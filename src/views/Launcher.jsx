@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { homeDir } from "@tauri-apps/api/path";
+import platformService from "../services/platform/PlatformService.js";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
@@ -86,6 +87,50 @@ export default function Launcher() {
   const [pulling, setPulling] = useState(false);
   const [pullProgress, setPullProgress] = useState(null); // { current, total }
   const { isAuthenticated, user, isGuest } = useAuth();
+
+  // A path is the identity of a local workspace — two folders called "Notes"
+  // are only told apart by where they live. So we show it in full, just
+  // collapsed against $HOME the way a shell would.
+  const [home, setHome] = useState("");
+  const [filter, setFilter] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const filterRef = useRef(null);
+  const rowRefs = useRef([]);
+  const listRef = useRef(null);
+  const [clipped, setClipped] = useState(false);
+  const mod = platformService.getModifierSymbol();
+
+  useEffect(() => {
+    homeDir().then((h) => setHome(h.replace(/\/$/, ""))).catch(() => {});
+  }, []);
+
+  const tildify = (p) => (home && p.startsWith(home) ? "~" + p.slice(home.length) : p);
+
+  const visible = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return recents;
+    return recents.filter(
+      (r) => r.name.toLowerCase().includes(q) || r.path.toLowerCase().includes(q)
+    );
+  }, [recents, filter]);
+
+  // Keep the cursor inside the list as it filters.
+  useEffect(() => {
+    setCursor((c) => Math.min(c, Math.max(0, visible.length - 1)));
+  }, [visible.length]);
+
+  // A row sliced through the middle of its path reads as a rendering fault, so
+  // the list fades at the bottom edge — but only while it actually overflows,
+  // otherwise the fade would dim a perfectly visible last row.
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) { setClipped(false); return; }
+    const measure = () => setClipped(el.scrollHeight > el.clientHeight + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [visible.length]);
 
   // Check if user has a synced workspace in the cloud
   useEffect(() => {
@@ -293,6 +338,52 @@ This is your new mobile workspace. Start taking notes!
     setRecents(readRecents());
   };
 
+  // The launcher is a keyboard surface: the list is ordered by recency, so the
+  // number beside a row is both its rank and the chord that opens it.
+  useEffect(() => {
+    if (isMobile()) return;
+    const onKey = (e) => {
+      const accel = e.metaKey || e.ctrlKey;
+
+      if (accel && e.key.toLowerCase() === "n") { e.preventDefault(); handleSelectWorkspace(); return; }
+      if (accel && e.key.toLowerCase() === "o") { e.preventDefault(); handleSelectWorkspace(); return; }
+
+      if (accel && /^[1-9]$/.test(e.key)) {
+        const hit = visible[Number(e.key) - 1];
+        if (hit) { e.preventDefault(); onRecent(hit.path); }
+        return;
+      }
+
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (visible.length === 0) return;
+        e.preventDefault();
+        setCursor((c) => {
+          const next = e.key === "ArrowDown" ? c + 1 : c - 1;
+          const wrapped = (next + visible.length) % visible.length;
+          rowRefs.current[wrapped]?.focus();
+          return wrapped;
+        });
+        return;
+      }
+
+      if (e.key === "Enter" && visible[cursor] && document.activeElement === filterRef.current) {
+        e.preventDefault();
+        onRecent(visible[cursor].path);
+        return;
+      }
+
+      if (e.key === "Escape" && filter) { setFilter(""); return; }
+
+      // Any bare printable key starts filtering, so you never have to aim at
+      // the field first.
+      if (!accel && !e.altKey && e.key.length === 1 && document.activeElement !== filterRef.current) {
+        filterRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [visible, cursor, filter]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Mobile-specific layout
   if (isMobile()) {
     return (
@@ -387,7 +478,12 @@ This is your new mobile workspace. Start taking notes!
 
   // Desktop layout
   return (
-    <div className="h-full bg-app-bg text-app-text flex items-center justify-center p-8 transition-colors duration-300">
+    // Height is pinned to the window rather than inherited: `h-full` depends on
+    // every ancestor having a definite height, and the provider stack between
+    // .app-content and here does not guarantee it. .app-root is 100vh and the
+    // titlebar is a fixed 40px, so this is exact — and it's what lets the list
+    // scroll internally while the header and actions stay pinned.
+    <div className="h-[calc(100vh-40px)] overflow-hidden bg-app-bg text-app-text flex justify-center transition-colors duration-300">
       {/* Test Mode Indicator */}
       {isTestMode && (
         <div className="fixed top-4 right-4 bg-yellow-500 text-black px-3 py-1 rounded-md text-sm font-medium z-50">
@@ -437,110 +533,151 @@ This is your new mobile workspace. Start taking notes!
         </div>
       )}
 
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="flex flex-col">
-          <h2 className="text-lg font-semibold text-app-text mb-4">Recently Opened</h2>
-          <div className="bg-app-panel/50 border border-app-border rounded-xl p-3 space-y-2 flex-1 min-h-[300px]">
-            {recents.length > 0 ? (
-              recents.map((r) => (
-                <div
-                  key={r.path}
-                  onClick={() => onRecent(r.path)}
-                  className="w-full text-left p-4 rounded-lg hover:bg-app-bg hover:border-app-accent border border-transparent transition-all duration-200 group cursor-pointer"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-md bg-app-accent/10 flex items-center justify-center flex-shrink-0">
-                      <Icon path="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-4 h-4 text-app-accent" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-app-text group-hover:text-app-text truncate">{r.name}</div>
-                      <div className="text-xs text-app-muted group-hover:text-app-text/70 transition-colors truncate">
-                        {shortenPath(r.path, 50)}
-                      </div>
-                    </div>
-                    <button
-                      onClick={(e) => onRemoveRecent(e, r.path)}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-500/20 hover:text-red-500 transition-all duration-200"
-                      title="Remove from recents"
-                    >
-                      <Icon path="M6 18L18 6M6 6l12 12" className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                <div className="w-16 h-16 rounded-full bg-app-accent/10 flex items-center justify-center mb-4">
-                  <Icon path="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" className="w-8 h-8 text-app-muted" />
-                </div>
-                <div className="text-app-muted text-sm">No recent workspaces</div>
-                <div className="text-app-muted/70 text-xs mt-1">Create or open a workspace to get started</div>
-              </div>
-            )}
+      {/* Header and actions are pinned; only the list scrolls. The window is
+          800x600 by default and a long recents list must never push the
+          headline or the actions out of view. */}
+      <div className="w-full max-w-[600px] px-10 py-9 flex flex-col h-full">
+        {/* Identity as an eyebrow, not a hero — you already know which app you
+            launched. The headline spends its weight on the actual job. */}
+        <div className="flex-none">
+          <div className="flex items-center gap-2 mb-7 text-app-muted">
+            <LokusLogo className="w-[13px] h-[13px]" />
+            <span className="font-mono text-[10px] tracking-[0.16em] uppercase">Lokus</span>
           </div>
+
+          <h1 className={`font-display text-[28px] leading-[1.15] font-bold tracking-[-0.01em] text-app-text ${recents.length ? "mb-6" : "mb-2"}`}>
+            Open a workspace
+          </h1>
+          {/* Only worth saying on first run. Once you have workspaces you know
+              what they are, and the line costs a row of the list. */}
+          {recents.length === 0 && (
+            <p className="text-[14px] leading-[1.6] text-app-text-secondary mb-6">
+              A workspace is a folder on this machine. Nothing gets copied anywhere.
+            </p>
+          )}
         </div>
-        <div className="flex flex-col justify-center">
-          <div className="text-center md:text-left">
-            <div className="mb-4">
-              <LokusLogo className="w-20 h-20 mx-auto md:mx-0" />
-            </div>
-            <h1 className="text-6xl font-bold tracking-tighter">Lokus</h1>
-            <p className="mt-2 text-app-muted">Your local-first notes workspace.</p>
-          </div>
-          <div className="mt-8 space-y-4">
-            <button
-              onClick={handleSelectWorkspace}
-              className="w-full text-left p-5 flex items-center gap-4 rounded-xl bg-app-panel hover:bg-app-accent hover:text-app-accent-fg border border-app-border hover:border-app-accent transition-all duration-200 group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-app-accent/10 group-hover:bg-app-accent-fg/20 flex items-center justify-center transition-colors">
-                <Icon path="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold text-lg group-hover:text-app-accent-fg">Create New Workspace</div>
-                <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">Start fresh with a new folder for your notes and ideas</div>
-              </div>
-            </button>
 
-            <button
-              onClick={handleSelectWorkspace}
-              className="w-full text-left p-5 flex items-center gap-4 rounded-xl bg-app-panel hover:bg-app-accent hover:text-app-accent-fg border border-app-border hover:border-app-accent transition-all duration-200 group"
-            >
-              <div className="w-12 h-12 rounded-lg bg-app-accent/10 group-hover:bg-app-accent-fg/20 flex items-center justify-center transition-colors">
-                <Icon path="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z" className="w-6 h-6" />
-              </div>
-              <div className="flex-1">
-                <div className="font-semibold text-lg group-hover:text-app-accent-fg">Open Existing Workspace</div>
-                <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">Continue working with an existing folder of notes</div>
-              </div>
-            </button>
+        {recents.length > 6 && (
+          <input
+            ref={filterRef}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by name or path"
+            aria-label="Filter workspaces"
+            className="w-full mb-5 bg-transparent border-b border-app-border focus:border-app-accent
+                       outline-none py-2 text-[15px] text-app-text placeholder:text-app-muted
+                       transition-colors motion-reduce:transition-none"
+          />
+        )}
 
-            {/* Pull Workspace from Cloud */}
-            {syncedWorkspace && (
-              <button
-                onClick={handlePullWorkspace}
-                disabled={pulling}
-                className="w-full text-left p-5 flex items-center gap-4 rounded-xl bg-app-panel hover:bg-app-accent hover:text-app-accent-fg border border-app-border hover:border-app-accent transition-all duration-200 group disabled:opacity-50"
-              >
-                <div className="w-12 h-12 rounded-lg bg-blue-500/10 group-hover:bg-app-accent-fg/20 flex items-center justify-center transition-colors">
-                  <Icon path="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" className="w-6 h-6 text-blue-500 group-hover:text-app-accent-fg" />
+        {visible.length > 0 ? (
+          // Shrinks and scrolls when the list is long, but never grows — a
+          // grown list strands the actions at the window's bottom edge with a
+          // void in between.
+          <ul
+            ref={listRef}
+            className={`min-h-0 overflow-y-auto -ml-4 pl-4 -mr-2 pr-2 ${
+              clipped ? "[mask-image:linear-gradient(to_bottom,black_calc(100%-28px),transparent)]" : ""
+            }`}
+          >
+            {visible.map((r, i) => (
+              <li key={r.path} className="border-b border-app-border/60 last:border-b-0">
+                <div className="group relative flex items-center">
+                  <button
+                    ref={(el) => (rowRefs.current[i] = el)}
+                    onClick={() => onRecent(r.path)}
+                    onFocus={() => setCursor(i)}
+                    className="flex-1 min-w-0 text-left py-[11px] pl-4 -ml-4 pr-16 border-l-2 border-transparent
+                               hover:border-app-accent focus-visible:border-app-accent focus-visible:outline-none
+                               transition-colors motion-reduce:transition-none"
+                  >
+                    <div className="font-display text-[15px] leading-[1.3] font-semibold text-app-text truncate">
+                      {r.name}
+                    </div>
+                    {/* The path is code, so it's set as code. */}
+                    <div className="font-mono text-[11px] leading-[1.5] text-app-muted group-hover:text-app-text-secondary
+                                    truncate mt-[2px] transition-colors motion-reduce:transition-none">
+                      {tildify(r.path)}
+                    </div>
+                  </button>
+
+                  {/* Always visible, just quiet — a shortcut nobody discovers
+                      isn't a shortcut. It brightens on hover rather than
+                      appearing from nothing. */}
+                  {i < 9 && (
+                    <kbd className="absolute right-7 pointer-events-none select-none font-mono text-[10px]
+                                    text-app-muted/45 group-hover:text-app-muted group-focus-within:text-app-muted
+                                    transition-colors motion-reduce:transition-none">
+                      {mod}{i + 1}
+                    </kbd>
+                  )}
+                  <button
+                    onClick={(e) => onRemoveRecent(e, r.path)}
+                    aria-label={`Remove ${r.name} from this list`}
+                    title="Remove from this list"
+                    className="absolute right-0 p-1.5 rounded text-app-muted opacity-0
+                               group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none
+                               focus-visible:ring-1 focus-visible:ring-app-accent
+                               hover:text-app-text transition-opacity motion-reduce:transition-none"
+                  >
+                    <Icon path="M6 18L18 6M6 6l12 12" className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-lg group-hover:text-app-accent-fg">
-                    {pulling ? (
-                      pullProgress
-                        ? `Pulling... ${pullProgress.current}/${pullProgress.total} files`
-                        : 'Pulling...'
-                    ) : `Pull "${syncedWorkspace.name}" from Cloud`}
-                  </div>
-                  <div className="text-sm text-app-muted group-hover:text-app-accent-fg/80 mt-1">
-                    Download your synced workspace to this device
-                  </div>
-                </div>
-              </button>
-            )}
-          </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[14px] leading-[1.7] text-app-text-secondary">
+            {filter
+              ? <>Nothing matches “{filter}”. <button onClick={() => setFilter("")} className="text-app-accent hover:underline">Clear the filter</button> to see everything.</>
+              : <>No workspaces yet. Pick any folder below — an empty one to start fresh, or one that already holds your markdown.</>}
+          </p>
+        )}
+
+        {/* Actions are a footer rule, not the main event: you do this twice a
+            year and open a recent workspace every other time. */}
+        <div className="flex-none mt-6 pt-5 border-t border-app-border flex flex-col">
+          <ActionRow onClick={handleSelectWorkspace} label="New workspace" hint={`${mod}N`}
+            detail="Choose an empty folder to start in" />
+          <ActionRow onClick={handleSelectWorkspace} label="Open folder…" hint={`${mod}O`}
+            detail="Point Lokus at markdown you already have" />
+          {syncedWorkspace && (
+            <ActionRow
+              onClick={handlePullWorkspace}
+              disabled={pulling}
+              label={pulling
+                ? (pullProgress ? `Downloading ${pullProgress.current} of ${pullProgress.total} files` : "Downloading…")
+                : `Download “${syncedWorkspace.name}”`}
+              detail="Copy your synced workspace onto this machine"
+            />
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** One action in the footer rule: label, quiet detail, optional chord. */
+function ActionRow({ onClick, label, detail, hint, disabled }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="group text-left py-[9px] pl-4 -ml-4 pr-2 border-l-2 border-transparent
+                 hover:border-app-accent focus-visible:border-app-accent focus-visible:outline-none
+                 disabled:opacity-50 disabled:hover:border-transparent
+                 transition-colors motion-reduce:transition-none"
+    >
+      <div className="flex items-baseline gap-2.5">
+        <span className="text-[14px] text-app-text">{label}</span>
+        {hint && (
+          <span className="font-mono text-[10px] text-app-muted/45 group-hover:text-app-muted
+                           group-focus-visible:text-app-muted transition-colors motion-reduce:transition-none">
+            {hint}
+          </span>
+        )}
+      </div>
+      <div className="text-[12.5px] leading-[1.5] text-app-muted mt-[1px]">{detail}</div>
+    </button>
   );
 }

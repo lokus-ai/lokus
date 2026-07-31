@@ -3,7 +3,24 @@ import { syncEngine } from '../../core/sync/SyncEngine';
 import { keyManager } from '../../core/sync/KeyManager';
 import { offlineQueue } from '../../core/sync/OfflineQueue';
 import { workspaceRegistry } from '../../core/sync/WorkspaceRegistry';
-import { Cloud, CloudOff, RefreshCw, Shield, HardDrive, Clock, FileText, Loader2, CheckCircle2, AlertTriangle, FolderSync, WifiOff } from 'lucide-react';
+import * as P from './primitives.jsx';
+
+/**
+ * Props:
+ *   isAuthenticated  {boolean}  signed in with a real account
+ *   isGuest          {boolean}  signed in as guest — sync unavailable
+ *   userId           {string}   Supabase user id
+ *   workspacePath    {string}   absolute path of the open workspace
+ *
+ * Unchanged from before this file was restyled.
+ */
+
+/** A read-only value — a count, a size, a duration. Mono, because it is data. */
+function Value({ children }) {
+  return (
+    <span className="font-mono text-[12px] tabular-nums text-app-text-secondary">{children}</span>
+  );
+}
 
 function formatBytes(bytes) {
   if (!bytes || bytes === 0) return '0 B';
@@ -137,263 +154,168 @@ export default function SyncPreferences({ isAuthenticated, isGuest, userId, work
     await syncEngine.sync();
   };
 
-  // --- Not authenticated ---
+  const lede = 'One workspace, encrypted on this device before it leaves it, readable on every device you sign in from.';
+
+  // --- Not signed in, or signed in as a guest ---
   if (!isAuthenticated || isGuest) {
     return (
-      <div className="space-y-6 max-w-2xl">
-        <div>
-          <h1 className="text-2xl font-bold text-app-text mb-2">Sync</h1>
-          <p className="text-app-text-secondary">Sign in to sync your workspace across devices.</p>
-        </div>
-        <div className="bg-app-panel border border-app-border rounded-xl p-8 text-center">
-          <CloudOff className="w-12 h-12 text-app-muted mx-auto mb-4" />
-          <p className="text-app-text font-medium mb-2">Sync is disabled</p>
-          <p className="text-app-muted text-sm">Sign in from the Account tab to enable encrypted cloud sync.</p>
-        </div>
-      </div>
+      <P.Page title="Sync" lede={lede}>
+        <P.Empty>Sign in from Account to sync a workspace to the cloud.</P.Empty>
+      </P.Page>
     );
   }
 
   if (loading) {
     return (
-      <div className="space-y-6 max-w-2xl">
-        <div>
-          <h1 className="text-2xl font-bold text-app-text mb-2">Sync</h1>
-        </div>
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 text-app-muted animate-spin" />
-        </div>
-      </div>
+      <P.Page title="Sync" lede={lede}>
+        <P.Empty>Checking what is synced…</P.Empty>
+      </P.Page>
     );
   }
 
-  // --- Status config ---
-  const statusConfig = {
-    idle: { icon: Cloud, color: 'text-app-muted', label: 'Idle' },
-    syncing: { icon: Loader2, color: 'text-blue-500', label: 'Syncing...' },
-    synced: { icon: CheckCircle2, color: 'text-green-500', label: 'Synced' },
-    error: { icon: AlertTriangle, color: 'text-amber-500', label: 'Error' },
-    offline: { icon: WifiOff, color: 'text-orange-500', label: `Offline${offlineQueue.size > 0 ? ` (${offlineQueue.size} queued)` : ''}` },
-    online: { icon: Cloud, color: 'text-green-500', label: 'Back online' },
-  }[syncStatus] || { icon: Cloud, color: 'text-app-muted', label: 'Idle' };
+  const statusLabel = {
+    idle: 'Idle',
+    syncing: 'Syncing…',
+    synced: 'Up to date',
+    error: 'Stopped on an error',
+    offline: `Offline${offlineQueue.size > 0 ? ` · ${offlineQueue.size} queued` : ''}`,
+    online: 'Back online',
+  }[syncStatus] || 'Idle';
 
-  const StatusIcon = statusConfig.icon;
+  const result = syncEngine.lastSyncResult;
+  const resultParts = [];
+  if (result) {
+    if (result.uploaded > 0) resultParts.push(`${result.uploaded} up`);
+    if (result.downloaded > 0) resultParts.push(`${result.downloaded} down`);
+    if (result.deleted > 0) resultParts.push(`${result.deleted} removed`);
+  }
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold text-app-text mb-2">Sync</h1>
-        <p className="text-app-text-secondary">
-          Sync one workspace across your devices with end-to-end encryption.
-        </p>
-      </div>
-
-      {/* ================================================================ */}
-      {/* STATE 1: No sync enabled anywhere */}
-      {/* ================================================================ */}
+    <P.Page title="Sync" lede={lede}>
+      {/* ---------------------------------------------------------------- */}
+      {/* State 1 — nothing is synced on this account yet                   */}
+      {/* ---------------------------------------------------------------- */}
       {!syncedWorkspace && (
-        <div className="bg-app-panel border border-app-border rounded-xl p-6">
-          <div className="text-center">
-            <Cloud className="w-12 h-12 text-app-muted mx-auto mb-4" />
-            {effectivePath ? (
-              <>
-                <p className="text-app-text font-medium mb-2">Sync is not enabled</p>
-                <p className="text-app-muted text-sm mb-6">
-                  Enable sync to upload "{currentWorkspaceName}" to the cloud and access it from any device.
-                </p>
-                <button
-                  onClick={handleEnableSync}
-                  disabled={enabling}
-                  className="px-6 py-2.5 bg-app-accent text-app-accent-fg rounded-lg hover:bg-app-accent/90 transition-colors font-medium disabled:opacity-50"
-                >
-                  {enabling ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Enabling...
-                    </span>
-                  ) : (
-                    `Enable Sync for "${currentWorkspaceName}"`
-                  )}
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-app-text font-medium mb-2">No workspace open</p>
-                <p className="text-app-muted text-sm">Open a workspace first to enable sync.</p>
-              </>
-            )}
-          </div>
-        </div>
+        <P.Group label="Workspace">
+          {effectivePath ? (
+            <>
+              <P.Empty>
+                Nothing is syncing yet. Start with{' '}
+                <span className="font-mono text-[12.5px] text-app-text">{currentWorkspaceName}</span>{' '}
+                and it will be encrypted here, then available wherever you sign in.
+              </P.Empty>
+              <div className="flex items-center gap-2 pt-3">
+                <P.Button tone="primary" onClick={handleEnableSync} disabled={enabling}>
+                  {enabling ? 'Starting…' : 'Start syncing this workspace'}
+                </P.Button>
+              </div>
+            </>
+          ) : (
+            <P.Empty>Open a workspace, then come back here to sync it.</P.Empty>
+          )}
+        </P.Group>
       )}
 
-      {/* ================================================================ */}
-      {/* STATE 2: Sync enabled & this is the synced workspace */}
-      {/* ================================================================ */}
+      {/* ---------------------------------------------------------------- */}
+      {/* State 2 — this workspace is the synced one                        */}
+      {/* ---------------------------------------------------------------- */}
       {syncedWorkspace && isSyncedHere && (
         <>
-          {/* Current synced workspace */}
-          <div className="bg-app-panel border border-app-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-app-text mb-3 flex items-center gap-2">
-              <FolderSync className="w-4 h-4" />
-              Synced Workspace
-            </h3>
-            <div className="flex items-center justify-between p-3 bg-green-500/5 rounded-lg border border-green-500/20">
+          <P.Group label="Workspace">
+            <P.Row label="Syncing">
+              <Value>{syncedWorkspace.name}</Value>
+            </P.Row>
+            <P.Row
+              label="Status"
+              hint={
+                syncEngine.lastSyncAt ? (
+                  <>Last run <span className="font-mono tabular-nums">{formatTimeAgo(syncEngine.lastSyncAt)}</span></>
+                ) : (
+                  'Has not run yet'
+                )
+              }
+            >
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-md bg-green-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                </div>
-                <div>
-                  <div className="text-sm font-medium text-app-text">{syncedWorkspace.name}</div>
-                  <div className="text-xs text-app-muted">Currently synced</div>
-                </div>
+                <Value>{statusLabel}</Value>
+                <P.Button onClick={handleSyncNow} disabled={syncing}>
+                  {syncing ? 'Syncing…' : 'Sync now'}
+                </P.Button>
               </div>
-              <button
-                onClick={handleDisableSync}
-                disabled={disabling}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {disabling ? <Loader2 className="w-3 h-3 animate-spin" /> : <CloudOff className="w-3 h-3" />}
-                {disabling ? 'Stopping...' : 'Stop Syncing'}
-              </button>
-            </div>
-          </div>
-
-          {/* Sync status + Sync Now */}
-          <div className="bg-app-panel border border-app-border rounded-xl p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <StatusIcon className={`w-5 h-5 ${statusConfig.color} ${syncStatus === 'syncing' ? 'animate-spin' : ''}`} />
-                <div>
-                  <span className="text-sm font-medium text-app-text">{statusConfig.label}</span>
-                  {syncEngine.lastSyncAt && (
-                    <p className="text-xs text-app-muted">Last sync: {formatTimeAgo(syncEngine.lastSyncAt)}</p>
-                  )}
-                </div>
-              </div>
-              <button
-                onClick={handleSyncNow}
-                disabled={syncing}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-app-border hover:bg-app-bg transition-colors disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'Syncing...' : 'Sync Now'}
-              </button>
-            </div>
-
-            {syncEngine.lastSyncResult && (
-              <div className="flex gap-4 text-xs text-app-muted pt-3 border-t border-app-border">
-                {syncEngine.lastSyncResult.uploaded > 0 && (
-                  <span>↑ {syncEngine.lastSyncResult.uploaded} uploaded</span>
-                )}
-                {syncEngine.lastSyncResult.downloaded > 0 && (
-                  <span>↓ {syncEngine.lastSyncResult.downloaded} downloaded</span>
-                )}
-                {syncEngine.lastSyncResult.deleted > 0 && (
-                  <span>✗ {syncEngine.lastSyncResult.deleted} deleted</span>
-                )}
-                {syncEngine.lastSyncResult.uploaded === 0 && syncEngine.lastSyncResult.downloaded === 0 && (syncEngine.lastSyncResult.deleted || 0) === 0 && (
-                  <span>Everything up to date</span>
-                )}
-              </div>
+            </P.Row>
+            {result && (
+              <P.Row label="Last run">
+                <Value>{resultParts.length > 0 ? resultParts.join(' · ') : 'Nothing to move'}</Value>
+              </P.Row>
             )}
-
             {syncStatus === 'error' && errorMessage && (
-              <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-sm text-red-500">{errorMessage}</p>
-              </div>
+              <P.Note tone="danger">{errorMessage} Sync again once it is resolved.</P.Note>
             )}
-          </div>
+          </P.Group>
 
-          {/* Cloud Storage Stats */}
-          <div className="bg-app-panel border border-app-border rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-app-text mb-4">Cloud Storage</h3>
+          <P.Group label="In the cloud">
             {loadingStats ? (
-              <div className="flex items-center justify-center py-4">
-                <Loader2 className="w-5 h-5 text-app-muted animate-spin" />
-              </div>
+              <P.Empty>Reading the manifest…</P.Empty>
             ) : remoteStats ? (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3">
-                  <FileText className="w-4 h-4 text-app-muted" />
-                  <div>
-                    <div className="text-lg font-semibold text-app-text">{remoteStats.fileCount}</div>
-                    <div className="text-xs text-app-muted">Files synced</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <HardDrive className="w-4 h-4 text-app-muted" />
-                  <div>
-                    <div className="text-lg font-semibold text-app-text">{formatBytes(remoteStats.totalSize)}</div>
-                    <div className="text-xs text-app-muted">Original size</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Shield className="w-4 h-4 text-app-muted" />
-                  <div>
-                    <div className="text-lg font-semibold text-app-text">{formatBytes(remoteStats.encryptedSize)}</div>
-                    <div className="text-xs text-app-muted">Encrypted size</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Clock className="w-4 h-4 text-app-muted" />
-                  <div>
-                    <div className="text-lg font-semibold text-app-text">{formatTimeAgo(remoteStats.lastModified)}</div>
-                    <div className="text-xs text-app-muted">Last change</div>
-                  </div>
-                </div>
-              </div>
+              <>
+                <P.Row label="Files">
+                  <Value>{remoteStats.fileCount}</Value>
+                </P.Row>
+                <P.Row label="Size on disk">
+                  <Value>{formatBytes(remoteStats.totalSize)}</Value>
+                </P.Row>
+                <P.Row label="Size encrypted">
+                  <Value>{formatBytes(remoteStats.encryptedSize)}</Value>
+                </P.Row>
+                <P.Row label="Newest change">
+                  <Value>{formatTimeAgo(remoteStats.lastModified)}</Value>
+                </P.Row>
+              </>
             ) : (
-              <p className="text-sm text-app-muted">No files synced yet. Save a file to start syncing.</p>
+              <P.Empty>Nothing uploaded yet. Save a file and it will go up within a few seconds.</P.Empty>
             )}
-          </div>
+          </P.Group>
+
+          <P.Group label="Stop">
+            <P.ActionRow
+              label={disabling ? 'Stopping…' : 'Stop syncing this workspace'}
+              hint="Deletes the encrypted copy and the manifest from the cloud. Your local files are untouched."
+              tone="danger"
+              onClick={handleDisableSync}
+              disabled={disabling}
+            />
+          </P.Group>
         </>
       )}
 
-      {/* ================================================================ */}
-      {/* STATE 3: Sync enabled but for a DIFFERENT workspace (read-only) */}
-      {/* ================================================================ */}
+      {/* ---------------------------------------------------------------- */}
+      {/* State 3 — a different workspace holds the sync slot (read-only)   */}
+      {/* ---------------------------------------------------------------- */}
       {syncedWorkspace && !isSyncedHere && (
-        <div className="bg-app-panel border border-app-border rounded-xl p-6">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-              <FolderSync className="w-5 h-5 text-blue-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-app-text mb-1">
-                Syncing "{syncedWorkspace.name}"
-              </p>
-              <p className="text-sm text-app-muted mb-1">
-                Open "{syncedWorkspace.name}" to manage sync settings.
-              </p>
-              {cooldown && !cooldown.canSwitch && (
-                <p className="text-xs text-amber-500 mt-2">
-                  You switched recently. Try again in {formatCooldown(cooldown.remainingMs)}.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
+        <P.Group label="Workspace">
+          <P.Empty>
+            Sync belongs to{' '}
+            <span className="font-mono text-[12.5px] text-app-text">{syncedWorkspace.name}</span>.
+            One account syncs one workspace, so open that one to change its settings.
+          </P.Empty>
+          {cooldown && !cooldown.canSwitch && (
+            <P.Note>
+              Sync can move to another workspace again in{' '}
+              <span className="font-mono tabular-nums">{formatCooldown(cooldown.remainingMs)}</span>.
+            </P.Note>
+          )}
+        </P.Group>
       )}
 
-      {/* How it works */}
-      <div className="bg-app-panel border border-app-border rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-app-text mb-3">How Sync Works</h3>
-        <div className="space-y-2.5 text-sm text-app-muted">
-          <div className="flex items-start gap-3">
-            <Shield className="w-4 h-4 mt-0.5 text-green-500 shrink-0" />
-            <span>All files are encrypted with <strong className="text-app-text">AES-256-GCM</strong> on your device before upload. We never see your data.</span>
-          </div>
-          <div className="flex items-start gap-3">
-            <RefreshCw className="w-4 h-4 mt-0.5 text-blue-500 shrink-0" />
-            <span>Syncs automatically <strong className="text-app-text">on save</strong> (3s debounce) and every <strong className="text-app-text">5 minutes</strong>.</span>
-          </div>
-          <div className="flex items-start gap-3">
-            <FolderSync className="w-4 h-4 mt-0.5 text-purple-500 shrink-0" />
-            <span>One workspace per account. Pull it from any device via the <strong className="text-app-text">launcher</strong>.</span>
-          </div>
-        </div>
-      </div>
-
-    </div>
+      <P.Group
+        label="How it works"
+        hint={
+          <>
+            Files are encrypted with <span className="font-mono">AES-256-GCM</span> on this device, so the
+            server only ever holds ciphertext. Lokus syncs three seconds after a save and again every five
+            minutes. To bring the workspace onto another machine, pull it from the launcher.
+          </>
+        }
+      />
+    </P.Page>
   );
 }

@@ -18,6 +18,17 @@ import calendarService from "../services/calendar.js";
 import { useAuth } from "../core/auth/AuthContext";
 import { User, LogIn, LogOut, Crown, Shield, Settings as SettingsIcon } from "lucide-react";
 import QuickImport from "../components/QuickImport.jsx";
+import * as P from "./preferences/primitives.jsx";
+import General from "./preferences/sections/General.jsx";
+import Callouts from "./preferences/sections/Callouts.jsx";
+import Markdown from "./preferences/sections/Markdown.jsx";
+import Editor from "./preferences/sections/Editor.jsx";
+import DailyNotes from "./preferences/sections/DailyNotes.jsx";
+import Shortcuts from "./preferences/sections/Shortcuts.jsx";
+import Connections from "./preferences/sections/Connections.jsx";
+import Account from "./preferences/sections/Account.jsx";
+import Updates from "./preferences/sections/Updates.jsx";
+import Import from "./preferences/sections/Import.jsx";
 import SyncPreferences from "./preferences/SyncPreferences.jsx";
 import { getAppVersion } from "../utils/appInfo.js";
 import { isDesktop } from '../platform/index.js';
@@ -44,7 +55,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
   const [authMessage, setAuthMessage] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [showQuickImport, setShowQuickImport] = useState(false);
-  const [expandedConnections, setExpandedConnections] = useState({ calendar: false, ical: false, caldav: false });
   const [icalSubscriptions, setIcalSubscriptions] = useState([]);
   const [icalUrl, setIcalUrl] = useState('');
   const [icalLoading, setIcalLoading] = useState(false);
@@ -73,19 +83,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
   // Workspace path (used for non-sync features)
   const [workspacePath, setWorkspacePath] = useState(workspacePathProp || '');
 
-  const [expandedSections, setExpandedSections] = useState({
-    font: true,
-    colors: false,
-    spacing: false,
-    typography: false,
-    codeBlocks: false,
-    lists: false,
-    links: false,
-    decorations: false,
-    blockquotes: false,
-    tables: false,
-    presets: false
-  });
 
   // Daily Notes state
   const [dailyNotesSettings, setDailyNotesSettings] = useState({
@@ -102,7 +99,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
   // Callouts
   const [callouts, setCallouts] = useState(getCalloutConfig());
 
-  const [selectedType, setSelectedType] = useState("note");
 
 
 
@@ -194,10 +190,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
     delete updated[name];
     setCustomSymbols(updated);
     saveCustomSymbols(updated);
-  };
-
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
   // Theme is already initialized by ThemeProvider in main.jsx
@@ -447,26 +439,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
     setKeymap(next);
   };
 
-  // Split accelerator into keycap parts for premium UI
-  const accelParts = (accel) => {
-    if (!accel) return [];
-    const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent || "");
-    const parts = accel.split('+');
-    return parts.map(p => {
-      if (p === 'CommandOrControl') return isMac ? '⌘' : 'Ctrl';
-      if (p === 'Control') return isMac ? '⌃' : 'Ctrl';
-      if (p === 'Shift') return isMac ? '⇧' : 'Shift';
-      if (p === 'Alt' || p === 'Option') return isMac ? '⌥' : 'Alt';
-      if (p === 'Comma') return ',';
-      return p.toUpperCase();
-    });
-  };
-
-  const Keycap = ({ children }) => (
-    <span className="inline-flex items-center rounded-md border border-app-border bg-app-bg px-2 py-0.5 text-xs font-medium tracking-wide">
-      {children}
-    </span>
-  );
 
   const handleThemeChange = async (e) => {
     const themeId = e.target.value;
@@ -694,2491 +666,231 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
           {/* Title shown in window titlebar, no need to duplicate here */}
         </header>
 
-        <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "220px 1fr" }}>
-          {/* Sidebar */}
-          <aside className="bg-app-panel border-r border-app-border p-3">
+        <div className="flex-1 min-h-0 grid" style={{ gridTemplateColumns: "196px 1fr" }}>
+          {/* Sidebar — grouped by what kind of setting it is, so fourteen
+              entries read as four short lists instead of one long one. The
+              active row is marked with an accent rule and text rather than a
+              solid pill, which was louder than anything in the content. */}
+          <aside className="bg-app-panel border-r border-app-border py-4 px-3 overflow-y-auto">
             {[
-              "General",
-              "Appearance",
-              "Editor",
-              "Callouts",
-              ...(featureFlags.enable_daily_notes ? ["Daily Notes"] : []),
-              "Markdown",
-              "Shortcuts",
-              ...(featureFlags.enable_import_export ? ["Import"] : []),
-              ...(featureFlags.enable_sync ? ["Sync"] : []),
-              ...(featureFlags.enable_calendar ? ["Connections"] : []),
-              "Account",
-              ...(featureFlags.enable_meetings ? ["Meeting Notes"] : []),
-              ...(featureFlags.enable_ai_assistant ? ["AI Assistant"] : []),
-              ...(import.meta.env.VITE_DISABLE_UPDATE_CHECKER !== 'true' ? ["Updates"] : []),
-            ].map((name) => (
-              <button
-                key={name}
-                onClick={() => setSection(name)}
-                className={`w-full text-left px-3 py-2 rounded-md mb-1 transition-colors ${section === name ? "bg-app-accent text-app-accent-fg" : "text-app-text hover:bg-app-bg"
-                  }`}
-              >
-                {name}
-              </button>
+              { label: null, items: ["General", "Appearance"] },
+              {
+                label: "Writing", items: [
+                  "Editor",
+                  "Callouts",
+                  "Markdown",
+                  ...(featureFlags.enable_daily_notes ? ["Daily Notes"] : []),
+                  "Shortcuts",
+                ]
+              },
+              {
+                label: "Data", items: [
+                  ...(featureFlags.enable_import_export ? ["Import"] : []),
+                  ...(featureFlags.enable_sync ? ["Sync"] : []),
+                  ...(featureFlags.enable_calendar ? ["Connections"] : []),
+                ]
+              },
+              {
+                label: "Assistants", items: [
+                  ...(featureFlags.enable_meetings ? ["Meeting Notes"] : []),
+                  ...(featureFlags.enable_ai_assistant ? ["AI Assistant"] : []),
+                ]
+              },
+              {
+                label: "About", items: [
+                  "Account",
+                  ...(import.meta.env.VITE_DISABLE_UPDATE_CHECKER !== 'true' ? ["Updates"] : []),
+                ]
+              },
+            ].filter((g) => g.items.length > 0).map((group) => (
+              <div key={group.label ?? "top"} className="mb-5 last:mb-0">
+                {group.label && (
+                  <h2 className="font-mono text-[9.5px] tracking-[0.16em] uppercase text-app-muted px-2 mb-1.5">
+                    {group.label}
+                  </h2>
+                )}
+                {group.items.map((name) => (
+                  <button
+                    key={name}
+                    onClick={() => setSection(name)}
+                    aria-current={section === name ? "page" : undefined}
+                    className={`w-full text-left pl-2 pr-2 py-[5px] text-[13.5px] rounded-[4px]
+                                border-l-2 transition-colors motion-reduce:transition-none
+                                focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-app-accent
+                                ${section === name
+                        ? "border-app-accent text-app-text bg-app-bg"
+                        : "border-transparent text-app-text-secondary hover:text-app-text"}`}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
             ))}
           </aside>
 
           {/* Content */}
           <main className="p-6 overflow-auto">
             {section === "Appearance" && (
-              <div className="space-y-8 max-w-xl">
+              <P.Page
+                title="Appearance"
+                lede="Themes are plain files. Upload one someone shared, or edit the colours here and export your own."
+                actions={
+                  <>
+                    <P.Button onClick={handleUploadTheme}>
+                      <span className="flex items-center gap-1.5"><Upload className="w-3.5 h-3.5" />Upload</span>
+                    </P.Button>
+                    <P.Button onClick={handleExportTheme} disabled={!activeTheme}>
+                      <span className="flex items-center gap-1.5"><Download className="w-3.5 h-3.5" />Export</span>
+                    </P.Button>
+                  </>
+                }
+              >
+                <P.Group label="Theme">
+                  <P.Row label="Active theme" hint="Applies to every window straight away.">
+                    <P.Select value={activeTheme} onChange={(v) => handleThemeChange({ target: { value: v } })}>
+                      {themes.map((theme) => (
+                        <option key={theme.id} value={theme.id}>{theme.name}</option>
+                      ))}
+                    </P.Select>
+                  </P.Row>
+                </P.Group>
 
-                <section>
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-sm uppercase tracking-wide text-app-muted">Theme</h2>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleUploadTheme}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors"
-                        title="Upload theme file"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        Upload
-                      </button>
-                      <button
-                        onClick={handleExportTheme}
-                        disabled={!activeTheme}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-panel border border-app-border hover:bg-app-bg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Export current theme"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        Export
-                      </button>
-                    </div>
-                  </div>
-
-                  <select
-                    className="h-9 px-3 w-full rounded-md bg-app-panel border border-app-border outline-none mb-4"
-                    value={activeTheme}
-                    onChange={handleThemeChange}
+                {activeTheme && Object.keys(themeTokens).length > 0 && (
+                  <P.Group
+                    label="Colours"
+                    hint="Each row is one token in the theme file. Accepts an RGB triplet (255 128 0) or a hex value."
                   >
-                    {themes.map((theme) => (
-                      <option key={theme.id} value={theme.id}>
-                        {theme.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  {/* Theme Editor Table */}
-                  {activeTheme && Object.keys(themeTokens).length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-app-muted">
-                          Edit colors and save changes to the theme file
-                        </p>
-                        <div className="flex items-center gap-2">
-                          {hasUnsavedChanges && (
-                            <button
-                              onClick={handleResetTheme}
-                              className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md hover:bg-app-panel transition-colors text-app-muted"
-                            >
-                              <RotateCcw className="w-3 h-3" />
-                              Reset
-                            </button>
-                          )}
-                          <button
-                            onClick={handleSaveTheme}
-                            disabled={!hasUnsavedChanges}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md bg-app-accent text-app-accent-fg hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <Save className="w-3.5 h-3.5" />
-                            Save Changes
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="border border-app-border rounded-md overflow-hidden">
-                        <div className="max-h-96 overflow-y-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-app-panel sticky top-0">
-                              <tr>
-                                <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Token</th>
-                                <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide w-16">Preview</th>
-                                <th className="text-left px-3 py-2 text-xs font-medium text-app-muted uppercase tracking-wide">Value</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {Object.entries(themeTokens).sort().map(([key, value]) => {
-                                const rgbValue = value.includes(' ') ? `rgb(${value})` : value;
-                                return (
-                                  <tr key={key} className="border-t border-app-border hover:bg-app-panel/50">
-                                    <td className="px-3 py-2 font-mono text-xs text-app-muted">{key}</td>
-                                    <td className="px-3 py-2">
-                                      <div
-                                        className="w-8 h-8 rounded border border-app-border"
-                                        style={{ backgroundColor: rgbValue }}
-                                        title={rgbValue}
-                                      />
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      <input
-                                        type="text"
-                                        value={value}
-                                        onChange={(e) => handleTokenChange(key, e.target.value)}
-                                        className="w-full px-2 py-1 text-xs font-mono rounded bg-app-bg border border-app-border outline-none focus:border-app-accent"
-                                        placeholder="e.g., 255 128 0 or #ff8000"
-                                      />
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {!activeTheme && (
-                    <p className="text-xs text-app-muted mt-2">
-                      Select a theme to edit its colors
-                    </p>
-                  )}
-                </section>
-
-              </div>
-            )}
-
-            {section === "Editor" && (
-              <div className="flex flex-col lg:flex-row gap-6 max-w-7xl">
-                {/* Settings Controls */}
-                <div className="flex-1 space-y-2 min-w-0">
-                  {/* Style Presets */}
-                  <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
-                    <button
-                      onClick={() => toggleSection('presets')}
-                      className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
-                        </svg>
-                        <h2 className="text-sm font-semibold">Quick Presets</h2>
-                      </div>
-                      <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.presets ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.presets && (
-                      <div className="p-4 bg-app-bg/50 backdrop-blur-sm">
-                        <p className="text-xs text-app-muted mb-3">Choose a preset to quickly apply professional styling</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <button
-                            onClick={() => applyPreset('minimal')}
-                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
-                          >
-                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Minimal</div>
-                            <div className="text-xs text-app-muted">Clean & simple</div>
-                          </button>
-                          <button
-                            onClick={() => applyPreset('comfortable')}
-                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
-                          >
-                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Comfortable</div>
-                            <div className="text-xs text-app-muted">Balanced & easy</div>
-                          </button>
-                          <button
-                            onClick={() => applyPreset('compact')}
-                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
-                          >
-                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Compact</div>
-                            <div className="text-xs text-app-muted">Dense & efficient</div>
-                          </button>
-                          <button
-                            onClick={() => applyPreset('spacious')}
-                            className="p-3 rounded-lg border border-app-border hover:border-app-accent hover:bg-app-accent/5 transition-all text-left group"
-                          >
-                            <div className="font-medium text-sm mb-1 group-hover:text-app-accent">Spacious</div>
-                            <div className="text-xs text-app-muted">Airy & relaxed</div>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Font Settings - Real-time */}
-                  <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
-                    <button
-                      onClick={() => toggleSection('font')}
-                      className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                        </svg>
-                        <h2 className="text-sm font-semibold">Font & Typography</h2>
-                      </div>
-                      <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.font ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.font && (
-                      <div className="p-4 space-y-4 bg-app-bg/50 backdrop-blur-sm">
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Font Family</label>
-                          <select
-                            className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                            value={liveEditorSettings.getSetting('fontFamily')}
-                            onChange={async (e) => {
-                              liveEditorSettings.updateSetting('fontFamily', e.target.value);
-                              await updateConfig({ editor: { ...editorSettings, font: { ...editorSettings.font, family: e.target.value } } });
-                            }}
-                          >
-                            <option value="ui-sans-serif">System UI</option>
-                            <option value="ui-serif">System Serif</option>
-                            <option value="ui-monospace">System Monospace</option>
-                            <option value="Inter">Inter</option>
-                            <option value="Roboto">Roboto</option>
-                            <option value="'Helvetica Neue', Helvetica">Helvetica</option>
-                            <option value="Georgia, serif">Georgia</option>
-                            <option value="'Times New Roman', serif">Times New Roman</option>
-                            <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Font Size</label>
-                            <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('fontSize')}px</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="12"
-                            max="24"
-                            step="1"
-                            className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                            value={liveEditorSettings.getSetting('fontSize')}
-                            onChange={(e) => liveEditorSettings.updateSetting('fontSize', parseInt(e.target.value))}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Line Height</label>
-                            <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('lineHeight')}</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="1.2"
-                            max="2.5"
-                            step="0.1"
-                            className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                            value={liveEditorSettings.getSetting('lineHeight')}
-                            onChange={(e) => liveEditorSettings.updateSetting('lineHeight', parseFloat(e.target.value))}
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-medium text-app-muted uppercase tracking-wide">Letter Spacing</label>
-                            <span className="text-xs font-mono text-app-accent bg-app-accent/10 px-2 py-0.5 rounded">{liveEditorSettings.getSetting('letterSpacing')}em</span>
-                          </div>
-                          <input
-                            type="range"
-                            min="-0.05"
-                            max="0.1"
-                            step="0.005"
-                            className="w-full h-2 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                            value={liveEditorSettings.getSetting('letterSpacing')}
-                            onChange={(e) => liveEditorSettings.updateSetting('letterSpacing', parseFloat(e.target.value))}
-                          />
-                        </div>
-
-                        <div className="border-t border-app-border/50 pt-4 mt-4">
-                          <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted mb-3 flex items-center gap-2">
-                            <div className="w-1 h-4 bg-app-accent rounded-full"></div>
-                            Heading Sizes
-                          </h3>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <label className="text-xs font-medium text-app-muted">H1</label>
-                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h1Size')}em</span>
-                              </div>
-                              <input
-                                type="range"
-                                min="1.5"
-                                max="3.0"
-                                step="0.1"
-                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                                value={liveEditorSettings.getSetting('h1Size')}
-                                onChange={(e) => liveEditorSettings.updateSetting('h1Size', parseFloat(e.target.value))}
-                              />
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <label className="text-xs font-medium text-app-muted">H2</label>
-                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h2Size')}em</span>
-                              </div>
-                              <input
-                                type="range"
-                                min="1.2"
-                                max="2.5"
-                                step="0.1"
-                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                                value={liveEditorSettings.getSetting('h2Size')}
-                                onChange={(e) => liveEditorSettings.updateSetting('h2Size', parseFloat(e.target.value))}
-                              />
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <label className="text-xs font-medium text-app-muted">H3</label>
-                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('h3Size')}em</span>
-                              </div>
-                              <input
-                                type="range"
-                                min="1.0"
-                                max="2.0"
-                                step="0.1"
-                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                                value={liveEditorSettings.getSetting('h3Size')}
-                                onChange={(e) => liveEditorSettings.updateSetting('h3Size', parseFloat(e.target.value))}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="border-t border-app-border/50 pt-4 mt-4">
-                          <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted mb-3 flex items-center gap-2">
-                            <div className="w-1 h-4 bg-app-accent rounded-full"></div>
-                            Font Weights
-                          </h3>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div>
-                              <div className="flex items-center justify-between mb-1.5">
-                                <label className="text-xs font-medium text-app-muted">Normal</label>
-                                <span className="text-xs font-mono text-app-accent">{liveEditorSettings.getSetting('fontWeight')}</span>
-                              </div>
-                              <input type="range" min="100" max="900" step="100"
-                                className="w-full h-1.5 bg-app-border rounded-lg appearance-none cursor-pointer accent-app-accent"
-                                value={liveEditorSettings.getSetting('fontWeight')}
-                                onChange={(e) => liveEditorSettings.updateSetting('fontWeight', parseInt(e.target.value))}
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium mb-1">Bold</label>
-                              <div className="flex items-center gap-2">
-                                <input type="range" min="100" max="900" step="100" className="flex-1"
-                                  value={liveEditorSettings.getSetting('boldWeight')}
-                                  onChange={(e) => liveEditorSettings.updateSetting('boldWeight', parseInt(e.target.value))}
-                                />
-                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('boldWeight')}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium mb-1">H1</label>
-                              <div className="flex items-center gap-2">
-                                <input type="range" min="100" max="900" step="100" className="flex-1"
-                                  value={liveEditorSettings.getSetting('h1Weight')}
-                                  onChange={(e) => liveEditorSettings.updateSetting('h1Weight', parseInt(e.target.value))}
-                                />
-                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h1Weight')}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium mb-1">H2</label>
-                              <div className="flex items-center gap-2">
-                                <input type="range" min="100" max="900" step="100" className="flex-1"
-                                  value={liveEditorSettings.getSetting('h2Weight')}
-                                  onChange={(e) => liveEditorSettings.updateSetting('h2Weight', parseInt(e.target.value))}
-                                />
-                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h2Weight')}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium mb-1">H3</label>
-                              <div className="flex items-center gap-2">
-                                <input type="range" min="100" max="900" step="100" className="flex-1"
-                                  value={liveEditorSettings.getSetting('h3Weight')}
-                                  onChange={(e) => liveEditorSettings.updateSetting('h3Weight', parseInt(e.target.value))}
-                                />
-                                <span className="text-xs text-app-muted w-8">{liveEditorSettings.getSetting('h3Weight')}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Spacing Settings */}
-                  <section className="border border-app-border rounded-lg overflow-hidden bg-app-panel/30 hover:border-app-accent/30 transition-all">
-                    <button
-                      onClick={() => toggleSection('spacing')}
-                      className="w-full px-4 py-2.5 bg-gradient-to-r from-app-panel/50 to-transparent hover:from-app-panel flex items-center justify-between transition-all group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <h2 className="text-sm font-semibold">Spacing & Layout</h2>
-                      </div>
-                      <svg className={`w-4 h-4 transition-transform duration-200 ${expandedSections.spacing ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.spacing && (
-                      <div className="p-4 space-y-4 bg-app-bg">
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Paragraph Spacing</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max="3"
-                              step="0.25"
-                              className="flex-1"
-                              value={liveEditorSettings.getSetting('paragraphSpacing')}
-                              onChange={(e) => liveEditorSettings.updateSetting('paragraphSpacing', parseFloat(e.target.value))}
-                            />
-                            <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('paragraphSpacing')}rem</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-2">List Item Spacing</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="0"
-                              max="1"
-                              step="0.05"
-                              className="flex-1"
-                              value={liveEditorSettings.getSetting('listSpacing')}
-                              onChange={(e) => liveEditorSettings.updateSetting('listSpacing', parseFloat(e.target.value))}
-                            />
-                            <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('listSpacing')}rem</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Indentation Size</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="range"
-                              min="1"
-                              max="4"
-                              step="0.5"
-                              className="flex-1"
-                              value={liveEditorSettings.getSetting('indentSize')}
-                              onChange={(e) => liveEditorSettings.updateSetting('indentSize', parseFloat(e.target.value))}
-                            />
-                            <span className="text-sm text-app-muted w-12">{liveEditorSettings.getSetting('indentSize')}rem</span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* List Symbols */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('lists')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">List Symbols</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.lists ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.lists && (
-                      <div className="p-4 space-y-4 bg-app-bg">
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Bullet Style</label>
-                          <div className="flex gap-2">
-                            {['•', '◦', '▪', '▸', '►', '○', '●'].map(symbol => (
-                              <button
-                                key={symbol}
-                                onClick={() => liveEditorSettings.updateSetting('bulletStyle', symbol)}
-                                className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${liveEditorSettings.getSetting('bulletStyle') === symbol
-                                  ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                                  : 'border-app-border hover:border-app-accent/50'
-                                  }`}
-                              >
-                                {symbol}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Checkbox Style</label>
-                          <div className="flex gap-2">
-                            {['☑', '✓', '✔', '☐', '✅'].map(symbol => (
-                              <button
-                                key={symbol}
-                                onClick={() => liveEditorSettings.updateSetting('checkboxStyle', symbol)}
-                                className={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${liveEditorSettings.getSetting('checkboxStyle') === symbol
-                                  ? 'border-app-accent bg-app-accent/10 text-app-accent'
-                                  : 'border-app-border hover:border-app-accent/50'
-                                  }`}
-                              >
-                                {symbol}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Colors */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('colors')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">Colors</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.colors ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.colors && (
-                      <div className="p-4 bg-app-bg">
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Text</label>
-                            <input
-                              type="color"
-                              className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('textColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('textColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('textColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Heading</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('headingColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('headingColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('headingColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Link</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('linkColor') === '#inherit' ? '#0000ff' : liveEditorSettings.getSetting('linkColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('linkColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Link Hover</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('linkHoverColor') === '#inherit' ? '#0000cc' : liveEditorSettings.getSetting('linkHoverColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('linkHoverColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Code</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('codeColor') === '#inherit' ? '#e83e8c' : liveEditorSettings.getSetting('codeColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('codeColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Code BG</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('codeBackground')}
-                              onChange={(e) => liveEditorSettings.updateSetting('codeBackground', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Quote</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('blockquoteColor') === '#inherit' ? '#6c757d' : liveEditorSettings.getSetting('blockquoteColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('blockquoteColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Quote Border</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('blockquoteBorder')}
-                              onChange={(e) => liveEditorSettings.updateSetting('blockquoteBorder', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Bold</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('boldColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('boldColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('boldColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Italic</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('italicColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('italicColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('italicColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Highlight BG</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('highlightColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('highlightColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Highlight Text</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('highlightTextColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('highlightTextColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('highlightTextColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium mb-1">Selection</label>
-                            <input type="color" className="w-full h-8 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('selectionColor').match(/#[0-9a-fA-F]{6}/)?.[0] || '#6366f1'}
-                              onChange={(e) => liveEditorSettings.updateSetting('selectionColor', `rgba(${parseInt(e.target.value.slice(1, 3), 16)}, ${parseInt(e.target.value.slice(3, 5), 16)}, ${parseInt(e.target.value.slice(5, 7), 16)}, 0.2)`)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Code Blocks */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('codeBlocks')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">Code Blocks</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.codeBlocks ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.codeBlocks && (
-                      <div className="p-4 bg-app-bg">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Background Color</label>
-                            <input
-                              type="color"
-                              className="w-full h-10 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('codeBlockBg')}
-                              onChange={(e) => liveEditorSettings.updateSetting('codeBlockBg', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Color</label>
-                            <input
-                              type="color"
-                              className="w-full h-10 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('codeBlockBorder')}
-                              onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorder', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Width</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="0"
-                                max="5"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('codeBlockBorderWidth')}
-                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorderWidth', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockBorderWidth')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Radius</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="0"
-                                max="20"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('codeBlockBorderRadius')}
-                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockBorderRadius', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockBorderRadius')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Padding</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="0"
-                                max="32"
-                                step="2"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('codeBlockPadding')}
-                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockPadding', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockPadding')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Font Family</label>
-                            <select
-                              className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                              value={liveEditorSettings.getSetting('codeBlockFont')}
-                              onChange={(e) => liveEditorSettings.updateSetting('codeBlockFont', e.target.value)}
-                            >
-                              <option value="ui-monospace">System Monospace</option>
-                              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
-                              <option value="'Fira Code', monospace">Fira Code</option>
-                              <option value="'Source Code Pro', monospace">Source Code Pro</option>
-                              <option value="Consolas, monospace">Consolas</option>
-                              <option value="Monaco, monospace">Monaco</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Font Size</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="10"
-                                max="20"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('codeBlockFontSize')}
-                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockFontSize', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('codeBlockFontSize')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Line Height</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="1.0"
-                                max="2.0"
-                                step="0.1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('codeBlockLineHeight')}
-                                onChange={(e) => liveEditorSettings.updateSetting('codeBlockLineHeight', parseFloat(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-8">{liveEditorSettings.getSetting('codeBlockLineHeight')}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Links */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('links')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">Links</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.links ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.links && (
-                      <div className="p-4 bg-app-bg">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Underline Style</label>
-                            <select
-                              className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                              value={liveEditorSettings.getSetting('linkUnderline')}
-                              onChange={(e) => liveEditorSettings.updateSetting('linkUnderline', e.target.value)}
-                            >
-                              <option value="none">None</option>
-                              <option value="hover">On Hover</option>
-                              <option value="always">Always</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Underline Thickness</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="1"
-                                max="4"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('linkUnderlineThickness')}
-                                onChange={(e) => liveEditorSettings.updateSetting('linkUnderlineThickness', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('linkUnderlineThickness')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Underline Offset</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="0"
-                                max="8"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('linkUnderlineOffset')}
-                                onChange={(e) => liveEditorSettings.updateSetting('linkUnderlineOffset', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('linkUnderlineOffset')}px</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Text Decorations */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('decorations')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">Text Decorations</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.decorations ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.decorations && (
-                      <div className="p-4 bg-app-bg">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Strikethrough Color</label>
-                            <input
-                              type="color"
-                              className="w-full h-10 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('strikethroughColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('strikethroughColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Strikethrough Thickness</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="1"
-                                max="4"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('strikethroughThickness')}
-                                onChange={(e) => liveEditorSettings.updateSetting('strikethroughThickness', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('strikethroughThickness')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Underline Color</label>
-                            <input
-                              type="color"
-                              className="w-full h-10 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('underlineColor') === '#inherit' ? '#000000' : liveEditorSettings.getSetting('underlineColor')}
-                              onChange={(e) => liveEditorSettings.updateSetting('underlineColor', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Underline Thickness</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="1"
-                                max="4"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('underlineThickness')}
-                                onChange={(e) => liveEditorSettings.updateSetting('underlineThickness', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('underlineThickness')}px</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Blockquotes */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('blockquotes')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">Blockquotes</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.blockquotes ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.blockquotes && (
-                      <div className="p-4 bg-app-bg">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Width</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="1"
-                                max="8"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('blockquoteBorderWidth')}
-                                onChange={(e) => liveEditorSettings.updateSetting('blockquoteBorderWidth', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('blockquoteBorderWidth')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Padding</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="8"
-                                max="32"
-                                step="2"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('blockquotePadding')}
-                                onChange={(e) => liveEditorSettings.updateSetting('blockquotePadding', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('blockquotePadding')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Style</label>
-                            <select
-                              className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none"
-                              value={liveEditorSettings.getSetting('blockquoteStyle')}
-                              onChange={(e) => liveEditorSettings.updateSetting('blockquoteStyle', e.target.value)}
-                            >
-                              <option value="solid">Solid</option>
-                              <option value="dashed">Dashed</option>
-                              <option value="dotted">Dotted</option>
-                              <option value="double">Double</option>
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Tables */}
-                  <section className="border border-app-border rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => toggleSection('tables')}
-                      className="w-full px-4 py-3 bg-app-panel/50 hover:bg-app-panel flex items-center justify-between transition-colors"
-                    >
-                      <h2 className="text-sm font-semibold uppercase tracking-wide">Tables</h2>
-                      <svg className={`w-5 h-5 transition-transform ${expandedSections.tables ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-                    {expandedSections.tables && (
-                      <div className="p-4 bg-app-bg">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Color</label>
-                            <input
-                              type="color"
-                              className="w-full h-10 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('tableBorder')}
-                              onChange={(e) => liveEditorSettings.updateSetting('tableBorder', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Header Background</label>
-                            <input
-                              type="color"
-                              className="w-full h-10 rounded border border-app-border cursor-pointer"
-                              value={liveEditorSettings.getSetting('tableHeaderBg')}
-                              onChange={(e) => liveEditorSettings.updateSetting('tableHeaderBg', e.target.value)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Border Width</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="1"
-                                max="4"
-                                step="1"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('tableBorderWidth')}
-                                onChange={(e) => liveEditorSettings.updateSetting('tableBorderWidth', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('tableBorderWidth')}px</span>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium mb-2">Cell Padding</label>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="range"
-                                min="4"
-                                max="20"
-                                step="2"
-                                className="flex-1"
-                                value={liveEditorSettings.getSetting('tableCellPadding')}
-                                onChange={(e) => liveEditorSettings.updateSetting('tableCellPadding', parseInt(e.target.value))}
-                              />
-                              <span className="text-sm text-app-muted w-10">{liveEditorSettings.getSetting('tableCellPadding')}px</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Save Button */}
-                  <div className="flex justify-end gap-3 pt-4 sticky bottom-0 bg-gradient-to-t from-app-bg via-app-bg to-transparent border-t border-app-border/50 py-4 backdrop-blur-sm">
-                    <button
-                      onClick={resetEditorSettings}
-                      className="px-4 py-2 rounded-lg border border-app-border hover:bg-app-panel hover:border-app-accent/50 transition-all flex items-center gap-2 group"
-                    >
-                      <svg className="w-4 h-4 group-hover:rotate-180 transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Reset
-                    </button>
-                    <button
-                      onClick={saveEditorSettings}
-                      className={`px-6 py-2 rounded-lg transition-all flex items-center gap-2 font-medium shadow-lg ${saveStatus === 'saving'
-                        ? 'bg-app-muted text-app-bg cursor-wait'
-                        : saveStatus === 'success'
-                          ? 'bg-green-600 text-white shadow-green-600/50'
-                          : saveStatus === 'error'
-                            ? 'bg-red-600 text-white shadow-red-600/50'
-                            : 'bg-app-accent text-white hover:bg-app-accent/90 hover:shadow-app-accent/50'
-                        }`}
-                    >
-                      {saveStatus === 'saving' && (
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      )}
-                      {saveStatus === 'success' && (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
-                      {saveStatus === 'error' && (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      )}
-                      {!saveStatus && (
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                        </svg>
-                      )}
-                      {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'success' ? 'Saved!' : saveStatus === 'error' ? 'Failed' : 'Save Settings'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Live Preview - Sticky on the right */}
-                <div className="lg:w-[400px] lg:sticky lg:top-6 self-start">
-                  <div className="border border-app-border rounded-xl p-4 bg-gradient-to-br from-app-panel/50 to-app-bg backdrop-blur-sm shadow-lg">
-                    <div className="flex items-center gap-2 mb-3">
-                      <svg className="w-4 h-4 text-app-accent" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                      </svg>
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-app-muted">Live Preview</h3>
-                    </div>
-                    <div
-                      className="ProseMirror min-h-[400px] max-h-[600px] overflow-y-auto p-4 bg-app-bg/80 rounded-lg border border-app-border/50 shadow-inner"
-                      style={{
-                        fontFamily: `var(--editor-font-family, ui-sans-serif)`,
-                        fontSize: `var(--editor-font-size, 16px)`,
-                        lineHeight: `var(--editor-line-height, 1.7)`,
-                        letterSpacing: `var(--editor-letter-spacing, 0.003em)`,
-                        color: `var(--editor-text-color, rgb(var(--text)))`
-                      }}
-                    >
-                      <h1>Heading 1</h1>
-                      <h2>Heading 2</h2>
-                      <h3>Heading 3</h3>
-                      <p>This is a paragraph with some <strong>bold text</strong> and <em>italic text</em>. You can see how your font settings affect the editor in real-time.</p>
-                      <ul>
-                        <li>Bullet point one</li>
-                        <li>Bullet point two</li>
-                        <li>Nested list:
-                          <ul>
-                            <li>Nested item 1</li>
-                            <li>Nested item 2</li>
-                          </ul>
-                        </li>
-                      </ul>
-                      <p>Here's a <a href="#">link example</a> and some <code>inline code</code>.</p>
-                      <blockquote>
-                        <p>This is a blockquote to test quote styling.</p>
-                      </blockquote>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {section === "Callouts" && (
-              <div className="p-6 space-y-4 max-w-md">
-                <h2 className="text-lg font-semibold">Callouts</h2>
-
-                <label className="block text-sm">Callout type</label>
-                <select
-                  className="w-full border p-2 rounded bg-app-panel"
-                  value={selectedType}
-                  onChange={(e) => setSelectedType(e.target.value)}
-                >
-                  <option value="note">Note</option>
-                  <option value="warning">Warning</option>
-                  <option value="tip">Tip</option>
-                </select>
-
-                <label className="block text-sm">Icon</label>
-                <input
-                  className="w-full border p-2 rounded bg-app-panel"
-                  value={callouts[selectedType]?.icon || ""}
-                  onChange={(e) => {
-                    const updated = {
-                      ...callouts,
-                      [selectedType]: {
-                        ...callouts[selectedType],
-                        icon: e.target.value
-                      }
-                    };
-                    setCallouts(updated);
-                    saveCalloutConfig(updated);
-                  }}
-                />
-
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={callouts[selectedType]?.collapsed ?? false}
-                    onChange={(e) => {
-                      const updated = {
-                        ...callouts,
-                        [selectedType]: {
-                          ...callouts[selectedType],
-                          collapsed: e.target.checked
-                        }
-                      };
-                      setCallouts(updated);
-                      saveCalloutConfig(updated);
-                    }}
-                  />
-                  Collapsed by default
-                </label>
-              </div>
-            )}
-
-
-
-            {section === "General" && (
-              <div className="space-y-8 max-w-2xl">
-                <div>
-                  <h1 className="text-2xl font-bold text-app-text mb-2">General</h1>
-                  <p className="text-app-text-secondary">
-                    Choose how much of Lokus you want to see.
-                  </p>
-                </div>
-
-                <section className="bg-app-panel border border-app-border rounded-xl p-6">
-                  <div className="flex items-start justify-between gap-6">
-                    <div>
-                      <h2 className="text-base font-semibold text-app-text mb-1">Advanced features</h2>
-                      <p className="text-sm text-app-text-secondary max-w-md">
-                        Lokus starts simple: just the editor, files, and search. Turn this on to
-                        unlock the advanced tools — Graph, Canvas, Kanban, Bases, Calendar, Meeting
-                        Notes, AI Assistant, Sync, Plugins, Templates, Terminal, MCP, and Version
-                        History.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={advancedFeatures}
-                      aria-label="Advanced features"
-                      onClick={() => setAdvancedFeatures(!advancedFeatures)}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${advancedFeatures ? "bg-app-accent" : "bg-app-border"}`}
-                    >
-                      <span
-                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${advancedFeatures ? "translate-x-5" : "translate-x-0.5"}`}
-                      />
-                    </button>
-                  </div>
-                  <p className="text-xs text-app-muted mt-4">
-                    {advancedFeatures
-                      ? "All features are enabled."
-                      : "Simple mode — advanced panels are hidden."}
-                  </p>
-                </section>
-              </div>
-            )}
-
-            {section === "Markdown" && (
-              <div className="max-w-3xl space-y-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm text-app-muted">Customize markdown syntax characters and behaviors</div>
-                  <button
-                    onClick={() => markdownSyntaxConfig.reset()}
-                    className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-app-border hover:bg-app-panel text-sm"
-                  >
-                    <RotateCcw className="w-4 h-4" /> Reset All
-                  </button>
-                </div>
-
-                <div className="rounded-lg border border-app-border overflow-hidden">
-                  <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
-                    <div className="col-span-5">Syntax</div>
-                    <div className="col-span-3">Marker</div>
-                    <div className="col-span-4 text-right">Enabled</div>
-                  </div>
-                  <div className="divide-y divide-app-border/60">
-                    {/* Headers */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="text-xl w-6 text-center">#</span>
-                        <div>
-                          <div className="text-sm">Headers</div>
-                          <div className="text-xs text-app-muted">Heading marker</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="2"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.heading?.marker || '#'}
-                          onChange={(e) => markdownSyntaxConfig.set('heading', 'marker', e.target.value)}
-                          disabled={markdownSyntax.heading?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('heading', 'enabled', !(markdownSyntax.heading?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.heading?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.heading?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Bold */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="font-bold text-xl w-6 text-center">B</span>
-                        <div>
-                          <div className="text-sm">Bold</div>
-                          <div className="text-xs text-app-muted">Wrapping characters for bold text</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="3"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.bold?.marker || '**'}
-                          onChange={(e) => markdownSyntaxConfig.set('bold', 'marker', e.target.value)}
-                          disabled={markdownSyntax.bold?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('bold', 'enabled', !(markdownSyntax.bold?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.bold?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.bold?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Italic */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="italic text-xl w-6 text-center">I</span>
-                        <div>
-                          <div className="text-sm">Italic</div>
-                          <div className="text-xs text-app-muted">Wrapping characters for italic text</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="2"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.italic?.marker || '*'}
-                          onChange={(e) => markdownSyntaxConfig.set('italic', 'marker', e.target.value)}
-                          disabled={markdownSyntax.italic?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('italic', 'enabled', !(markdownSyntax.italic?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.italic?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.italic?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Inline Code */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="font-mono text-app-accent text-xl w-6 text-center">`</span>
-                        <div>
-                          <div className="text-sm">Inline Code</div>
-                          <div className="text-xs text-app-muted">Wrapping character for code</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="2"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.inlineCode?.marker || '`'}
-                          onChange={(e) => markdownSyntaxConfig.set('inlineCode', 'marker', e.target.value)}
-                          disabled={markdownSyntax.inlineCode?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('inlineCode', 'enabled', !(markdownSyntax.inlineCode?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.inlineCode?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.inlineCode?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Strikethrough */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="line-through text-xl w-6 text-center">S</span>
-                        <div>
-                          <div className="text-sm">Strikethrough</div>
-                          <div className="text-xs text-app-muted">Wrapping characters for strikethrough</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="3"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.strikethrough?.marker || '~~'}
-                          onChange={(e) => markdownSyntaxConfig.set('strikethrough', 'marker', e.target.value)}
-                          disabled={markdownSyntax.strikethrough?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('strikethrough', 'enabled', !(markdownSyntax.strikethrough?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.strikethrough?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.strikethrough?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Highlight */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="bg-yellow-200/30 px-1 text-xl w-6 text-center">H</span>
-                        <div>
-                          <div className="text-sm">Highlight</div>
-                          <div className="text-xs text-app-muted">Wrapping characters for highlights</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="3"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.highlight?.marker || '=='}
-                          onChange={(e) => markdownSyntaxConfig.set('highlight', 'marker', e.target.value)}
-                          disabled={markdownSyntax.highlight?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('highlight', 'enabled', !(markdownSyntax.highlight?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.highlight?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.highlight?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Bullet Lists */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="text-xl w-6 text-center">•</span>
-                        <div>
-                          <div className="text-sm">Bullet Lists</div>
-                          <div className="text-xs text-app-muted">Default list marker</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <select
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.bulletList?.defaultMarker || '-'}
-                          onChange={(e) => markdownSyntaxConfig.set('bulletList', 'defaultMarker', e.target.value)}
-                          disabled={markdownSyntax.bulletList?.enabled === false}
-                        >
-                          {(markdownSyntax.bulletList?.markers || ['*', '-', '+']).map(m => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('bulletList', 'enabled', !(markdownSyntax.bulletList?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.bulletList?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.bulletList?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Blockquote */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="text-app-muted text-xl w-6 text-center">&gt;</span>
-                        <div>
-                          <div className="text-sm">Blockquote</div>
-                          <div className="text-xs text-app-muted">Quote line prefix</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="2"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.blockquote?.marker || '>'}
-                          onChange={(e) => markdownSyntaxConfig.set('blockquote', 'marker', e.target.value)}
-                          disabled={markdownSyntax.blockquote?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('blockquote', 'enabled', !(markdownSyntax.blockquote?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.blockquote?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.blockquote?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Wiki Links */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="text-app-accent w-6 text-center font-mono text-xl">[[</span>
-                        <div>
-                          <div className="text-sm">Wiki Links</div>
-                          <div className="text-xs text-app-muted">Opening/closing brackets</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            maxLength="3"
-                            className="w-9 px-1 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                            value={markdownSyntax.link?.wikiLink?.open || '[['}
-                            onChange={(e) => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, open: e.target.value } })}
-                            disabled={markdownSyntax.link?.wikiLink?.enabled === false}
-                          />
-                          <input
-                            type="text"
-                            maxLength="3"
-                            className="w-9 px-1 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                            value={markdownSyntax.link?.wikiLink?.close || ']]'}
-                            onChange={(e) => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, close: e.target.value } })}
-                            disabled={markdownSyntax.link?.wikiLink?.enabled === false}
-                          />
-                        </div>
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('link', { ...markdownSyntax.link, wikiLink: { ...markdownSyntax.link?.wikiLink, enabled: !(markdownSyntax.link?.wikiLink?.enabled !== false) } })}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.link?.wikiLink?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.link?.wikiLink?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Images */}
-                    <div className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                      <div className="col-span-5 flex items-center gap-3">
-                        <span className="text-xl w-6 text-center">🖼</span>
-                        <div>
-                          <div className="text-sm">Images</div>
-                          <div className="text-xs text-app-muted">Image prefix marker</div>
-                        </div>
-                      </div>
-                      <div className="col-span-3">
-                        <input
-                          type="text"
-                          maxLength="2"
-                          className="w-20 px-2 py-1 text-center text-sm rounded bg-app-bg border border-app-border focus:border-app-accent outline-none font-mono"
-                          value={markdownSyntax.image?.marker || '!'}
-                          onChange={(e) => markdownSyntaxConfig.set('image', 'marker', e.target.value)}
-                          disabled={markdownSyntax.image?.enabled === false}
-                        />
-                      </div>
-                      <div className="col-span-4 flex justify-end">
-                        <button
-                          onClick={() => markdownSyntaxConfig.set('image', 'enabled', !(markdownSyntax.image?.enabled !== false))}
-                          className={`w-12 h-6 rounded-full transition-colors relative ${markdownSyntax.image?.enabled !== false ? 'bg-app-accent' : 'bg-app-border'
-                            }`}
-                        >
-                          <div className={`w-4 h-4 rounded-full bg-app-bg absolute top-1 transition-transform ${markdownSyntax.image?.enabled !== false ? 'translate-x-7' : 'translate-x-1'
-                            }`}></div>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => {
-                      const json = markdownSyntaxConfig.export();
-                      navigator.clipboard.writeText(json);
-                      alert('Copied to clipboard!');
-                    }}
-                    className="px-4 py-2 text-sm rounded-lg border border-app-border hover:bg-app-panel transition-colors"
-                  >
-                    Export
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const saved = await markdownSyntaxConfig.save();
-                      setSaveStatus(saved ? 'success' : 'error');
-                      setTimeout(() => setSaveStatus(''), 3000);
-
-                      // Emit event to notify other windows to reload config
-                      if (saved) {
-                        try {
-                          const { emit } = await import('@tauri-apps/api/event');
-                          await emit('lokus:markdown-config-changed', {
-                            config: markdownSyntaxConfig.getAll()
-                          });
-                          if (import.meta.env.DEV) {
-                          }
-                        } catch { }
-                      }
-                    }}
-                    className="px-6 py-2 text-sm rounded-lg bg-app-accent text-white hover:bg-app-accent/90 transition-colors relative"
-                  >
-                    {saveStatus === 'success' ? '✓ Saved!' : saveStatus === 'error' ? '✗ Failed' : 'Save Configuration'}
-                  </button>
-                </div>
-
-                {/* Custom Symbol Shortcuts */}
-                <div className="mt-8 pt-6 border-t border-app-border">
-                  <h3 className="text-lg font-medium mb-2">Symbol Shortcuts</h3>
-                  <p className="text-sm text-app-muted mb-4">
-                    Type <code className="px-1.5 py-0.5 bg-app-bg rounded text-xs">:name:</code> to insert symbols.
-                    Built-in: <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:theta:</code> → θ,
-                    <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:arrow:</code> → →,
-                    <code className="px-1 py-0.5 bg-app-bg rounded text-xs">:inf:</code> → ∞
-                  </p>
-
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-medium mb-2">Custom Symbols</h4>
-                      <p className="text-xs text-app-muted mb-3">Add your own shortcuts. These override built-in symbols with the same name.</p>
-
-                      {/* Add new symbol form */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <input
-                          type="text"
-                          placeholder="name (e.g. myarrow)"
-                          className="flex-1 h-9 px-3 text-sm rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent font-mono"
-                          value={newSymbolName}
-                          onChange={(e) => setNewSymbolName(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))}
-                          onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
-                        />
-                        <span className="text-app-muted">→</span>
-                        <input
-                          type="text"
-                          placeholder="symbol (e.g. ➜)"
-                          className="w-24 h-9 px-3 text-sm text-center rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
-                          value={newSymbolChar}
-                          onChange={(e) => setNewSymbolChar(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && addCustomSymbol()}
-                        />
-                        <button
-                          onClick={addCustomSymbol}
-                          disabled={!newSymbolName.trim() || !newSymbolChar.trim() || newSymbolName.trim().length < 2}
-                          className="h-9 px-4 text-sm rounded-md bg-app-accent text-white hover:bg-app-accent/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Add
-                        </button>
-                      </div>
-
-                      {/* List of custom symbols */}
-                      {Object.keys(customSymbols).length > 0 ? (
-                        <div className="rounded-lg border border-app-border overflow-hidden">
-                          <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
-                            <div className="col-span-5">Shortcut</div>
-                            <div className="col-span-5">Symbol</div>
-                            <div className="col-span-2"></div>
-                          </div>
-                          <div className="divide-y divide-app-border/60">
-                            {Object.entries(customSymbols).map(([name, symbol]) => (
-                              <div key={name} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                                <div className="col-span-5 font-mono text-sm">:{name}:</div>
-                                <div className="col-span-5 text-lg">{symbol}</div>
-                                <div className="col-span-2 flex justify-end">
-                                  <button
-                                    onClick={() => removeCustomSymbol(name)}
-                                    className="text-xs text-app-muted hover:text-red-500 transition-colors"
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="text-sm text-app-muted italic">No custom symbols defined.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {section === "Daily Notes" && (
-              <div className="max-w-2xl space-y-6">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-2">Daily Notes</h2>
-                  <p className="text-app-muted">Configure your daily journaling workflow with customizable templates and date formats.</p>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Date Format</label>
-                    <input
-                      type="text"
-                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
-                      value={dailyNotesSettings.format}
-                      onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, format: e.target.value })}
-                      onBlur={saveDailyNotesSettings}
-                      placeholder="yyyy-MM-dd"
-                    />
-                    <p className="text-xs text-app-muted mt-1">
-                      Uses date-fns format. Examples: yyyy-MM-dd, MM-dd-yyyy, yyyy/MM/dd
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Folder Location</label>
-                    <input
-                      type="text"
-                      className="w-full h-9 px-3 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent"
-                      value={dailyNotesSettings.folder}
-                      onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, folder: e.target.value })}
-                      onBlur={saveDailyNotesSettings}
-                      placeholder="Daily Notes"
-                    />
-                    <p className="text-xs text-app-muted mt-1">
-                      Folder path relative to your workspace root
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Daily Note Template</label>
-                    <textarea
-                      className="w-full h-32 px-3 py-2 rounded-md bg-app-panel border border-app-border outline-none focus:border-app-accent resize-y font-mono text-sm"
-                      value={dailyNotesSettings.template}
-                      onChange={(e) => setDailyNotesSettings({ ...dailyNotesSettings, template: e.target.value })}
-                      onBlur={saveDailyNotesSettings}
-                      placeholder="# {{date}}&#10;&#10;## Tasks&#10;- &#10;&#10;## Notes&#10;"
-                    />
-                    <div className="text-xs text-app-muted mt-2 space-y-1">
-                      <p className="font-medium">Available template variables:</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 pl-2">
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date}}'}</code> - Today's date</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{yesterday}}'}</code> - Yesterday's date</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{tomorrow}}'}</code> - Tomorrow's date</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day}}'}</code> - Day name (Monday)</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{day_short}}'}</code> - Day name (Mon)</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{month}}'}</code> - Month name</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{week}}'}</code> - Week number</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{year}}'}</code> - Year (2025)</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{time}}'}</code> - Current time</div>
-                        <div><code className="px-1 py-0.5 bg-app-bg rounded text-xs">{'{{date:FORMAT}}'}</code> - Custom format</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 py-2">
-                    <input
-                      type="checkbox"
-                      id="openOnStartup"
-                      className="w-4 h-4 rounded border-app-border"
-                      checked={dailyNotesSettings.openOnStartup}
-                      onChange={(e) => {
-                        setDailyNotesSettings({ ...dailyNotesSettings, openOnStartup: e.target.checked });
-                        saveDailyNotesSettings();
-                      }}
-                    />
-                    <label htmlFor="openOnStartup" className="text-sm cursor-pointer">
-                      Open today's daily note on startup
-                    </label>
-                  </div>
-                  {isDesktop() && (
-                    <div className="pt-4 border-t border-app-border">
-                      <p className="text-sm text-app-muted mb-2">Quick access:</p>
-                      <ul className="text-sm space-y-1 text-app-muted">
-                        <li>• Press <kbd className="px-2 py-0.5 bg-app-bg border border-app-border rounded text-xs">Cmd/Ctrl + Shift + D</kbd> to open today's note</li>
-                        <li>• Use Command Palette (Cmd/Ctrl + K) → "Open Daily Note"</li>
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {section === "Shortcuts" && (
-              <div className="max-w-3xl space-y-6">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-app-muted" />
-                    <input
-                      value={query}
-                      onChange={(e) => setQuery(e.target.value)}
-                      placeholder="Search actions..."
-                      className="w-full pl-8 pr-3 h-9 rounded-md bg-app-bg border border-app-border outline-none focus:ring-2 focus:ring-app-accent/40"
-                    />
-                  </div>
-                  <button onClick={onResetAll} className="h-9 inline-flex items-center gap-2 px-3 rounded-md border border-app-border hover:bg-app-panel text-sm">
-                    <RotateCcw className="w-4 h-4" /> Reset All
-                  </button>
-                </div>
-
-                <div className="rounded-lg border border-app-border overflow-hidden">
-                  <div className="grid grid-cols-12 bg-app-panel/40 px-4 py-2 text-xs text-app-muted">
-                    <div className="col-span-7">Action</div>
-                    <div className="col-span-3">Shortcut</div>
-                    <div className="col-span-2 text-right">Edit</div>
-                  </div>
-                  <div className="divide-y divide-app-border/60">
-                    {actions
-                      .filter(a => a.name.toLowerCase().includes(query.toLowerCase()))
-                      .map(a => {
-                        const accel = keymap[a.id];
-                        const parts = accelParts(accel);
+                    <div className="max-h-[320px] overflow-y-auto -mr-2 pr-2">
+                      {Object.entries(themeTokens).sort().map(([key, value]) => {
+                        const swatch = value.includes(' ') ? `rgb(${value})` : value;
                         return (
-                          <div key={a.id} className="grid grid-cols-12 items-center px-4 py-2 hover:bg-app-panel/30">
-                            <div className="col-span-7 text-sm">{a.name}</div>
-                            <div className="col-span-3">
-                              {editing === a.id ? (
-                                <div className="inline-flex items-center gap-2">
-                                  <span className="text-xs text-app-muted">Press keys…</span>
-                                </div>
-                              ) : (
-                                <div className="flex flex-wrap items-center gap-1">
-                                  {parts.length > 0 ? parts.map((p, i) => (
-                                    <Keycap key={i}>{p}</Keycap>
-                                  )) : <span className="text-xs text-app-muted">Not set</span>}
-                                </div>
-                              )}
-                            </div>
-                            <div className="col-span-2">
-                              {editing === a.id ? (
-                                <input
-                                  autoFocus
-                                  onKeyDown={(e) => onKeyCapture(e, a.id)}
-                                  onBlur={cancelEdit}
-                                  className="w-full h-8 text-center bg-app-bg border border-dashed border-app-border rounded outline-none"
-                                  placeholder={formatAccelerator(accel) || "Press keys..."}
-                                />
-                              ) : (
-                                <div className="flex items-center justify-end gap-2">
-                                  <button
-                                    onClick={() => beginEdit(a.id)}
-                                    className="h-8 inline-flex items-center gap-2 px-2 rounded-md border border-app-border hover:bg-app-panel text-xs"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" /> Edit
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                          <div key={key} className="py-2 border-b border-app-border/60 last:border-b-0 flex items-center gap-3">
+                            <span
+                              aria-hidden
+                              title={swatch}
+                              className="w-4 h-4 rounded-[3px] border border-app-border flex-none"
+                              style={{ backgroundColor: swatch }}
+                            />
+                            <label htmlFor={`tok-${key}`} className="font-mono text-[11.5px] text-app-muted flex-1 min-w-0 truncate">
+                              {key}
+                            </label>
+                            <P.TextField
+                              id={`tok-${key}`}
+                              mono
+                              value={value}
+                              onChange={(v) => handleTokenChange(key, v)}
+                              placeholder="255 128 0"
+                              className="w-[150px] flex-none"
+                            />
                           </div>
                         );
                       })}
-                  </div>
-                </div>
-              </div>
+                    </div>
+                    {hasUnsavedChanges && (
+                      <div className="flex items-center gap-2 pt-3">
+                        <P.Button tone="primary" onClick={handleSaveTheme}>Save changes</P.Button>
+                        <P.Button tone="ghost" onClick={handleResetTheme}>Discard</P.Button>
+                      </div>
+                    )}
+                  </P.Group>
+                )}
+
+                {!activeTheme && <P.Empty>Choose a theme above to edit its colours.</P.Empty>}
+              </P.Page>
+            )}
+
+            {section === "Editor" && (
+              <Editor
+                settings={liveSettings}
+                onChange={(k, v) => liveEditorSettings.updateSetting(k, v)}
+                onApplyPreset={applyPreset}
+                onReset={resetEditorSettings}
+                onFontFamilyChange={async (v) => {
+                  liveEditorSettings.updateSetting('fontFamily', v);
+                  await updateConfig({ editor: { ...editorSettings, font: { ...editorSettings.font, family: v } } });
+                }}
+              />
+            )}
+
+            {section === "Callouts" && (
+              <Callouts
+                callouts={callouts}
+                onChange={(next) => { setCallouts(next); saveCalloutConfig(next); }}
+              />
+            )}
+
+            {section === "General" && (
+              <General
+                advancedFeatures={advancedFeatures}
+                onAdvancedFeaturesChange={setAdvancedFeatures}
+              />
+            )}
+
+            {section === "Markdown" && (
+              <Markdown
+                syntax={markdownSyntax}
+                customSymbols={customSymbols}
+                newSymbolName={newSymbolName}
+                onNewSymbolNameChange={setNewSymbolName}
+                newSymbolChar={newSymbolChar}
+                onNewSymbolCharChange={setNewSymbolChar}
+                onAddSymbol={addCustomSymbol}
+                onRemoveSymbol={removeCustomSymbol}
+              />
+            )}
+
+            {section === "Daily Notes" && (
+              <DailyNotes
+                settings={dailyNotesSettings}
+                onChange={(patch) => setDailyNotesSettings((s) => ({ ...s, ...patch }))}
+                onSave={saveDailyNotesSettings}
+              />
+            )}
+
+            {section === "Shortcuts" && (
+              <Shortcuts
+                actions={actions}
+                keymap={keymap}
+                query={query}
+                onQueryChange={setQuery}
+                editing={editing}
+                onBeginEdit={beginEdit}
+                onCancelEdit={cancelEdit}
+                onKeyCapture={onKeyCapture}
+                onResetAll={onResetAll}
+              />
             )}
 
             {section === "Connections" && (
-              <div className="space-y-8">
-                <div>
-                  <h2 className="text-xl font-semibold text-app-text">Connections</h2>
-                  <p className="text-sm text-app-text-secondary mt-1">
-                    Link your accounts to sync data with Lokus
-                  </p>
-                </div>
-
-                {/* Google Calendar */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setExpandedConnections(prev => ({ ...prev, calendar: !prev.calendar }))}
-                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
-                  >
-                    {expandedConnections.calendar ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#4285F4" />
-                      <rect x="3" y="4" width="18" height="5" fill="#1967D2" />
-                      <circle cx="7" cy="6.5" r="1" fill="#EA4335" />
-                      <circle cx="17" cy="6.5" r="1" fill="#EA4335" />
-                      <rect x="6" y="11" width="3" height="3" rx="0.5" fill="white" />
-                      <rect x="10.5" y="11" width="3" height="3" rx="0.5" fill="white" />
-                      <rect x="15" y="11" width="3" height="3" rx="0.5" fill="white" />
-                      <rect x="6" y="15.5" width="3" height="3" rx="0.5" fill="white" />
-                      <rect x="10.5" y="15.5" width="3" height="3" rx="0.5" fill="#FBBC05" />
-                      <rect x="15" y="15.5" width="3" height="3" rx="0.5" fill="white" />
-                    </svg>
-                    <span className="font-medium text-app-text flex-1 text-left">Google Calendar</span>
-                    <CalendarConnectionStatus />
-                  </button>
-                  {expandedConnections.calendar && (
-                    <div className="pl-9">
-                      <CalendarSettings />
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-app-border" />
-
-                {/* iCal Subscriptions */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setExpandedConnections(prev => ({ ...prev, ical: !prev.ical }))}
-                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
-                  >
-                    {expandedConnections.ical ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <rect x="3" y="4" width="18" height="18" rx="2" fill="#5856D6" />
-                      <rect x="3" y="4" width="18" height="5" fill="#4340B8" />
-                      <path d="M7 6.5L7 3M17 6.5L17 3" stroke="#FF3B30" strokeWidth="1.5" strokeLinecap="round" />
-                      <rect x="6" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
-                      <rect x="10.5" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
-                      <rect x="15" y="11" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
-                      <rect x="6" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
-                      <rect x="10.5" y="15" width="3" height="2" rx="0.5" fill="white" fillOpacity="0.9" />
-                    </svg>
-                    <span className="font-medium text-app-text flex-1 text-left">iCal / ICS</span>
-                    {icalSubscriptions.length > 0 && (
-                      <span className="text-xs text-app-muted">{icalSubscriptions.length}</span>
-                    )}
-                  </button>
-                  {expandedConnections.ical && (
-                    <div className="pl-9 space-y-3">
-                      {/* Add subscription form */}
-                      <form
-                        onSubmit={async (e) => {
-                          e.preventDefault();
-                          if (!icalUrl.trim()) return;
-                          setIcalLoading(true);
-                          try {
-                            const sub = await calendarService.ical.addSubscription(icalUrl.trim());
-                            setIcalSubscriptions(prev => [...prev, sub]);
-                            setIcalUrl('');
-                          } catch (err) {
-                            console.error('Failed to add subscription:', err);
-                            alert(err.message || 'Failed to add subscription');
-                          } finally {
-                            setIcalLoading(false);
-                          }
-                        }}
-                        className="flex gap-2"
-                      >
-                        <input
-                          type="text"
-                          value={icalUrl}
-                          onChange={(e) => setIcalUrl(e.target.value)}
-                          placeholder="webcal:// or https:// URL"
-                          className="flex-1 px-2 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent"
-                        />
-                        <button
-                          type="submit"
-                          disabled={icalLoading || !icalUrl.trim()}
-                          className="px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 disabled:opacity-50"
-                        >
-                          {icalLoading ? 'Adding...' : 'Add'}
-                        </button>
-                      </form>
-
-                      {/* Subscriptions list */}
-                      {icalSubscriptions.length > 0 ? (
-                        <div className="space-y-1">
-                          {icalSubscriptions.map((sub) => (
-                            <div key={sub.id} className="flex items-center justify-between py-1.5 group">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div
-                                  className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                                  style={{ backgroundColor: sub.color || '#5856D6' }}
-                                />
-                                <span className="text-sm text-app-text truncate">{sub.name}</span>
-                                {sub.last_synced && (
-                                  <span className="text-xs text-app-muted">
-                                    · {new Date(sub.last_synced).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={async () => {
-                                    try {
-                                      const updated = await calendarService.ical.syncSubscription(sub.id);
-                                      setIcalSubscriptions(prev =>
-                                        prev.map(s => s.id === sub.id ? updated : s)
-                                      );
-                                    } catch (err) {
-                                      console.error('Failed to sync:', err);
-                                    }
-                                  }}
-                                  className="p-1 hover:bg-app-panel rounded"
-                                  title="Sync"
-                                >
-                                  <RefreshCw className="w-3 h-3 text-app-muted" />
-                                </button>
-                                <button
-                                  onClick={async () => {
-                                    if (!window.confirm(`Remove "${sub.name}"?`)) return;
-                                    try {
-                                      await calendarService.ical.removeSubscription(sub.id);
-                                      setIcalSubscriptions(prev => prev.filter(s => s.id !== sub.id));
-                                    } catch (err) {
-                                      console.error('Failed to remove:', err);
-                                    }
-                                  }}
-                                  className="p-1 hover:bg-app-panel rounded text-red-500"
-                                  title="Remove"
-                                >
-                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M18 6L6 18M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-app-muted">
-                          Subscribe to iCal/ICS calendars from any URL
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-app-border" />
-
-                {/* CalDAV / iCloud Calendar */}
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setExpandedConnections(prev => ({ ...prev, caldav: !prev.caldav }))}
-                    className="flex items-center gap-3 w-full hover:bg-app-panel/50 rounded-lg p-2 -m-2 transition-colors"
-                  >
-                    {expandedConnections.caldav ? <ChevronDown className="w-4 h-4 text-app-muted" /> : <ChevronRight className="w-4 h-4 text-app-muted" />}
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
-                      <defs>
-                        <linearGradient id="icloudGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-                          <stop offset="0%" stopColor="#5AC8FA" />
-                          <stop offset="100%" stopColor="#007AFF" />
-                        </linearGradient>
-                      </defs>
-                      <path d="M19 18H6.5C4.01 18 2 15.99 2 13.5C2 11.26 3.64 9.41 5.79 9.07C6.07 6.25 8.43 4 11.32 4C13.34 4 15.09 5.18 16.01 6.9C16.33 6.83 16.66 6.8 17 6.8C19.76 6.8 22 9.04 22 11.8C22 14.22 20.25 16.24 17.94 16.72" fill="url(#icloudGrad)" />
-                      <rect x="8" y="12" width="8" height="6" rx="1" fill="white" fillOpacity="0.9" />
-                      <path d="M10 15L11.5 16.5L14 13.5" stroke="#007AFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className="font-medium text-app-text flex-1 text-left">iCloud / CalDAV</span>
-                    {caldavAccount && (
-                      <span className="text-xs text-green-500">Connected</span>
-                    )}
-                  </button>
-                  {expandedConnections.caldav && (
-                    <div className="pl-9 space-y-3">
-                      {caldavAccount ? (
-                        <>
-                          {/* Connected state */}
-                          <div className="flex items-center justify-between py-2 px-3 bg-app-panel/50 rounded-lg">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-                                <span className="text-white text-xs font-medium">
-                                  {caldavAccount.username?.charAt(0)?.toUpperCase() || 'A'}
-                                </span>
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-sm text-app-text truncate">{caldavAccount.display_name || caldavAccount.username}</p>
-                                <p className="text-xs text-app-muted truncate">{caldavAccount.username}</p>
-                              </div>
-                            </div>
-                            <button
-                              onClick={async () => {
-                                if (!window.confirm('Disconnect iCloud Calendar?')) return;
-                                setCaldavLoading(true);
-                                try {
-                                  await calendarService.caldav.disconnect();
-                                  setCaldavAccount(null);
-                                  setCaldavCalendars([]);
-                                } catch (err) {
-                                  console.error('Failed to disconnect:', err);
-                                } finally {
-                                  setCaldavLoading(false);
-                                }
-                              }}
-                              disabled={caldavLoading}
-                              className="px-3 py-1.5 text-xs text-red-500 hover:bg-red-500/10 rounded transition-colors"
-                            >
-                              Disconnect
-                            </button>
-                          </div>
-
-                          {/* Calendars list */}
-                          {caldavCalendars.length > 0 && (
-                            <div className="space-y-1">
-                              <span className="text-xs text-app-muted">Calendars</span>
-                              {caldavCalendars.map((cal) => (
-                                <div key={cal.id} className="flex items-center gap-2 py-1">
-                                  <div
-                                    className="w-2.5 h-2.5 rounded-sm flex-shrink-0"
-                                    style={{ backgroundColor: cal.color || '#007AFF' }}
-                                  />
-                                  <span className="text-sm text-app-text">{cal.name}</span>
-                                  {cal.is_primary && (
-                                    <span className="text-xs text-app-muted">(Primary)</span>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Refresh button */}
-                          <button
-                            onClick={async () => {
-                              setCaldavLoading(true);
-                              try {
-                                const cals = await calendarService.caldav.refreshCalendars();
-                                setCaldavCalendars(cals);
-                              } catch (err) {
-                                console.error('Failed to refresh:', err);
-                              } finally {
-                                setCaldavLoading(false);
-                              }
-                            }}
-                            disabled={caldavLoading}
-                            className="flex items-center gap-1.5 text-xs text-app-muted hover:text-app-text transition-colors"
-                          >
-                            <RefreshCw className={`w-3 h-3 ${caldavLoading ? 'animate-spin' : ''}`} />
-                            Refresh Calendars
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          {/* Connection form */}
-                          <p className="text-xs text-app-muted">
-                            Connect to iCloud Calendar for two-way sync. You'll need an{' '}
-                            <a
-                              href="https://support.apple.com/en-us/HT204397"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-app-accent hover:underline"
-                            >
-                              app-specific password
-                            </a>.
-                          </p>
-                          <form
-                            onSubmit={async (e) => {
-                              e.preventDefault();
-                              if (!caldavForm.username || !caldavForm.password) return;
-                              setCaldavLoading(true);
-                              try {
-                                const account = await calendarService.caldav.connect(
-                                  caldavForm.serverUrl,
-                                  caldavForm.username,
-                                  caldavForm.password
-                                );
-                                setCaldavAccount(account);
-                                setCaldavForm({ serverUrl: 'https://caldav.icloud.com', username: '', password: '' });
-                                // Refresh calendars
-                                const cals = await calendarService.caldav.refreshCalendars();
-                                setCaldavCalendars(cals);
-                              } catch (err) {
-                                console.error('Failed to connect:', err);
-                                alert(err.message || 'Failed to connect');
-                              } finally {
-                                setCaldavLoading(false);
-                              }
-                            }}
-                            className="space-y-2"
-                          >
-                            <input
-                              type="email"
-                              value={caldavForm.username}
-                              onChange={(e) => setCaldavForm(prev => ({ ...prev, username: e.target.value }))}
-                              placeholder="Apple ID (email)"
-                              className="w-full px-2 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent"
-                            />
-                            <input
-                              type="password"
-                              value={caldavForm.password}
-                              onChange={(e) => setCaldavForm(prev => ({ ...prev, password: e.target.value }))}
-                              placeholder="App-specific password"
-                              className="w-full px-2 py-1.5 text-sm bg-app-bg border border-app-border rounded focus:outline-none focus:border-app-accent"
-                            />
-                            <button
-                              type="submit"
-                              disabled={caldavLoading || !caldavForm.username || !caldavForm.password}
-                              className="w-full px-3 py-1.5 text-sm bg-app-accent text-app-accent-fg rounded hover:opacity-90 disabled:opacity-50"
-                            >
-                              {caldavLoading ? 'Connecting...' : 'Connect iCloud Calendar'}
-                            </button>
-                          </form>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-app-border" />
-
-                {/* Coming Soon */}
-                <div className="space-y-3">
-                  <span className="text-xs font-medium text-app-muted uppercase tracking-wide">Coming Soon</span>
-                  <div className="flex flex-wrap gap-3">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <rect x="2" y="4" width="20" height="16" rx="2" fill="#0078D4" />
-                        <path d="M2 8L12 14L22 8" stroke="white" strokeWidth="1.5" />
-                      </svg>
-                      <span className="text-xs text-app-text-secondary">Outlook</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2Z" fill="#0052CC" />
-                        <path d="M8 8H16V10H8V8ZM8 12H14V14H8V12Z" fill="white" />
-                      </svg>
-                      <span className="text-xs text-app-text-secondary">Jira</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <path d="M6 6H10V10H6V6Z" fill="#E01E5A" />
-                        <path d="M14 6H18V10H14V6Z" fill="#36C5F0" />
-                        <path d="M6 14H10V18H6V14Z" fill="#2EB67D" />
-                        <path d="M14 14H18V18H14V14Z" fill="#ECB22E" />
-                      </svg>
-                      <span className="text-xs text-app-text-secondary">Slack</span>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-app-panel border border-app-border rounded-full opacity-50">
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none">
-                        <rect x="2" y="2" width="20" height="20" rx="4" fill="#FF5700" />
-                        <circle cx="12" cy="12" r="4" fill="white" />
-                        <circle cx="18" cy="6" r="1.5" fill="white" />
-                      </svg>
-                      <span className="text-xs text-app-text-secondary">Reddit</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <Connections
+                {...{
+                  icalSubscriptions, setIcalSubscriptions,
+                  icalUrl, setIcalUrl,
+                  icalLoading, setIcalLoading,
+                  caldavAccount, setCaldavAccount,
+                  caldavCalendars, setCaldavCalendars,
+                  caldavForm, setCaldavForm,
+                  caldavLoading, setCaldavLoading,
+                }}
+              />
             )}
 
             {section === "Account" && (
-              <div className="space-y-8 max-w-2xl">
-                {/* Account Header */}
-                <div>
-                  <h1 className="text-2xl font-bold text-app-text mb-2">Account</h1>
-                  <p className="text-app-text-secondary">
-                    Manage your account settings, authentication, and profile.
-                  </p>
-                </div>
-
-                {isLoading ? (
-                  <div className="flex items-center justify-center py-12">
-                    <div className="w-6 h-6 border-2 border-app-accent border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                ) : isGuest ? (
-                  /* Guest Mode State */
-                  <div className="bg-app-panel border border-app-border rounded-xl p-8">
-                    <div className="text-center">
-                      <div className="w-16 h-16 bg-app-muted/20 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <User className="w-8 h-8 text-app-muted" />
-                      </div>
-                      <h2 className="text-xl font-semibold text-app-text mb-3">Guest Mode</h2>
-                      <p className="text-app-text-secondary mb-8 max-w-md mx-auto">
-                        You're using Lokus as a guest. Sign in to sync your notes across devices.
-                      </p>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await signOut(); // Clears guest mode → reveals the inline sign-in form below
-                          } catch { }
-                        }}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-app-accent text-white font-medium rounded-lg hover:bg-app-accent/90 transition-colors"
-                      >
-                        <LogIn className="w-4 h-4" />
-                        Sign In
-                      </button>
-                    </div>
-                  </div>
-                ) : !isAuthenticated ? (
-                  /* Sign In State — inline login form */
-                  <div className="bg-app-panel border border-app-border rounded-xl p-8">
-                    <div className="max-w-sm mx-auto">
-                      <h2 className="text-xl font-semibold text-app-text mb-1 text-center">
-                        {authMode === 'signin' && 'Sign in to Lokus'}
-                        {authMode === 'signup' && 'Create an account'}
-                        {authMode === 'reset' && 'Reset password'}
-                      </h2>
-                      <p className="text-app-text-secondary text-sm mb-6 text-center">
-                        {authMode === 'signin' && 'Sync your notes across devices.'}
-                        {authMode === 'signup' && 'Get started with Lokus.'}
-                        {authMode === 'reset' && 'Enter your email to reset your password.'}
-                      </p>
-
-                      {authError && (
-                        <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
-                          {authError}
-                        </div>
-                      )}
-                      {authMessage && (
-                        <div className="mb-4 p-3 rounded-lg bg-green-500/10 border border-green-500/20 text-green-500 text-sm">
-                          {authMessage}
-                        </div>
-                      )}
-
-                      {/* OAuth buttons */}
-                      {authMode !== 'reset' && (
-                        <>
-                          <button
-                            onClick={async () => {
-                              setAuthError('');
-                              setAuthLoading(true);
-                              try { await signInWithGoogle(); } catch (err) { setAuthError(err.message || 'Failed to sign in with Google'); setAuthLoading(false); }
-                            }}
-                            disabled={authLoading}
-                            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-app-border bg-app-bg hover:bg-app-bg/80 transition-colors disabled:opacity-50 mb-2"
-                          >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24">
-                              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                              <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                              <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                              <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                            </svg>
-                            <span>Continue with Google</span>
-                          </button>
-                          <button
-                            onClick={async () => {
-                              setAuthError('');
-                              setAuthLoading(true);
-                              try { await signInWithApple(); } catch (err) { setAuthError(err.message || 'Failed to sign in with Apple'); setAuthLoading(false); }
-                            }}
-                            disabled={authLoading}
-                            className="w-full flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg border border-app-border bg-app-bg hover:bg-app-bg/80 transition-colors disabled:opacity-50"
-                          >
-                            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                            </svg>
-                            <span>Continue with Apple</span>
-                          </button>
-
-                          <div className="flex items-center gap-4 my-4">
-                            <div className="flex-1 h-px bg-app-border"></div>
-                            <span className="text-app-muted text-xs">or</span>
-                            <div className="flex-1 h-px bg-app-border"></div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Email form */}
-                      <form onSubmit={async (e) => {
-                        e.preventDefault();
-                        setAuthError('');
-                        setAuthMessage('');
-                        setAuthLoading(true);
-                        try {
-                          if (authMode === 'signin') {
-                            await signInWithEmail(authEmail, authPassword);
-                          } else if (authMode === 'signup') {
-                            if (authPassword !== authConfirmPassword) { setAuthError('Passwords do not match'); setAuthLoading(false); return; }
-                            if (authPassword.length < 6) { setAuthError('Password must be at least 6 characters'); setAuthLoading(false); return; }
-                            const result = await signUpWithEmail(authEmail, authPassword);
-                            if (result?.user?.identities?.length === 0) { setAuthError('An account with this email already exists'); }
-                            else { setAuthMessage('Check your email for a confirmation link'); setAuthMode('signin'); }
-                          } else {
-                            await resetPassword(authEmail);
-                            setAuthMessage('Check your email for a password reset link');
-                          }
-                        } catch (err) { setAuthError(err.message || 'Authentication failed'); }
-                        finally { setAuthLoading(false); }
-                      }}>
-                        <div className="space-y-3">
-                          <input
-                            type="email" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)}
-                            placeholder="you@example.com" required
-                            className="w-full px-3 py-2 rounded-lg border border-app-border bg-app-bg text-app-text text-sm focus:outline-none focus:ring-2 focus:ring-app-accent/50 focus:border-app-accent"
-                          />
-                          {authMode !== 'reset' && (
-                            <input
-                              type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)}
-                              placeholder="Password" required minLength={6}
-                              className="w-full px-3 py-2 rounded-lg border border-app-border bg-app-bg text-app-text text-sm focus:outline-none focus:ring-2 focus:ring-app-accent/50 focus:border-app-accent"
-                            />
-                          )}
-                          {authMode === 'signup' && (
-                            <input
-                              type="password" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                              placeholder="Confirm password" required minLength={6}
-                              className="w-full px-3 py-2 rounded-lg border border-app-border bg-app-bg text-app-text text-sm focus:outline-none focus:ring-2 focus:ring-app-accent/50 focus:border-app-accent"
-                            />
-                          )}
-                          <button type="submit" disabled={authLoading}
-                            className="w-full px-4 py-2.5 rounded-lg bg-app-accent text-white font-medium text-sm hover:bg-app-accent/90 transition-colors disabled:opacity-50"
-                          >
-                            {authLoading ? 'Loading...' : authMode === 'signin' ? 'Sign In' : authMode === 'signup' ? 'Create Account' : 'Send Reset Link'}
-                          </button>
-                        </div>
-                      </form>
-
-                      {/* Mode switching */}
-                      <div className="mt-4 text-center text-xs">
-                        {authMode === 'signin' && (
-                          <>
-                            <button onClick={() => { setAuthMode('reset'); setAuthError(''); setAuthMessage(''); }} className="text-app-muted hover:text-app-text transition-colors">Forgot password?</button>
-                            <div className="mt-2">
-                              <span className="text-app-muted">Don't have an account? </span>
-                              <button onClick={() => { setAuthMode('signup'); setAuthError(''); setAuthMessage(''); }} className="text-app-accent hover:underline">Sign up</button>
-                            </div>
-                          </>
-                        )}
-                        {authMode === 'signup' && (
-                          <div>
-                            <span className="text-app-muted">Already have an account? </span>
-                            <button onClick={() => { setAuthMode('signin'); setAuthError(''); setAuthMessage(''); }} className="text-app-accent hover:underline">Sign in</button>
-                          </div>
-                        )}
-                        {authMode === 'reset' && (
-                          <button onClick={() => { setAuthMode('signin'); setAuthError(''); setAuthMessage(''); }} className="text-app-accent hover:underline">Back to sign in</button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Signed In State - Arc-like Dashboard */
-                  <div className="space-y-6">
-                    {/* Profile Section */}
-                    <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                      <div className="flex items-center gap-4">
-                        {user?.avatar_url ? (
-                          <img
-                            src={user.avatar_url}
-                            alt="Profile"
-                            className="w-16 h-16 rounded-full border-2 border-app-border"
-                          />
-                        ) : (
-                          <div className="w-16 h-16 bg-app-accent rounded-full flex items-center justify-center">
-                            <User className="w-8 h-8 text-white" />
-                          </div>
-                        )}
-                        <div className="flex-1">
-                          <h2 className="text-lg font-semibold text-app-text">
-                            {user?.name || 'User'}
-                          </h2>
-                          <p className="text-app-text-secondary text-sm">
-                            {user?.email || 'No email available'}
-                          </p>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              setIsSigningOut(true);
-                              await signOut();
-                            } catch { } finally {
-                              setIsSigningOut(false);
-                            }
-                          }}
-                          disabled={isSigningOut}
-                          className="px-4 py-2 text-app-text-secondary hover:text-app-text border border-app-border rounded-lg hover:bg-app-bg transition-colors disabled:opacity-50"
-                        >
-                          {isSigningOut ? 'Signing out...' : 'Sign Out'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Account Features */}
-                    <div className="bg-app-panel border border-app-border rounded-xl p-6">
-                      <h3 className="text-lg font-semibold text-app-text mb-4">Your Plan</h3>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-app-text">End-to-end encrypted sync</span>
-                          </div>
-                          <Shield className="w-4 h-4 text-green-500" />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-app-text">Cross-device sync</span>
-                          </div>
-                          <Shield className="w-4 h-4 text-green-500" />
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-app-text">Cloud backup</span>
-                          </div>
-                          <Shield className="w-4 h-4 text-green-500" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Danger Zone */}
-                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-6">
-                      <h3 className="text-lg font-semibold text-red-500 mb-2">Danger Zone</h3>
-                      <p className="text-sm text-app-text-secondary mb-4">
-                        Permanently delete your account and all associated data. This action cannot be undone.
-                      </p>
-                      <button
-                        onClick={async () => {
-                          if (window.confirm('Are you sure you want to delete your account? This action cannot be undone and all your data will be permanently removed.')) {
-                            try {
-                              await deleteAccount();
-                            } catch (err) {
-                              console.error('Failed to delete account:', err);
-                            }
-                          }
-                        }}
-                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm font-medium"
-                      >
-                        Delete Account
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Account
+                {...{
+                  isLoading, isGuest, isAuthenticated, user,
+                  signInWithGoogle, signInWithApple, signInWithEmail,
+                  signUpWithEmail, resetPassword, signOut, deleteAccount,
+                  authMode, setAuthMode,
+                  authEmail, setAuthEmail,
+                  authPassword, setAuthPassword,
+                  authConfirmPassword, setAuthConfirmPassword,
+                  authError, setAuthError,
+                  authMessage, setAuthMessage,
+                  authLoading, setAuthLoading,
+                  isSigningOut, setIsSigningOut,
+                }}
+              />
             )}
 
             {featureFlags.enable_sync && section === "Sync" && (
@@ -3187,197 +899,19 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
 
 
             {section === "Updates" && (
-              <div className="space-y-8 max-w-xl">
-                <section>
-                  <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">App Updates</h2>
-
-                  <div className="bg-app-panel rounded-lg p-4 border border-app-border">
-                    <div className="flex items-start justify-between mb-4">
-                      <div>
-                        <h3 className="font-medium mb-1">Current Version</h3>
-                        <p className="text-2xl font-semibold text-app-accent">v{appVersion || 'Loading...'}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => window.dispatchEvent(new Event('check-for-update'))}
-                      className="w-full px-4 py-2 bg-app-accent text-app-accent-fg rounded-md hover:opacity-90 transition-opacity"
-                    >
-                      Check for Updates
-                    </button>
-
-                    <p className="mt-4 text-sm text-app-muted">
-                      Lokus automatically checks for updates in the background. Click the button above to check manually.
-                    </p>
-                  </div>
-                </section>
-
-                <section>
-                  <h2 className="text-sm uppercase tracking-wide text-app-muted mb-4">Update Channel</h2>
-
-                  <div className="bg-app-panel rounded-lg p-4 border border-app-border">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-medium mb-1">Beta Updates</h3>
-                        <p className="text-sm text-app-muted">
-                          Get early access to new features before they're released to everyone.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          checked={betaUpdates}
-                          onChange={async (e) => {
-                            const newValue = e.target.checked;
-                            setBetaUpdates(newValue);
-                            try {
-                              await updateConfig({ updates: { betaChannel: newValue } });
-                            } catch (error) {
-                              console.error('Failed to save beta updates preference:', error);
-                            }
-                          }}
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-app-accent rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-app-accent"></div>
-                      </label>
-                    </div>
-
-                    {betaUpdates && (
-                      <p className="mt-3 text-xs text-yellow-600 dark:text-yellow-400">
-                        Beta versions may contain bugs and incomplete features. Use at your own risk.
-                      </p>
-                    )}
-                  </div>
-                </section>
-
-                {/* Analytics - small toggle at bottom */}
-                <section className="pt-4 border-t border-app-border/30">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-app-muted">Help improve Lokus</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={localStorage.getItem('lokus-analytics-preferences') ? JSON.parse(localStorage.getItem('lokus-analytics-preferences')).enabled !== false : true}
-                        onChange={(e) => {
-                          const enabled = e.target.checked;
-                          localStorage.setItem('lokus-analytics-preferences', JSON.stringify({ enabled, lastUpdated: new Date().toISOString() }));
-                          // Dynamically import to avoid circular deps
-                          import('../services/posthog.js').then(({ default: posthog }) => {
-                            if (enabled) posthog.enable();
-                            else posthog.disable();
-                          });
-                        }}
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-app-accent/70"></div>
-                    </label>
-                  </div>
-                </section>
-
-                {/* Privacy & Legal */}
-                <section className="pt-2">
-                  <button
-                    onClick={() => {
-                      import('@tauri-apps/plugin-opener').then(({ open }) => {
-                        open('https://lokusmd.com/privacy');
-                      });
-                    }}
-                    className="text-sm text-app-muted hover:text-app-accent transition-colors"
-                  >
-                    Privacy Policy
-                  </button>
-                </section>
-              </div>
+              <Updates
+                appVersion={appVersion}
+                betaUpdates={betaUpdates}
+                onBetaUpdatesChange={async (next) => {
+                  setBetaUpdates(next);
+                  try { await updateConfig({ updates: { betaChannel: next } }); }
+                  catch (e) { console.error('Failed to save beta updates preference:', e); }
+                }}
+              />
             )}
 
             {section === "Import" && (
-              <div className="space-y-6 max-w-2xl">
-                <div>
-                  <h2 className="text-2xl font-semibold mb-2" style={{ color: 'rgb(var(--text))' }}>
-                    Import Notes
-                  </h2>
-                  <p style={{ color: 'rgb(var(--muted))' }}>
-                    Migrate your notes from other platforms
-                  </p>
-                </div>
-
-                {/* Quick Import Card */}
-                <div className="p-6 border rounded-lg" style={{ borderColor: 'rgb(var(--border))' }}>
-                  <div className="text-center mb-4">
-                    <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ background: 'rgb(var(--accent) / 0.1)' }}>
-                      <Upload className="w-8 h-8" style={{ color: 'rgb(var(--accent))' }} />
-                    </div>
-                    <h3 className="text-lg font-semibold mb-2" style={{ color: 'rgb(var(--text))' }}>
-                      Import from Another App
-                    </h3>
-                    <p className="text-sm mb-4" style={{ color: 'rgb(var(--muted))' }}>
-                      Select your notes folder and we'll auto-detect the format and convert it for you.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={() => setShowQuickImport(true)}
-                    className="w-full px-4 py-3 rounded-lg font-medium hover:opacity-90 transition-opacity"
-                    style={{
-                      background: 'rgb(var(--accent))',
-                      color: 'white'
-                    }}
-                  >
-                    Select Folder to Import
-                  </button>
-
-                  {/* Supported Platforms */}
-                  <div className="mt-4 pt-4 border-t" style={{ borderColor: 'rgb(var(--border))' }}>
-                    <p className="text-xs text-center mb-2" style={{ color: 'rgb(var(--muted))' }}>
-                      Supported platforms
-                    </p>
-                    <div className="flex justify-center gap-4">
-                      <span className="text-sm" style={{ color: 'rgb(var(--text))' }}>Logseq</span>
-                      <span className="text-sm" style={{ color: 'rgb(var(--text))' }}>Roam</span>
-                      <span className="text-sm" style={{ color: 'rgb(var(--text))' }}>Obsidian</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Info Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 border rounded-lg" style={{ borderColor: 'rgb(var(--border))' }}>
-                    <h4 className="font-medium mb-1" style={{ color: 'rgb(var(--text))' }}>What gets converted?</h4>
-                    <ul className="text-sm space-y-1" style={{ color: 'rgb(var(--muted))' }}>
-                      <li>• Properties to YAML frontmatter</li>
-                      <li>• TODO/DONE to checkboxes</li>
-                      <li>• Block references resolved</li>
-                      <li>• Wiki links preserved</li>
-                    </ul>
-                  </div>
-                  <div className="p-4 border rounded-lg" style={{ borderColor: 'rgb(var(--border))' }}>
-                    <h4 className="font-medium mb-1" style={{ color: 'rgb(var(--text))' }}>Safe conversion</h4>
-                    <ul className="text-sm space-y-1" style={{ color: 'rgb(var(--muted))' }}>
-                      <li>• Backup created automatically</li>
-                      <li>• Original files preserved</li>
-                      <li>• Obsidian works as-is</li>
-                      <li>• Undo with backup folder</li>
-                    </ul>
-                  </div>
-                </div>
-
-                {/* Documentation Link */}
-                <div className="p-4 border rounded-lg" style={{
-                  borderColor: 'rgb(var(--border))',
-                  background: 'rgb(var(--bg))'
-                }}>
-                  <p className="text-sm" style={{ color: 'rgb(var(--muted))' }}>
-                    Need help? Read the <a
-                      href="https://github.com/lokus-ai/lokus/blob/main/docs/migration-guide.md"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ color: 'rgb(var(--accent))', textDecoration: 'underline' }}
-                    >
-                      Migration Guide
-                    </a> for detailed instructions.
-                  </p>
-                </div>
-              </div>
+              <Import onImport={() => setShowQuickImport(true)} />
             )}
 
             {section === "Meeting Notes" && <MeetingNotes />}

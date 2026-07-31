@@ -54,6 +54,9 @@ vi.mock('../core/auth/AuthContext.jsx', () => ({
 vi.mock('../platform/index.js', () => ({
   isMobile: () => false,
   isDesktop: () => true,
+  // PlatformService calls this in its constructor at import time, and the
+  // Launcher pulls it in for the modifier glyph on its keyboard hints.
+  getPlatform: () => 'macos',
 }))
 
 import { invoke } from '@tauri-apps/api/core'

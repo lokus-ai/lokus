@@ -13,6 +13,16 @@ module.exports = {
         "app-accent": "rgb(var(--accent) / <alpha-value>)",
         "app-accent-fg": "rgb(var(--accent-fg) / <alpha-value>)",
         "app-titlebar": "rgb(var(--app-titlebar) / <alpha-value>)",
+        // These CSS variables have always existed in all three theme blocks,
+        // but were never exposed as classes — so `bg-app-panel-secondary` and
+        // friends silently did nothing in the nine files already using them.
+        "app-panel-secondary": "rgb(var(--panel-secondary) / <alpha-value>)",
+        "app-border-hover": "rgb(var(--border-hover) / <alpha-value>)",
+        "app-accent-hover": "rgb(var(--accent-hover) / <alpha-value>)",
+        "app-danger": "rgb(var(--danger) / <alpha-value>)",
+        "app-success": "rgb(var(--success) / <alpha-value>)",
+        "app-warning": "rgb(var(--warning) / <alpha-value>)",
+        "app-info": "rgb(var(--info) / <alpha-value>)",
       },
       borderRadius: {
         md: "8px",
