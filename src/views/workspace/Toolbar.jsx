@@ -16,6 +16,9 @@ import {
 import platformService from '../../services/platform/PlatformService.js';
 import { closeTabWithGuard } from '../../features/tabs/closeGuard';
 
+/** Stand-in tab shown when the group is empty. Never enters the store. */
+const WELCOME_TAB = '__welcome__';
+
 /**
  * Toolbar — fixed titlebar with action buttons and responsive tab bar.
  *
@@ -62,12 +65,23 @@ export default function Toolbar({
   const openTabs = focusedGroup?.tabs ?? [];
   const activeFile = focusedGroup?.activeTab ?? null;
   const hasActiveTabs = openTabs.length > 0;
+
+  // With nothing open the titlebar is a bare strip with a lone "+", which
+  // reads as broken. Stand in a non-closable Welcome tab so the bar always
+  // has something in it. Presentational only — it is never added to the
+  // group, so `activeFile` stays null and EditorGroup keeps rendering
+  // WelcomeScreen underneath it.
+  const displayTabs = hasActiveTabs
+    ? openTabs
+    : [{ path: WELCOME_TAB, name: 'Welcome', closable: false }];
+  const displayActiveTab = hasActiveTabs ? activeFile : WELCOME_TAB;
   // Dirty flags live in the tabMeta store (off the layout tree) — subscribe
   // to a shallow-compared array of dirty paths for the focused group.
   const dirtyPaths = useTabMetaStore(useShallow(selectGroupDirtyPaths(focusedGroup?.id)));
   const unsavedChanges = new Set(dirtyPaths);
 
   const handleTabClick = (path) => {
+    if (path === WELCOME_TAB) return; // placeholder, already what's showing
     const groupId = useEditorGroupStore.getState().focusedGroupId;
     if (groupId) {
       useEditorGroupStore.getState().setActiveTab(groupId, path);
@@ -75,6 +89,7 @@ export default function Toolbar({
   };
 
   const handleTabClose = (path) => {
+    if (path === WELCOME_TAB) return; // not closable
     const groupId = useEditorGroupStore.getState().focusedGroupId;
     if (groupId) {
       closeTabWithGuard(groupId, path);
@@ -196,8 +211,8 @@ export default function Toolbar({
         }}
       >
         <ResponsiveTabBar
-          tabs={openTabs}
-          activeTab={activeFile}
+          tabs={displayTabs}
+          activeTab={displayActiveTab}
           onTabClick={handleTabClick}
           onTabClose={handleTabClose}
           onNewTab={handleNewTab}

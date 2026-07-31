@@ -1,838 +1,610 @@
-import React from 'react';
-import { Network, Link, FileText, Tag, ChevronDown, ChevronRight, Search, Sliders, Palette, Filter, Zap, Play, Pause, Sparkles, Image } from 'lucide-react';
-import { countMatches } from '../core/graph/color-group-matcher.js';
+import React, { useEffect, useMemo, useReducer } from 'react';
+import {
+  Network, Link, FileText, Tag, Paperclip, Ghost, ChevronDown, ChevronRight,
+  Search, Palette, Filter, Zap, Image, RotateCcw, Crosshair,
+} from 'lucide-react';
+import { useGraphConfig } from '../core/graph2/graphConfig.js';
+import { getGraphEngine } from '../core/graph2/graphEngine.js';
+import { countMatches } from '../core/graph2/colorGroups.js';
 
 /**
- * GraphSidebar - Obsidian-style graph customization panel
+ * GraphSidebar — the graph control panel.
  *
- * Displays:
- * - Selected node details (when node is selected/hovered)
- * - Collapsible sections: Filters, Display, Forces
- * - Real-time customization controls
+ * Reads and writes `useGraphConfig` directly: every control is a live patch
+ * into the engine (settings apply instantly, disk write is debounced). Stats
+ * and color-group match counts are read straight off the engine and stay live
+ * as the index and the layout change.
+ *
+ * Used by the right sidebar (when the graph tab is focused) and by GraphView's
+ * settings rail — both drive the same singleton engine.
  */
-export default function GraphSidebar({
-  selectedNodes = [],
-  hoveredNode = null,
-  graphData = { nodes: [], links: [] },
-  stats = {},
-  onNodeClick = () => {},
-  // Graph configuration
-  config = {},
-  onConfigChange = () => {},
-  // Animation tour controls
-  isAnimating = false,
-  animationSpeed = 2000,
-  onToggleAnimation = () => {},
-  onAnimationSpeedChange = () => {}
-}) {
-  // Get the primary selected/hovered node
-  const activeNode = hoveredNode || (selectedNodes.length > 0
-    ? graphData.nodes.find(n => n.id === selectedNodes[0])
-    : null);
 
-  // Get connected nodes if we have an active node
-  const connectedNodes = activeNode
-    ? graphData.links
-        .filter(link =>
-          (link.source?.id || link.source) === activeNode.id ||
-          (link.target?.id || link.target) === activeNode.id
-        )
-        .map(link => {
-          const nodeId = (link.source?.id || link.source) === activeNode.id
-            ? (link.target?.id || link.target)
-            : (link.source?.id || link.source);
-          return graphData.nodes.find(n => n.id === nodeId);
-        })
-        .filter(Boolean)
-    : [];
+/**
+ * Re-render on engine changes, throttled.
+ *
+ * The engine notifies on every simulation tick (~60/s); nothing in this panel
+ * needs that rate. Throttling keeps stats and match counts live without making
+ * the controls thrash while the layout settles.
+ */
+function useEngineTick(intervalMs = 350) {
+  const [tick, bump] = useReducer((n) => n + 1, 0);
+  useEffect(() => {
+    let last = 0;
+    let timer = null;
+    const onChange = () => {
+      const wait = intervalMs - (Date.now() - last);
+      if (wait <= 0) {
+        last = Date.now();
+        bump();
+      } else if (!timer) {
+        timer = setTimeout(() => {
+          timer = null;
+          last = Date.now();
+          bump();
+        }, wait);
+      }
+    };
+    const unsub = getGraphEngine().subscribe(onChange);
+    return () => { unsub(); clearTimeout(timer); };
+  }, [intervalMs]);
+  return tick;
+}
 
-  // Helper to toggle collapse state
-  const toggleCollapse = (section) => {
-    onConfigChange({
-      ...config,
-      [`collapse-${section}`]: !config[`collapse-${section}`]
-    });
+function baseName(path) {
+  if (!path) return '';
+  const file = path.split('/').pop() || path;
+  return file.replace(/\.md$/i, '');
+}
+
+export default function GraphSidebar({ className = '', hideHeader = false }) {
+  const config = useGraphConfig((s) => s.config);
+  const update = useGraphConfig((s) => s.update);
+  const reset = useGraphConfig((s) => s.reset);
+  const tick = useEngineTick();
+
+  const engine = getGraphEngine();
+  const stats = useMemo(() => engine.stats(), [engine, tick]);
+  // The engine mutates its node array in place, so `tick` is what invalidates.
+  const nodes = useMemo(() => engine.nodes(), [engine, tick]);
+  const focusPath = useMemo(() => engine.getFocus(), [engine, tick]);
+
+  const groups = config.colorGroups || [];
+  const matchCounts = useMemo(
+    () => groups.map((g) => countMatches(g.query, nodes)),
+    [groups, nodes, tick] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const toggleCollapse = (section) =>
+    update({ [`collapse-${section}`]: !config[`collapse-${section}`] });
+
+  const patchGroups = (next) => update({ colorGroups: next });
+  const editGroup = (index, patch) => {
+    const next = [...groups];
+    next[index] = { ...next[index], ...patch };
+    patchGroups(next);
   };
-
-  // Helper to update config value
-  const updateConfig = (key, value) => {
-    onConfigChange({
-      ...config,
-      [key]: value
-    });
+  const moveGroup = (index, delta) => {
+    const target = index + delta;
+    if (target < 0 || target >= groups.length) return;
+    const next = [...groups];
+    [next[index], next[target]] = [next[target], next[index]];
+    patchGroups(next);
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-app-panel">
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-app-border">
-        <h3 className="text-sm font-semibold text-app-text flex items-center gap-2">
-          <Network className="w-4 h-4" />
-          Graph Settings
-        </h3>
-      </div>
+    <div className={`h-full flex flex-col overflow-hidden bg-app-panel ${className}`}>
+      {!hideHeader && (
+        <div className="px-4 py-3 border-b border-app-border">
+          <h3 className="text-sm font-semibold text-app-text flex items-center gap-2">
+            <Network className="w-4 h-4" strokeWidth={1.5} />
+            Graph Settings
+          </h3>
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
-        {/* Active Node Details - Always visible if node selected */}
-        {activeNode && (
-          <div className="px-4 py-4 border-b border-app-border">
-            <div className="text-xs font-semibold text-app-muted uppercase tracking-wide mb-2">
-              {hoveredNode ? 'Hovered Node' : 'Selected Node'}
+        {/* FILTERS */}
+        <Section
+          icon={<Filter className="w-4 h-4" />}
+          title="Filters"
+          collapsed={config['collapse-filter']}
+          onToggle={() => toggleCollapse('filter')}
+        >
+          <div>
+            <label className="text-xs text-app-muted mb-1.5 block">Search</label>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-app-muted" />
+              <input
+                type="text"
+                value={config.search || ''}
+                onChange={(e) => update({ search: e.target.value })}
+                placeholder="Highlight nodes…"
+                className="w-full pl-8 pr-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text placeholder-app-muted focus:outline-none focus:border-app-accent"
+              />
             </div>
-            <div className="bg-app-bg rounded-lg p-3 border border-app-border">
-              <div className="font-medium text-app-text mb-2 break-words">
-                {activeNode.label || activeNode.title || activeNode.id}
-              </div>
-              <div className="flex items-center gap-2 text-xs text-app-muted mb-3">
-                <div className={`w-2 h-2 rounded-full`}
-                  style={{ backgroundColor: getNodeColor(activeNode) }}
+          </div>
+
+          <div className="space-y-2">
+            <Toggle
+              label="Show Tags"
+              checked={config.showTags ?? true}
+              onChange={(v) => update({ showTags: v })}
+            />
+            <Toggle
+              label="Show Attachments"
+              checked={config.showAttachments ?? false}
+              onChange={(v) => update({ showAttachments: v })}
+            />
+            <Toggle
+              label="Hide Unresolved (placeholders)"
+              checked={config.hideUnresolved ?? false}
+              onChange={(v) => update({ hideUnresolved: v })}
+            />
+            <Toggle
+              label="Show Orphans (no connections)"
+              checked={config.showOrphans ?? true}
+              onChange={(v) => update({ showOrphans: v })}
+            />
+          </div>
+
+          {/* Local graph — a neighborhood filter around the active file */}
+          <div className="pt-3 border-t border-app-border space-y-3">
+            <Toggle
+              label="Local graph"
+              checked={config.localMode ?? false}
+              onChange={(v) => update({ localMode: v })}
+            />
+            <div className="text-xs text-app-muted -mt-1.5">
+              Show only notes within a few hops of the active file.
+            </div>
+
+            {config.localMode && (
+              <>
+                <Slider
+                  label="Depth"
+                  value={config.localDepth ?? 1}
+                  min={1}
+                  max={5}
+                  step={1}
+                  onChange={(v) => update({ localDepth: v })}
+                  format={(v) => `${v} hop${v === 1 ? '' : 's'}`}
                 />
-                <span className="capitalize">{activeNode.type || 'document'}</span>
-              </div>
-
-              {/* Node Stats */}
-              <div className="space-y-2 text-xs">
-                {activeNode.backlinkCount !== undefined && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-app-muted">Backlinks</span>
-                    <span className="font-medium text-app-text">{activeNode.backlinkCount}</span>
-                  </div>
-                )}
-                {activeNode.metadata?.wordCount !== undefined && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-app-muted">Words</span>
-                    <span className="font-medium text-app-text">{activeNode.metadata.wordCount}</span>
-                  </div>
-                )}
-                {activeNode.metadata?.tags && activeNode.metadata.tags.length > 0 && (
-                  <div className="pt-2 border-t border-app-border">
-                    <div className="text-app-muted mb-1">Tags</div>
-                    <div className="flex flex-wrap gap-1">
-                      {activeNode.metadata.tags.map((tag, i) => (
-                        <span key={i} className="px-2 py-0.5 bg-app-accent/10 text-app-accent rounded text-xs">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Connected Nodes */}
-            {connectedNodes.length > 0 && (
-              <div className="mt-3">
-                <div className="text-xs font-semibold text-app-muted uppercase tracking-wide mb-2 flex items-center gap-2">
-                  <Link className="w-3 h-3" />
-                  Connected ({connectedNodes.length})
-                </div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {connectedNodes.slice(0, 10).map((node, i) => (
-                    <button
-                      key={i}
-                      onClick={() => onNodeClick(node)}
-                      className="w-full text-left px-3 py-2 bg-app-bg hover:bg-app-panel rounded border border-app-border hover:border-app-accent transition-all text-xs group"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: getNodeColor(node) }}
-                        />
-                        <span className="truncate text-app-text group-hover:text-app-accent">
-                          {node.label || node.title || node.id}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                  {connectedNodes.length > 10 && (
-                    <div className="text-xs text-app-muted text-center py-2">
-                      +{connectedNodes.length - 10} more
-                    </div>
+                <div className="text-xs p-2 bg-app-bg rounded border border-app-border flex items-start gap-2">
+                  <Crosshair className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-app-accent" />
+                  {focusPath ? (
+                    <span className="text-app-muted">
+                      Centered on <span className="text-app-text font-medium">{baseName(focusPath)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-app-muted">
+                      No active file — open a note to see its neighborhood.
+                    </span>
                   )}
                 </div>
-              </div>
+              </>
             )}
           </div>
-        )}
+        </Section>
 
-        {/* FILTERS SECTION */}
-        <div className="border-b border-app-border">
-          <button
-            onClick={() => toggleCollapse('filter')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-              <Filter className="w-4 h-4" />
-              <span>Filters</span>
+        {/* DISPLAY */}
+        <Section
+          icon={<Palette className="w-4 h-4" />}
+          title="Display"
+          collapsed={config['collapse-display']}
+          onToggle={() => toggleCollapse('display')}
+        >
+          <div className="space-y-2">
+            <Toggle
+              label="Show Arrows"
+              checked={config.showArrow ?? true}
+              onChange={(v) => update({ showArrow: v })}
+            />
+            <Toggle
+              label="Highlight neighbors on hover"
+              checked={config.highlightNeighbors ?? true}
+              onChange={(v) => update({ highlightNeighbors: v })}
+            />
+            <Toggle
+              label="Follow active file"
+              checked={config.followFocus ?? true}
+              onChange={(v) => update({ followFocus: v })}
+            />
+            <div className="text-xs text-app-muted">
+              The camera glides to whichever note you have open.
             </div>
-            {config['collapse-filter'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+          </div>
 
-          {!config['collapse-filter'] && (
-            <div className="px-4 pb-4 space-y-3">
-              {/* Search Filter */}
-              <div>
-                <label className="text-xs text-app-muted mb-1.5 block">Search</label>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-app-muted" />
-                  <input
-                    type="text"
-                    value={config.search || ''}
-                    onChange={(e) => updateConfig('search', e.target.value)}
-                    placeholder="Filter nodes..."
-                    className="w-full pl-8 pr-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text placeholder-app-muted focus:outline-none focus:border-app-accent"
-                  />
-                </div>
-              </div>
+          <Slider
+            label="Text Fade"
+            value={config.textFadeMultiplier ?? 1.3}
+            min={0}
+            max={3}
+            step={0.1}
+            onChange={(v) => update({ textFadeMultiplier: v })}
+            format={(v) => v.toFixed(1)}
+          />
+          <Slider
+            label="Node Size"
+            value={config.nodeSizeMultiplier ?? 1.0}
+            min={0.5}
+            max={2}
+            step={0.05}
+            onChange={(v) => update({ nodeSizeMultiplier: v })}
+            format={(v) => v.toFixed(2)}
+          />
+          <Slider
+            label="Line Size"
+            value={config.lineSizeMultiplier ?? 1.0}
+            min={0.5}
+            max={3}
+            step={0.1}
+            onChange={(v) => update({ lineSizeMultiplier: v })}
+            format={(v) => v.toFixed(2)}
+          />
+        </Section>
 
-              {/* Checkboxes */}
-              <div className="space-y-2">
-                <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer hover:text-app-accent transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={config.showTags ?? true}
-                    onChange={(e) => updateConfig('showTags', e.target.checked)}
-                    className="w-4 h-4 rounded border-app-border accent-app-accent"
-                  />
-                  <span>Show Tags</span>
-                </label>
+        {/* FORCES */}
+        <Section
+          icon={<Zap className="w-4 h-4" />}
+          title="Forces"
+          collapsed={config['collapse-forces']}
+          onToggle={() => toggleCollapse('forces')}
+        >
+          <Slider
+            label="Center Force"
+            value={config.centerStrength ?? 0.1}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => update({ centerStrength: v })}
+            format={(v) => v.toFixed(2)}
+            hint="Pull nodes toward center"
+          />
+          <Slider
+            label="Repel Force"
+            value={config.repelStrength ?? 100}
+            min={10}
+            max={500}
+            step={10}
+            onChange={(v) => update({ repelStrength: v })}
+            format={(v) => String(Math.round(v))}
+            hint="Push nodes apart (higher = more spread)"
+          />
+          <Slider
+            label="Link Stiffness"
+            value={config.linkStrength ?? 0.3}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => update({ linkStrength: v })}
+            format={(v) => v.toFixed(2)}
+            hint="How rigidly links hold nodes together"
+          />
+          <Slider
+            label="Link Distance"
+            value={config.linkDistance ?? 80}
+            min={20}
+            max={300}
+            step={5}
+            onChange={(v) => update({ linkDistance: v })}
+            format={(v) => `${Math.round(v)}px`}
+            hint="Target distance between connected nodes"
+          />
+        </Section>
 
-                <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer hover:text-app-accent transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={config.showAttachments ?? false}
-                    onChange={(e) => updateConfig('showAttachments', e.target.checked)}
-                    className="w-4 h-4 rounded border-app-border accent-app-accent"
-                  />
-                  <span>Show Attachments</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer hover:text-app-accent transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={config.hideUnresolved ?? false}
-                    onChange={(e) => updateConfig('hideUnresolved', e.target.checked)}
-                    className="w-4 h-4 rounded border-app-border accent-app-accent"
-                  />
-                  <span>Hide Unresolved (placeholders)</span>
-                </label>
-
-                <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer hover:text-app-accent transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={config.showOrphans ?? true}
-                    onChange={(e) => updateConfig('showOrphans', e.target.checked)}
-                    className="w-4 h-4 rounded border-app-border accent-app-accent"
-                  />
-                  <span>Show Orphans (no connections)</span>
-                </label>
-              </div>
+        {/* COLOR GROUPS */}
+        <Section
+          icon={<Palette className="w-4 h-4" />}
+          title="Color Groups"
+          collapsed={config['collapse-groups']}
+          onToggle={() => toggleCollapse('groups')}
+        >
+          <div>
+            <label className="text-xs text-app-muted mb-1.5 block">Color Scheme</label>
+            <select
+              value={config.colorScheme || 'type'}
+              onChange={(e) => update({ colorScheme: e.target.value })}
+              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
+            >
+              <option value="type">By Type (note/placeholder/tag)</option>
+              <option value="folder">By Folder</option>
+              <option value="tag">By Primary Tag</option>
+              <option value="creation-date">By Creation Date</option>
+              <option value="modification-date">By Modification Date</option>
+            </select>
+            <div className="text-xs text-app-muted mt-1.5">
+              {config.colorScheme === 'folder' && 'Colors nodes by the folder they live in'}
+              {config.colorScheme === 'tag' && 'Colors nodes by their primary tag'}
+              {config.colorScheme === 'creation-date' && 'Colors nodes by creation date (recent to old)'}
+              {config.colorScheme === 'modification-date' && 'Colors nodes by modification date'}
+              {(!config.colorScheme || config.colorScheme === 'type') &&
+                'Colors nodes by their type (note, placeholder, tag, attachment)'}
             </div>
-          )}
-        </div>
+          </div>
 
-        {/* DISPLAY SECTION */}
-        <div className="border-b border-app-border">
-          <button
-            onClick={() => toggleCollapse('display')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-              <Palette className="w-4 h-4" />
-              <span>Display</span>
-            </div>
-            {config['collapse-display'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+          <div className="text-xs text-app-muted mb-1">Color Overrides</div>
 
-          {!config['collapse-display'] && (
-            <div className="px-4 pb-4 space-y-4">
-              {/* Show Arrows Checkbox */}
-              <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer hover:text-app-accent transition-colors">
-                <input
-                  type="checkbox"
-                  checked={config.showArrow ?? true}
-                  onChange={(e) => updateConfig('showArrow', e.target.checked)}
-                  className="w-4 h-4 rounded border-app-border accent-app-accent"
-                />
-                <span>Show Arrows</span>
-              </label>
-
-              {/* Text Fade Multiplier */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Text Fade</span>
-                  <span className="text-app-text font-medium">{(config.textFadeMultiplier ?? 1.3).toFixed(1)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="3"
-                  step="0.1"
-                  value={config.textFadeMultiplier ?? 1.3}
-                  onChange={(e) => updateConfig('textFadeMultiplier', parseFloat(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-              </div>
-
-              {/* Node Size Multiplier */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Node Size</span>
-                  <span className="text-app-text font-medium">{(config.nodeSizeMultiplier ?? 1.0).toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="2"
-                  step="0.05"
-                  value={config.nodeSizeMultiplier ?? 1.0}
-                  onChange={(e) => updateConfig('nodeSizeMultiplier', parseFloat(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-              </div>
-
-              {/* Line Size Multiplier */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Line Size</span>
-                  <span className="text-app-text font-medium">{(config.lineSizeMultiplier ?? 1.0).toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.5"
-                  max="3"
-                  step="0.1"
-                  value={config.lineSizeMultiplier ?? 1.0}
-                  onChange={(e) => updateConfig('lineSizeMultiplier', parseFloat(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* FORCES SECTION */}
-        <div className="border-b border-app-border">
-          <button
-            onClick={() => toggleCollapse('forces')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-              <Zap className="w-4 h-4" />
-              <span>Forces</span>
-            </div>
-            {config['collapse-forces'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {!config['collapse-forces'] && (
-            <div className="px-4 pb-4 space-y-4">
-              {/* Center Strength */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Center Force</span>
-                  <span className="text-app-text font-medium">{(config.centerStrength ?? 0.1).toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={config.centerStrength ?? 0.1}
-                  onChange={(e) => updateConfig('centerStrength', parseFloat(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-                <div className="text-xs text-app-muted mt-1">Pull nodes toward center</div>
-              </div>
-
-              {/* Repel Strength */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Repel Force</span>
-                  <span className="text-app-text font-medium">{Math.round(config.repelStrength ?? 100)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="10"
-                  max="500"
-                  step="10"
-                  value={config.repelStrength ?? 100}
-                  onChange={(e) => updateConfig('repelStrength', parseFloat(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-                <div className="text-xs text-app-muted mt-1">Push nodes apart (higher = more spread)</div>
-              </div>
-
-              {/* Link Strength */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Link Stiffness</span>
-                  <span className="text-app-text font-medium">{(config.linkStrength ?? 0.3).toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={config.linkStrength ?? 0.3}
-                  onChange={(e) => updateConfig('linkStrength', parseFloat(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-                <div className="text-xs text-app-muted mt-1">How rigidly links hold nodes together</div>
-              </div>
-
-              {/* Link Distance */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Link Distance</span>
-                  <span className="text-app-text font-medium">{Math.round(config.linkDistance ?? 80)}px</span>
-                </div>
-                <input
-                  type="range"
-                  min="20"
-                  max="300"
-                  step="5"
-                  value={config.linkDistance ?? 80}
-                  onChange={(e) => updateConfig('linkDistance', parseInt(e.target.value))}
-                  className="w-full accent-app-accent"
-                />
-                <div className="text-xs text-app-muted mt-1">Target distance between connected nodes</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* COLOR GROUPS SECTION */}
-        <div className="border-b border-app-border">
-          <button
-            onClick={() => toggleCollapse('groups')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-              <Palette className="w-4 h-4" />
-              <span>Color Groups</span>
-            </div>
-            {config['collapse-groups'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {!config['collapse-groups'] && (
-            <div className="px-4 pb-4 space-y-3">
-              {/* Color Scheme Selector */}
-              <div>
-                <label className="text-xs text-app-muted mb-1.5 block">Color Scheme</label>
-                <select
-                  value={config.colorScheme || 'type'}
-                  onChange={(e) => updateConfig('colorScheme', e.target.value)}
-                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
-                >
-                  <option value="type">By Type (document/tag/folder)</option>
-                  <option value="folder">By Folder Depth</option>
-                  <option value="tag">By Primary Tag</option>
-                  <option value="creation-date">By Creation Date</option>
-                  <option value="modification-date">By Modification Date</option>
-                </select>
-                <div className="text-xs text-app-muted mt-1.5">
-                  {config.colorScheme === 'type' && 'Colors nodes by their type (document, placeholder, tag, etc.)'}
-                  {config.colorScheme === 'folder' && 'Colors nodes by folder depth in the file tree'}
-                  {config.colorScheme === 'tag' && 'Colors nodes by their primary tag'}
-                  {config.colorScheme === 'creation-date' && 'Colors nodes by creation date (recent to old)'}
-                  {config.colorScheme === 'modification-date' && 'Colors nodes by modification date'}
-                </div>
-              </div>
-
-              {/* Query-based color group overrides */}
-              <div className="text-xs text-app-muted mb-1">Color Overrides</div>
-
-              {config.colorGroups && config.colorGroups.length > 0 && (
-                <div className="space-y-2">
-                  {config.colorGroups.map((group, index) => {
-                    const matchCount = countMatches(group.query, graphData?.nodes || []);
-                    return (
-                      <div key={index} className="flex items-center gap-2 p-2 bg-app-bg rounded border border-app-border">
-                        <div className="flex flex-col gap-0.5">
-                          <button
-                            onClick={() => {
-                              if (index === 0) return;
-                              const newGroups = [...(config.colorGroups || [])];
-                              [newGroups[index - 1], newGroups[index]] = [newGroups[index], newGroups[index - 1]];
-                              updateConfig('colorGroups', newGroups);
-                            }}
-                            disabled={index === 0}
-                            className="text-[10px] text-app-muted hover:text-app-text disabled:opacity-30 leading-none"
-                            title="Move up (higher priority)"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (index === config.colorGroups.length - 1) return;
-                              const newGroups = [...(config.colorGroups || [])];
-                              [newGroups[index], newGroups[index + 1]] = [newGroups[index + 1], newGroups[index]];
-                              updateConfig('colorGroups', newGroups);
-                            }}
-                            disabled={index === config.colorGroups.length - 1}
-                            className="text-[10px] text-app-muted hover:text-app-text disabled:opacity-30 leading-none"
-                            title="Move down (lower priority)"
-                          >
-                            ▼
-                          </button>
-                        </div>
-                        <input
-                          type="color"
-                          value={group.color}
-                          onChange={(e) => {
-                            const newGroups = [...(config.colorGroups || [])];
-                            newGroups[index] = { ...newGroups[index], color: e.target.value };
-                            updateConfig('colorGroups', newGroups);
-                          }}
-                          className="w-7 h-7 rounded border border-app-border cursor-pointer shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <input
-                            type="text"
-                            value={group.query}
-                            onChange={(e) => {
-                              const newGroups = [...(config.colorGroups || [])];
-                              newGroups[index] = { ...newGroups[index], query: e.target.value };
-                              updateConfig('colorGroups', newGroups);
-                            }}
-                            placeholder="folder:path/ or tag:name or text"
-                            className="w-full px-2 py-1 bg-app-panel border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
-                          />
-                        </div>
-                        <span
-                          className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${
-                            matchCount > 0
-                              ? 'bg-app-accent/20 text-app-accent'
-                              : 'bg-app-bg text-app-muted'
-                          }`}
-                          title={`${matchCount} node${matchCount !== 1 ? 's' : ''} matched`}
-                        >
-                          {matchCount}
-                        </span>
-                        <button
-                          onClick={() => {
-                            const newGroups = config.colorGroups.filter((_, i) => i !== index);
-                            updateConfig('colorGroups', newGroups);
-                          }}
-                          className="text-xs text-app-muted hover:text-red-400 shrink-0 transition-colors"
-                          title="Remove group"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <button
-                onClick={() => {
-                  const newGroup = {
-                    query: '',
-                    color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0')
-                  };
-                  updateConfig('colorGroups', [...(config.colorGroups || []), newGroup]);
-                }}
-                className="w-full px-3 py-2 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent rounded text-xs font-medium transition-colors"
-              >
-                + Add Color Group
-              </button>
-
-              <div className="text-[11px] text-app-muted space-y-1 p-2 bg-app-bg rounded border border-app-border">
-                <div><span className="text-app-text font-mono">folder:path/</span> — match by folder</div>
-                <div><span className="text-app-text font-mono">tag:name</span> — match by tag</div>
-                <div><span className="text-app-text font-mono">text</span> — match by title</div>
-                <div className="text-app-muted mt-1">First match wins. Use arrows to reorder priority.</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* BACKGROUND SECTION */}
-        <div className="border-b border-app-border">
-          <button
-            onClick={() => toggleCollapse('background')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
-          >
-            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-              <Image className="w-4 h-4" />
-              <span>Background</span>
-            </div>
-            {config['collapse-background'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-
-          {!config['collapse-background'] && (
-            <div className="px-4 pb-4 space-y-4">
-              {/* Background Type Selector */}
-              <div>
-                <label className="text-xs text-app-muted mb-1.5 block">Background Type</label>
-                <select
-                  value={config.backgroundType || 'radial'}
-                  onChange={(e) => updateConfig('backgroundType', e.target.value)}
-                  className="w-full px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
-                >
-                  <option value="none">None (transparent)</option>
-                  <option value="solid">Solid Color</option>
-                  <option value="gradient">Linear Gradient</option>
-                  <option value="radial">Radial Gradient</option>
-                  <option value="dots">Dot Pattern</option>
-                  <option value="grid">Grid Pattern</option>
-                </select>
-              </div>
-
-              {/* Color Pickers - Show for all types except 'none' */}
-              {config.backgroundType !== 'none' && (
-                <>
-                  {/* Primary Color */}
-                  <div>
-                    <label className="text-xs text-app-muted mb-1.5 block">
-                      {config.backgroundType === 'solid' ? 'Background Color' : 'Primary Color'}
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={config.backgroundColor || '#1e1b4b'}
-                        onChange={(e) => updateConfig('backgroundColor', e.target.value)}
-                        className="w-12 h-10 rounded border border-app-border cursor-pointer"
-                      />
-                      <input
-                        type="text"
-                        value={config.backgroundColor || '#1e1b4b'}
-                        onChange={(e) => updateConfig('backgroundColor', e.target.value)}
-                        className="flex-1 px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text font-mono focus:outline-none focus:border-app-accent"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Secondary Color - Show for gradients and patterns */}
-                  {(config.backgroundType === 'gradient' || config.backgroundType === 'radial' ||
-                    config.backgroundType === 'dots' || config.backgroundType === 'grid') && (
-                    <div>
-                      <label className="text-xs text-app-muted mb-1.5 block">Secondary Color</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="color"
-                          value={config.backgroundSecondary || '#6366f1'}
-                          onChange={(e) => updateConfig('backgroundSecondary', e.target.value)}
-                          className="w-12 h-10 rounded border border-app-border cursor-pointer"
-                        />
-                        <input
-                          type="text"
-                          value={config.backgroundSecondary || '#6366f1'}
-                          onChange={(e) => updateConfig('backgroundSecondary', e.target.value)}
-                          className="flex-1 px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text font-mono focus:outline-none focus:border-app-accent"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Opacity Slider */}
-                  <div>
-                    <div className="flex justify-between text-xs mb-1.5">
-                      <span className="text-app-muted">Opacity</span>
-                      <span className="text-app-text font-medium">{(config.backgroundOpacity ?? 0.1).toFixed(2)}</span>
+          {groups.length > 0 && (
+            <div className="space-y-2">
+              {groups.map((group, index) => {
+                const matchCount = matchCounts[index] ?? 0;
+                return (
+                  <div key={index} className="flex items-center gap-2 p-2 bg-app-bg rounded border border-app-border">
+                    <div className="flex flex-col gap-0.5">
+                      <button
+                        onClick={() => moveGroup(index, -1)}
+                        disabled={index === 0}
+                        className="text-[10px] text-app-muted hover:text-app-text disabled:opacity-30 leading-none"
+                        title="Move up (higher priority)"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        onClick={() => moveGroup(index, 1)}
+                        disabled={index === groups.length - 1}
+                        className="text-[10px] text-app-muted hover:text-app-text disabled:opacity-30 leading-none"
+                        title="Move down (lower priority)"
+                      >
+                        ▼
+                      </button>
                     </div>
                     <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={config.backgroundOpacity ?? 0.1}
-                      onChange={(e) => updateConfig('backgroundOpacity', parseFloat(e.target.value))}
-                      className="w-full accent-app-accent"
+                      type="color"
+                      value={group.color}
+                      onChange={(e) => editGroup(index, { color: e.target.value })}
+                      className="w-7 h-7 rounded border border-app-border cursor-pointer shrink-0"
+                      title="Group color"
                     />
+                    <div className="flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={group.query}
+                        onChange={(e) => editGroup(index, { query: e.target.value })}
+                        placeholder="folder:path/ or tag:name or text"
+                        className="w-full px-2 py-1 bg-app-panel border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
+                      />
+                    </div>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full shrink-0 ${
+                        matchCount > 0 ? 'bg-app-accent/20 text-app-accent' : 'bg-app-bg text-app-muted'
+                      }`}
+                      title={`${matchCount} node${matchCount !== 1 ? 's' : ''} matched`}
+                    >
+                      {matchCount}
+                    </span>
+                    <button
+                      onClick={() => patchGroups(groups.filter((_, i) => i !== index))}
+                      className="text-xs text-app-muted hover:text-red-400 shrink-0 transition-colors"
+                      title="Remove group"
+                    >
+                      ✕
+                    </button>
                   </div>
-
-                  {/* Pattern-specific controls */}
-                  {(config.backgroundType === 'dots' || config.backgroundType === 'grid') && (
-                    <>
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="text-app-muted">{config.backgroundType === 'dots' ? 'Dot Size' : 'Line Width'}</span>
-                          <span className="text-app-text font-medium">{config.backgroundDotSize ?? 2}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          step="0.5"
-                          value={config.backgroundDotSize ?? 2}
-                          onChange={(e) => updateConfig('backgroundDotSize', parseFloat(e.target.value))}
-                          className="w-full accent-app-accent"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between text-xs mb-1.5">
-                          <span className="text-app-muted">Spacing</span>
-                          <span className="text-app-text font-medium">{config.backgroundDotSpacing ?? 30}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="10"
-                          max="100"
-                          step="5"
-                          value={config.backgroundDotSpacing ?? 30}
-                          onChange={(e) => updateConfig('backgroundDotSpacing', parseInt(e.target.value))}
-                          className="w-full accent-app-accent"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {/* Info Text */}
-                  <div className="text-xs text-app-muted p-2 bg-app-bg rounded border border-app-border">
-                    {config.backgroundType === 'solid' && '💡 Solid background fill'}
-                    {config.backgroundType === 'gradient' && '💡 Linear gradient from top to bottom'}
-                    {config.backgroundType === 'radial' && '💡 Radial gradient from center outward'}
-                    {config.backgroundType === 'dots' && '💡 Dot pattern overlay'}
-                    {config.backgroundType === 'grid' && '💡 Grid pattern overlay'}
-                  </div>
-                </>
-              )}
+                );
+              })}
             </div>
           )}
-        </div>
 
-        {/* ANIMATION CONTROLS SECTION */}
-        <div className="border-b border-app-border">
           <button
-            onClick={() => toggleCollapse('animation')}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
+            onClick={() =>
+              patchGroups([
+                ...groups,
+                { query: '', color: '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0') },
+              ])
+            }
+            className="w-full px-3 py-2 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent rounded text-xs font-medium transition-colors"
           >
-            <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-              <Sparkles className="w-4 h-4" />
-              <span>Animation Tour</span>
-            </div>
-            {config['collapse-animation'] ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            + Add Color Group
           </button>
 
-          {!config['collapse-animation'] && (
-            <div className="px-4 pb-4 space-y-4">
-              {/* Play/Pause Button */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={onToggleAnimation}
-                  className={`flex-1 px-4 py-3 rounded-lg font-medium text-sm transition-all ${
-                    isAnimating
-                      ? 'bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30'
-                      : 'bg-app-accent/10 hover:bg-app-accent/20 text-app-accent border border-app-accent/30'
-                  }`}
-                >
-                  <div className="flex items-center justify-center gap-2">
-                    {isAnimating ? (
-                      <>
-                        <Pause className="w-4 h-4" />
-                        <span>Stop Tour</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4" />
-                        <span>Start Tour</span>
-                      </>
-                    )}
-                  </div>
-                </button>
-              </div>
+          <div className="text-[11px] text-app-muted space-y-1 p-2 bg-app-bg rounded border border-app-border">
+            <div><span className="text-app-text font-mono">folder:path/</span> — match by folder</div>
+            <div><span className="text-app-text font-mono">tag:name</span> — match by tag</div>
+            <div><span className="text-app-text font-mono">type:phantom</span> — match by node type</div>
+            <div><span className="text-app-text font-mono">-query</span> — negate any of the above</div>
+            <div><span className="text-app-text font-mono">text</span> — match by title or path</div>
+            <div className="text-app-muted mt-1">First match wins. Use arrows to reorder priority.</div>
+          </div>
+        </Section>
 
-              {/* Speed Control */}
-              <div>
-                <div className="flex justify-between text-xs mb-1.5">
-                  <span className="text-app-muted">Animation Speed</span>
-                  <span className="text-app-text font-medium">
-                    {animationSpeed / 1000}s per node
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="500"
-                  max="5000"
-                  step="100"
-                  value={animationSpeed}
-                  onChange={(e) => onAnimationSpeedChange(parseInt(e.target.value))}
-                  className="w-full accent-app-accent"
+        {/* BACKGROUND */}
+        <Section
+          icon={<Image className="w-4 h-4" />}
+          title="Background"
+          collapsed={config['collapse-background']}
+          onToggle={() => toggleCollapse('background')}
+        >
+          <div>
+            <label className="text-xs text-app-muted mb-1.5 block">Background Type</label>
+            <select
+              value={config.backgroundType || 'none'}
+              onChange={(e) => update({ backgroundType: e.target.value })}
+              className="w-full px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text focus:outline-none focus:border-app-accent"
+            >
+              <option value="none">None (transparent)</option>
+              <option value="solid">Solid Color</option>
+              <option value="gradient">Linear Gradient</option>
+              <option value="radial">Radial Gradient</option>
+              <option value="dots">Dot Pattern</option>
+              <option value="grid">Grid Pattern</option>
+            </select>
+          </div>
+
+          {config.backgroundType && config.backgroundType !== 'none' && (
+            <>
+              <ColorField
+                label={config.backgroundType === 'solid' ? 'Background Color' : 'Primary Color'}
+                value={config.backgroundColor || '#1e1b4b'}
+                onChange={(v) => update({ backgroundColor: v })}
+              />
+
+              {config.backgroundType !== 'solid' && (
+                <ColorField
+                  label="Secondary Color"
+                  value={config.backgroundSecondary || '#6366f1'}
+                  onChange={(v) => update({ backgroundSecondary: v })}
                 />
-                <div className="text-xs text-app-muted mt-1">
-                  How long to focus on each node (faster ← → slower)
-                </div>
-              </div>
+              )}
 
-              {/* Info */}
-              <div className="text-xs text-app-muted p-3 bg-app-bg rounded border border-app-border">
-                <div className="flex items-start gap-2">
-                  <Sparkles className="w-4 h-4 mt-0.5 flex-shrink-0 text-app-accent" />
-                  <div>
-                    <div className="font-medium text-app-text mb-1">Auto-tour your knowledge graph</div>
-                    <div>
-                      Automatically cycles through all visible nodes, focusing and zooming on each one.
-                      Perfect for exploring your knowledge base or presentations.
-                    </div>
-                  </div>
-                </div>
+              <Slider
+                label="Opacity"
+                value={config.backgroundOpacity ?? 0.1}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(v) => update({ backgroundOpacity: v })}
+                format={(v) => v.toFixed(2)}
+              />
+
+              {(config.backgroundType === 'dots' || config.backgroundType === 'grid') && (
+                <>
+                  <Slider
+                    label={config.backgroundType === 'dots' ? 'Dot Size' : 'Line Width'}
+                    value={config.backgroundDotSize ?? 2}
+                    min={1}
+                    max={10}
+                    step={0.5}
+                    onChange={(v) => update({ backgroundDotSize: v })}
+                    format={(v) => `${v}px`}
+                  />
+                  <Slider
+                    label="Spacing"
+                    value={config.backgroundDotSpacing ?? 30}
+                    min={10}
+                    max={100}
+                    step={5}
+                    onChange={(v) => update({ backgroundDotSpacing: v })}
+                    format={(v) => `${Math.round(v)}px`}
+                  />
+                </>
+              )}
+
+              <div className="text-xs text-app-muted p-2 bg-app-bg rounded border border-app-border">
+                {config.backgroundType === 'solid' && 'Solid background fill'}
+                {config.backgroundType === 'gradient' && 'Linear gradient from top to bottom'}
+                {config.backgroundType === 'radial' && 'Radial gradient from center outward'}
+                {config.backgroundType === 'dots' && 'Dot pattern overlay'}
+                {config.backgroundType === 'grid' && 'Grid pattern overlay'}
               </div>
-            </div>
+            </>
           )}
-        </div>
+        </Section>
 
-        {/* STATISTICS SECTION */}
+        {/* STATISTICS */}
         <div className="px-4 py-4">
           <div className="text-xs font-semibold text-app-muted uppercase tracking-wide mb-3">
             Statistics
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <StatCard
-              icon={<FileText className="w-4 h-4" />}
-              label="Nodes"
-              value={stats.nodeCount || graphData.nodes.length}
-            />
-            <StatCard
-              icon={<Link className="w-4 h-4" />}
-              label="Links"
-              value={stats.linkCount || graphData.links.length}
-            />
-            <StatCard
-              icon={<Network className="w-4 h-4" />}
-              label="WikiLinks"
-              value={stats.wikiLinkCount || 0}
-            />
-            <StatCard
-              icon={<Tag className="w-4 h-4" />}
-              label="Placeholders"
-              value={stats.placeholderCount || 0}
-            />
+            <StatCard icon={<Network className="w-4 h-4" />} label="Nodes" value={stats.nodes ?? 0} />
+            <StatCard icon={<Link className="w-4 h-4" />} label="Links" value={stats.links ?? 0} />
+            <StatCard icon={<FileText className="w-4 h-4" />} label="Notes" value={stats.files ?? 0} />
+            <StatCard icon={<Ghost className="w-4 h-4" />} label="Placeholders" value={stats.phantoms ?? 0} />
+            {stats.tags !== undefined && (
+              <StatCard icon={<Tag className="w-4 h-4" />} label="Tags" value={stats.tags} />
+            )}
+            {stats.attachments !== undefined && (
+              <StatCard icon={<Paperclip className="w-4 h-4" />} label="Attachments" value={stats.attachments} />
+            )}
           </div>
+          <div className="text-[11px] text-app-muted mt-2">Counts reflect the current filters.</div>
+        </div>
 
-          {/* Performance Info */}
-          {stats.fps && (
-            <div className="mt-4">
-              <div className="text-xs font-semibold text-app-muted uppercase tracking-wide mb-2">
-                Performance
-              </div>
-              <div className="bg-app-bg rounded-lg p-3 border border-app-border space-y-2 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-app-muted">FPS</span>
-                  <span className={`font-medium ${
-                    stats.fps >= 50 ? 'text-green-500' :
-                    stats.fps >= 30 ? 'text-yellow-500' : 'text-red-500'
-                  }`}>
-                    {Math.round(stats.fps)}
-                  </span>
-                </div>
-                {stats.renderTime !== undefined && (
-                  <div className="flex items-center justify-between">
-                    <span className="text-app-muted">Render Time</span>
-                    <span className="font-medium text-app-text">{stats.renderTime}ms</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+        {/* RESET */}
+        <div className="px-4 pb-4">
+          <button
+            onClick={reset}
+            className="w-full px-3 py-2 flex items-center justify-center gap-2 bg-app-bg hover:bg-app-panel-secondary border border-app-border hover:border-app-accent rounded text-xs font-medium text-app-muted hover:text-app-text transition-colors"
+            title="Restore every graph setting to its default"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Reset to defaults
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// Helper component for stat cards
+// ---- building blocks --------------------------------------------------------
+
+function Section({ icon, title, collapsed, onToggle, children }) {
+  return (
+    <div className="border-b border-app-border">
+      <button
+        onClick={onToggle}
+        className="w-full px-4 py-3 flex items-center justify-between hover:bg-app-bg/50 transition-colors"
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold text-app-text">
+          {icon}
+          <span>{title}</span>
+        </div>
+        {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </button>
+      {!collapsed && <div className="px-4 pb-4 space-y-4">{children}</div>}
+    </div>
+  );
+}
+
+function Toggle({ label, checked, onChange }) {
+  return (
+    <label className="flex items-center gap-2 text-xs text-app-text cursor-pointer hover:text-app-accent transition-colors">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 rounded border-app-border accent-app-accent"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function Slider({ label, value, min, max, step, onChange, format, hint }) {
+  return (
+    <div>
+      <div className="flex justify-between text-xs mb-1.5">
+        <span className="text-app-muted">{label}</span>
+        <span className="text-app-text font-medium">{format ? format(value) : value}</span>
+      </div>
+      <input
+        type="range"
+        aria-label={label}
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full accent-app-accent"
+      />
+      {hint && <div className="text-xs text-app-muted mt-1">{hint}</div>}
+    </div>
+  );
+}
+
+function ColorField({ label, value, onChange }) {
+  return (
+    <div>
+      <label className="text-xs text-app-muted mb-1.5 block">{label}</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          aria-label={label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-12 h-10 rounded border border-app-border cursor-pointer"
+        />
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="flex-1 px-3 py-2 bg-app-bg border border-app-border rounded text-xs text-app-text font-mono focus:outline-none focus:border-app-accent"
+        />
+      </div>
+    </div>
+  );
+}
+
 function StatCard({ icon, label, value }) {
   return (
     <div className="bg-app-bg rounded-lg p-3 border border-app-border">
@@ -845,16 +617,4 @@ function StatCard({ icon, label, value }) {
       </div>
     </div>
   );
-}
-
-// Node color helper (matches ProfessionalGraphView)
-function getNodeColor(node) {
-  const colorMap = {
-    document: '#10b981',
-    placeholder: '#6b7280',
-    tag: '#ef4444',
-    folder: '#f59e0b',
-    attachment: '#8b5cf6'
-  };
-  return colorMap[node.type] || '#6366f1';
 }

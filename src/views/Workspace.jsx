@@ -19,7 +19,6 @@ import { useReferenceModal } from '../features/workspace/useReferenceModal';
 import { useSave, useExport } from '../features/editor';
 import { useAutosaveFlush } from '../features/editor/hooks/useAutosaveFlush';
 import { useFileOperations } from '../features/file-tree';
-import { useGraphEngine } from '../features/graph';
 import { useTabs } from '../features/tabs';
 import { ShortcutListener } from '../features/shortcuts';
 
@@ -30,6 +29,9 @@ import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 import dailyNotesManager from '../core/daily-notes/manager.js';
 import { syncScheduler } from '../core/sync/SyncScheduler';
 import { useAuth } from '../core/auth/AuthContext';
+import { useGraphStore } from '../core/graph2/graphStore.js';
+import { getGraphEngine } from '../core/graph2/graphEngine.js';
+import { useGraphConfig } from '../core/graph2/graphConfig.js';
 
 // Sub-components
 import WorkspaceShell from './WorkspaceShell';
@@ -52,13 +54,9 @@ function WorkspaceInner({ path }) {
   const { plugins } = usePlugins();
   const featureFlags = useFeatureFlags();
 
-  // Graph engine (owns graphProcessorRef internally)
-  const graphEngine = useGraphEngine({ workspacePath: path });
-
   // Save / export
   const { handleSave, handleSaveAs } = useSave({
     workspacePath: path,
-    graphProcessorRef: graphEngine.graphProcessorRef,
     onRefreshFiles: () => useFileTreeStore.getState().refreshTree(),
   });
   const { handleExportHtml, handleExportPdf } = useExport({ workspacePath: path });
@@ -89,7 +87,6 @@ function WorkspaceInner({ path }) {
   // Workspace-level Tauri event listeners
   useWorkspaceEvents({
     workspacePath: path,
-    graphProcessorRef: graphEngine.graphProcessorRef,
     insertImagesIntoEditor,
   });
 
@@ -143,6 +140,62 @@ function WorkspaceInner({ path }) {
     }
     return filterByFeatureFlags(filterFileTree(fileTree));
   }, [fileTree, activeBase?.sourceFolder, scopeMode, scopedFolders, filterFileTree, featureFlags.enable_kanban, featureFlags.enable_canvas]);
+
+  // ---------------------------------------------------------------------------
+  // graph2 — the link index is a WORKSPACE resource, not a panel's.
+  //
+  // It boots here, not in the graph panel, because everything that depends on
+  // links must work whether or not the graph was ever opened: backlinks,
+  // unlinked mentions, and the incremental re-parse on save (which no-ops
+  // unless the index is `ready`).
+  //
+  // One index and one engine per workspace. A switch is handled entirely by
+  // these path-keyed effects: `boot` builds a fresh index for the new path,
+  // `attach` re-binds the engine to it (dropping the old subscription and all
+  // layout state), and `load` re-reads that workspace's settings. Nothing
+  // holds the old index afterwards.
+  //
+  // The engine singleton is deliberately NOT destroyed on unmount: it is
+  // app-scoped and frames subscribe to it directly, so tearing it down would
+  // strand them — and under StrictMode's double-mount it would discard the
+  // config `load` had already pushed in.
+  // ---------------------------------------------------------------------------
+  const graphIndex = useGraphStore((s) => s.index);
+
+  useEffect(() => {
+    if (path && fileTree?.length) useGraphStore.getState().boot(path, fileTree);
+  }, [path, fileTree]);
+
+  useEffect(() => {
+    if (path) useGraphConfig.getState().load(path);
+  }, [path]);
+
+  useEffect(() => {
+    if (graphIndex) getGraphEngine().attach(graphIndex);
+  }, [graphIndex]);
+
+  // The engine's focus drives local-graph mode. Special tabs (`__graph__`,
+  // `__bases__`, …) are not nodes, so focus stays on the last real file —
+  // opening the graph shouldn't blank the local view it is meant to show.
+  const activePath = useEditorGroupStore((s) => {
+    const { layout, focusedGroupId } = s;
+    if (!focusedGroupId) return null;
+    const findGroup = (node) => {
+      if (node.type === 'group' && node.id === focusedGroupId) return node;
+      if (node.type === 'container') {
+        for (const child of node.children) {
+          const found = findGroup(child);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+    return findGroup(layout)?.activeTab ?? null;
+  });
+
+  useEffect(() => {
+    if (activePath && !activePath.startsWith('__')) getGraphEngine().setFocus(activePath);
+  }, [activePath]);
 
   // ---------------------------------------------------------------------------
   // Callbacks delegated to sub-components
@@ -256,7 +309,6 @@ function WorkspaceInner({ path }) {
                 onFileOpen={handleFileOpen}
                 onOpenDailyNoteByDate={fileOps.handleOpenDailyNoteByDate}
                 onReloadCurrentFile={reloadCurrentFile}
-                graphProcessorRef={graphEngine.graphProcessorRef}
               />
             </ErrorBoundary>
           }

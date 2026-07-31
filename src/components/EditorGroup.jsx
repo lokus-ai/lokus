@@ -11,6 +11,8 @@ import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
 import { getTabModel, setTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
+import GraphView from './graph2/GraphView.jsx';
+import { getGraphEngine } from '../core/graph2/graphEngine.js';
 import { useTabMetaStore, getTabMeta, selectGroupDirtyPaths } from '../stores/tabMeta';
 import { useShallow } from 'zustand/shallow';
 import { closeTabWithGuard } from '../features/tabs/closeGuard';
@@ -39,7 +41,6 @@ const isNonEditorPath = (p) =>
 
 // Lazy-loaded special tab views
 const BasesView = lazy(() => import('../bases/BasesView'));
-const ProfessionalGraphView = lazy(() => import('../views/ProfessionalGraphView').then(m => ({ default: m.ProfessionalGraphView })));
 const KanbanBoard = lazy(() => import('./KanbanBoard'));
 const MathGraphEditor = lazy(() => import('./MathGraph/MathGraphEditor.jsx'));
 
@@ -522,10 +523,12 @@ export default function EditorGroup({
       {/* Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
 
-        {/* Welcome screen — shown when no tab is active in single-group mode only.
-            In split mode, empty groups auto-close when the last tab is removed.
-            The brief empty state after a fresh split shows a minimal placeholder. */}
-        {!activeFile && hideTabBar && (
+        {/* Welcome screen — whenever no tab is active. In split mode an empty
+            group normally auto-closes, but until it does this beats an empty
+            pane, and it's the same component either way so the two paths can't
+            drift. WelcomeScreen is h-full with its own centred column, so it
+            sizes down to a split pane fine. */}
+        {!activeFile && (
           <WelcomeScreen
             onCreateFile={onCreateFile}
             onCreateFolder={onCreateFolder}
@@ -533,11 +536,6 @@ export default function EditorGroup({
             onOpenCommandPalette={onOpenCommandPalette}
             onFileOpen={onFileOpen}
           />
-        )}
-        {!activeFile && !hideTabBar && (
-          <div className="flex-1 flex items-center justify-center text-app-muted text-sm">
-            Open a file to get started
-          </div>
         )}
 
         {/* DEPRECATED: .canvas (TLDraw) format is no longer supported */}
@@ -612,12 +610,17 @@ export default function EditorGroup({
           </div>
         )}
 
-        {/* Graph view — rendered as a tab */}
+        {/* Graph view — rendered as a tab (graph2: incremental, canvas).
+            `__graph__` is not a node, so the focus to show is whatever real
+            file the engine last tracked — read at render, which is exactly
+            when the tab becomes active. */}
         {isGraphTab && (
           <div className="flex-1 overflow-hidden h-full">
-            <Suspense fallback={<div className="flex-1 flex items-center justify-center text-app-muted">Loading...</div>}>
-              <ProfessionalGraphView workspacePath={workspacePath} />
-            </Suspense>
+            <GraphView
+              workspacePath={workspacePath}
+              focusPath={getGraphEngine().getFocus()}
+              onFileClick={onFileOpen}
+            />
           </div>
         )}
 

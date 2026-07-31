@@ -20,11 +20,6 @@ export const Loading = () => (
  * Lazy load heavy components - this actually helps!
  */
 export const LazyEditor = lazy(() => import('../editor'));
-export const LazyGraph = lazy(() =>
-  import('../views/ProfessionalGraphView.jsx').then(m => ({
-    default: m.ProfessionalGraphView
-  }))
-);
 export const LazyCanvas = lazy(() => import('../views/Canvas.jsx'));
 export const LazyKanban = lazy(() => import('../components/KanbanBoard.jsx'));
 export const LazyPreferences = lazy(() => import('../views/Preferences.jsx'));
@@ -300,7 +295,6 @@ export const usePerformance = () => {
 export default {
   Loading,
   LazyEditor,
-  LazyGraph,
   LazyCanvas,
   LazyKanban,
   LazyPreferences,

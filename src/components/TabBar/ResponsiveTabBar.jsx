@@ -72,30 +72,32 @@ export function ResponsiveTabBar({
         {hasUnsavedChanges && (
           <span className="w-2 h-2 rounded-full bg-app-accent flex-shrink-0" />
         )}
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => {
-            e.stopPropagation();
-            onTabClose?.(tab.path);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
+        {tab.closable !== false && (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
               e.stopPropagation();
               onTabClose?.(tab.path);
-            }
-          }}
-          className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 transition-opacity cursor-pointer"
-          style={{
-            opacity: isActive || isHovered ? 0.7 : 0,
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-          onMouseLeave={(e) => e.currentTarget.style.opacity = isActive ? '0.7' : '0'}
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </span>
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.stopPropagation();
+                onTabClose?.(tab.path);
+              }
+            }}
+            className="ml-1 hover:bg-white/10 rounded p-1 flex-shrink-0 transition-opacity cursor-pointer"
+            style={{
+              opacity: isActive || isHovered ? 0.7 : 0,
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = isActive ? '0.7' : '0'}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </span>
+        )}
       </div>
     );
   };

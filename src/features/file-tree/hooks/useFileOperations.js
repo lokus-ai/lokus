@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useFileTreeStore } from '../../../stores/fileTree';
+import { useGraphStore } from '../../../core/graph2/graphStore.js';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useViewStore } from '../../../stores/views';
 import { getEditor } from '../../../stores/editorRegistry';
@@ -127,6 +128,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
           name: fileName,
         });
         refreshTree();
+        useGraphStore.getState().fileCreated(newPath);
         handleFileOpen?.({ path: newPath, name: fileName, is_directory: false });
       } else {
         await invoke('create_folder_in_workspace', {
@@ -367,6 +369,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
 
     try {
       await invoke('delete_file', { path });
+      useGraphStore.getState().fileRemoved(path);
       const egStore = useEditorGroupStore.getState();
       const focusedGroup = egStore.getFocusedGroup();
       if (focusedGroup && focusedGroup.tabs.some(t => t.path === path)) {
