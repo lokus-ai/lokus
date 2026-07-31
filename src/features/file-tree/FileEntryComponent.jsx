@@ -1,16 +1,11 @@
-import { useEffect, useRef, useCallback } from "react";
+import { memo, useEffect, useRef, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { confirm, open as openDialog } from "@tauri-apps/plugin-dialog";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { ColoredFileIcon } from "../../components/FileIcon.jsx";
-import FileContextMenu from "../../components/FileContextMenu.jsx";
 import { AnimatePresence, motion } from "framer-motion";
 import { useAutoExpand } from "../../hooks/useAutoExpand.js";
 import { useGraphStore } from "../../core/graph2/graphStore.js";
-import { getFilename } from "../../utils/pathUtils.js";
-import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
-import { useViewStore } from "../../stores/views";
-import { useEditorGroupStore } from "../../stores/editorGroups";
+import { useFileTreeStore } from "../../stores/fileTree";
 import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
 import { InlineRenameInput } from "./InlineRenameInput.jsx";
 import { NewItemInput } from "./NewItemInput.jsx";
@@ -33,9 +28,33 @@ export function getExtension(filename) {
   return '';
 }
 
-export function FileEntryComponent({ entry, level, onFileClick, activeFile, expandedFolders, toggleFolder, onRefresh, keymap, renamingPath, setRenamingPath, onViewHistory, setTagModalFile, setShowTagModal, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, updateDropPosition, fileTreeRef, isExternalDragActive, hoveredFolder, setHoveredFolder, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, setSelectedPaths, creatingItem, onCreateConfirm, onUpdateTabPath }) {
+/**
+ * One row of the file tree.
+ *
+ * Deliberately takes as few changing props as possible and reads the rest
+ * from the file-tree store with per-path selectors, because the tree is
+ * recursive: memoizing a row that correctly bails out would also stop the
+ * update reaching its descendants, so "does this row care?" has to be decided
+ * by the row itself. Combined with `memo`, expanding a folder or switching
+ * tabs now re-renders the handful of rows whose own state changed rather than
+ * all of them.
+ *
+ * The right-click menu lives once at the tree root (see FileTreeView) — it
+ * used to be mounted per row, which meant every row built ~100 menu elements
+ * on every render for a menu that is only ever open on one row at a time.
+ */
+function FileEntryComponentImpl({ entry, level, onFileClick, toggleFolder, onRefresh, updateDropPosition, fileTreeRef, isExternalDragActive, toast, onCheckReferences, onSelectEntry, isSelected, selectedPaths, onCreateConfirm, onUpdateTabPath }) {
   const entryRef = useRef(null);
   const hoverTimeoutRef = useRef(null);
+
+  const path = entry.path;
+  const isActive = useFileTreeStore((s) => s.activePath === path);
+  const isExpanded = useFileTreeStore((s) => s.expandedFolders.has(path));
+  const isRenaming = useFileTreeStore((s) => s.renamingPath === path);
+  const isExternalHovered = useFileTreeStore((s) => s.hoveredFolder === path);
+  const creatingHere = useFileTreeStore((s) => s.creatingItem?.targetPath === path ? s.creatingItem : null);
+  const setRenamingPath = useCallback((p) => useFileTreeStore.setState({ renamingPath: p }), []);
+  const setHoveredFolder = useCallback((p) => useFileTreeStore.getState().setHoveredFolder(p), []);
 
   const { attributes, listeners, setNodeRef: draggableRef, isDragging } = useDraggable({
     id: entry.path,
@@ -48,7 +67,6 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
     disabled: !entry.is_directory,
   });
 
-  const isExpanded = expandedFolders.has(entry.path);
   const isDropTarget = isOver && entry.is_directory;
 
   // Auto-expand folder after 800ms hover during drag
@@ -118,23 +136,12 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
   };
 
   const baseClasses = "obsidian-file-item";
-  const stateClasses = activeFile === entry.path ? 'active' : '';
+  const stateClasses = isActive ? 'active' : '';
   const selectedClasses = isSelected ? 'selected' : '';
   const dropTargetClasses = isDropTarget ? 'drop-target-inside' : '';
   const draggingClasses = isDragging ? 'dragging' : '';
   const willExpandClasses = willAutoExpand ? 'will-expand-indicator' : '';
-  const externalDropTargetClasses = (isExternalDragActive && entry.is_directory && hoveredFolder === entry.path) ? 'external-drop-target' : '';
-
-  const onRename = () => {
-    // For .md files: open them (the note header handles renaming)
-    if (!entry.is_directory && entry.path.endsWith('.md')) {
-      onFileClick(entry);
-      return;
-    }
-
-    // For other files and folders: enter inline rename mode
-    setRenamingPath(entry.path);
-  };
+  const externalDropTargetClasses = (isExternalDragActive && entry.is_directory && isExternalHovered) ? 'external-drop-target' : '';
 
   const handleRenameSubmit = async (newName) => {
     if (!newName || newName.trim() === "" || newName.trim() === entry.name) {
@@ -195,326 +202,6 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
     setRenamingPath(null);
   };
 
-  const onCreateFileHere = async () => {
-    try {
-      const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
-      const name = "Untitled.md";
-      await invoke("write_file_content", { path: `${base}/${name}`, content: "" });
-      onRefresh && onRefresh();
-    } catch (e) {
-      toast?.error(`Failed to create file: ${e.message || e}`);
-    }
-  };
-
-  const onCreateFolderHere = async () => {
-    const name = window.prompt("New folder name:");
-    if (!name) return;
-    try {
-      const base = entry.is_directory ? entry.path : entry.path.split("/").slice(0, -1).join("/");
-      await invoke("create_folder_in_workspace", { workspacePath: base, name });
-      onRefresh && onRefresh();
-    } catch (e) {
-      toast?.error(`Failed to create folder: ${e.message || e}`);
-    }
-  };
-
-  const handleFileContextAction = useCallback(async (action, data) => {
-    const { file } = data;
-
-    switch (action) {
-      case 'open':
-        onFileClick(file);
-        break;
-      case 'openToSide':
-        // Enable split view and open file in right pane
-        setUseSplitView(true);
-        setRightPaneFile(file.path);
-
-        // Set title (remove .md extension)
-        const fileName = getFilename(file.name);
-        setRightPaneTitle(fileName.replace(/\.md$/, ''));
-
-        // Load content if it's a markdown file
-        if (file.path.endsWith('.md') || file.path.endsWith('.txt')) {
-          // Check if this file is already loaded in the focused group to avoid duplicate load
-          const focusedGroup = useEditorGroupStore.getState().getFocusedGroup();
-          const currentEditorContent = focusedGroup?.contentByTab?.[file.path]?.html ?? null;
-          if (file.path === activeFile && currentEditorContent) {
-            setRightPaneContent(currentEditorContent);
-          } else {
-            try {
-              const content = await invoke('read_file_content', { path: file.path });
-              setRightPaneContent(content || '');
-            } catch (err) {
-              setRightPaneContent('');
-            }
-          }
-        } else {
-          setRightPaneContent('');
-        }
-        break;
-      case 'viewHistory':
-        if (onViewHistory && file.type === 'file') {
-          onViewHistory(file.path);
-        }
-        break;
-      case 'openWith':
-        // Open file with system default application
-        try {
-          await invoke('platform_open_with_default', { path: file.path });
-        } catch (e) {
-          toast.error(`Failed to open file: ${e}`);
-        }
-        break;
-      case 'revealInFinder':
-        try {
-          await invoke('platform_reveal_in_file_manager', { path: file.path });
-        } catch (err) {
-          console.error('Workspace: Failed to reveal file in finder', err);
-        }
-        break;
-      case 'openInTerminal':
-        const ff = globalThis.__LOKUS_FEATURE_FLAGS__ || {};
-        if (ff.enable_terminal === false) return;
-        try {
-          const terminalPath = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
-          await invoke('platform_open_terminal', { path: terminalPath });
-        } catch (err) {
-          console.error('Workspace: Failed to open terminal', err);
-        }
-        break;
-      case 'cut':
-        // Cut file to clipboard
-        cutFiles([file]);
-        toast.success(`Cut: ${file.name}`);
-        break;
-      case 'copy':
-        // Copy file to clipboard
-        copyFiles([file]);
-        toast.success(`Copied: ${file.name}`);
-        break;
-      case 'copyPath':
-        try {
-          await navigator.clipboard.writeText(file.path);
-        } catch (err) {
-          console.error('Workspace: Failed to copy path', err);
-        }
-        break;
-      case 'copyRelativePath':
-        try {
-          const wsPath = window.__LOKUS_WORKSPACE_PATH__ || '';
-          const relativePath = getRelativePath(file.path, wsPath);
-          await navigator.clipboard.writeText(relativePath);
-          toast.success('Copied relative path');
-        } catch (e) {
-          toast.error('Failed to copy relative path');
-        }
-        break;
-      case 'newFile':
-        await onCreateFileHere();
-        break;
-      case 'newFolder':
-        await onCreateFolderHere();
-        break;
-      case 'rename':
-        onRename();
-        break;
-      case 'delete':
-        try {
-          const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
-          if (confirmed) {
-            await invoke('delete_file', { path: file.path });
-            onRefresh && onRefresh();
-          }
-        } catch (err) {
-          console.error('Workspace: Failed to delete file', err);
-        }
-        break;
-      case 'selectForCompare':
-        // Select file for comparison
-        if (file.type === 'file') {
-          useViewStore.setState({ selectedFileForCompare: file });
-          toast.success(`Selected for compare: ${file.name}`);
-        }
-        break;
-      case 'compareWith': {
-        // Compare with previously selected file
-        const compareFile = useViewStore.getState().selectedFileForCompare;
-        if (compareFile && file.type === 'file') {
-          // Open both files in split view for manual comparison
-          onFileClick(compareFile.path);
-          setUseSplitView(true);
-          setTimeout(() => {
-            setRightPaneFile(file.path);
-            setRightPaneTitle(file.name);
-          }, 100);
-          toast.success(`Comparing ${compareFile.name} with ${file.name}`);
-          useViewStore.setState({ selectedFileForCompare: null });
-        }
-        break;
-      }
-      case 'shareEmail':
-      case 'shareSlack':
-      case 'shareTeams':
-        // Basic sharing: copy file path to clipboard
-        try {
-          await navigator.clipboard.writeText(file.path);
-          toast.success(`File path copied. Share via ${action.replace('share', '')}`);
-        } catch (e) {
-          toast.error('Failed to copy file path');
-        }
-        break;
-      case 'addTag':
-      case 'manageTags':
-        // Open tag management modal for markdown files
-        if (file && (file.name.endsWith('.md') || file.name.endsWith('.markdown'))) {
-          setTagModalFile(file);
-          useViewStore.getState().openPanel('showTagModal');
-        }
-        break;
-
-      // Bulk operations for multi-select
-      case 'deleteSelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          const count = data.selectedPaths.size;
-          const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
-          if (confirmed) {
-            for (const p of data.selectedPaths) {
-              try {
-                await invoke('delete_file', { path: p });
-              } catch (err) {
-                console.error(`Failed to delete ${p}:`, err);
-              }
-            }
-            setSelectedPaths(new Set());
-            onRefresh?.();
-            toast.success(`Deleted ${count} item${count > 1 ? 's' : ''}`);
-          }
-        }
-        break;
-      case 'cutSelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          const filesToCut = Array.from(data.selectedPaths).map(p => ({ path: p }));
-          cutFiles(filesToCut);
-          toast.success(`Cut ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}`);
-        }
-        break;
-      case 'copySelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          const filesToCopy = Array.from(data.selectedPaths).map(p => ({ path: p }));
-          copyFiles(filesToCopy);
-          toast.success(`Copied ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}`);
-        }
-        break;
-      case 'duplicateSelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          let duplicatedCount = 0;
-          for (const p of data.selectedPaths) {
-            try {
-              // Read content and write to new file with " copy" suffix
-              const content = await invoke('read_file_content', { path: p });
-              const pathParts = p.split('/');
-              const fileName = pathParts.pop();
-              const dirPath = pathParts.join('/');
-              const ext = fileName.includes('.') ? '.' + fileName.split('.').pop() : '';
-              const baseName = ext ? fileName.slice(0, -ext.length) : fileName;
-              const newName = `${baseName} copy${ext}`;
-              const newPath = `${dirPath}/${newName}`;
-              await invoke('write_file', { path: newPath, content });
-              duplicatedCount++;
-            } catch (err) {
-              console.error(`Failed to duplicate ${p}:`, err);
-            }
-          }
-          onRefresh?.();
-          toast.success(`Duplicated ${duplicatedCount} item${duplicatedCount > 1 ? 's' : ''}`);
-        }
-        break;
-      case 'moveSelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          try {
-            const selectedFolder = await openDialog({
-              directory: true,
-              multiple: false,
-              title: `Move ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''} to...`,
-            });
-            if (selectedFolder) {
-              let movedCount = 0;
-              for (const p of data.selectedPaths) {
-                try {
-                  await invoke('move_file', {
-                    sourcePath: p,
-                    destinationDir: selectedFolder,
-                  });
-                  const fileName = p.split('/').pop();
-                  onUpdateTabPath?.(p, selectedFolder + '/' + fileName);
-                  movedCount++;
-                } catch (err) {
-                  console.error(`Failed to move ${p}:`, err);
-                }
-              }
-              setSelectedPaths(new Set());
-              onRefresh?.();
-              toast.success(`Moved ${movedCount} item${movedCount > 1 ? 's' : ''}`);
-            }
-          } catch (err) {
-            console.error('Move dialog error:', err);
-          }
-        }
-        break;
-      case 'exportSelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          try {
-            const exportFolder = await openDialog({
-              directory: true,
-              multiple: false,
-              title: `Export ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''} to...`,
-            });
-            if (exportFolder) {
-              let exportedCount = 0;
-              for (const p of data.selectedPaths) {
-                try {
-                  // Read file content and write to new location
-                  const content = await invoke('read_file_content', { path: p });
-                  const fileName = p.substring(p.lastIndexOf('/') + 1);
-                  const destPath = `${exportFolder}/${fileName}`;
-                  await invoke('write_file', { path: destPath, content });
-                  exportedCount++;
-                } catch (err) {
-                  console.error(`Failed to export ${p}:`, err);
-                }
-              }
-              toast.success(`Exported ${exportedCount} item${exportedCount > 1 ? 's' : ''}`);
-            }
-          } catch (err) {
-            console.error('Export dialog error:', err);
-          }
-        }
-        break;
-      case 'archiveSelected':
-        if (data.selectedPaths && data.selectedPaths.size > 0) {
-          // Archive feature requires backend support - show info message
-          toast.info(`Archive feature coming soon. For now, use Export to copy ${data.selectedPaths.size} item${data.selectedPaths.size > 1 ? 's' : ''}.`);
-        }
-        break;
-
-      default:
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    onFileClick,
-    setUseSplitView,
-    setRightPaneFile,
-    setRightPaneTitle,
-    setRightPaneContent,
-    onViewHistory,
-    onRefresh,
-    setTagModalFile,
-    setShowTagModal
-    // Note: onCreateFileHere, onCreateFolderHere, onRename excluded to prevent infinite loop
-    // They're accessible via closure and don't need to be in deps
-  ]);
-
   return (
     <li
       className="file-entry-container"
@@ -530,12 +217,6 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
         className="rounded"
       >
         <div ref={draggableRef} className="flex items-center w-full">
-          <FileContextMenu
-            file={{ ...entry, type: entry.is_directory ? 'folder' : 'file' }}
-            onAction={handleFileContextAction}
-            selectedPaths={selectedPaths}
-            isSelected={isSelected}
-          >
             <button
               {...listeners}
               {...attributes}
@@ -553,7 +234,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
                   showChevron={true}
                 />
               )}
-              {renamingPath === entry.path ? (
+              {isRenaming ? (
                 <InlineRenameInput
                   initialValue={entry.name}
                   onSubmit={handleRenameSubmit}
@@ -568,7 +249,6 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
                 <span className="file-count-badge">({fileCount})</span>
               )}
             </button>
-          </FileContextMenu>
         </div>
       </div>
       <AnimatePresence initial={false}>
@@ -587,42 +267,26 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
                   entry={child}
                   level={level + 1}
                   onFileClick={onFileClick}
-                  activeFile={activeFile}
-                  expandedFolders={expandedFolders}
                   toggleFolder={toggleFolder}
                   onRefresh={onRefresh}
-                  keymap={keymap}
-                  creatingItem={creatingItem}
                   onCreateConfirm={onCreateConfirm}
-                  renamingPath={renamingPath}
-                  setRenamingPath={setRenamingPath}
-                  onViewHistory={onViewHistory}
-                  setTagModalFile={setTagModalFile}
-                  setShowTagModal={setShowTagModal}
-                  setUseSplitView={setUseSplitView}
-                  setRightPaneFile={setRightPaneFile}
-                  setRightPaneTitle={setRightPaneTitle}
-                  setRightPaneContent={setRightPaneContent}
                   updateDropPosition={updateDropPosition}
                   fileTreeRef={fileTreeRef}
                   isExternalDragActive={isExternalDragActive}
-                  hoveredFolder={hoveredFolder}
-                  setHoveredFolder={setHoveredFolder}
                   toast={toast}
                   onCheckReferences={onCheckReferences}
                   onSelectEntry={onSelectEntry}
                   isSelected={selectedPaths.has(child.path) || false}
                   selectedPaths={selectedPaths}
-                  setSelectedPaths={setSelectedPaths}
                   onUpdateTabPath={onUpdateTabPath}
                 />
               ))}
             </ul>
           </motion.div>
         )}
-        {creatingItem && creatingItem.targetPath === entry.path && (
+        {creatingHere && (
           <NewItemInput
-            type={creatingItem.type}
+            type={creatingHere.type}
             level={level + 1}
             onConfirm={onCreateConfirm}
           />
@@ -631,3 +295,7 @@ export function FileEntryComponent({ entry, level, onFileClick, activeFile, expa
     </li>
   );
 }
+
+/** Memoized: with per-path store subscriptions above, a row only re-renders
+ *  when its own props change or its own slice of tree state moves. */
+export const FileEntryComponent = memo(FileEntryComponentImpl);

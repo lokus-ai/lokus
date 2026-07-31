@@ -9,37 +9,18 @@ vi.mock('../editor/commands/index.js', () => ({
 }))
 
 import { setTextSelection } from '../editor/commands/index.js'
-
-// jsdom does not ship with a real MutationObserver implementation that fires
-// callbacks synchronously. We provide a manual mock that records observer
-// instances so tests can trigger the callback themselves.
-const observerInstances = []
-const OriginalMutationObserver = globalThis.MutationObserver
-
-class MockMutationObserver {
-    constructor(callback) {
-        this.callback = callback
-        this.observed = false
-        observerInstances.push(this)
-    }
-    observe() { this.observed = true }
-    disconnect() { this.observed = false }
-}
+import { editorAPI } from '../plugins/api/EditorAPI.js'
 
 describe('DocumentOutline Component', () => {
     let mockEditor
 
     beforeEach(() => {
         vi.useFakeTimers()
-
-        // Replace the global MutationObserver with our mock
-        globalThis.MutationObserver = MockMutationObserver
-        observerInstances.length = 0
+        editorAPI.removeAllListeners('editor-update')
 
         // Build a ProseMirror-style editor mock.
         // DocumentOutline uses:
         //   editor.state.doc.descendants(callback)
-        //   editor.dom                (to pass to MutationObserver.observe)
         //   editor.coordsAtPos(pos)   (directly on the view, not view.coordsAtPos)
         //   setTextSelection(editor, pos) from commands module
         mockEditor = {
@@ -65,7 +46,7 @@ describe('DocumentOutline Component', () => {
 
     afterEach(() => {
         vi.useRealTimers()
-        globalThis.MutationObserver = OriginalMutationObserver
+        editorAPI.removeAllListeners('editor-update')
         vi.clearAllMocks()
     })
 
@@ -99,15 +80,19 @@ describe('DocumentOutline Component', () => {
         expect(window.scrollTo).toHaveBeenCalled()
     })
 
-    it('attaches a MutationObserver to editor.dom on mount', () => {
+    // The outline listens for the editor's own update event rather than
+    // observing the ProseMirror DOM. A MutationObserver with subtree +
+    // characterData fired on every keystroke's text mutation, building records
+    // that were then discarded by the debounce.
+    it('subscribes to editor updates on mount', () => {
+        expect(editorAPI.listenerCount('editor-update')).toBe(0)
+
         render(<DocumentOutline editor={mockEditor} />)
 
-        // At least one observer should have been created and started observing
-        expect(observerInstances.length).toBeGreaterThan(0)
-        expect(observerInstances[0].observed).toBe(true)
+        expect(editorAPI.listenerCount('editor-update')).toBe(1)
     })
 
-    it('updates headings after MutationObserver fires and debounce expires', () => {
+    it('updates headings after an editor update and the debounce expires', () => {
         render(<DocumentOutline editor={mockEditor} />)
 
         // Verify initial headings are shown
@@ -121,9 +106,8 @@ describe('DocumentOutline Component', () => {
             nodes.forEach((node, index) => callback(node, index * 10))
         })
 
-        // Simulate the MutationObserver callback firing (mimics a DOM mutation)
         act(() => {
-            observerInstances[0].callback([], observerInstances[0])
+            editorAPI.emit('editor-update')
             vi.advanceTimersByTime(500) // advance past the 500ms debounce
         })
 
@@ -131,13 +115,13 @@ describe('DocumentOutline Component', () => {
         expect(screen.queryByText('Heading 1')).not.toBeInTheDocument()
     })
 
-    it('disconnects the MutationObserver on unmount', () => {
+    it('unsubscribes on unmount', () => {
         const { unmount } = render(<DocumentOutline editor={mockEditor} />)
 
-        expect(observerInstances[0].observed).toBe(true)
+        expect(editorAPI.listenerCount('editor-update')).toBe(1)
 
         unmount()
 
-        expect(observerInstances[0].observed).toBe(false)
+        expect(editorAPI.listenerCount('editor-update')).toBe(0)
     })
 })

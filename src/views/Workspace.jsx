@@ -36,6 +36,7 @@ import dailyNotesManager from '../core/daily-notes/manager.js';
 import { syncScheduler } from '../core/sync/SyncScheduler';
 import { useAuth } from '../core/auth/AuthContext';
 import { useGraphStore } from '../core/graph2/graphStore.js';
+import { warmLazyViews } from '../core/perf/prefetch.js';
 import { getGraphEngine } from '../core/graph2/graphEngine.js';
 import { useGraphConfig } from '../core/graph2/graphConfig.js';
 
@@ -105,6 +106,11 @@ function WorkspaceInner({ path }) {
     if (path) dailyNotesManager.init(path);
   }, [path]);
 
+  // Pull the heavy lazy views into the module cache once the app has settled,
+  // so Bases / Kanban / Canvas open instantly instead of flashing "Loading…"
+  // the first time each is clicked.
+  useEffect(() => { warmLazyViews(); }, []);
+
   // Initialize cloud sync when workspace opens with authenticated user
   const { isAuthenticated, isGuest, user } = useAuth();
   useEffect(() => {
@@ -168,9 +174,11 @@ function WorkspaceInner({ path }) {
   // ---------------------------------------------------------------------------
   const graphIndex = useGraphStore((s) => s.index);
 
-  useEffect(() => {
-    if (path && fileTree?.length) useGraphStore.getState().boot(path, fileTree);
-  }, [path, fileTree]);
+  // boot() is called by useWorkspaceSession, which already reads every
+  // markdown file for the reference worker and hands the same payload to the
+  // index. Booting from here as well would start a second full read of the
+  // vault, since this effect fires as soon as the file tree lands — before
+  // that read resolves.
 
   useEffect(() => {
     if (path) useGraphConfig.getState().load(path);

@@ -1,5 +1,5 @@
 import React from "react";
-import * as Sentry from "@sentry/react";
+import { captureException } from "../../services/telemetry.js";
 
 /**
  * Error boundary scoped to the editor area only.
@@ -18,7 +18,7 @@ export class EditorErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) {
     // Report to Sentry
     try {
-      Sentry.captureException(error, { extra: { componentStack: errorInfo?.componentStack } });
+      captureException(error, { extra: { componentStack: errorInfo?.componentStack } });
     } catch {}
 
     // Emit event so Workspace can activate source mode

@@ -8,6 +8,7 @@ import { getEditor } from "../../stores/editorRegistry";
 import { getFilename } from "../../utils/pathUtils.js";
 import { isImageFile, findImageFiles } from "../../utils/imageUtils.js";
 import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
+import { useGraphStore } from "../../core/graph2/graphStore.js";
 import { insertContent } from "../../editor/commands/index.js";
 
 /**
@@ -201,19 +202,28 @@ export function useWorkspaceSession({ workspacePath, plugins }) {
         walk(tree);
         try { window.__LOKUS_FILE_INDEX__ = flat; } catch {}
 
-        // Build the reference index in the worker.
-        // The worker cannot call Tauri IPC itself, so we read all markdown
-        // file contents here on the main thread (in parallel) and then hand
-        // the {path, content} pairs to the worker for off-thread indexing.
-        const mdFiles = flat.filter(f => f.path.endsWith('.md'));
-        Promise.all(
-          mdFiles.map(f =>
-            invoke('read_file_content', { path: f.path })
-              .then(content => ({ path: f.path, content: content ?? '' }))
-              .catch(() => null)
-          )
-        ).then(results => {
-          const filesWithContent = results.filter(Boolean);
+        // One bulk read of the vault, shared by everything that needs it.
+        //
+        // This was one `read_file_content` IPC round-trip per markdown file —
+        // hundreds of them — and then graphStore.boot read the whole vault a
+        // second time via `read_all_files`. Now the contents cross the bridge
+        // once and seed both the link index and the reference worker.
+        const mdPaths = flat.filter(f => f.path.endsWith('.md')).map(f => f.path);
+        const contents = mdPaths.length
+          ? invoke('read_all_files', { paths: mdPaths })
+          : Promise.resolve({});
+
+        // Handed to boot as a *promise*, synchronously, so the store flips to
+        // 'booting' before the read starts — that window is what makes saves
+        // landing mid-boot get replayed onto the snapshot instead of lost.
+        useGraphStore.getState().boot(workspacePath, tree, contents);
+
+        // The worker cannot call Tauri IPC itself, so it gets {path, content}
+        // pairs for off-thread indexing.
+        contents.then(byPath => {
+          const filesWithContent = Object.entries(byPath)
+            .filter(([, content]) => typeof content === 'string')
+            .map(([path, content]) => ({ path, content }));
           return referenceWorkerClient.buildIndex(filesWithContent);
         }).catch(() => {});
 

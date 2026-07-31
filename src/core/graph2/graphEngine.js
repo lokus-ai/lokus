@@ -70,6 +70,16 @@ export function createGraphEngine() {
   const listeners = new Set();
   const notify = () => { for (const fn of listeners) fn(); };
 
+  // Only frames subscribe, so an empty listener set means nothing is drawing
+  // the graph right now. Index changes that land in that state are recorded
+  // rather than acted on: rebuilding the view model and re-heating the sim on
+  // every save cost hundreds of ms of main-thread time for pixels nobody was
+  // looking at. `staleIndex` says the node/link set needs rebuilding;
+  // `owedHeat` is the largest re-heat we skipped. Both are settled by the next
+  // frame to subscribe.
+  let staleIndex = false;
+  let owedHeat = 0;
+
   // ---- view model -----------------------------------------------------------
 
   /** Which nodes/links survive the current filter config. */
@@ -270,9 +280,31 @@ export function createGraphEngine() {
       .force('collide', forceCollide((d) => d.radius + 4));
 
     if (reheat > 0) {
+      if (listeners.size === 0) {
+        // Nothing is drawing — don't spin d3's timer to animate an invisible
+        // layout. Bank the heat; the next frame to subscribe spends it.
+        owedHeat = Math.max(owedHeat, reheat);
+        sim.stop();
+        running = false;
+        return;
+      }
       running = true;
       sim.alpha(Math.max(sim.alpha(), reheat)).restart();
     }
+  }
+
+  /**
+   * Bring the node/link set up to date without waking the simulation.
+   *
+   * Read accessors call this so that skipping work while nothing is drawing
+   * stays invisible to callers: `nodes()`/`stats()` never return a stale view
+   * just because no frame happens to be mounted. Only the *animation* is
+   * deferred — that's the expensive part, and it's the part nobody can see.
+   */
+  function settle() {
+    if (!staleIndex) return;
+    staleIndex = false;
+    reconcile({ reheat: 0 });
   }
 
   // ---- public API ---------------------------------------------------------------
@@ -287,8 +319,17 @@ export function createGraphEngine() {
       byId.clear();
       nodes = [];
       links = [];
+      staleIndex = false;
+      owedHeat = 0;
       if (!index) { notify(); return; }
-      unsubIndex = index.subscribe(() => reconcile({ reheat: 0.2 }));
+      unsubIndex = index.subscribe(() => {
+        if (listeners.size === 0) {
+          staleIndex = true;
+          owedHeat = Math.max(owedHeat, 0.2);
+          return;
+        }
+        reconcile({ reheat: 0.2 });
+      });
       reconcile({ reheat: 0.7 }); // first layout settles properly
     },
 
@@ -322,13 +363,14 @@ export function createGraphEngine() {
     },
     getFocus: () => focusPath,
 
-    nodes: () => nodes,
-    links: () => links,
-    node: (id) => byId.get(id) || null,
-    neighbors: (id) => neighbors.get(id) || EMPTY_SET,
+    nodes: () => { settle(); return nodes; },
+    links: () => { settle(); return links; },
+    node: (id) => { settle(); return byId.get(id) || null; },
+    neighbors: (id) => { settle(); return neighbors.get(id) || EMPTY_SET; },
     isRunning: () => running,
 
     stats() {
+      settle();
       const files = nodes.filter((n) => n.type === 'file').length;
       const phantoms = nodes.filter((n) => n.type === 'phantom').length;
       return { nodes: nodes.length, files, links: links.length, phantoms };
@@ -359,13 +401,39 @@ export function createGraphEngine() {
       sim?.alphaTarget(0);
     },
     reheat(alpha = 0.3) {
+      if (!sim) return;
+      if (listeners.size === 0) { owedHeat = Math.max(owedHeat, alpha); return; }
       running = true;
-      sim?.alpha(alpha).restart();
+      sim.alpha(alpha).restart();
     },
 
     subscribe(fn) {
+      const wasIdle = listeners.size === 0;
       listeners.add(fn);
-      return () => listeners.delete(fn);
+
+      // First frame to look at the graph pays for whatever changed while it
+      // wasn't watching — once, instead of on every intervening save.
+      if (wasIdle) {
+        const heat = owedHeat;
+        owedHeat = 0;
+        if (staleIndex) {
+          staleIndex = false;
+          reconcile({ reheat: Math.max(heat, 0.2) });
+        } else if (heat > 0) {
+          // A read already settled the data; all that's left is the layout.
+          applyToSim(heat);
+        }
+      }
+
+      return () => {
+        listeners.delete(fn);
+        // Last frame went away: park the simulation instead of letting it
+        // keep ticking against an audience of nobody.
+        if (listeners.size === 0) {
+          sim?.stop();
+          running = false;
+        }
+      };
     },
 
     destroy() {

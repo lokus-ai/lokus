@@ -1,5 +1,5 @@
 import React from 'react';
-import * as Sentry from '@sentry/react';
+import { captureException } from '../../services/telemetry.js';
 
 /**
  * Fallback UI shown when a component crashes
@@ -80,10 +80,48 @@ function ErrorFallback({ error, componentStack, resetError }) {
 }
 
 /**
- * Enhanced Error Boundary with Sentry integration
- * Wraps the entire application to catch React component errors
+ * Application error boundary.
+ *
+ * Was `Sentry.ErrorBoundary`, which pinned the whole reporting SDK into the
+ * boot chunk for a feature that ships disabled. This keeps the same contract
+ * the one call site relies on — a `fallback` component receiving
+ * `{ error, componentStack, resetError }`, plus `onError` — and reports
+ * through the telemetry shim, which is a no-op unless crash reports are on.
  */
-const ErrorBoundary = Sentry.ErrorBoundary;
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null, componentStack: null };
+    this.resetError = this.resetError.bind(this);
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    this.setState({ componentStack: errorInfo?.componentStack ?? null });
+    captureException(error, {
+      extra: { componentStack: errorInfo?.componentStack },
+    });
+    this.props.onError?.(error, errorInfo);
+  }
+
+  resetError() {
+    this.setState({ error: null, componentStack: null });
+  }
+
+  render() {
+    const { error, componentStack } = this.state;
+    if (!error) return this.props.children;
+
+    const Fallback = this.props.fallback;
+    if (typeof Fallback === 'function') {
+      return <Fallback error={error} componentStack={componentStack} resetError={this.resetError} />;
+    }
+    return Fallback ?? null;
+  }
+}
 
 export { ErrorBoundary, ErrorFallback };
 export default ErrorBoundary;

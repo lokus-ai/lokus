@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback, forwardRef, useImperativeHandle } from "react";
-import * as Sentry from "@sentry/react";
 import { recoverContent } from "../lib/sanitizeHTML.js";
 
 // --- ProseMirror core imports (replacing TipTap) ---

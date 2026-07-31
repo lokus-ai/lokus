@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import * as Sentry from '@sentry/react'
+import { initTelemetry } from './services/telemetry.js'
 import { ErrorBoundary, ErrorFallback } from './components/error/ErrorBoundary'
 import App from './App'
 import { ThemeProvider } from './hooks/theme'
@@ -12,45 +12,32 @@ import posthog from './services/posthog.js'
 window.React = React;
 window.ReactDOM = ReactDOM;
 
-// Initialize Sentry SDK before rendering
-if (import.meta.env.VITE_ENABLE_CRASH_REPORTS === 'true') {
-  try {
-    Sentry.init({
-      dsn: import.meta.env.VITE_SENTRY_DSN,
-      environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development',
-      integrations: [
-        Sentry.browserTracingIntegration(),
-        Sentry.replayIntegration({
-          maskAllText: true,
-          blockAllMedia: true,
-        }),
-      ],
-      // Performance Monitoring
-      tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0, // 10% in production, 100% in dev
-      // Session Replay
-      replaysSessionSampleRate: 0.1, // 10% of sessions
-      replaysOnErrorSampleRate: 1.0, // 100% of sessions with errors
-      // Additional options
-      beforeSend(event, hint) {
-        // Filter out known noisy errors
-        if (event.exception) {
-          const errorMessage = event.exception.values?.[0]?.value || '';
-          // Filter out WebView2 cleanup warnings
-          if (errorMessage.includes('WebView2')) {
-            return null;
-          }
-        }
-        return event;
-      },
-    });
-
-    logger.info('Main', 'Sentry SDK initialized successfully');
-  } catch (error) {
-    logger.error('Main', 'Failed to initialize Sentry SDK:', error);
-  }
-} else {
-  logger.info('Main', 'Crash reporting disabled');
-}
+// Initialize crash reporting. initTelemetry only pulls the SDK in when
+// VITE_ENABLE_CRASH_REPORTS is set, so with it off the ~390 KB Sentry bundle
+// stays out of the boot payload entirely instead of being downloaded and
+// parsed on every launch to do nothing.
+initTelemetry({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  environment: import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development',
+  // Performance Monitoring
+  tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0, // 10% in production, 100% in dev
+  // Session Replay
+  replaysSessionSampleRate: 0.1, // 10% of sessions
+  replaysOnErrorSampleRate: 1.0, // 100% of sessions with errors
+  beforeSend(event) {
+    // Filter out known noisy errors
+    if (event.exception) {
+      const errorMessage = event.exception.values?.[0]?.value || '';
+      // Filter out WebView2 cleanup warnings
+      if (errorMessage.includes('WebView2')) {
+        return null;
+      }
+    }
+    return event;
+  },
+}).then((sdk) => {
+  logger.info('Main', sdk ? 'Sentry SDK initialized successfully' : 'Crash reporting disabled');
+});
 
 // Initialize PostHog analytics
 posthog.initialize().catch(err => {

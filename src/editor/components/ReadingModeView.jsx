@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import DOMPurify from 'dompurify';
+import 'katex/dist/katex.min.css';
 import '../styles/editor.css';
 
 /**
@@ -120,34 +121,27 @@ const ReadingModeView = ({ content, editorSettings }) => {
       containerRef.current.addEventListener('click', handleCalloutToggle);
       containerRef.current.addEventListener('click', handleWikiLinkClick);
 
-      // Render math if KaTeX is available
-      if (window.katex || window.renderMathInElement) {
-        try {
-          const renderMath = async () => {
-            // Try to load KaTeX auto-render if not already loaded
-            if (!window.renderMathInElement && window.katex) {
-              try {
-                await import('katex/dist/contrib/auto-render.js');
-              } catch {}
-            }
-
-            if (window.renderMathInElement) {
-              window.renderMathInElement(containerRef.current, {
-                delimiters: [
-                  { left: '$$', right: '$$', display: true },
-                  { left: '$', right: '$', display: false },
-                  { left: '\\[', right: '\\]', display: true },
-                  { left: '\\(', right: '\\)', display: false }
-                ],
-                throwOnError: false
-              });
-            }
-          };
-          renderMath();
-        } catch { }
-      }
+      // Render math. auto-render is imported on demand from the bundled KaTeX
+      // rather than read off `window` — the global only ever existed because a
+      // CDN <script> set it, so this path silently did nothing when offline.
+      let cancelled = false;
+      import('katex/contrib/auto-render')
+        .then(({ default: renderMathInElement }) => {
+          if (cancelled || !containerRef.current) return;
+          renderMathInElement(containerRef.current, {
+            delimiters: [
+              { left: '$$', right: '$$', display: true },
+              { left: '$', right: '$', display: false },
+              { left: '\\[', right: '\\]', display: true },
+              { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false
+          });
+        })
+        .catch(() => { });
 
       return () => {
+        cancelled = true;
         if (containerRef.current) {
           containerRef.current.removeEventListener('click', handleCalloutToggle);
           containerRef.current.removeEventListener('click', handleWikiLinkClick);

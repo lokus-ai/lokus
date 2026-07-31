@@ -41,9 +41,26 @@ export default defineConfig(async () => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('@excalidraw')) return 'excalidraw-vendor'
-          if (id.includes('react-dom') || id.includes('react/')) return 'react-vendor'
-          if (id.includes('@sentry')) return 'sentry'
+          // Excalidraw is deliberately NOT named here. Forcing it into a
+          // manual chunk made Rollup hoist the entry's shared helpers into
+          // that same chunk, which gave the entry a *static* import of it —
+          // so all 7 MB was modulepreloaded at boot even though Canvas is
+          // lazily imported. Left alone, Rollup puts it in an async chunk
+          // that only loads when a canvas is actually opened.
+          // Sentry is not named here for the same reason as Excalidraw: a
+          // manual chunk becomes a home for Rollup's shared runtime helpers,
+          // which then gives the entry a static import of it. That put the
+          // whole ~390 KB reporting SDK in the boot payload of an app that
+          // ships with crash reporting switched off. Unnamed, it lands in a
+          // real async chunk that only loads if telemetry is enabled.
+          //
+          // react-vendor stays: React is needed at boot regardless, so it is
+          // a harmless place for those helpers to live.
+          // Anchored to node_modules/. The old test was `id.includes('react/')`,
+          // which also matched `@sentry/react/` — so the reporting SDK was
+          // silently bundled into react-vendor and shipped at boot even after
+          // it stopped being statically imported.
+          if (/node_modules\/(react|react-dom)\//.test(id)) return 'react-vendor'
         },
       },
     },

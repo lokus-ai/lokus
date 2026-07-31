@@ -14,14 +14,16 @@ pub struct FileEntry {
 }
 
 // --- Private Helper ---
-fn read_directory_contents(path: &Path) -> futures::future::BoxFuture<'static, Result<Vec<FileEntry>, String>> {
-    let path = path.to_path_buf();
-    Box::pin(async move {
-        read_directory_contents_with_depth(&path, 0).await
-    })
-}
 
-async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
+/// Walk a workspace directory tree.
+///
+/// Synchronous on purpose. The async version awaited four times per entry
+/// (`read_dir`, `next_entry`, `file_type`, `metadata`), and on macOS each of
+/// those metadata calls is a dispatch onto tokio's blocking pool — so a vault
+/// with a few thousand files paid several thousand thread hand-offs just to
+/// list itself. Running the whole walk inside ONE `spawn_blocking` keeps it
+/// off the UI thread while doing the stats back-to-back on a single thread.
+fn walk_directory(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
     // Limit recursion depth to prevent infinite loops
     const MAX_DEPTH: usize = 10;
 
@@ -33,38 +35,58 @@ async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result
     }
 
     let mut entries = vec![];
-    let mut dir_entries = tokio::fs::read_dir(path).await.map_err(|e| {
-        e.to_string()
-    })?;
+    let dir_entries = fs::read_dir(path).map_err(|e| e.to_string())?;
 
-    while let Ok(Some(entry)) = dir_entries.next_entry().await {
+    for entry in dir_entries.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
-        
+
         // Skip excluded directories and files
         if EXCLUDED_NAMES.contains(&name.as_str()) {
             continue;
         }
 
-        // Get file type efficiently without full metadata
-        let file_type = entry.file_type().await.map_err(|e| e.to_string())?;
-        let is_directory = file_type.is_dir();
-        
+        // `file_type()` is answered from the readdir record on macOS and Linux,
+        // so this costs no extra syscall.
+        let Ok(file_type) = entry.file_type() else { continue };
+
         // Skip symbolic links to prevent infinite loops
         if file_type.is_symlink() {
             continue;
         }
 
+        let is_directory = file_type.is_dir();
+
         let children = if is_directory {
-            Some(Box::pin(read_directory_contents_with_depth(&path, depth + 1)).await?)
+            Some(walk_directory(&path, depth + 1)?)
         } else {
             None
         };
 
-        // Skip metadata fetching for performance - set defaults
-        let size = 0;
-        let created = None;
-        let modified = None;
+        // Real size + mtime for files. These used to be hardcoded to 0/None
+        // "for performance", which cost far more than the stat it saved: the
+        // sync cache compares the mtime+size it stored against these, so it
+        // never registered a hit and re-read + re-hashed the whole vault every
+        // five minutes. The MAX_FILE_SIZE guard downstream was dead for the
+        // same reason (`0 > limit` is never true).
+        //
+        // Directories are skipped — nothing reads a directory's size, and it
+        // is one stat per folder that buys nothing.
+        let (size, created, modified) = if is_directory {
+            (0, None, None)
+        } else {
+            match entry.metadata() {
+                Ok(meta) => {
+                    let to_secs = |t: std::io::Result<std::time::SystemTime>| {
+                        t.ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                    };
+                    (meta.len(), to_secs(meta.created()), to_secs(meta.modified()))
+                }
+                Err(_) => (0, None, None),
+            }
+        };
 
         entries.push(FileEntry {
             name,
@@ -76,7 +98,7 @@ async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result
             children,
         });
     }
-    
+
     entries.sort_by(|a, b| b.is_directory.cmp(&a.is_directory).then_with(|| a.name.cmp(&b.name)));
     Ok(entries)
 }
@@ -85,7 +107,9 @@ async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result
 
 #[tauri::command]
 pub async fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
-    read_directory_contents(Path::new(&workspace_path)).await
+    tokio::task::spawn_blocking(move || walk_directory(Path::new(&workspace_path), 0))
+        .await
+        .map_err(|e| format!("Directory walk failed: {}", e))?
 }
 
 /// Maximum size for a file loaded into the text editor. Larger files are refused
@@ -131,82 +155,63 @@ pub fn read_binary_file(path: String) -> Result<Vec<u8>, String> {
     fs::read(path).map_err(|e| e.to_string())
 }
 
+/// Save a file.
+///
+/// `async` is load-bearing: a non-`async` `#[tauri::command]` body is dispatched
+/// on the main thread, so on macOS the fsync below would block the UI for the
+/// whole duration of the write on every save.
 #[tauri::command]
-pub fn write_file_content(path: String, content: String) -> Result<(), String> {
-    atomic_write_file(&path, &content)
+pub async fn write_file_content(path: String, content: String) -> Result<(), String> {
+    atomic_write_file(&path, &content).await
 }
 
 // Atomic write implementation: write to temp file then rename
-fn atomic_write_file(path: &str, content: &str) -> Result<(), String> {
-    use std::io::Write;
+async fn atomic_write_file(path: &str, content: &str) -> Result<(), String> {
+    use tokio::io::AsyncWriteExt;
 
     let target_path = Path::new(path);
 
     // Pre-write validation: check parent directory exists
     if let Some(parent) = target_path.parent() {
-        if !parent.exists() {
+        if !tokio::fs::try_exists(parent).await.unwrap_or(false) {
             return Err(format!("Parent directory does not exist: {}", parent.display()));
         }
     }
 
-    // Create backup if file exists (for rollback)
-    let backup_path = if target_path.exists() {
-        let backup = format!("{}.backup", path);
-        fs::copy(target_path, &backup).ok(); // Best effort - don't fail if backup fails
-        Some(backup)
-    } else {
-        None
-    };
-
-    // Write to temporary file first
+    // Write to a temp file, then rename over the target. rename(2) within a
+    // directory is atomic, so the original file is either fully replaced or
+    // untouched — there is no torn state for a `.backup` copy to roll back to.
+    // Making one was doubling the bytes written on every single save.
     let temp_path = format!("{}.tmp", path);
-    let write_result = (|| -> Result<(), std::io::Error> {
-        let mut file = fs::File::create(&temp_path)?;
-        file.write_all(content.as_bytes())?;
-        file.sync_all()?; // Ensure data is flushed to disk
-        Ok(())
-    })();
+    let write_result = async {
+        let mut file = tokio::fs::File::create(&temp_path).await?;
+        file.write_all(content.as_bytes()).await?;
+        file.sync_all().await?; // Ensure data is flushed to disk
+        Ok::<(), std::io::Error>(())
+    }.await;
 
-    match write_result {
-        Ok(_) => {
-            // Atomic rename: this is the critical operation
-            match fs::rename(&temp_path, target_path) {
-                Ok(_) => {
-                    // Success! Clean up backup
-                    if let Some(backup) = backup_path {
-                        let _ = fs::remove_file(backup); // Best effort cleanup
-                    }
-                    Ok(())
-                }
-                Err(e) => {
-                    // Rename failed - clean up temp file and restore backup
-                    let _ = fs::remove_file(&temp_path);
-                    if let Some(backup) = backup_path {
-                        let _ = fs::rename(&backup, target_path); // Attempt rollback
-                    }
-                    Err(format!("Failed to rename temp file: {}", e))
-                }
-            }
-        }
+    if let Err(e) = write_result {
+        let _ = tokio::fs::remove_file(&temp_path).await;
+        return Err(format!("Failed to write to temp file: {}", e));
+    }
+
+    match tokio::fs::rename(&temp_path, target_path).await {
+        Ok(_) => Ok(()),
         Err(e) => {
-            // Write to temp failed - clean up
-            let _ = fs::remove_file(&temp_path);
-            if let Some(backup) = backup_path {
-                let _ = fs::remove_file(backup);
-            }
-            Err(format!("Failed to write to temp file: {}", e))
+            let _ = tokio::fs::remove_file(&temp_path).await;
+            Err(format!("Failed to rename temp file: {}", e))
         }
     }
 }
 
 // Separate command for saving versions - only called when needed
 #[tauri::command]
-pub fn save_file_version_manual(path: String, content: String) -> Result<(), String> {
-    save_file_version(&path, &content)
+pub async fn save_file_version_manual(path: String, content: String) -> Result<(), String> {
+    save_file_version(&path, &content).await
 }
 
 // Helper function to save file version
-fn save_file_version(file_path: &str, content: &str) -> Result<(), String> {
+async fn save_file_version(file_path: &str, content: &str) -> Result<(), String> {
     let path = Path::new(file_path);
 
     // Find workspace root by looking for .lokus directory
@@ -225,7 +230,7 @@ fn save_file_version(file_path: &str, content: &str) -> Result<(), String> {
         relative_path,
         content.to_string(),
         Some("auto_save".to_string()),
-    ).map(|_| ())
+    ).await.map(|_| ())
 }
 
 // Helper function to find workspace root containing .lokus directory
@@ -288,10 +293,10 @@ pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn create_file_in_workspace(workspace_path: String, name: String) -> Result<String, String> {
+pub async fn create_file_in_workspace(workspace_path: String, name: String) -> Result<String, String> {
     let path = Path::new(&workspace_path).join(&name);
     let path_str = path.to_string_lossy().to_string();
-    atomic_write_file(&path_str, "")?;
+    atomic_write_file(&path_str, "").await?;
     Ok(path_str)
 }
 
@@ -512,9 +517,9 @@ pub fn read_directory(path: String) -> Result<Vec<DirectoryEntry>, String> {
 }
 
 #[tauri::command]
-pub fn write_file(path: String, content: String) -> Result<(), String> {
+pub async fn write_file(path: String, content: String) -> Result<(), String> {
     // Alias for write_file_content for consistency with importers
-    atomic_write_file(&path, &content)
+    atomic_write_file(&path, &content).await
 }
 
 #[tauri::command]

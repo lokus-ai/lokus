@@ -13,8 +13,17 @@ export const useFileTreeStore = create(
     hoveredFolder: null,
     isExternalDragActive: false,
     keymap: {},
+    // Mirrors the focused editor group's active tab. Rows read it from here
+    // with a per-path selector rather than taking it as a prop, so switching
+    // tabs re-renders the two rows whose highlight actually changed instead of
+    // every row in the tree. (A memoized row can't solve this: an ancestor
+    // that correctly bails out would stop the update reaching its children.)
+    activePath: null,
 
     setFileTree: (tree) => set({ fileTree: tree }),
+
+    setActivePath: (path) =>
+      set((s) => (s.activePath === path ? s : { activePath: path })),
 
     toggleFolder: (path) =>
       set((s) => {
