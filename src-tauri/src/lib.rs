@@ -31,7 +31,7 @@ pub(crate) mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
 mod notifications;
-// AI: local models (Ollama), local embeddings index, keychain secret storage.
+// Keychain secret storage.
 // `ai_local` and `secure_store` are internally gated to the non-mobile target
 // block (they use reqwest / keyring); `ai_embeddings` is all-platform.
 mod secure_store;
@@ -468,71 +468,6 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-/// Validate an API key by making a lightweight HTTP request from Rust.
-///
-/// This bypasses CORS restrictions that block browser `fetch()` from the
-/// Tauri WebView to external API servers.
-#[cfg(desktop)]
-#[tauri::command]
-async fn validate_api_key(provider: String, api_key: String) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
-
-    let response = match provider.as_str() {
-        "openai" => {
-            client
-                .get("https://api.openai.com/v1/models")
-                .header("Authorization", format!("Bearer {}", api_key))
-                .send()
-                .await
-        }
-        "anthropic" => {
-            client
-                .post("https://api.anthropic.com/v1/messages")
-                .header("Content-Type", "application/json")
-                .header("x-api-key", &api_key)
-                .header("anthropic-version", "2023-06-01")
-                .body(r#"{"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"."}]}"#)
-                .send()
-                .await
-        }
-        "deepgram" => {
-            client
-                .get("https://api.deepgram.com/v1/projects")
-                .header("Authorization", format!("Token {}", api_key))
-                .send()
-                .await
-        }
-        _ => return Ok(serde_json::json!({ "valid": false, "error": format!("Unknown provider: {}", provider) })),
-    };
-
-    match response {
-        Ok(resp) => {
-            let status = resp.status().as_u16();
-            // For Anthropic: 200 or 400 means key is valid (400 = bad payload but auth passed)
-            let valid = if provider == "anthropic" {
-                status == 200 || status == 400
-            } else {
-                status == 200
-            };
-
-            if valid {
-                Ok(serde_json::json!({ "valid": true }))
-            } else {
-                let error = match status {
-                    401 => format!("Invalid {} API key.", provider),
-                    403 => format!("{} API key lacks required permissions.", provider),
-                    429 => "Rate limit hit — key may be valid but exhausted.".to_string(),
-                    _ => format!("{} validation failed ({}).", provider, status),
-                };
-                Ok(serde_json::json!({ "valid": false, "error": error }))
-            }
-        }
-        Err(e) => {
-            Ok(serde_json::json!({ "valid": false, "error": format!("Network error: {}", e) }))
-        }
-    }
-}
-
 /// Set up the system tray icon with a context menu.
 ///
 /// Left-click on the tray icon shows and focuses the main window.
@@ -958,9 +893,7 @@ pub fn run() {
       notifications::request_notification_permission_cmd,
       notifications::send_native_notification,
       #[cfg(desktop)]
-      validate_api_key,
       #[cfg(desktop)]
-      // AI — local Ollama (gated to the non-mobile target block, matching reqwest)
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
       #[cfg(not(any(target_os = "ios", target_os = "android")))]

@@ -72,17 +72,6 @@ tracing-appender = "0.2"
 tauri-plugin-shell = "2.3.3"
 blake3 = "1.5"
 getrandom = "0.2"
-# Audio capture
-cpal = "0.15"
-ringbuf = "0.4"
-bytemuck = { version = "1", features = ["derive"] }
-# WebSocket transcription
-tokio-tungstenite = { version = "0.26", features = ["native-tls"] }
-tungstenite = "0.26"
-futures-util = "0.3"
-# Local embeddings index (.lokus/embeddings.db). `bundled` statically links a
-# known-good libsqlite3 — no cross-platform version drift, no extension loading.
-rusqlite = { version = "0.31", features = ["bundled"] }
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
@@ -105,13 +94,10 @@ axum = "0.7"
 sentry = { version = "0.34", default-features = false, features = ["backtrace", "contexts", "panic", "rustls", "reqwest"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-screencapturekit = "0.3"
 cocoa = "0.25"
 objc = "0.2"
 objc-foundation = "0.1"
 security-framework = "2.9"
-# CoreAudio meeting detection
-coreaudio-sys = "0.2"
 # Native macOS APIs (notifications, app detection)
 objc2 = "0.6"
 block2 = "0.6"

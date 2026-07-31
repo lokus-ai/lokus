@@ -32,7 +32,6 @@ Lokus is a **Desktop Note-Taking & Knowledge Management Platform** that bridges 
 2. **Note-Taking** — Daily notes, meeting notes, research notes
 3. **Research & Study** — Organizing research materials, academic notes
 4. **Project Management** — Database views for task tracking and project planning
-5. **AI-Assisted Writing** — MCP server integration for Claude and other AI assistants
 
 ---
 
@@ -57,8 +56,6 @@ Lokus is a **Desktop Note-Taking & Knowledge Management Platform** that bridges 
 │  │              BACKEND LAYER (Rust/Tauri)                    │ │
 │  │  • File System Management                                   │ │
 │  │  • Audio Capture & Transcription                            │ │
-│  │  • MCP Server (Model Context Protocol)                      │ │
-│  │  • Meeting Detection & Scheduling                           │ │
 │  │  • Authentication & Secure Storage                          │ │
 │  │  • Sync Engine (Yjs + Supabase)                             │ │
 │  │  • Notifications & System Integration                       │ │
@@ -108,7 +105,6 @@ Lokus is a **Desktop Note-Taking & Knowledge Management Platform** that bridges 
   - `plugins/` — Plugin runtime & management
   - `sync/` — Synchronization engine
   - `markdown/` — Custom markdown compiler
-  - `mcp/` — MCP client integration
   - Additional: blocks, links, references, tasks, tags, etc.
 
 #### 4. **Backend Layer (Rust/Tauri)**
@@ -119,10 +115,7 @@ Lokus is a **Desktop Note-Taking & Knowledge Management Platform** that bridges 
   - `lib.rs` — Shared library exports
   - `file_locking.rs` — File lock management
   - `auth.rs` — Authentication logic
-  - `mcp.rs` — MCP protocol implementation
-  - `mcp_embedded.rs` — Embedded MCP server
   - `api_server.rs` — HTTP API server
-  - `meeting_detector.rs` — Meeting detection from audio/calendar
   - `transcription.rs` — Audio transcription handling
   - `clipboard.rs` — Clipboard operations
   - `search.rs` — Search implementation
@@ -187,9 +180,7 @@ Lokus is a **Desktop Note-Taking & Knowledge Management Platform** that bridges 
 ### Platform-Specific Dependencies
 
 **macOS**:
-- `screencapturekit` — Screen capture for meetings
 - `objc2` — Objective-C bridge for native APIs
-- `coreaudio-sys` — CoreAudio meeting detection
 - `security-framework` — macOS Keychain integration
 
 **Windows**:
@@ -292,7 +283,6 @@ npm run build:macos          # Build macOS app
 npm run build:windows        # Build Windows app
 npm run build:linux          # Build Linux app
 npm run build:appstore       # Build for App Store
-npm run bundle:mcp           # Bundle MCP server
 ```
 
 ---
@@ -390,7 +380,6 @@ Production:
 
 **Key Utility Scripts**:
 - `build-*.js` — Platform-specific build scripts
-- `bundle-mcp.cjs` — MCP server bundling
 - `sync-version.cjs` — Keep versions in sync
 - `check-platform.js` — Verify build prerequisites
 - `install-build-deps.sh` — Install Rust/system dependencies
@@ -566,15 +555,6 @@ Production:
 - Content sanitization
 - Permissions model for plugins
 
-### MCP Server (`src/core/mcp/`, `src-tauri/src/mcp*.rs`)
-
-**Model Context Protocol Integration**:
-- Embedded MCP server for AI assistants (Claude)
-- Resources: File access, workspace browsing
-- Tools: Create/edit documents, search
-- Prompts: Pre-built prompt templates
-- HTTP server for external connections
-
 ### Daily Notes (`src/core/daily-notes/`)
 
 **Features**:
@@ -597,7 +577,6 @@ Production:
 **Features**:
 - Calendar integration (iCal parsing)
 - Schedule block detection
-- Meeting detection & tracking
 - Event-based notes
 
 ---
@@ -618,7 +597,6 @@ lokus/
 │   ├── unit/                    # Unit tests
 │   ├── integration/             # Integration tests
 │   ├── e2e/                     # End-to-end tests
-│   └── mcp-server/              # MCP server tests
 ├── docs/                        # Documentation & plans
 ├── scripts/                     # Build & utility scripts
 ├── public/                      # Static assets (fonts, icons)
@@ -645,7 +623,6 @@ src/
 │   ├── templates/              # Template system
 │   ├── editor/                 # Editor configuration
 │   ├── markdown/               # Markdown compilation
-│   ├── mcp/                    # MCP client
 │   ├── importers/              # Import tools
 │   ├── tasks/                  # Task management
 │   ├── tags/                   # Tag system
@@ -670,7 +647,6 @@ src/
 ├── workers/                     # Web Workers
 ├── bases/                       # Database views (concept)
 ├── platform/                    # Platform abstraction
-├── mcp-server/                  # Node.js MCP server
 ├── main.jsx                     # React entry point
 ├── App.jsx                      # Root component
 └── [test files & config]        # Test setup
@@ -686,9 +662,7 @@ src-tauri/
 │   ├── api_server.rs           # HTTP API
 │   ├── auth.rs                 # Authentication
 │   ├── file_locking.rs         # File lock management
-│   ├── mcp.rs                  # MCP protocol
 │   ├── mcp_embedded.rs         # Embedded server
-│   ├── meeting_detector.rs     # Meeting detection
 │   ├── transcription.rs        # Audio transcription
 │   ├── clipboard_*.rs          # Clipboard ops
 │   ├── search.rs               # Search impl
@@ -724,7 +698,6 @@ src-tauri/
 ├── entitlements*.plist        # macOS entitlements
 ├── PrivacyInfo.xcprivacy      # iOS privacy manifest
 ├── Info.plist                 # macOS app info
-├── mcp-bundle/                # Bundled MCP server
 └── target/                    # Build output
 ```
 
@@ -758,7 +731,6 @@ tests/
 │   ├── setup/                  # Global setup/teardown
 │   ├── helpers/                # Test utilities
 │   └── mocks/                  # Mock data
-├── mcp-server/                 # MCP server tests
 │   ├── MCPProtocol.test.js
 │   ├── MCPServerHost.test.js
 │   ├── http-server-*.test.js
@@ -813,16 +785,7 @@ tests/
 - Sandbox isolated execution with limited API
 - User prompts for interactive templates
 
-### 6. **MCP Server Integration**
-
-**Pattern**: Model Context Protocol for AI assistants
-- Embedded MCP server in Tauri backend
-- Exposes workspace as resources to Claude/other AI
-- Tools for creating/editing documents
-- Context prompts for common tasks
-- Optional HTTP server for external clients
-
-### 7. **Performance Optimization Strategies**
+### 6. **Performance Optimization Strategies**
 
 **Patterns Used**:
 - Virtual scrolling for large lists (@tanstack/react-virtual)
@@ -832,7 +795,7 @@ tests/
 - Minimized re-renders via Zustand selectors
 - SVG-based graph visualization vs canvas
 
-### 8. **Multi-Platform Desktop App**
+### 7. **Multi-Platform Desktop App**
 
 **Pattern**: Tauri for cross-platform with platform-specific code
 - Single codebase for Windows, macOS, Linux
@@ -841,7 +804,7 @@ tests/
 - Windows: Windows API for credentials
 - Linux: Secret service via keyring crate
 
-### 9. **Error Boundary & Crash Reporting**
+### 8. **Error Boundary & Crash Reporting**
 
 **Pattern**: React Error Boundary + Sentry
 - Component-level error boundaries
@@ -849,7 +812,7 @@ tests/
 - Sentry for crash reporting (optional)
 - PostHog for analytics (optional, can disable)
 
-### 10. **Test Pyramid**
+### 9. **Test Pyramid**
 
 **Pattern**: Unit → Integration → E2E
 - **Unit Tests**: Vitest with jsdom for components & utilities
@@ -903,7 +866,6 @@ tests/
 ✅ Template system (90+ features)
 ✅ Full-text search
 ✅ Plugin marketplace & SDK
-✅ MCP server integration
 ✅ Multi-platform support
 ✅ Daily notes & task system
 ✅ Import from Obsidian/Roam/Logseq
@@ -989,8 +951,6 @@ tests/
 | Graph View | ✅ | ✅ | ✅ | 🔄 | 🔄 |
 | Canvas | ✅ | ✅ | ✅ | 🔄 | 🔄 |
 | Plugins | ✅ | ✅ | ✅ | ❌ | ❌ |
-| MCP Server | ✅ | ✅ | ✅ | ❌ | ❌ |
-| Meeting Detection | ✅ | ⏳ | ❌ | ❌ | ❌ |
 | Calendar Integration | ✅ | ✅ | ✅ | 🔄 | 🔄 |
 
 Legend: ✅ Supported | 🔄 In Development | ⏳ Planned | ❌ Not Supported
