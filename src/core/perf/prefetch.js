@@ -25,6 +25,8 @@ const LAZY_VIEWS = [
   () => import('../../components/KanbanBoard'),
   () => import('../../views/Canvas'),
   () => import('../../components/MathGraph/MathGraphEditor.jsx'),
+  () => import('../../components/Calendar'),
+  () => import('../../components/DailyNotes'),
   () => import('../../views/Preferences'),
 ];
 

@@ -36,8 +36,11 @@ async function sendToSentry(context, error, extraData) {
   if (!isProduction) return;
 
   try {
-    // Dynamically import Sentry to avoid loading in dev
-    const { captureException, captureMessage } = await import('@sentry/react');
+    // Routed through the telemetry shim, which is a no-op (and pulls in no
+    // SDK) unless crash reporting is actually switched on. Importing
+    // '@sentry/react' directly here meant the first logged error in a
+    // production build fetched ~390 KB even with reporting disabled.
+    const { captureException, captureMessage } = await import('../services/telemetry.js');
 
     const extra = {
       context,

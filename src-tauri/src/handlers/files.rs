@@ -14,14 +14,16 @@ pub struct FileEntry {
 }
 
 // --- Private Helper ---
-fn read_directory_contents(path: &Path) -> futures::future::BoxFuture<'static, Result<Vec<FileEntry>, String>> {
-    let path = path.to_path_buf();
-    Box::pin(async move {
-        read_directory_contents_with_depth(&path, 0).await
-    })
-}
 
-async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
+/// Walk a workspace directory tree.
+///
+/// Synchronous on purpose. The async version awaited four times per entry
+/// (`read_dir`, `next_entry`, `file_type`, `metadata`), and on macOS each of
+/// those metadata calls is a dispatch onto tokio's blocking pool — so a vault
+/// with a few thousand files paid several thousand thread hand-offs just to
+/// list itself. Running the whole walk inside ONE `spawn_blocking` keeps it
+/// off the UI thread while doing the stats back-to-back on a single thread.
+fn walk_directory(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
     // Limit recursion depth to prevent infinite loops
     const MAX_DEPTH: usize = 10;
 
@@ -33,50 +35,57 @@ async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result
     }
 
     let mut entries = vec![];
-    let mut dir_entries = tokio::fs::read_dir(path).await.map_err(|e| {
-        e.to_string()
-    })?;
+    let dir_entries = fs::read_dir(path).map_err(|e| e.to_string())?;
 
-    while let Ok(Some(entry)) = dir_entries.next_entry().await {
+    for entry in dir_entries.flatten() {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
-        
+
         // Skip excluded directories and files
         if EXCLUDED_NAMES.contains(&name.as_str()) {
             continue;
         }
 
-        // Get file type efficiently without full metadata
-        let file_type = entry.file_type().await.map_err(|e| e.to_string())?;
-        let is_directory = file_type.is_dir();
-        
+        // `file_type()` is answered from the readdir record on macOS and Linux,
+        // so this costs no extra syscall.
+        let Ok(file_type) = entry.file_type() else { continue };
+
         // Skip symbolic links to prevent infinite loops
         if file_type.is_symlink() {
             continue;
         }
 
+        let is_directory = file_type.is_dir();
+
         let children = if is_directory {
-            Some(Box::pin(read_directory_contents_with_depth(&path, depth + 1)).await?)
+            Some(walk_directory(&path, depth + 1)?)
         } else {
             None
         };
 
-        // Real size + mtime. These used to be hardcoded to 0/None "for
-        // performance", which cost far more than the stat it saved: the sync
-        // cache compares the mtime+size it stored against these, so it never
-        // registered a hit and re-read + re-hashed the whole vault every five
-        // minutes. The MAX_FILE_SIZE guard downstream was dead for the same
-        // reason (`0 > limit` is never true).
-        let (size, created, modified) = match entry.metadata().await {
-            Ok(meta) => {
-                let to_secs = |t: std::io::Result<std::time::SystemTime>| {
-                    t.ok()
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_secs() as i64)
-                };
-                (meta.len(), to_secs(meta.created()), to_secs(meta.modified()))
+        // Real size + mtime for files. These used to be hardcoded to 0/None
+        // "for performance", which cost far more than the stat it saved: the
+        // sync cache compares the mtime+size it stored against these, so it
+        // never registered a hit and re-read + re-hashed the whole vault every
+        // five minutes. The MAX_FILE_SIZE guard downstream was dead for the
+        // same reason (`0 > limit` is never true).
+        //
+        // Directories are skipped — nothing reads a directory's size, and it
+        // is one stat per folder that buys nothing.
+        let (size, created, modified) = if is_directory {
+            (0, None, None)
+        } else {
+            match entry.metadata() {
+                Ok(meta) => {
+                    let to_secs = |t: std::io::Result<std::time::SystemTime>| {
+                        t.ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_secs() as i64)
+                    };
+                    (meta.len(), to_secs(meta.created()), to_secs(meta.modified()))
+                }
+                Err(_) => (0, None, None),
             }
-            Err(_) => (0, None, None),
         };
 
         entries.push(FileEntry {
@@ -89,7 +98,7 @@ async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result
             children,
         });
     }
-    
+
     entries.sort_by(|a, b| b.is_directory.cmp(&a.is_directory).then_with(|| a.name.cmp(&b.name)));
     Ok(entries)
 }
@@ -98,7 +107,9 @@ async fn read_directory_contents_with_depth(path: &Path, depth: usize) -> Result
 
 #[tauri::command]
 pub async fn read_workspace_files(workspace_path: String) -> Result<Vec<FileEntry>, String> {
-    read_directory_contents(Path::new(&workspace_path)).await
+    tokio::task::spawn_blocking(move || walk_directory(Path::new(&workspace_path), 0))
+        .await
+        .map_err(|e| format!("Directory walk failed: {}", e))?
 }
 
 /// Maximum size for a file loaded into the text editor. Larger files are refused

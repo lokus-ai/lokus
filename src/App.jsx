@@ -2,8 +2,15 @@ import { useEffect, lazy, Suspense } from "react";
 import Launcher from "./views/Launcher";
 import AuthGate from "./core/auth/AuthGate.jsx";
 import { OnboardingWizard } from "./components/onboarding/OnboardingWizard.jsx";
-// Lazy load heavy views
-const Workspace = lazy(() => import("./views/Workspace"));
+// Lazy load heavy views.
+//
+// The import is kicked off here at module scope rather than only when React
+// first renders <Workspace/>. Both windows almost always end up needing it,
+// and starting the fetch during app bootstrap overlaps it with provider setup
+// and the auth gate instead of queueing it behind them. lazy() reuses the same
+// in-flight promise, so this costs one extra reference and no extra bytes.
+const workspaceChunk = import("./views/Workspace");
+const Workspace = lazy(() => workspaceChunk);
 const Preferences = lazy(() => import("./views/Preferences"));
 
 import UpdateChecker from "./components/UpdateChecker";
@@ -31,7 +38,7 @@ import editorConfigCache from "./core/editor/config-cache.js";
 import "./core/workspace/manager.js";
 // Guard window access in non-Tauri environments
 import { emit } from "@tauri-apps/api/event";
-import * as Sentry from "@sentry/react";
+import { addBreadcrumb } from "./services/telemetry.js";
 import posthog from "./services/posthog.js";
 
 // Simple loading spinner for Suspense fallback
@@ -72,20 +79,20 @@ function App() {
   // Track view navigation with breadcrumbs
   useEffect(() => {
     if (isPrefsWindow) {
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'navigation',
         message: 'Navigated to Preferences',
         level: 'info',
       });
     } else if (activePath) {
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'navigation',
         message: 'Navigated to Workspace',
         level: 'info',
         data: { path: activePath },
       });
     } else {
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'navigation',
         message: 'Navigated to Launcher',
         level: 'info',
@@ -125,21 +132,21 @@ function App() {
       if (navigator.userAgent.includes('Windows NT 10.0')) {
         document.body.classList.add('windows-11');
       }
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'platform',
         message: 'Windows platform detected',
         level: 'info',
       });
     } else if (platformService.isMacOS()) {
       document.body.classList.add('macos');
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'platform',
         message: 'macOS platform detected',
         level: 'info',
       });
     } else if (platformService.isLinux()) {
       document.body.classList.add('linux');
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'platform',
         message: 'Linux platform detected',
         level: 'info',

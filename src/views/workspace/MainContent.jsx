@@ -3,7 +3,14 @@ import { useViewStore } from '../../stores/views';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import ErrorBoundary from '../../components/ErrorBoundary';
 
-const EditorGroupsView = lazy(() => import('./EditorGroupsView'));
+// NOT lazy. This is the default view — it renders on every workspace open —
+// so deferring it bought nothing and cost a second sequential chunk fetch
+// after the Workspace chunk had already painted the sidebar. That gap is the
+// "Loading…" people see at startup: the shell is up, the content is still
+// downloading. Bundled with Workspace it arrives in one request instead of
+// two, and the fallback never shows.
+import EditorGroupsView from './EditorGroupsView';
+
 const CalendarView = lazy(() => import('../../components/Calendar').then(m => ({ default: m.CalendarView })));
 const Canvas = lazy(() => import('../Canvas'));
 const Preferences = lazy(() => import('../Preferences'));
