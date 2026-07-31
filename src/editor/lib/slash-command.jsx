@@ -27,7 +27,6 @@ import {
   AlertCircle,
   HelpCircle,
   BookOpen,
-  Sparkles,
 } from "lucide-react";
 import tippy from "tippy.js/dist/tippy.esm.js";
 
@@ -425,24 +424,6 @@ function openTableSizePicker({ editor: view, range }) {
 // ---------------------------------------------------------------------------
 
 const commandItems = [
-  {
-    group: "AI",
-    commands: [
-      {
-        title: "Ask AI",
-        description: "Open the AI command bar to write, transform, or ask.",
-        icon: <Sparkles size={18} />,
-        command: ({ editor: view, range }) => {
-          // Remove the slash trigger, then open the Cmd-K AI panel for this view.
-          // The React layer (Editor.jsx) listens for this event and mounts AICmdK.
-          deleteRange(view, range);
-          window.dispatchEvent(new CustomEvent('lokus:open-ai-cmdk', {
-            detail: { view },
-          }));
-        },
-      },
-    ],
-  },
   {
     group: "Writing",
     commands: [

@@ -18,7 +18,7 @@ export default function General({ advancedFeatures, onAdvancedFeaturesChange }) 
       <P.Group label="Features">
         <P.Row
           label="Advanced features"
-          hint="Adds Graph, Canvas, Kanban, Bases, Calendar, Meeting Notes, AI Assistant, Sync, Plugins, Templates, Terminal, MCP and Version History."
+          hint="Adds Graph, Canvas, Kanban, Bases, Calendar, Sync, Plugins, Templates, Terminal and Version History."
         >
           <P.Toggle
             checked={advancedFeatures}

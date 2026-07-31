@@ -57,7 +57,7 @@ export class TemplateManager {
 
   /**
    * Refresh templates from file system (re-scan templates directory)
-   * This is useful when templates are created externally (e.g., by MCP)
+   * This is useful when templates are created externally
    */
   async refresh() {
     if (this.useFileStorage) {

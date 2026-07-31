@@ -13,11 +13,8 @@ mod search;
 mod plugins;
 mod platform;
 #[cfg(desktop)]
-mod mcp;
 #[cfg(desktop)]
-mod mcp_setup;
 #[cfg(desktop)]
-mod mcp_embedded;
 #[cfg(desktop)]
 mod auth;
 #[cfg(desktop)]
@@ -33,15 +30,10 @@ mod logging;
 pub(crate) mod file_locking;
 #[cfg(target_os = "macos")]
 mod macos;
-mod audio;
-mod meeting_detector;
-mod transcription;
 mod notifications;
 // AI: local models (Ollama), local embeddings index, keychain secret storage.
 // `ai_local` and `secure_store` are internally gated to the non-mobile target
 // block (they use reqwest / keyring); `ai_embeddings` is all-platform.
-mod ai_local;
-mod ai_embeddings;
 mod secure_store;
 
 #[cfg(desktop)]
@@ -541,141 +533,6 @@ async fn validate_api_key(provider: String, api_key: String) -> Result<serde_jso
     }
 }
 
-/// Proxy an LLM request through Rust to bypass CORS.
-///
-/// Supports both OpenAI and Anthropic in streaming mode. Streams SSE chunks
-/// back to the frontend as `lokus:llm-chunk:{sessionId}` events, then emits
-/// `lokus:llm-done:{sessionId}` when complete.
-#[cfg(desktop)]
-#[tauri::command]
-async fn llm_stream_request(
-    app: tauri::AppHandle,
-    session_id: String,
-    provider: String,
-    api_key: String,
-    model: String,
-    system_prompt: String,
-    user_prompt: String,
-    stream: bool,
-) -> Result<serde_json::Value, String> {
-    use futures_util::StreamExt;
-
-    let client = reqwest::Client::new();
-
-    let (url, request_body, headers) = match provider.as_str() {
-        "openai" => {
-            let body = serde_json::json!({
-                "model": model,
-                "messages": [
-                    { "role": "system", "content": system_prompt },
-                    { "role": "user", "content": user_prompt },
-                ],
-                "temperature": 0.3,
-                "max_tokens": 2048,
-                "stream": stream,
-            });
-            let mut h = reqwest::header::HeaderMap::new();
-            h.insert("Authorization", format!("Bearer {}", api_key).parse().unwrap());
-            h.insert("Content-Type", "application/json".parse().unwrap());
-            ("https://api.openai.com/v1/chat/completions".to_string(), body, h)
-        }
-        "anthropic" => {
-            let body = serde_json::json!({
-                "model": model,
-                "max_tokens": 2048,
-                "system": system_prompt,
-                "messages": [{ "role": "user", "content": user_prompt }],
-                "stream": stream,
-            });
-            let mut h = reqwest::header::HeaderMap::new();
-            h.insert("x-api-key", api_key.parse().unwrap());
-            h.insert("anthropic-version", "2023-06-01".parse().unwrap());
-            h.insert("Content-Type", "application/json".parse().unwrap());
-            ("https://api.anthropic.com/v1/messages".to_string(), body, h)
-        }
-        _ => return Err(format!("Unknown LLM provider: {}", provider)),
-    };
-
-    let response = client
-        .post(&url)
-        .headers(headers)
-        .json(&request_body)
-        .send()
-        .await
-        .map_err(|e| format!("LLM request failed: {}", e))?;
-
-    if !response.status().is_success() {
-        let status = response.status().as_u16();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("LLM API error ({}): {}", status, body));
-    }
-
-    if !stream {
-        // Non-streaming: return the full response
-        let body: serde_json::Value = response
-            .json()
-            .await
-            .map_err(|e| format!("Failed to parse LLM response: {}", e))?;
-        return Ok(body);
-    }
-
-    // Streaming: read SSE lines and emit events
-    let chunk_event = format!("lokus:llm-chunk:{}", session_id);
-    let done_event = format!("lokus:llm-done:{}", session_id);
-
-    let mut byte_stream = response.bytes_stream();
-    let mut buffer = String::new();
-
-    while let Some(chunk_result) = byte_stream.next().await {
-        let chunk = chunk_result.map_err(|e| format!("Stream read error: {}", e))?;
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        // Process complete lines
-        while let Some(newline_pos) = buffer.find('\n') {
-            let line = buffer[..newline_pos].trim().to_string();
-            buffer = buffer[newline_pos + 1..].to_string();
-
-            if line.is_empty() || !line.starts_with("data: ") {
-                continue;
-            }
-
-            let data = &line[6..];
-            if data == "[DONE]" {
-                continue;
-            }
-
-            // Parse the SSE data and extract text delta
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(data) {
-                let text = match provider.as_str() {
-                    "openai" => json
-                        .pointer("/choices/0/delta/content")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string(),
-                    "anthropic" => {
-                        if json.get("type").and_then(|v| v.as_str()) == Some("content_block_delta") {
-                            json.pointer("/delta/text")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("")
-                                .to_string()
-                        } else {
-                            String::new()
-                        }
-                    }
-                    _ => String::new(),
-                };
-
-                if !text.is_empty() {
-                    let _ = app.emit(&chunk_event, serde_json::json!({ "text": text }));
-                }
-            }
-        }
-    }
-
-    let _ = app.emit(&done_event, serde_json::json!({}));
-    Ok(serde_json::json!({ "done": true }))
-}
-
 /// Set up the system tray icon with a context menu.
 ///
 /// Left-click on the tray icon shows and focuses the main window.
@@ -941,15 +798,10 @@ pub fn run() {
       plugins::read_plugin_file,
       plugins::get_plugin_manifest,
       #[cfg(desktop)]
-      mcp::mcp_start,
       #[cfg(desktop)]
-      mcp::mcp_stop,
       #[cfg(desktop)]
-      mcp::mcp_status,
       #[cfg(desktop)]
-      mcp::mcp_restart,
       #[cfg(desktop)]
-      mcp::mcp_health_check,
       #[cfg(desktop)]
       auth::initiate_oauth_flow,
       #[cfg(desktop)]
@@ -1011,11 +863,8 @@ pub fn run() {
       #[cfg(desktop)]
       connections::gmail_clear_queue,
       #[cfg(desktop)]
-      mcp_setup::setup_mcp_integration,
       #[cfg(desktop)]
-      mcp_setup::check_mcp_status,
       #[cfg(desktop)]
-      mcp_setup::restart_mcp_server,
       #[cfg(desktop)]
       api_server::api_set_workspace,
       #[cfg(desktop)]
@@ -1103,45 +952,22 @@ pub fn run() {
       #[cfg(desktop)]
       calendar::get_sync_state,
       // Audio capture commands
-      audio::get_audio_devices,
-      audio::start_audio_capture,
-      audio::stop_audio_capture,
-      audio::get_audio_level,
-      audio::start_system_audio_capture,
       // Meeting detector commands
-      meeting_detector::enable_meeting_detection,
-      meeting_detector::disable_meeting_detection,
-      meeting_detector::dismiss_detection,
-      meeting_detector::start_meeting_monitoring,
-      meeting_detector::stop_meeting_monitoring,
       // Transcription commands
-      transcription::start_transcription,
-      transcription::stop_transcription,
       // Native notification commands
       notifications::request_notification_permission_cmd,
       notifications::send_native_notification,
       #[cfg(desktop)]
       validate_api_key,
       #[cfg(desktop)]
-      llm_stream_request,
       // AI — local Ollama (gated to the non-mobile target block, matching reqwest)
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
-      ai_local::ollama_check,
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
-      ai_local::ollama_list_models,
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
-      ai_local::ollama_stream_request,
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
-      ai_local::ollama_pull_model,
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
-      ai_local::ollama_embed,
       // AI — local embeddings index (.lokus/embeddings.db), all-platform
-      ai_embeddings::index_note_embedding,
-      ai_embeddings::delete_note_embedding,
-      ai_embeddings::search_embeddings,
-      ai_embeddings::list_indexed_notes,
       // AI — local append-only audit trail (.lokus/ai-audit.jsonl), all-platform
-      handlers::ai::append_audit_log,
       // AI — keychain-backed secret storage (gated, matches keyring crate)
       #[cfg(not(any(target_os = "ios", target_os = "android")))]
       secure_store::secure_store_set,
@@ -1190,24 +1016,6 @@ pub fn run() {
       // Desktop-only initialization
       #[cfg(desktop)]
       {
-        // Initialize MCP Server Manager
-        let mcp_manager = mcp::MCPServerManager::new(app.handle().clone());
-        app.manage(mcp_manager.clone());
-
-        // Auto-start HTTP MCP server for CLI integration
-        let mcp_manager_clone = mcp_manager.clone();
-        tauri::async_runtime::spawn(async move {
-          // Small delay to ensure MCP setup completes first
-          tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-          match mcp_manager_clone.auto_start() {
-            Ok(_status) => {
-            }
-            Err(_e) => {
-            }
-          }
-        });
-
         // Initialize auth state
         let auth_state = auth::SharedAuthState::default();
         app.manage(auth_state);
@@ -1303,20 +1111,6 @@ pub fn run() {
           }
         }
       });
-
-      // Auto-setup MCP integration on first launch (desktop only)
-      #[cfg(desktop)]
-      {
-        let app_clone = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-          let setup = mcp_setup::MCPSetup::new(app_clone);
-          if !setup.is_setup_complete() {
-            if let Err(_e) = setup.setup().await {
-            }
-          } else {
-          }
-        });
-      }
 
       // Desktop-only window management
       #[cfg(desktop)]

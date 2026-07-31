@@ -5,7 +5,6 @@ import React, { createContext, useContext, useState, useEffect, useMemo, useCall
 // and hidden until the user opts in (see ADVANCED_FEATURE_FLAGS below).
 // Editor, Files, Search and the command palette are not flag-gated — they're always on.
 export const ADVANCED_FEATURE_FLAGS = [
-    'enable_ai_assistant',
     'enable_sync',
     'enable_plugins',
     'enable_canvas',
@@ -13,9 +12,7 @@ export const ADVANCED_FEATURE_FLAGS = [
     'enable_kanban',
     'enable_bases',
     'enable_calendar',
-    'enable_meetings',
     'enable_templates',
-    'enable_mcp',
     'enable_terminal',
     'enable_version_history',
 ];
@@ -105,7 +102,6 @@ const DEFAULT_CONFIG = {
         enable_backlinks: true,
         enable_import_export: true,
         // Advanced — off by default, revealed by the "Advanced features" toggle
-        enable_ai_assistant: false,
         enable_sync: false,
         enable_plugins: false,
         enable_canvas: false,
@@ -113,9 +109,7 @@ const DEFAULT_CONFIG = {
         enable_kanban: false,
         enable_bases: false,
         enable_calendar: false,
-        enable_meetings: false,
         enable_templates: false,
-        enable_mcp: false,
         enable_terminal: false,
         enable_version_history: false,
     },

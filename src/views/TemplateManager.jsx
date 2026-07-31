@@ -424,7 +424,7 @@ export default function TemplateManager() {
           <button
             onClick={handleRefresh}
             className="flex items-center gap-2 px-3 py-1 border border-app-border rounded-md hover:bg-app-bg transition-colors"
-            title="Refresh templates from filesystem (useful after MCP creates templates)"
+            title="Refresh templates from filesystem"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
             Refresh

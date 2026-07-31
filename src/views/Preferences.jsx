@@ -11,8 +11,6 @@ import liveEditorSettings from "../core/editor/live-settings.js";
 import "../editor/styles/editor.css";
 import markdownSyntaxConfig from "../core/markdown/syntax-config.js";
 import { useFeatureFlags, useAdvancedFeatures } from "../contexts/RemoteConfigContext";
-import AIAssistant from "./preferences/AIAssistant.jsx";
-import MeetingNotes from "./preferences/MeetingNotes.jsx";
 import { CalendarSettings, CalendarConnectionStatus } from "../components/Calendar/index.js";
 import calendarService from "../services/calendar.js";
 import { useAuth } from "../core/auth/AuthContext";
@@ -691,12 +689,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
                 ]
               },
               {
-                label: "Assistants", items: [
-                  ...(featureFlags.enable_meetings ? ["Meeting Notes"] : []),
-                  ...(featureFlags.enable_ai_assistant ? ["AI Assistant"] : []),
-                ]
-              },
-              {
                 label: "About", items: [
                   "Account",
                   ...(import.meta.env.VITE_DISABLE_UPDATE_CHECKER !== 'true' ? ["Updates"] : []),
@@ -914,11 +906,6 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
               <Import onImport={() => setShowQuickImport(true)} />
             )}
 
-            {section === "Meeting Notes" && <MeetingNotes />}
-
-            {featureFlags.enable_ai_assistant && section === "AI Assistant" && (
-              <AIAssistant />
-            )}
           </main>
         </div>
 

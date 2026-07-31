@@ -79,8 +79,8 @@ describe('Simple feature-flag default', () => {
     expect(screen.getByTestId('graph').textContent).toBe('true');
   });
 
-  it('ADVANCED_FEATURE_FLAGS lists exactly the 13 hidden flags', () => {
-    expect(ADVANCED_FEATURE_FLAGS).toHaveLength(13);
+  it('ADVANCED_FEATURE_FLAGS lists exactly the 10 hidden flags', () => {
+    expect(ADVANCED_FEATURE_FLAGS).toHaveLength(10);
     expect(ADVANCED_FEATURE_FLAGS).not.toContain('enable_daily_notes');
     expect(ADVANCED_FEATURE_FLAGS).not.toContain('enable_backlinks');
     expect(ADVANCED_FEATURE_FLAGS).not.toContain('enable_import_export');
