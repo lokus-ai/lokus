@@ -225,8 +225,11 @@ jobs:
           VITE_APPSTORE: 'true'
         run: |
           npm run build
-          cd src-tauri
-          cargo tauri build --config tauri.appstore.conf.json
+          # npx, not `cargo tauri`: this job never installs tauri-cli via cargo,
+          # so `cargo tauri build` fails with "no such command: tauri". The CLI
+          # is already a devDependency and was installed by `npm install` above,
+          # which also keeps it on the version pinned in package.json.
+          npx tauri build --config src-tauri/tauri.appstore.conf.json
 
       - name: Sign and Package for App Store
         env:
