@@ -22,16 +22,34 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "^2.0", features = [] }
 
 [dependencies]
-tauri = { version = "^2.0", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-opener = "^2.0"
+# Tauri crate versions are pinned to a MINOR here, and the matching npm
+# packages are pinned with `~` in package.json.
+#
+# `tauri build` refuses to run when a crate and its npm package differ on
+# major.minor. Cargo.lock is gitignored, so CI resolves these from scratch:
+# a caret range let the Rust side float to a newer minor than the npm side had
+# resolved to (or the reverse), and the release build failed on the mismatch.
+# Pinning both sides means CI and a local checkout resolve the same versions.
+# Note the tilde: in Cargo a bare "2.10" means ^2.10 and still accepts
+# 2.11, which is exactly how this slipped through the first time.
+# Keep `tauri` on the same minor as tauri-runtime/tauri-runtime-wry, which
+# it depends on with a caret: pinning the core to ~2.10 while the runtime
+# resolved to 2.11 produced a trait-bound error *inside* the tauri crate.
+# Bump them together, deliberately.
+tauri = { version = "~2.11", features = ["protocol-asset", "tray-icon"] }
+tauri-plugin-opener = "~2.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri-plugin-dialog = "2.6.0"
-tauri-plugin-fs = "^2.0"
+# Kept in lockstep with @tauri-apps/plugin-dialog in package.json.
+# `tauri build` refuses to run when the crate and the npm package differ
+# on major.minor, and a caret range on the npm side used to float ahead
+# of this pin on a clean CI install and break the release.
+tauri-plugin-dialog = "~2.7"
+tauri-plugin-fs = "~2.5"
 urlencoding = "2.1.3"
-tauri-plugin-store = "2.4.0"
-tauri-plugin-clipboard-manager = "^2.0"
-tauri-plugin-updater = "2.10.0"
+tauri-plugin-store = "~2.4"
+tauri-plugin-clipboard-manager = "~2.3"
+tauri-plugin-updater = "~2.10"
 tokio = { version = "1", features = ["full"] }
 regex = "1.0"
 walkdir = "2.0"
@@ -43,7 +61,7 @@ zip = "2.4"
 sha2 = "0.10"
 semver = "1.0"
 num_cpus = "1.0"
-tauri-plugin-deep-link = "^2.0"
+tauri-plugin-deep-link = "~2.4"
 pkce = "0.2"
 base64 = "0.22"
 hex = "0.4"
@@ -69,14 +87,14 @@ lazy_static = "1.4"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "time"] }
 tracing-appender = "0.2"
-tauri-plugin-shell = "2.3.3"
+tauri-plugin-shell = "~2.3"
 blake3 = "1.5"
 getrandom = "0.2"
 
 # Desktop-only dependencies (use system_configuration which is macOS-only)
 [target.'cfg(not(any(target_os = "ios", target_os = "android")))'.dependencies]
 machine-uid = "0.4"
-tauri-plugin-global-shortcut = "2.3.0"
+tauri-plugin-global-shortcut = "~2.3"
 reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"], default-features = false }
 keyring = "3.6"
 oauth2 = "4.4"
