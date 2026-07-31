@@ -1,4 +1,5 @@
 import { useLayoutStore } from '../../stores/layout';
+import { beginDragGuard } from '../../features/layout/dragGuard';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { getEditor } from '../../stores/editorRegistry';
@@ -79,11 +80,13 @@ export default function RightSidebar({
     const aside = asideRef.current;
     if (!aside) return;
     const rect = aside.getBoundingClientRect();
+    const endGuard = beginDragGuard('row-resize');
     const onMove = (ev) => {
       const pct = ((ev.clientY - rect.top) / rect.height) * 100;
       setGraphPct(Math.max(20, Math.min(80, pct)));
     };
     const onUp = () => {
+      endGuard();
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };

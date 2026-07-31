@@ -523,10 +523,12 @@ export default function EditorGroup({
       {/* Content Area */}
       <div className="flex-1 min-h-0 overflow-hidden relative">
 
-        {/* Welcome screen — shown when no tab is active in single-group mode only.
-            In split mode, empty groups auto-close when the last tab is removed.
-            The brief empty state after a fresh split shows a minimal placeholder. */}
-        {!activeFile && hideTabBar && (
+        {/* Welcome screen — whenever no tab is active. In split mode an empty
+            group normally auto-closes, but until it does this beats an empty
+            pane, and it's the same component either way so the two paths can't
+            drift. WelcomeScreen is h-full with its own centred column, so it
+            sizes down to a split pane fine. */}
+        {!activeFile && (
           <WelcomeScreen
             onCreateFile={onCreateFile}
             onCreateFolder={onCreateFolder}
@@ -534,11 +536,6 @@ export default function EditorGroup({
             onOpenCommandPalette={onOpenCommandPalette}
             onFileOpen={onFileOpen}
           />
-        )}
-        {!activeFile && !hideTabBar && (
-          <div className="flex-1 flex items-center justify-center text-app-muted text-sm">
-            Open a file to get started
-          </div>
         )}
 
         {/* DEPRECATED: .canvas (TLDraw) format is no longer supported */}
