@@ -55,10 +55,42 @@
     transition: color .15s ease, background-color .15s ease, border-color .15s ease, font-size .15s ease, line-height .15s ease, letter-spacing .15s ease;
 }
 
-/* Selection color */
+/* Selection color — defaults to the theme accent so it tracks light/dark
+   themes; --editor-selection-color is only set when the user customizes it.
+   This native rule is the fallback for when SelectionLayer bails out
+   (huge selections); normally the drawn layer below replaces it. */
 .ProseMirror::selection,
 .ProseMirror *::selection {
-    background: var(--editor-selection-color, rgba(99, 102, 241, 0.2)) !important;
+    background: var(--editor-selection-color, rgb(var(--accent) / 0.25)) !important;
+}
+
+/* SelectionLayer (drawSelection-style painted selection).
+   Paints ABOVE the content as a translucent tint so blocks with opaque
+   backgrounds (code blocks, table cells) highlight correctly too. */
+.pm-selection-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+.pm-selection-chunk {
+    position: absolute;
+    background: var(--editor-selection-color, rgb(var(--accent) / 0.22));
+    border-radius: 3px;
+}
+/* Whole-block highlight for fully-selected tables/callouts/code/etc. */
+.pm-selection-chunk.pm-selection-block {
+    border-radius: 0.5rem;
+    box-shadow: 0 0 0 2px var(--editor-selection-color, rgb(var(--accent) / 0.22));
+}
+/* Whole-cell tint when a text selection sweeps through a table */
+.pm-selection-chunk.pm-selection-cell {
+    border-radius: 0;
+}
+/* While the layer is drawing, silence native painting (caret stays) */
+.ProseMirror.pm-native-selection-hidden::selection,
+.ProseMirror.pm-native-selection-hidden *::selection {
+    background: transparent !important;
 }
 
 /* Paragraph spacing */
@@ -161,13 +193,26 @@
     font-weight: 600;
     color: rgb(var(--text)) !important;
 }
+/* Excel-style cell range selection (prosemirror-tables CellSelection) */
+.tableWrapper .selectedCell,
+.ProseMirror .selectedCell {
+    border-color: rgb(var(--accent) / 0.6) !important;
+}
 .tableWrapper .selectedCell::after,
 .ProseMirror .selectedCell::after {
     content: "";
     position: absolute;
     left: 0; right: 0; top: 0; bottom: 0;
-    background: rgb(var(--accent) / 0.15);
+    background: rgb(var(--accent) / 0.12);
     pointer-events: none;
+}
+/* prosemirror-tables adds this class while a cell range is selected so the
+   native text selection doesn't double-paint on top of the cell overlay */
+.ProseMirror.ProseMirror-hideselection *::selection {
+    background: transparent !important;
+}
+.ProseMirror.ProseMirror-hideselection {
+    caret-color: transparent;
 }
 .tableWrapper .column-resize-handle,
 .ProseMirror .column-resize-handle {

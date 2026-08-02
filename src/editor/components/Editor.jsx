@@ -12,11 +12,13 @@ import { history, undo, redo } from 'prosemirror-history';
 import { splitListItem, liftListItem, sinkListItem } from 'prosemirror-schema-list';
 import { dropCursor } from 'prosemirror-dropcursor';
 import { gapCursor } from 'prosemirror-gapcursor';
+import { columnResizing, tableEditing, goToNextCell } from 'prosemirror-tables';
 import { InputRule, inputRules, wrappingInputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
 import { createEditorCommands, insertContent as pmInsertContent } from '../commands/index.js';
 
 // --- Extension plugin factories ---
 import { createBlockIdPlugin } from '../extensions/BlockId.js';
+import { createSelectionLayerPlugin } from '../extensions/SelectionLayer.js';
 import { createTaskSyntaxHighlightPlugin } from '../extensions/TaskSyntaxHighlight.js';
 import { createFoldingPlugins } from '../extensions/Folding.js';
 import { createMarkdownPastePlugin } from '../extensions/MarkdownPaste.js';
@@ -443,7 +445,14 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       keymap({ 'Mod-z': undo, 'Mod-y': redo, 'Mod-Shift-z': redo }),
       dropCursor(),
       gapCursor(),
+      // ── Tables ──────────────────────────────────────────────────────
+      // columnResizing must precede tableEditing. tableEditing provides
+      // CellSelection (drag/shift-click across cells) whose copy/paste
+      // serializes a real <table> fragment — pasteable into Excel/Sheets.
+      columnResizing(),
+      tableEditing(),
       // Trivial extensions
+      createSelectionLayerPlugin(),
       createBlockIdPlugin(),
       createTaskSyntaxHighlightPlugin(),
       ...createFoldingPlugins(),
@@ -459,6 +468,8 @@ const Editor = forwardRef(({ content, onContentChange, onEditorReady, isLoading 
       ...createGraphLinkPlugins(schema),
       ...createCodeBlockPlugins(schema),
       createCodeBlockIndentPlugin(),
+      // After CodeBlockIndent so Tab in a code block inside a cell still indents
+      keymap({ Tab: goToNextCell(1), 'Shift-Tab': goToNextCell(-1) }),
       ...createMathSnippetsPlugins(schema, { customSnippets: customSymbols }),
       createSymbolShortcutsPlugin({ customSymbols }),
       createMermaidInputRulesPlugin(schema),

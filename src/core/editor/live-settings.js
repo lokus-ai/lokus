@@ -81,7 +81,7 @@ class LiveEditorSettings {
       tableCellPadding: 12,
 
       // Selection
-      selectionColor: 'rgba(99, 102, 241, 0.2)'
+      selectionColor: null // null = use CSS fallback (theme accent)
     };
     
     this.settings = { ...this.defaultSettings };
@@ -105,6 +105,12 @@ class LiveEditorSettings {
         // Let it use the theme's default color instead
         if (config.editorSettings.tableHeaderBg === '#f8f9fa') {
           delete config.editorSettings.tableHeaderBg;
+        }
+
+        // Migration: drop old indigo selection default so it follows the
+        // theme accent instead (only users who actively picked a color keep it)
+        if (config.editorSettings.selectionColor === 'rgba(99, 102, 241, 0.2)') {
+          delete config.editorSettings.selectionColor;
         }
 
         this.settings = { ...this.defaultSettings, ...config.editorSettings };
@@ -260,8 +266,12 @@ class LiveEditorSettings {
     }
     root.style.setProperty('--editor-table-cell-padding', this.settings.tableCellPadding + 'px');
 
-    // Selection
-    root.style.setProperty('--editor-selection-color', this.settings.selectionColor);
+    // Selection — only set when customized (null = CSS fallback to theme accent)
+    if (this.settings.selectionColor) {
+      root.style.setProperty('--editor-selection-color', this.settings.selectionColor);
+    } else {
+      root.style.removeProperty('--editor-selection-color');
+    }
   }
   
   updateSetting(key, value) {
