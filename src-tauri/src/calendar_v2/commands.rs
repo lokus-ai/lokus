@@ -289,6 +289,142 @@ async fn finish_google_link(
     Ok(email)
 }
 
+/// Begin linking a Microsoft account (Outlook / 365 / personal). Same
+/// per-flow PKCE + loopback pattern as Google.
+#[tauri::command]
+pub async fn cal2_account_add_microsoft(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+) -> Result<String, String> {
+    use super::providers::microsoft as ms;
+    let client_id = std::env::var("MS_CLIENT_ID").map_err(|_| "MS_CLIENT_ID not set".to_string())?;
+
+    let flow_id = Uuid::new_v4().to_string();
+    let pkce = auth::pkce_pair();
+    let redirect = auth::redirect_uri();
+
+    let url = format!(
+        "{}?client_id={}&response_type=code&redirect_uri={}&response_mode=query&scope={}&state={}&code_challenge={}&code_challenge_method=S256&prompt=select_account",
+        ms::AUTH_URL,
+        urlencoding::encode(&client_id),
+        urlencoding::encode(&redirect),
+        urlencoding::encode(ms::SCOPES),
+        urlencoding::encode(&flow_id),
+        urlencoding::encode(&pkce.challenge),
+    );
+
+    let rx = auth::register_flow(&flow_id);
+    let store = store.inner().clone();
+    let flow_for_task = flow_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let code = match tokio::time::timeout(std::time::Duration::from_secs(300), rx).await {
+            Ok(Ok(code)) => code,
+            _ => {
+                auth::cancel_flow(&flow_for_task);
+                return;
+            }
+        };
+        match finish_microsoft_link(&code, &pkce.verifier, &redirect, &store).await {
+            Ok(email) => {
+                tracing::info!("calendar_v2: linked microsoft account {email}");
+                if let Some(engine) = app.try_state::<super::SyncEngine>() {
+                    engine.sync_now();
+                }
+                let _ = app.emit("calendar://account-linked", email);
+                emit_changed(&app);
+            }
+            Err(e) => {
+                tracing::error!("calendar_v2: microsoft link failed: {e}");
+                let _ = app.emit("calendar://account-link-failed", e);
+            }
+        }
+    });
+
+    Ok(url)
+}
+
+async fn finish_microsoft_link(
+    code: &str,
+    verifier: &str,
+    redirect: &str,
+    store: &CalendarStore,
+) -> Result<String, String> {
+    use super::providers::microsoft as ms;
+    let client_id = std::env::var("MS_CLIENT_ID").map_err(|_| "MS_CLIENT_ID not set")?;
+    let http = reqwest::Client::new();
+
+    let body: serde_json::Value = http
+        .post(ms::TOKEN_URL)
+        .form(&[
+            ("client_id", client_id.as_str()),
+            ("code", code),
+            ("code_verifier", verifier),
+            ("grant_type", "authorization_code"),
+            ("redirect_uri", redirect),
+            ("scope", ms::SCOPES),
+        ])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let access = body["access_token"].as_str().ok_or_else(|| format!("token exchange failed: {body}"))?;
+    let refresh = body["refresh_token"].as_str().map(String::from);
+    let ttl = body["expires_in"].as_u64().unwrap_or(3600);
+
+    let me: serde_json::Value = http
+        .get("https://graph.microsoft.com/v1.0/me")
+        .bearer_auth(access)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let email = me["mail"]
+        .as_str()
+        .or(me["userPrincipalName"].as_str())
+        .unwrap_or("microsoft account")
+        .to_string();
+
+    let now = now_ms();
+    let account = Account {
+        id: Uuid::new_v4().to_string(),
+        provider: "microsoft".into(),
+        label: email.clone(),
+        identity: email.clone(),
+        status: "connected".into(),
+        color: None,
+        config: serde_json::json!({}),
+        created_at: now,
+        updated_at: now,
+    };
+    let acc = account.clone();
+    store.with(move |c| store::upsert_account(c, &acc)).await?;
+    let identity = account.identity.clone();
+    let real_id: String = store
+        .with(move |c| {
+            c.query_row(
+                "SELECT id FROM accounts WHERE provider='microsoft' AND identity=?1",
+                rusqlite::params![identity],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+        })
+        .await?;
+    let now_s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    creds::store(
+        &real_id,
+        &creds::StoredCreds { access: access.to_string(), refresh, expires_at: Some(now_s + ttl) },
+    )?;
+    Ok(email)
+}
+
 /// Connect a CalDAV / iCloud account: verifies credentials + discovers the
 /// calendar home via the V1 client, then registers the account.
 #[tauri::command]

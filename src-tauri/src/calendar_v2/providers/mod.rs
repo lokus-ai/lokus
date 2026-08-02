@@ -2,6 +2,7 @@ pub mod caldav;
 pub mod common;
 pub mod google;
 pub mod ical;
+pub mod microsoft;
 
 use std::sync::Arc;
 
@@ -13,6 +14,7 @@ use super::models::Account;
 pub fn connector_for(account: &Account) -> Option<Arc<dyn CalendarConnector>> {
     match account.provider.as_str() {
         "google" => Some(Arc::new(google::GoogleConnector::new(account.id.clone()))),
+        "microsoft" => Some(Arc::new(microsoft::MicrosoftConnector::new(account.id.clone()))),
         "caldav" | "icloud" => Some(Arc::new(caldav::CalDavConnector::new(
             account.id.clone(),
             account.config.clone(),

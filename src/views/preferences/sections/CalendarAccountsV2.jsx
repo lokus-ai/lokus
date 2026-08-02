@@ -25,11 +25,11 @@ export default function CalendarAccountsV2() {
     useCalendarV2Store.getState().init();
   }, []);
 
-  const addGoogle = async () => {
+  const addOauth = async (fn) => {
     setBusy(true);
     setError(null);
     try {
-      await calendarV2.addGoogleAccount();
+      await fn();
       // Completion lands via calendar://changed once the browser flow finishes.
     } catch (e) {
       setError(String(e?.message || e));
@@ -78,11 +78,16 @@ export default function CalendarAccountsV2() {
         </div>
       ))}
 
-      <div className="pt-3 flex items-center gap-2">
-        <P.Button tone="primary" onClick={addGoogle} disabled={busy}>
-          {busy ? 'Opening browser…' : 'Add Google account'}
+      <div className="pt-3 flex items-center gap-2 flex-wrap">
+        <P.Button tone="primary" onClick={() => addOauth(calendarV2.addGoogleAccount)} disabled={busy}>
+          {busy ? 'Opening browser…' : 'Add Google'}
         </P.Button>
-        <span className="text-[11px] text-app-muted">Microsoft, iCloud and Notion arrive with the next phases.</span>
+        <P.Button onClick={() => addOauth(calendarV2.addMicrosoftAccount)} disabled={busy}>
+          Add Microsoft
+        </P.Button>
+        <span className="text-[11px] text-app-muted">
+          iCloud uses an app-specific password (below, legacy section for now). Notion arrives next.
+        </span>
       </div>
       {error && <P.Note tone="danger">{error}</P.Note>}
     </>

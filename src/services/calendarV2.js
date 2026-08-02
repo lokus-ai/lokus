@@ -141,6 +141,18 @@ export const calendarV2 = {
     await open(url);
     return url;
   },
+  async addMicrosoftAccount() {
+    const url = await invoke('cal2_account_add_microsoft');
+    const { open } = await import('@tauri-apps/plugin-shell');
+    await open(url);
+    return url;
+  },
+  async addCaldavAccount(serverUrl, username, password, label = null) {
+    return invoke('cal2_account_add_caldav', { serverUrl, username, password, label });
+  },
+  async addIcalAccount(url, name = null) {
+    return invoke('cal2_account_add_ical', { url, name });
+  },
   async removeAccount(accountId) {
     return invoke('cal2_account_remove', { accountId });
   },
