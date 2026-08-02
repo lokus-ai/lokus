@@ -1528,7 +1528,7 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
   // Get calendar color
   const getCalendarColor = (calendarId) => {
     const calendar = calendars?.find(c => c.id === calendarId);
-    return calendar?.color || '#6366f1'; // default indigo
+    return calendar?.color || '#6366f1';
   };
 
   // Calculate event position and height
@@ -1755,11 +1755,16 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                       >
                         <GripVertical className="w-3 h-3" style={{ color: getCalendarColor(event.calendar_id) }} />
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-[11px] font-semibold truncate leading-tight" style={{ color: getCalendarColor(event.calendar_id) }}>
+                      <div className={`min-w-0 ${event.pending ? 'opacity-60' : ''}`}>
+                        <div className="text-[11px] font-semibold truncate leading-tight" style={{ color: event.color || getCalendarColor(event.calendar_id) }}>
                           {event.title}
+                          {event.also_in?.length > 0 && (
+                            <span className="ml-1 text-[9px] font-normal opacity-60" title={`Also in ${event.also_in.length} other calendar${event.also_in.length > 1 ? 's' : ''}`}>
+                              ⧉{event.also_in.length + 1}
+                            </span>
+                          )}
                         </div>
-                        <div className="text-[10px] opacity-70 tabular-nums" style={{ color: getCalendarColor(event.calendar_id) }}>
+                        <div className="text-[10px] opacity-70 tabular-nums" style={{ color: event.color || getCalendarColor(event.calendar_id) }}>
                           {format(parseISO(event.start), 'h:mm a')}
                         </div>
                       </div>
@@ -2093,9 +2098,14 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
                   >
                     <GripVertical className="w-3.5 h-3.5" style={{ color: getCalendarColor(event.calendar_id) }} />
                   </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold" style={{ color: getCalendarColor(event.calendar_id) }}>
+                  <div className={`min-w-0 ${event.pending ? 'opacity-60' : ''}`}>
+                    <div className="text-xs font-semibold" style={{ color: event.color || getCalendarColor(event.calendar_id) }}>
                       {event.title}
+                      {event.also_in?.length > 0 && (
+                        <span className="ml-1 text-[10px] font-normal opacity-60" title={`Also in ${event.also_in.length} other calendar${event.also_in.length > 1 ? 's' : ''}`}>
+                          ⧉{event.also_in.length + 1}
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] opacity-70 tabular-nums" style={{ color: getCalendarColor(event.calendar_id) }}>
                       {format(parseISO(event.start), 'h:mm a')} – {format(parseISO(event.end), 'h:mm a')}

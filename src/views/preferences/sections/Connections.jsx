@@ -24,7 +24,6 @@
  */
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { CalendarSettings } from "../../../components/Calendar/index.js";
 import CalendarAccountsV2 from './CalendarAccountsV2.jsx';
 import calendarService from "../../../services/calendar.js";
 import * as P from "../primitives.jsx";
@@ -156,9 +155,6 @@ export default function Connections({
         <CalendarAccountsV2 />
       </P.Group>
 
-      <P.Group label="Google Calendar (legacy)">
-        <CalendarSettings />
-      </P.Group>
 
       <P.Group label="iCal subscriptions" hint="Read-only feeds from any webcal:// or https:// address.">
         <form onSubmit={addSubscription} className="flex items-center gap-2 pb-3 border-b border-app-border/60">

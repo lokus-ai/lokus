@@ -28,9 +28,7 @@ import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/short
 import { PluginProvider } from "./hooks/usePlugins.jsx";
 import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
-import { CalendarProvider } from "./contexts/CalendarContext.jsx";
 import { ScheduleProvider } from "./contexts/ScheduleContext.jsx";
-import { useFeatureFlags } from "./contexts/RemoteConfigContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
 import markdownSyntaxConfig from "./core/markdown/syntax-config.js";
 import editorConfigCache from "./core/editor/config-cache.js";
@@ -52,12 +50,9 @@ const LoadingFallback = () => (
 
 // Conditionally wrap providers based on feature flags
 const FeatureGatedProviders = ({ children }) => {
-  const featureFlags = useFeatureFlags();
   let content = children;
   content = <ScheduleProvider>{content}</ScheduleProvider>;
-  if (featureFlags.enable_calendar) {
-    content = <CalendarProvider>{content}</CalendarProvider>;
-  }
+  // Calendar V2: no provider needed — the zustand store self-initializes.
   return content;
 };
 
