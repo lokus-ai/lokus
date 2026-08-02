@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -24,6 +24,7 @@ import {
   ListTodo
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { invoke } from '@tauri-apps/api/core';
 import {
   format,
   startOfMonth,
@@ -133,6 +134,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
       return;
     }
 
+    setEventAnchor(null); // navigation-driven open → centered
     setSelectedEvent(targetEvent);
     setCalendarNavigationTarget(null);
   }, [calendarNavigationTarget, setCalendarNavigationTarget, viewEvents]);
@@ -588,7 +590,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
   };
 
   // Open create event modal
-  const openCreateModal = useCallback((date = null, startHour = null) => {
+  const openCreateModal = useCallback((date = null, startHour = null, anchor = null) => {
     const eventDate = date || currentDate;
     let startTime, endTime, endDate;
 
@@ -658,7 +660,8 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
       endDate: endDate || eventDate,
       startTime,
       endTime,
-      allDay: false
+      allDay: false,
+      anchor
     });
     setShowCreateModal(true);
   }, [currentDate]);
@@ -842,13 +845,18 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
     });
   }, [calendars]);
 
+  // Anchor for the event-details popover (click position; null = centered)
+  const [eventAnchor, setEventAnchor] = useState(null);
+
   // Handle click on event (for MonthView which doesn't use drag system)
-  const handleEventClick = useCallback((event) => {
+  const handleEventClick = useCallback((event, e = null) => {
+    setEventAnchor(e ? { x: e.clientX, y: e.clientY } : null);
     setSelectedEvent(event);
   }, []);
 
   // Handle double-click on event to open details modal
-  const handleEventDoubleClick = useCallback((event) => {
+  const handleEventDoubleClick = useCallback((event, e = null) => {
+    setEventAnchor(e ? { x: e.clientX, y: e.clientY } : null);
     setSelectedEvent(event);
   }, []);
 
@@ -1020,26 +1028,26 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
   return (
     <div className="flex flex-col h-full bg-app-bg">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-app-border bg-app-panel">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-app-border/60">
+        <div className="flex items-center gap-3">
           {/* Navigation */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={goToToday}
+              className="px-2.5 py-1 mr-1 text-xs font-medium rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
+            >
+              Today
+            </button>
             <button
               onClick={goToPrevious}
-              className="p-2 hover:bg-app-bg rounded transition-colors"
+              className="p-1.5 rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
               title="Previous"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
-              onClick={goToToday}
-              className="px-3 py-1.5 text-sm border border-app-border rounded hover:bg-app-bg transition-colors"
-            >
-              Today
-            </button>
-            <button
               onClick={goToNext}
-              className="p-2 hover:bg-app-bg rounded transition-colors"
+              className="p-1.5 rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
               title="Next"
             >
               <ChevronRight className="w-4 h-4" />
@@ -1047,20 +1055,20 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
           </div>
 
           {/* Title */}
-          <h1 className="text-lg font-semibold">
+          <h1 className="text-sm font-semibold text-app-text">
             {getHeaderTitle()}
           </h1>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {/* Task Sidebar Toggle - only in week/day views */}
           {(viewMode === 'week' || viewMode === 'day') && (
             <button
               onClick={() => setShowTaskSidebar(prev => !prev)}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`p-1.5 rounded-md transition-colors ${
                 showTaskSidebar
-                  ? 'bg-app-accent/15 text-app-accent'
-                  : 'hover:bg-app-bg text-app-muted hover:text-app-text'
+                  ? 'bg-[rgb(var(--text)/0.08)] text-app-text'
+                  : 'text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)]'
               }`}
               title={showTaskSidebar ? 'Hide task sidebar' : 'Schedule tasks'}
             >
@@ -1072,35 +1080,35 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
           {writableCalendars.length > 0 && (
             <button
               onClick={() => openCreateModal()}
-              className="p-2 hover:bg-app-bg rounded-lg transition-colors text-app-muted hover:text-app-text"
+              className="p-1.5 rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
               title="Create event"
             >
               <Plus className="w-4 h-4" />
             </button>
           )}
 
-          {/* View Mode Selector */}
-          <div className="flex items-center border border-app-border rounded overflow-hidden">
+          {/* View Mode Selector — segmented control */}
+          <div className="flex items-center gap-0.5 mx-1 p-0.5 rounded-lg bg-[rgb(var(--text)/0.06)]">
             <button
               onClick={() => setViewMode('month')}
-              className={`p-2 transition-colors ${viewMode === 'month' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'}`}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'month' ? 'bg-app-bg text-app-text shadow-sm' : 'text-app-muted hover:text-app-text'}`}
               title="Month view"
             >
-              <Grid3X3 className="w-4 h-4" />
+              <Grid3X3 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setViewMode('week')}
-              className={`p-2 transition-colors ${viewMode === 'week' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'}`}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'week' ? 'bg-app-bg text-app-text shadow-sm' : 'text-app-muted hover:text-app-text'}`}
               title="Week view"
             >
-              <LayoutGrid className="w-4 h-4" />
+              <LayoutGrid className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setViewMode('day')}
-              className={`p-2 transition-colors ${viewMode === 'day' ? 'bg-app-accent text-app-accent-fg' : 'hover:bg-app-bg'}`}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === 'day' ? 'bg-app-bg text-app-text shadow-sm' : 'text-app-muted hover:text-app-text'}`}
               title="Day view"
             >
-              <List className="w-4 h-4" />
+              <List className="w-3.5 h-3.5" />
             </button>
           </div>
 
@@ -1108,20 +1116,20 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
           <button
             onClick={triggerSync}
             disabled={syncInProgress}
-            className="p-2 hover:bg-app-bg rounded transition-colors"
+            className="p-1.5 rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
             title={viewEventsLoading ? 'Loading events...' : 'Sync calendars'}
           >
-            <RefreshCw className={`w-4 h-4 ${syncInProgress || viewEventsLoading ? 'animate-spin' : ''} ${viewEventsLoading && !syncInProgress ? 'text-app-muted' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${syncInProgress || viewEventsLoading ? 'animate-spin' : ''}`} />
           </button>
 
           {/* Settings */}
           {onOpenSettings && (
             <button
               onClick={onOpenSettings}
-              className="p-2 hover:bg-app-bg rounded transition-colors"
+              className="p-1.5 rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
               title="Calendar settings"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
@@ -1165,6 +1173,8 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
                   <WeekView
                     currentDate={currentDate}
                     selectedDate={selectedDate}
+                    onEventClick={handleEventClick}
+                    createPreview={showCreateModal ? createEventData : null}
                     onSelectDate={setSelectedDate}
                     onDayDoubleClick={(date) => {
                       setCurrentDate(date);
@@ -1189,6 +1199,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
                 {viewMode === 'day' && (
                   <DayView
                     currentDate={currentDate}
+                    createPreview={showCreateModal ? createEventData : null}
                     getEventsForDate={getEventsForDate}
                     calendars={calendars}
                     onCreateEvent={openCreateModal}
@@ -1228,6 +1239,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
       {selectedEvent && (
         <EventDetailsModal
           event={selectedEvent}
+          anchor={eventAnchor}
           calendars={calendars}
           onClose={() => setSelectedEvent(null)}
           onOptimisticUpdate={(updatedEvent) => {
@@ -1253,6 +1265,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
       {showCreateModal && createEventData && (
         <CreateEventModal
           initialData={createEventData}
+          onPreviewChange={(patch) => setCreateEventData(prev => (prev ? { ...prev, ...patch } : prev))}
           calendars={writableCalendars}
           onClose={() => {
             setShowCreateModal(false);
@@ -1288,6 +1301,62 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
 }
 
 /**
+ * AnchoredPopover — Apple-Calendar-style popover that opens next to the
+ * clicked slot/event (falls back to centered when no anchor). No dimmed
+ * backdrop; a transparent layer catches outside clicks. Scale/fade-in via
+ * .lokus-popover with transform-origin at the anchor side.
+ */
+function AnchoredPopover({ anchor, onClose, width = 360, children }) {
+  const ref = useRef(null);
+  const [style, setStyle] = useState(null);
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const h = el.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    if (!anchor) {
+      setStyle({ left: (vw - width) / 2, top: Math.max(24, (vh - h) / 2), origin: '50% 50%', side: null });
+      return;
+    }
+
+    let left = anchor.x + 14;
+    let side = 'left'; // arrow on the popover's left edge (popover right of anchor)
+    let originX = '0%';
+    if (left + width > vw - 8) {
+      left = Math.max(8, anchor.x - width - 14);
+      side = 'right';
+      originX = '100%';
+    }
+    const top = Math.min(Math.max(8, anchor.y - 60), Math.max(8, vh - h - 8));
+    const arrowTop = Math.min(Math.max(anchor.y - top, 14), Math.max(h - 14, 14));
+    setStyle({ left, top, origin: `${originX} ${arrowTop}px`, side, arrowTop });
+  }, [anchor, width]);
+
+  return (
+    <div className="fixed inset-0 z-50" onMouseDown={onClose}>
+      <div
+        ref={ref}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`absolute lokus-popover ${style ? '' : 'invisible'}`}
+        style={{ left: style?.left, top: style?.top, width, transformOrigin: style?.origin }}
+      >
+        {children}
+        {/* Chat-bubble tail pointing at the anchor (Apple Calendar style) */}
+        {style?.side && (
+          <div
+            className={`lokus-popover-arrow lokus-popover-arrow-${style.side}`}
+            style={{ top: style.arrowTop }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Month View Component
  */
 function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, getEventsForDate, calendars, onEventClick, onCreateEvent, onContextMenu }) {
@@ -1311,18 +1380,18 @@ function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, 
   };
 
   return (
-    <div className="p-4">
+    <div className="flex flex-col h-full">
       {/* Week day headers */}
-      <div className="grid grid-cols-7 mb-2">
+      <div className="grid grid-cols-7 border-b border-app-border/60">
         {weekDays.map(day => (
-          <div key={day} className="text-center text-xs font-medium text-app-muted py-2">
+          <div key={day} className="text-center text-[10px] font-semibold uppercase tracking-wider text-app-muted py-2">
             {day}
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-px bg-app-border rounded overflow-hidden">
+      <div className="flex-1 grid grid-cols-7" style={{ gridAutoRows: '1fr' }}>
         {weeks.map((week, weekIndex) => (
           week.map((day, dayIndex) => {
             const events = getEventsForDate(day);
@@ -1342,9 +1411,11 @@ function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, 
                 onDoubleClick={() => onDayDoubleClick && onDayDoubleClick(day)}
                 onContextMenu={(e) => onContextMenu?.(e, 'dayCell', { date: day })}
                 className={`
-                  min-h-[100px] p-2 bg-app-bg cursor-pointer transition-colors group relative
-                  ${isCurrentMonth ? 'hover:bg-app-panel' : 'bg-app-panel/50'}
-                  ${isSelected ? 'ring-2 ring-app-accent ring-inset' : ''}
+                  min-h-[96px] p-1.5 cursor-pointer transition-colors group relative
+                  border-b border-r border-app-border/40
+                  ${dayIndex === 0 ? 'border-l-0' : ''}
+                  ${isCurrentMonth ? 'hover:bg-[rgb(var(--text)/0.03)]' : ''}
+                                    ${isSelected ? 'ring-1 ring-app-accent/60 ring-inset' : ''}
                 `}
               >
                 {/* Add event button - appears on hover */}
@@ -1354,16 +1425,16 @@ function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, 
                       e.stopPropagation();
                       onCreateEvent(day);
                     }}
-                    className="absolute top-1 right-1 w-5 h-5 rounded bg-app-bg/80 text-app-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-app-border hover:text-app-text"
+                    className="absolute top-1 right-1 w-5 h-5 rounded-md text-app-muted opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center hover:bg-[rgb(var(--text)/0.08)] hover:text-app-text"
                     title="Create event"
                   >
                     <Plus className="w-3 h-3" />
                   </button>
                 )}
                 <div className={`
-                  text-sm font-medium mb-1
-                  ${!isCurrentMonth ? 'text-app-muted' : ''}
-                  ${isTodayDate ? 'w-6 h-6 rounded-full bg-app-accent text-app-accent-fg flex items-center justify-center' : ''}
+                  text-xs font-medium mb-1 tabular-nums
+                  ${!isCurrentMonth ? 'text-app-muted/40' : 'text-app-text'}
+                  ${isTodayDate ? 'w-5 h-5 rounded-full bg-[rgb(var(--text)/0.9)] text-app-bg flex items-center justify-center text-[11px]' : ''}
                 `}>
                   {format(day, 'd')}
                 </div>
@@ -1376,27 +1447,28 @@ function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, 
                         key={event.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          onEventClick?.(event);
+                          onEventClick?.(event, e);
                         }}
                         onContextMenu={(e) => {
                           e.stopPropagation();
                           onContextMenu?.(e, 'event', { event, date: day });
                         }}
-                        className={`text-xs truncate px-1 py-0.5 rounded cursor-pointer hover:opacity-80 transition-opacity ${
+                        className={`text-[11px] truncate px-1.5 py-px rounded cursor-pointer hover:brightness-110 transition-all leading-[1.5] ${
                           isAllDay ? 'font-medium' : ''
                         }`}
                         style={{
-                          backgroundColor: isAllDay ? color : `${color}20`,
-                          color: isAllDay ? '#fff' : color
+                          backgroundColor: isAllDay ? `${color}2b` : 'transparent',
+                          color,
                         }}
                         title={event.title}
                       >
+                        {!isAllDay && <span className="inline-block w-1 h-1 rounded-full mr-1 align-middle" style={{ backgroundColor: color }} />}
                         {event.title}
                       </div>
                     );
                   })}
                   {displayEvents.length > 3 && (
-                    <div className="text-xs text-app-muted px-1">
+                    <div className="text-[10px] text-app-muted px-1.5">
                       +{displayEvents.length - 3} more
                     </div>
                   )}
@@ -1413,7 +1485,7 @@ function MonthView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, 
 /**
  * Week View Component
  */
-function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventDoubleClick, onEventMouseDown, onEventDrop, dragState, scheduleBlocks, getScheduleBlocksForDate, tasksCache, onScheduleBlockContextMenu, onResizeScheduleBlock }) {
+function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventClick, onEventDoubleClick, createPreview, onEventMouseDown, onEventDrop, dragState, scheduleBlocks, getScheduleBlocksForDate, tasksCache, onScheduleBlockContextMenu, onResizeScheduleBlock }) {
   const weekStart = startOfWeek(currentDate);
   const weekEnd = endOfWeek(currentDate);
   const days = eachDayOfInterval({ start: weekStart, end: weekEnd });
@@ -1461,7 +1533,7 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
     const hour = START_HOUR + (y / HOUR_HEIGHT);
     // Snap to 15 min intervals
     const snappedHour = Math.floor(hour * 4) / 4;
-    onCreateEvent?.(day, snappedHour);
+    onCreateEvent?.(day, snappedHour, { x: e.clientX, y: e.clientY });
   };
 
   // Handle right-click on time grid
@@ -1518,8 +1590,8 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
     return {
       top: `${top}px`,
       height: `${height}px`,
-      backgroundColor: `${color}20`,
-      borderLeft: `3px solid ${color}`,
+      backgroundColor: `${color}1a`,
+      borderLeft: `2px solid ${color}cc`,
     };
   };
 
@@ -1534,44 +1606,47 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
   };
 
   return (
-    <div className="flex flex-col h-full">
+    // ONE scroll container for header + grid: if the grid scrolled in its own
+    // container, its scrollbar shrank the columns and the vertical lines no
+    // longer lined up with the day headers above.
+    <div className="h-full overflow-auto">
+      <div className="sticky top-0 z-20 bg-app-bg">
       {/* Day headers */}
-      <div className="flex border-b border-app-border bg-app-panel sticky top-0 z-10">
-        <div className="w-16 flex-shrink-0" />
+      <div className="flex border-b border-app-border/60 bg-app-bg">
+        <div className="w-14 flex-shrink-0" />
         {days.map(day => (
           <div
             key={day.toISOString()}
             onClick={() => onSelectDate(day)}
             onDoubleClick={() => onDayDoubleClick && onDayDoubleClick(day)}
-            className={`
-              flex-1 text-center py-2 cursor-pointer hover:bg-app-bg transition-colors border-l border-app-border
-              ${isToday(day) ? 'bg-app-accent/10' : ''}
-            `}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2 cursor-pointer hover:bg-[rgb(var(--text)/0.03)] transition-colors"
           >
-            <div className="text-xs text-app-muted">
+            <span className={`text-[10px] font-medium uppercase tracking-wider ${isToday(day) ? 'text-app-text' : 'text-app-muted/80'}`}>
               {format(day, 'EEE')}
-            </div>
-            <div className={`
-              text-lg font-medium
-              ${isToday(day) ? 'w-8 h-8 rounded-full bg-app-accent text-app-accent-fg flex items-center justify-center mx-auto' : ''}
+            </span>
+            <span className={`
+              text-xs font-semibold tabular-nums
+              ${isToday(day)
+                ? 'w-[18px] h-[18px] rounded-[5px] bg-[rgb(var(--text)/0.9)] text-app-bg flex items-center justify-center text-[11px]'
+                : 'text-app-text'}
             `}>
               {format(day, 'd')}
-            </div>
+            </span>
           </div>
         ))}
       </div>
 
       {/* All-day events row */}
-      <div className="flex border-b border-app-border bg-app-panel/50 min-h-[36px]">
-        <div className="w-16 flex-shrink-0 text-xs text-app-muted py-2 px-2 text-right">
-          All-day
+      <div className="flex border-b border-app-border/60 min-h-[28px]">
+        <div className="w-14 flex-shrink-0 text-[10px] text-app-muted/70 py-1.5 pr-2 text-right">
+          all-day
         </div>
         {days.map(day => {
           const allDayEvents = getAllDayEvents(day);
           return (
             <div
               key={day.toISOString()}
-              className="flex-1 border-l border-app-border p-1 flex flex-col gap-1"
+              className="flex-1 border-l border-app-border/40 p-0.5 flex flex-col gap-0.5"
               onContextMenu={(e) => onContextMenu?.(e, 'allDaySlot', { date: day })}
             >
               {allDayEvents.map(event => {
@@ -1579,13 +1654,13 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                 return (
                   <div
                     key={event.id}
-                    onClick={() => onEventClick?.(event)}
+                    onClick={(e) => onEventClick?.(event, e)}
                     onContextMenu={(e) => {
                       e.stopPropagation();
                       onContextMenu?.(e, 'event', { event, date: day });
                     }}
-                    className="text-xs truncate px-2 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity font-medium"
-                    style={{ backgroundColor: color, color: '#fff' }}
+                    className="text-[11px] truncate px-1.5 py-0.5 rounded-md cursor-pointer hover:opacity-80 transition-opacity font-medium"
+                    style={{ backgroundColor: `${color}2b`, color }}
                     title={event.title}
                   >
                     {event.title}
@@ -1597,20 +1672,38 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
         })}
       </div>
 
+      </div>
+
       {/* Time grid */}
-      <div className="flex-1 overflow-auto">
-        <div className="flex" style={{ height: `${(END_HOUR - START_HOUR + 1) * HOUR_HEIGHT}px` }}>
+      <div>
+        <div className="flex relative" style={{ height: `${(END_HOUR - START_HOUR + 1) * HOUR_HEIGHT}px` }}>
+          {/* Faint current-time hairline across the whole week (Apple style) */}
+          {todayInWeek && timeIndicatorPosition !== null && (
+            <div
+              className="absolute left-14 right-0 h-px bg-red-500/25 z-[5] pointer-events-none"
+              style={{ top: `${timeIndicatorPosition}px` }}
+            />
+          )}
           {/* Time labels */}
-          <div className="w-16 flex-shrink-0 relative">
+          <div className="w-14 flex-shrink-0 relative">
             {timeSlots.map(hour => (
               <div
                 key={hour}
-                className="absolute w-full text-xs text-app-muted px-2 text-right"
+                className="absolute w-full text-[10px] text-app-muted/70 pr-2 text-right -translate-y-1/2 tabular-nums"
                 style={{ top: `${(hour - START_HOUR) * HOUR_HEIGHT}px` }}
               >
-                {format(new Date().setHours(hour, 0), 'h a')}
+                {hour !== START_HOUR && format(new Date().setHours(hour, 0), 'h a')}
               </div>
             ))}
+            {/* Current time badge (Apple Calendar style) */}
+            {todayInWeek && timeIndicatorPosition !== null && (
+              <div
+                className="absolute right-0.5 -translate-y-1/2 z-10 px-1.5 py-px rounded-full bg-red-500 text-white text-[9px] font-semibold tabular-nums"
+                style={{ top: `${timeIndicatorPosition}px` }}
+              >
+                {format(currentTime, 'h:mm')}
+              </div>
+            )}
           </div>
 
           {/* Day columns - clickable to create events */}
@@ -1624,7 +1717,7 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                 data-day-iso={day.toISOString()}
                 data-start-hour={START_HOUR}
                 data-hour-height={HOUR_HEIGHT}
-                className={`flex-1 relative border-l border-app-border cursor-pointer ${dragState?.isDragging ? 'bg-app-accent/5' : ''}`}
+                className={`flex-1 relative border-l border-app-border/40 cursor-pointer ${dragState?.isDragging ? 'bg-app-accent/5' : ''}`}
                 onClick={(e) => handleTimeGridClick(day, e)}
                 onContextMenu={(e) => handleTimeGridContextMenu(day, e)}
                 onMouseUp={(e) => handleTimeGridMouseUp(day, e)}
@@ -1633,7 +1726,7 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                 {timeSlots.map(hour => (
                   <div
                     key={hour}
-                    className="absolute w-full border-t border-app-border/50 pointer-events-none"
+                    className="absolute w-full border-t border-app-border/30 pointer-events-none"
                     style={{ top: `${(hour - START_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
                   />
                 ))}
@@ -1641,12 +1734,9 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                 {/* Current time indicator - only on today's column */}
                 {isToday(day) && timeIndicatorPosition !== null && (
                   <div
-                    className="absolute left-0 right-0 z-50 pointer-events-none flex items-center"
+                    className="absolute left-0 right-0 z-50 pointer-events-none -translate-y-1/2 h-[2px] bg-red-500"
                     style={{ top: `${timeIndicatorPosition}px` }}
-                  >
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500 -ml-1 shadow-sm" />
-                    <div className="flex-1 h-0.5 bg-red-500 shadow-sm" />
-                  </div>
+                  />
                 )}
 
                 {/* Events */}
@@ -1670,13 +1760,13 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                       key={event.id}
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (!isDragging) onEventDoubleClick?.(event);
+                        if (!isDragging) onEventDoubleClick?.(event, e);
                       }}
                       onContextMenu={(e) => {
                         e.stopPropagation();
                         onContextMenu?.(e, 'event', { event, date: day });
                       }}
-                      className={`group absolute rounded-r px-1 py-1 hover:opacity-90 overflow-hidden select-none cursor-pointer ${
+                      className={`group absolute rounded-md px-1.5 py-1 hover:brightness-110 overflow-hidden select-none cursor-pointer ${
                         isDragging ? 'opacity-70 scale-105 ring-2 ring-app-accent shadow-lg pointer-events-none' : 'transition-all'
                       }`}
                       style={{
@@ -1688,37 +1778,79 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
                       }}
                       title={event.title}
                     >
-                      <div className="flex items-start gap-1">
-                        {/* Drag handle */}
-                        <div
-                          onMouseDown={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                            onEventMouseDown?.(event, e);
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            e.preventDefault();
-                          }}
-                          className="flex-shrink-0 cursor-grab active:cursor-grabbing"
-                          title="Drag to move"
-                        >
-                          <GripVertical className="w-3.5 h-3.5" style={{ color: getCalendarColor(event.calendar_id) }} />
+                      {/* Drag handle — floats top-right on hover, no text reflow */}
+                      <div
+                        onMouseDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          onEventMouseDown?.(event, e);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                        className="absolute top-0.5 right-0.5 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 transition-opacity"
+                        title="Drag to move"
+                      >
+                        <GripVertical className="w-3 h-3" style={{ color: getCalendarColor(event.calendar_id) }} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold truncate leading-tight" style={{ color: getCalendarColor(event.calendar_id) }}>
+                          {event.title}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium truncate" style={{ color: getCalendarColor(event.calendar_id) }}>
-                            {event.title}
-                          </div>
-                          <div className="text-xs opacity-70" style={{ color: getCalendarColor(event.calendar_id) }}>
-                            {format(parseISO(event.start), 'h:mm a')}
-                          </div>
+                        <div className="text-[10px] opacity-70 tabular-nums" style={{ color: getCalendarColor(event.calendar_id) }}>
+                          {format(parseISO(event.start), 'h:mm a')}
                         </div>
                       </div>
                     </div>
                   );
                 })}
 
-                {/* Schedule Blocks (task time blocks) */}
+                {/* New-event placeholder while the create popover is open (Apple style) */}
+                {createPreview && !createPreview.allDay && isSameDay(day, createPreview.date) && (() => {
+                  const [sh, sm] = (createPreview.startTime || '09:00').split(':').map(Number);
+                  const [eh, em] = (createPreview.endTime || '10:00').split(':').map(Number);
+                  const startH = sh + sm / 60;
+                  const endH = eh + em / 60;
+                  if (endH <= START_HOUR || startH >= END_HOUR + 1) return null;
+                  const top = (Math.max(startH, START_HOUR) - START_HOUR) * HOUR_HEIGHT;
+                  const height = Math.max((Math.min(endH, END_HOUR + 1) - Math.max(startH, START_HOUR)) * HOUR_HEIGHT, 18);
+                  return (
+                    <div
+                      className="absolute left-0.5 right-1 rounded-md bg-app-accent/25 ring-1 ring-app-accent/60 px-1.5 py-1 z-40 pointer-events-none overflow-hidden"
+                      style={{ top: `${top}px`, height: `${height}px` }}
+                    >
+                      <div className="text-[11px] font-semibold text-app-accent leading-tight">New Event</div>
+                      <div className="text-[10px] text-app-accent/80 tabular-nums">
+                        {format(new Date().setHours(sh, sm), 'h:mm')} – {format(new Date().setHours(eh, em), 'h:mm a')}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* New-event placeholder while the create popover is open (Apple style) */}
+            {createPreview && !createPreview.allDay && isSameDay(currentDate, createPreview.date) && (() => {
+              const [sh, sm] = (createPreview.startTime || '09:00').split(':').map(Number);
+              const [eh, em] = (createPreview.endTime || '10:00').split(':').map(Number);
+              const startH = sh + sm / 60;
+              const endH = eh + em / 60;
+              if (endH <= START_HOUR || startH >= END_HOUR + 1) return null;
+              const top = (Math.max(startH, START_HOUR) - START_HOUR) * HOUR_HEIGHT;
+              const height = Math.max((Math.min(endH, END_HOUR + 1) - Math.max(startH, START_HOUR)) * HOUR_HEIGHT, 18);
+              return (
+                <div
+                  className="absolute left-0.5 right-1 rounded-md bg-app-accent/25 ring-1 ring-app-accent/60 px-1.5 py-1 z-40 pointer-events-none overflow-hidden"
+                  style={{ top: `${top}px`, height: `${height}px` }}
+                >
+                  <div className="text-[11px] font-semibold text-app-accent leading-tight">New Event</div>
+                  <div className="text-[10px] text-app-accent/80 tabular-nums">
+                    {format(new Date().setHours(sh, sm), 'h:mm')} – {format(new Date().setHours(eh, em), 'h:mm a')}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Schedule Blocks (task time blocks) */}
                 {getScheduleBlocksForDate && getScheduleBlocksForDate(day).map((block, idx) => {
                   const task = tasksCache?.get(block.task_id);
                   return (
@@ -1745,7 +1877,7 @@ function WeekView({ currentDate, selectedDate, onSelectDate, onDayDoubleClick, g
 /**
  * Day View Component
  */
-function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventClick, onEventDoubleClick, onEventMouseDown, onEventDrop, dragState, scheduleBlocks, getScheduleBlocksForDate, tasksCache, onScheduleBlockContextMenu, onResizeScheduleBlock }) {
+function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onContextMenu, onEventClick, onEventDoubleClick, createPreview, onEventMouseDown, onEventDrop, dragState, scheduleBlocks, getScheduleBlocksForDate, tasksCache, onScheduleBlockContextMenu, onResizeScheduleBlock }) {
   const events = getEventsForDate(currentDate);
   const allDayEvents = events.filter(e => e.all_day);
   const timedEvents = events.filter(e => !e.all_day);
@@ -1792,7 +1924,7 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
     const hour = START_HOUR + (y / HOUR_HEIGHT);
     // Snap to 15 min intervals
     const snappedHour = Math.floor(hour * 4) / 4;
-    onCreateEvent?.(currentDate, snappedHour);
+    onCreateEvent?.(currentDate, snappedHour, { x: e.clientX, y: e.clientY });
   };
 
   // Handle right-click on time grid
@@ -1848,19 +1980,21 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
     return {
       top: `${top}px`,
       height: `${height}px`,
-      backgroundColor: `${color}20`,
-      borderLeft: `3px solid ${color}`,
+      backgroundColor: `${color}1a`,
+      borderLeft: `2px solid ${color}cc`,
     };
   };
 
   return (
-    <div className="flex flex-col h-full">
+    // Single scroll container (see WeekView note): keeps the all-day row and
+    // the time grid the same width so their vertical lines align.
+    <div className="h-full overflow-auto">
       {/* All-day events - always show this section */}
-      <div className="border-b border-app-border px-4 py-3 bg-app-panel">
+      <div className="border-b border-app-border/60 px-4 py-2 sticky top-0 z-20 bg-app-bg">
         <div className="flex items-center gap-4">
-          <div className="text-xs text-app-muted w-16 text-right">All-day</div>
+          <div className="text-[10px] text-app-muted/70 w-14 text-right">all-day</div>
           <div
-            className="flex-1 flex flex-wrap gap-2 min-h-[28px]"
+            className="flex-1 flex flex-wrap gap-1.5 min-h-[22px] items-center"
             onContextMenu={(e) => onContextMenu?.(e, 'allDaySlot', { date: currentDate })}
           >
             {allDayEvents.length > 0 ? (
@@ -1869,39 +2003,48 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
                 return (
                   <div
                     key={event.id}
-                    onClick={() => onEventClick?.(event)}
+                    onClick={(e) => onEventClick?.(event, e)}
                     onContextMenu={(e) => {
                       e.stopPropagation();
                       onContextMenu?.(e, 'event', { event, date: currentDate });
                     }}
-                    className="text-sm px-3 py-1 rounded cursor-pointer hover:opacity-80 transition-opacity font-medium"
-                    style={{ backgroundColor: color, color: '#fff' }}
+                    className="text-[11px] px-2 py-0.5 rounded-md cursor-pointer hover:brightness-110 transition-all font-medium"
+                    style={{ backgroundColor: `${color}2b`, color }}
                   >
                     {event.title}
                   </div>
                 );
               })
             ) : (
-              <span className="text-xs text-app-muted italic">No all-day events</span>
+              <span className="text-[11px] text-app-muted/50">No all-day events</span>
             )}
           </div>
         </div>
       </div>
 
       {/* Timed events */}
-      <div className="flex-1 overflow-auto">
+      <div>
         <div className="flex" style={{ height: `${(END_HOUR - START_HOUR + 1) * HOUR_HEIGHT}px` }}>
           {/* Time labels */}
-          <div className="w-20 flex-shrink-0 relative border-r border-app-border">
+          <div className="w-14 flex-shrink-0 relative">
             {timeSlots.map(hour => (
               <div
                 key={hour}
-                className="absolute w-full text-sm text-app-muted px-4 text-right"
+                className="absolute w-full text-[10px] text-app-muted/70 pr-2 text-right -translate-y-1/2 tabular-nums"
                 style={{ top: `${(hour - START_HOUR) * HOUR_HEIGHT}px` }}
               >
-                {format(new Date().setHours(hour, 0), 'h:mm a')}
+                {hour !== START_HOUR && format(new Date().setHours(hour, 0), 'h a')}
               </div>
             ))}
+            {/* Current time badge (Apple Calendar style) */}
+            {isTodayView && timeIndicatorPosition !== null && (
+              <div
+                className="absolute right-0.5 -translate-y-1/2 z-10 px-1.5 py-px rounded-full bg-red-500 text-white text-[9px] font-semibold tabular-nums"
+                style={{ top: `${timeIndicatorPosition}px` }}
+              >
+                {format(currentTime, 'h:mm')}
+              </div>
+            )}
           </div>
 
           {/* Events column - clickable to create events */}
@@ -1910,7 +2053,7 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
             data-day-iso={currentDate.toISOString()}
             data-start-hour={START_HOUR}
             data-hour-height={HOUR_HEIGHT}
-            className={`flex-1 relative cursor-pointer ${dragState?.isDragging ? 'bg-app-accent/5' : ''}`}
+            className={`flex-1 relative border-l border-app-border/40 cursor-pointer ${dragState?.isDragging ? 'bg-app-accent/5' : ''}`}
             onClick={handleTimeGridClick}
             onContextMenu={handleTimeGridContextMenu}
             onMouseUp={handleTimeGridMouseUp}
@@ -1919,7 +2062,7 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
             {timeSlots.map(hour => (
               <div
                 key={hour}
-                className="absolute w-full border-t border-app-border/50 pointer-events-none"
+                className="absolute w-full border-t border-app-border/30 pointer-events-none"
                 style={{ top: `${(hour - START_HOUR) * HOUR_HEIGHT}px`, height: `${HOUR_HEIGHT}px` }}
               />
             ))}
@@ -1930,8 +2073,8 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
                 className="absolute left-0 right-0 z-50 pointer-events-none flex items-center"
                 style={{ top: `${timeIndicatorPosition}px` }}
               >
-                <div className="w-3 h-3 rounded-full bg-red-500 -ml-1.5 shadow-sm" />
-                <div className="flex-1 h-0.5 bg-red-500 shadow-sm" />
+                <div className="w-2 h-2 rounded-full bg-red-500 -ml-1" />
+                <div className="flex-1 h-px bg-red-500/90" />
               </div>
             )}
 
@@ -1955,13 +2098,13 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
                   key={event.id}
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (!isDragging) onEventClick?.(event);
+                    if (!isDragging) onEventClick?.(event, e);
                   }}
                   onContextMenu={(e) => {
                     e.stopPropagation();
                     onContextMenu?.(e, 'event', { event, date: currentDate });
                   }}
-                  className={`group absolute rounded-r px-2 py-2 hover:opacity-90 overflow-hidden select-none cursor-pointer ${
+                  className={`group absolute rounded-md px-2 py-1.5 hover:brightness-110 overflow-hidden select-none cursor-pointer ${
                     isDragging ? 'opacity-70 scale-105 ring-2 ring-app-accent shadow-lg pointer-events-none' : 'transition-all'
                   }`}
                   style={{
@@ -1973,36 +2116,34 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
                   }}
                   title={event.title}
                 >
-                  <div className="flex items-start gap-1.5">
-                    {/* Drag handle */}
-                    <div
-                      onMouseDown={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onEventMouseDown?.(event, e);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                      }}
-                      className="flex-shrink-0 cursor-grab active:cursor-grabbing"
-                      title="Drag to move"
-                    >
-                      <GripVertical className="w-4 h-4" style={{ color: getCalendarColor(event.calendar_id) }} />
+                  {/* Drag handle — floats top-right on hover */}
+                  <div
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onEventMouseDown?.(event, e);
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    className="absolute top-1 right-1 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-60 transition-opacity"
+                    title="Drag to move"
+                  >
+                    <GripVertical className="w-3.5 h-3.5" style={{ color: getCalendarColor(event.calendar_id) }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold" style={{ color: getCalendarColor(event.calendar_id) }}>
+                      {event.title}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium" style={{ color: getCalendarColor(event.calendar_id) }}>
-                        {event.title}
-                      </div>
-                      <div className="text-xs opacity-70" style={{ color: getCalendarColor(event.calendar_id) }}>
-                        {format(parseISO(event.start), 'h:mm a')} - {format(parseISO(event.end), 'h:mm a')}
-                      </div>
-                      {event.location && (
-                        <div className="text-xs opacity-60 mt-1" style={{ color: getCalendarColor(event.calendar_id) }}>
-                          {event.location}
-                        </div>
-                      )}
+                    <div className="text-[11px] opacity-70 tabular-nums" style={{ color: getCalendarColor(event.calendar_id) }}>
+                      {format(parseISO(event.start), 'h:mm a')} – {format(parseISO(event.end), 'h:mm a')}
                     </div>
+                    {event.location && (
+                      <div className="text-[11px] opacity-60 mt-0.5" style={{ color: getCalendarColor(event.calendar_id) }}>
+                        {event.location}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -2033,7 +2174,7 @@ function DayView({ currentDate, getEventsForDate, calendars, onCreateEvent, onCo
 /**
  * Event Edit Popover
  */
-function EventDetailsModal({ event, calendars, onClose, onOptimisticUpdate, onOptimisticDelete, onRevert, onRevertDelete }) {
+function EventDetailsModal({ event, calendars, anchor = null, onClose, onOptimisticUpdate, onOptimisticDelete, onRevert, onRevertDelete }) {
   const [title, setTitle] = useState(event.title || '');
   const [location, setLocation] = useState(event.location || '');
   const [description, setDescription] = useState(event.description || '');
@@ -2188,199 +2329,165 @@ function EventDetailsModal({ event, calendars, onClose, onOptimisticUpdate, onOp
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        className="bg-[#2c2c2e] rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header with calendar color */}
-        <div className="h-1.5" style={{ backgroundColor: color }} />
+  // Apple-Calendar-style grouped sections on app tokens
+  const group = "rounded-xl bg-[rgb(var(--text)/0.07)] overflow-hidden divide-y divide-[rgb(var(--text)/0.08)]";
+  const row = "flex items-center gap-2.5 px-3.5 py-2.5";
+  const inputBare = "flex-1 min-w-0 bg-transparent text-sm text-app-text placeholder:text-app-muted/50 outline-none [color-scheme:dark]";
 
-        {/* Title */}
-        <div className="p-4 pb-2">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Event title"
-            className="w-full text-xl font-semibold bg-transparent text-white placeholder-gray-500 outline-none"
-            autoFocus
-          />
-          <div className="flex items-center gap-2 mt-1">
-            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-            <span className="text-sm text-gray-400">{getCalendarName(event.calendar_id)}</span>
+  return (
+    <AnchoredPopover anchor={anchor} onClose={onClose} width={360}>
+      <div className="bg-app-panel border border-app-border/70 rounded-2xl shadow-2xl w-full">
+        {/* Title + calendar */}
+        <div className="px-4 pt-4 pb-3">
+          <div className="flex items-start gap-2">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Event title"
+              className="flex-1 min-w-0 text-[15px] font-semibold bg-transparent text-app-text placeholder:text-app-muted/50 outline-none"
+              autoFocus
+            />
+            <span className="w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: color }} />
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs text-app-muted">{getCalendarName(event.calendar_id)}</span>
             {!isWritable && (
-              <span className="text-xs px-1.5 py-0.5 bg-gray-700 text-gray-400 rounded">Read-only</span>
+              <span className="text-[10px] px-1.5 py-px bg-[rgb(var(--text)/0.08)] text-app-muted rounded">Read-only</span>
             )}
           </div>
         </div>
 
-        {/* Error message */}
-        {error && (
-          <div className="mx-4 mb-2 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
+        <div className="px-4 pb-4 space-y-2">
+          {/* Error message */}
+          {error && (
+            <div className="px-2.5 py-1.5 bg-red-500/10 border border-red-500/25 rounded-md">
+              <p className="text-xs text-red-400">{error}</p>
+            </div>
+          )}
 
-        {/* Location */}
-        <div className="px-4 py-2">
-          <div className="flex items-center gap-3 bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Add location"
-              className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none text-sm"
-            />
-          </div>
-        </div>
-
-        {/* All Day Toggle */}
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <span className="text-sm text-white">All-day</span>
-            <button
-              type="button"
-              onClick={() => setAllDay(!allDay)}
-              className={`relative w-12 h-7 rounded-full transition-colors ${
-                allDay ? 'bg-green-500' : 'bg-gray-600'
-              }`}
-            >
-              <span
-                className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                  allDay ? 'left-6' : 'left-1'
+          {/* Date & time group */}
+          <div className={group}>
+            <div className={row}>
+              <Clock className="w-3.5 h-3.5 text-app-muted/70 flex-shrink-0" />
+              <span className="text-xs text-app-muted w-8">Start</span>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputBare} />
+              {!allDay && (
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="bg-transparent text-sm text-app-text outline-none tabular-nums [color-scheme:dark]" />
+              )}
+            </div>
+            <div className={row}>
+              <span className="w-3.5 flex-shrink-0" />
+              <span className="text-xs text-app-muted w-8">End</span>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputBare} />
+              {!allDay && (
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="bg-transparent text-sm text-app-text outline-none tabular-nums [color-scheme:dark]" />
+              )}
+            </div>
+            <div className={`${row} justify-between`}>
+              <span className="text-sm text-app-text">All-day</span>
+              <button
+                type="button"
+                onClick={() => setAllDay(!allDay)}
+                className={`relative w-8 h-[18px] rounded-full transition-colors ${
+                  allDay ? 'bg-app-accent' : 'bg-[rgb(var(--text)/0.15)]'
                 }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Start Date/Time */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-              <span className="text-sm text-gray-400 w-10">Start</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="flex-1 bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-              />
-              {!allDay && (
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="bg-transparent text-white outline-none text-sm [color-scheme:dark]"
+              >
+                <span
+                  className={`absolute top-0.5 left-0 w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${
+                    allDay ? 'translate-x-[15px]' : 'translate-x-0.5'
+                  }`}
                 />
-              )}
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* End Date/Time */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm text-gray-400 w-10">End</span>
+          {/* Location group */}
+          <div className={group}>
+            <div className={row}>
+              <MapPin className="w-3.5 h-3.5 text-app-muted/70 flex-shrink-0" />
               <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="flex-1 bg-transparent text-white outline-none text-sm [color-scheme:dark]"
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Add location"
+                className={inputBare}
               />
-              {!allDay && (
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-                />
-              )}
             </div>
           </div>
-        </div>
 
-        {/* Attendees */}
-        {event.attendees && event.attendees.length > 0 && (
-          <div className="px-4 py-2">
-            <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-              <div className="flex items-start gap-3">
-                <Users className="w-4 h-4 text-gray-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm text-gray-400 mb-1">Attendees</p>
-                  {event.attendees.map((a, i) => (
-                    <p key={i} className="text-sm text-white">{a.name || a.email}</p>
-                  ))}
+          {/* Attendees group */}
+          {event.attendees && event.attendees.length > 0 && (
+            <div className={group}>
+              {event.attendees.map((a, i) => (
+                <div key={i} className={row}>
+                  <Users className={`w-3.5 h-3.5 flex-shrink-0 ${i === 0 ? 'text-app-muted/70' : 'opacity-0'}`} />
+                  <span className="text-sm text-app-text truncate">{a.name || a.email}</span>
                 </div>
-              </div>
+              ))}
+            </div>
+          )}
+
+          {/* Notes group */}
+          <div className={group}>
+            <div className="px-3.5 py-2.5">
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Add notes…"
+                rows={3}
+                className="w-full bg-transparent text-sm text-app-text placeholder:text-app-muted/50 outline-none resize-none"
+              />
             </div>
           </div>
-        )}
 
-        {/* Notes */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add notes..."
-              rows={3}
-              className="w-full bg-transparent text-white placeholder-gray-500 outline-none text-sm resize-none"
-            />
+          {/* Read-only notice */}
+          {!isWritable && (
+            <div className="px-2.5 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-md">
+              <p className="text-xs text-amber-400">{getReadOnlyReason()}</p>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 pt-1">
+            {isWritable && (
+              <button
+                onClick={handleDelete}
+                className="px-2.5 py-1.5 text-xs rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+              >
+                Delete
+              </button>
+            )}
+            <div className="flex-1" />
+            {event.html_link && (
+              <a
+                href={event.html_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1.5 text-xs rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
+              >
+                Open in Google
+              </a>
+            )}
+            {isWritable && (
+              <button
+                onClick={handleSave}
+                className="px-3.5 py-1.5 text-xs font-medium rounded-md bg-app-accent text-app-accent-fg hover:opacity-90 transition-opacity"
+              >
+                Save
+              </button>
+            )}
           </div>
-        </div>
-
-        {/* Read-only notice */}
-        {!isWritable && (
-          <div className="mx-4 mb-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <p className="text-xs text-amber-400">{getReadOnlyReason()}</p>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="p-4 pt-2 flex items-center gap-3">
-          {isWritable && (
-            <button
-              onClick={handleDelete}
-              className="px-4 py-2 text-sm text-red-400 hover:text-red-300"
-            >
-              Delete
-            </button>
-          )}
-          <div className="flex-1" />
-          {event.html_link && (
-            <a
-              href={event.html_link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 text-sm text-blue-400 hover:text-blue-300"
-            >
-              Open in Google
-            </a>
-          )}
-          {isWritable && (
-            <button
-              onClick={handleSave}
-              className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-            >
-              Save
-            </button>
-          )}
         </div>
       </div>
-    </div>
+    </AnchoredPopover>
   );
 }
 
 /**
  * Create Event Modal
  */
-function CreateEventModal({ initialData, calendars, onClose, onOptimisticAdd, onReplaceTemp, onRemoveTemp }) {
+function CreateEventModal({ initialData, calendars, onClose, onOptimisticAdd, onReplaceTemp, onRemoveTemp, onPreviewChange }) {
   const [title, setTitle] = useState('');
   const [location, setLocation] = useState('');
   const [description, setDescription] = useState('');
@@ -2479,164 +2586,179 @@ function CreateEventModal({ initialData, calendars, onClose, onOptimisticAdd, on
     return () => window.removeEventListener('keydown', handleEsc);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        className="bg-[#2c2c2e] rounded-2xl shadow-2xl w-full max-w-[400px] overflow-hidden"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header with calendar color */}
-        <div className="h-1.5" style={{ backgroundColor: color }} />
+  // Keep the on-grid placeholder chip in sync with edits in this popover.
+  useEffect(() => {
+    onPreviewChange?.({
+      date: new Date(startDate + 'T00:00:00'),
+      endDate: new Date(endDate + 'T00:00:00'),
+      startTime,
+      endTime,
+      allDay,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startDate, endDate, startTime, endTime, allDay]);
 
-        {/* Title */}
-        <div className="p-4 pb-2">
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="New Event"
-            className="w-full text-xl font-semibold bg-transparent text-white placeholder-gray-500 outline-none"
-            autoFocus
-          />
-        </div>
-
-        {/* Calendar selector */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
-              <select
-                value={selectedCalendarId}
-                onChange={(e) => setSelectedCalendarId(e.target.value)}
-                className="flex-1 bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-              >
-                {calendars.map(cal => (
-                  <option key={cal.id} value={cal.id}>{cal.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Error message */}
-        {error && (
-          <div className="mx-4 mb-2 p-3 bg-red-500/20 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* Location */}
-        <div className="px-4 py-2">
-          <div className="flex items-center gap-3 bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <MapPin className="w-4 h-4 text-gray-500 flex-shrink-0" />
-            <input
-              type="text"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Add location"
-              className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none text-sm"
-            />
-          </div>
-        </div>
-
-        {/* All Day Toggle */}
-        <div className="px-4 py-2">
-          <div className="flex items-center justify-between bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <span className="text-sm text-white">All-day</span>
+  // No writable calendar connected — explain where to fix it instead of a dead end.
+  if (calendars.length === 0) {
+    return (
+      <AnchoredPopover anchor={initialData?.anchor || null} onClose={onClose} width={340}>
+        <div className="bg-app-panel border border-app-border rounded-xl shadow-2xl w-full p-5">
+          <h2 className="text-sm font-semibold text-app-text mb-1.5">No calendar connected</h2>
+          <p className="text-xs text-app-muted leading-relaxed mb-4">
+            Events need a calendar to live in. Connect Google Calendar or
+            iCloud/CalDAV under <span className="text-app-text font-medium">Preferences → Connections</span>.
+          </p>
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-xs rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors">
+              Close
+            </button>
             <button
-              type="button"
-              onClick={() => setAllDay(!allDay)}
-              className={`relative w-12 h-7 rounded-full transition-colors ${
-                allDay ? 'bg-green-500' : 'bg-gray-600'
-              }`}
+              onClick={() => {
+                invoke('open_preferences_window', { workspacePath: window.__WORKSPACE_PATH__ || null }).catch(() => {});
+                onClose();
+              }}
+              className="px-3 py-1.5 text-xs font-medium rounded-md bg-app-accent/15 text-app-accent hover:bg-app-accent/25 transition-colors"
             >
-              <span
-                className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                  allDay ? 'left-6' : 'left-1'
-                }`}
-              />
+              Open Preferences
             </button>
           </div>
         </div>
+      </AnchoredPopover>
+    );
+  }
 
-        {/* Start Date/Time */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-              <span className="text-sm text-gray-400 w-10">Start</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="flex-1 bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-              />
-              {!allDay && (
-                <input
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  className="bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-                />
-              )}
-            </div>
-          </div>
-        </div>
+  // Apple-Calendar-style grouped sections on app tokens
+  const group = "rounded-xl bg-[rgb(var(--text)/0.07)] overflow-hidden divide-y divide-[rgb(var(--text)/0.08)]";
+  const row = "flex items-center gap-2.5 px-3.5 py-2.5";
+  const inputBare = "flex-1 min-w-0 bg-transparent text-sm text-app-text placeholder:text-app-muted/50 outline-none [color-scheme:dark]";
 
-        {/* End Date/Time */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <div className="flex items-center gap-3">
-              <div className="w-4 h-4 flex-shrink-0" />
-              <span className="text-sm text-gray-400 w-10">End</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="flex-1 bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-              />
-              {!allDay && (
-                <input
-                  type="time"
-                  value={endTime}
-                  onChange={(e) => setEndTime(e.target.value)}
-                  className="bg-transparent text-white outline-none text-sm [color-scheme:dark]"
-                />
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Notes */}
-        <div className="px-4 py-2">
-          <div className="bg-[#1c1c1e] rounded-lg px-3 py-2.5">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add notes..."
-              rows={2}
-              className="w-full bg-transparent text-white placeholder-gray-500 outline-none text-sm resize-none"
+  return (
+    <AnchoredPopover anchor={initialData?.anchor || null} onClose={onClose} width={360}>
+      <div className="bg-app-panel border border-app-border/70 rounded-2xl shadow-2xl w-full">
+        {/* Title + calendar picker (color dot + select, Apple style) */}
+        <div className="px-4 pt-4 pb-3">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="New Event"
+              className="flex-1 min-w-0 text-[15px] font-semibold bg-transparent text-app-text placeholder:text-app-muted/50 outline-none"
+              autoFocus
             />
+            <div className="relative flex items-center flex-shrink-0 rounded-md bg-[rgb(var(--text)/0.06)] pl-2 pr-1 py-1 cursor-pointer">
+              <span className="w-2.5 h-2.5 rounded-full pointer-events-none" style={{ backgroundColor: color }} />
+              <select
+                value={selectedCalendarId}
+                onChange={(e) => setSelectedCalendarId(e.target.value)}
+                className="absolute inset-0 opacity-0 cursor-pointer"
+                title="Calendar"
+              >
+                {calendars.map(cal => (
+                  <option key={cal.id} value={cal.id}>
+                    {cal.name || `${cal.provider} calendar`}
+                  </option>
+                ))}
+              </select>
+              <svg className="w-3 h-3 ml-1 text-app-muted pointer-events-none" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M3 4.5 6 7.5 9 4.5" />
+              </svg>
+            </div>
+          </div>
+          <div className="text-xs text-app-muted mt-0.5">
+            {selectedCalendar?.name || `${selectedCalendar?.provider || ''} calendar`}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="p-4 pt-2 flex items-center justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-400 hover:text-gray-300"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-          >
-            Create
-          </button>
+        <div className="px-4 pb-4 space-y-2">
+          {/* Error message */}
+          {error && (
+            <div className="px-2.5 py-1.5 bg-red-500/10 border border-red-500/25 rounded-md">
+              <p className="text-xs text-red-400">{error}</p>
+            </div>
+          )}
+
+          {/* Date & time group */}
+          <div className={group}>
+            <div className={row}>
+              <Clock className="w-3.5 h-3.5 text-app-muted/70 flex-shrink-0" />
+              <span className="text-xs text-app-muted w-8">Start</span>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputBare} />
+              {!allDay && (
+                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="bg-transparent text-sm text-app-text outline-none tabular-nums [color-scheme:dark]" />
+              )}
+            </div>
+            <div className={row}>
+              <span className="w-3.5 flex-shrink-0" />
+              <span className="text-xs text-app-muted w-8">End</span>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputBare} />
+              {!allDay && (
+                <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="bg-transparent text-sm text-app-text outline-none tabular-nums [color-scheme:dark]" />
+              )}
+            </div>
+            <div className={`${row} justify-between`}>
+              <span className="text-sm text-app-text">All-day</span>
+              <button
+                type="button"
+                onClick={() => setAllDay(!allDay)}
+                className={`relative w-8 h-[18px] rounded-full transition-colors ${
+                  allDay ? 'bg-app-accent' : 'bg-[rgb(var(--text)/0.15)]'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0 w-3.5 h-3.5 bg-white rounded-full shadow-sm transition-transform ${
+                    allDay ? 'translate-x-[15px]' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {/* Location group */}
+          <div className={group}>
+            <div className={row}>
+              <MapPin className="w-3.5 h-3.5 text-app-muted/70 flex-shrink-0" />
+              <input
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Add location"
+                className={inputBare}
+              />
+            </div>
+          </div>
+
+          {/* Notes group */}
+          <div className={group}>
+            <div className="px-3.5 py-2.5">
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Add notes…"
+                rows={2}
+                className="w-full bg-transparent text-sm text-app-text placeholder:text-app-muted/50 outline-none resize-none"
+              />
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 text-xs rounded-md text-app-muted hover:text-app-text hover:bg-[rgb(var(--text)/0.06)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleCreate}
+              className="px-3.5 py-1.5 text-xs font-medium rounded-md bg-app-accent text-app-accent-fg hover:opacity-90 transition-opacity"
+            >
+              Create
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </AnchoredPopover>
   );
 }
 

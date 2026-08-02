@@ -21,6 +21,7 @@ mod auth;
 mod connections;
 #[cfg(desktop)]
 mod calendar;
+mod calendar_v2;
 #[cfg(desktop)]
 mod oauth_server;
 mod secure_storage;
@@ -637,6 +638,14 @@ pub fn run() {
       handlers::files::read_workspace_files,
       handlers::watcher::start_workspace_watch,
       handlers::watcher::stop_workspace_watch,
+      calendar_v2::commands::cal2_accounts_list,
+      calendar_v2::commands::cal2_calendars_list,
+      calendar_v2::commands::cal2_set_calendar_visible,
+      calendar_v2::commands::cal2_events_in_range,
+      calendar_v2::commands::cal2_event_get,
+      calendar_v2::commands::cal2_event_create,
+      calendar_v2::commands::cal2_event_update,
+      calendar_v2::commands::cal2_event_delete,
       handlers::files::create_file_in_workspace,
       handlers::files::create_folder_in_workspace,
       handlers::files::read_file_content,
@@ -958,6 +967,25 @@ pub fn run() {
         // Initialize calendar auth state
         let calendar_state = calendar::SharedCalendarAuthState::default();
         app.manage(calendar_state);
+
+        // Calendar V2 local store (SQLite). Failure is logged, not fatal —
+        // V1 calendar paths still work without it.
+        {
+          use tauri::Manager;
+          match app.path().app_data_dir() {
+            Ok(dir) => match calendar_v2::CalendarStore::open(dir.join("calendar")) {
+              Ok(store) => {
+                app.manage(store.clone());
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                  calendar_v2::commands::maybe_reexpand(handle, store).await;
+                });
+              }
+              Err(e) => tracing::error!("calendar_v2 store init failed: {e}"),
+            },
+            Err(e) => tracing::error!("calendar_v2: no app data dir: {e}"),
+          }
+        }
 
 
         // Initialize OAuth Server

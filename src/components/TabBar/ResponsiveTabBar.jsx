@@ -6,8 +6,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator
 } from '../ui/dropdown-menu';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Calendar } from 'lucide-react';
 import { ColoredFileIcon } from '../FileIcon.jsx';
+
+/** Icons for synthetic view tabs (tab.kind) that aren't backed by a file. */
+const VIEW_TAB_ICONS = { calendar: Calendar };
 
 /**
  * ResponsiveTabBar — scrollable tab strip (browser/Notion style).
@@ -107,12 +110,16 @@ export function ResponsiveTabBar({
         onMouseEnter={() => !isActive && setHoveredTab(tab.path)}
         onMouseLeave={() => setHoveredTab(null)}
       >
-        <ColoredFileIcon
-          fileName={tab.name}
-          isDirectory={false}
-          className="tab-file-icon"
-          showChevron={false}
-        />
+        {VIEW_TAB_ICONS[tab.kind] ? (
+          React.createElement(VIEW_TAB_ICONS[tab.kind], { className: 'tab-file-icon text-app-muted' })
+        ) : (
+          <ColoredFileIcon
+            fileName={tab.name}
+            isDirectory={false}
+            className="tab-file-icon"
+            showChevron={false}
+          />
+        )}
         <span className="truncate flex-1">{tab.name}</span>
         {hasUnsavedChanges && (
           <span className="w-2 h-2 rounded-full bg-app-accent flex-shrink-0" />

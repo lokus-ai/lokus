@@ -236,16 +236,13 @@ export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks, 
   }
 
   return (
-    <div className="w-56 flex-shrink-0 border-r border-app-border bg-app-panel flex flex-col h-full">
+    <div className="w-56 flex-shrink-0 border-r border-app-border/60 flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-app-border">
-        <div className="flex items-center gap-1.5">
-          <ListTodo size={14} className="text-app-accent" />
-          <span className="text-xs font-medium text-app-text">Tasks</span>
-        </div>
+      <div className="flex items-center justify-between px-3 pt-3 pb-1">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-app-muted">Tasks</span>
         <button
           onClick={onToggle}
-          className="p-0.5 rounded hover:bg-white/10 text-app-muted hover:text-app-text transition-colors"
+          className="p-0.5 rounded hover:bg-[rgb(var(--text)/0.07)] text-app-muted hover:text-app-text transition-colors"
           title="Hide task sidebar"
         >
           <ChevronLeft size={14} />
@@ -253,7 +250,7 @@ export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks, 
       </div>
 
       {/* Search */}
-      <div className="px-2 py-1.5 border-b border-app-border">
+      <div className="px-2 py-1.5">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-app-muted" />
           <input
@@ -262,16 +259,16 @@ export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks, 
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search tasks..."
-            className="w-full pl-6 pr-2 py-1 text-xs bg-transparent border border-app-border 
-              rounded text-app-text placeholder:text-app-muted
-              focus:outline-none focus:border-app-accent/50
+            className="w-full pl-6 pr-2 py-1 text-xs bg-[rgb(var(--text)/0.04)] border border-transparent
+              rounded-md text-app-text placeholder:text-app-muted/70
+              focus:outline-none focus:border-app-accent/40 focus:bg-transparent
               transition-colors duration-150"
           />
         </div>
       </div>
 
       {/* Filter tabs */}
-      <div className="flex px-2 py-1 gap-0.5 border-b border-app-border">
+      <div className="flex px-2 py-1 gap-0.5">
         {[
           { key: 'unscheduled', label: 'Unscheduled' },
           { key: 'active', label: 'Active' },
@@ -283,7 +280,7 @@ export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks, 
             className={`
               flex-1 px-1.5 py-0.5 text-[10px] rounded transition-colors duration-150
               ${filterMode === key
-                ? 'bg-app-accent/15 text-app-accent font-medium'
+                ? 'bg-[rgb(var(--text)/0.08)] text-app-text font-medium'
                 : 'text-app-muted hover:text-app-text hover:bg-white/5'
               }
             `}
@@ -326,8 +323,8 @@ export default function TaskScheduleSidebar({ isOpen, onToggle, scheduleBlocks, 
       </div>
 
       {/* Footer with count */}
-      <div className="px-3 py-1.5 border-t border-app-border">
-        <div className="text-[10px] text-app-muted">
+      <div className="px-3 py-1.5 border-t border-app-border/40">
+        <div className="text-[10px] text-app-muted/70">
           {sortedTasks.length} task{sortedTasks.length !== 1 ? 's' : ''}
           {filterMode === 'unscheduled' && ' unscheduled'}
         </div>
