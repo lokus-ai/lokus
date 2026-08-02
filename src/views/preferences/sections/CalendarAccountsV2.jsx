@@ -85,8 +85,19 @@ export default function CalendarAccountsV2() {
         <P.Button onClick={() => addOauth(calendarV2.addMicrosoftAccount)} disabled={busy}>
           Add Microsoft
         </P.Button>
+        <P.Button
+          onClick={() => {
+            const token = window.prompt(
+              'Paste a Notion internal-integration token.\n\nCreate one at notion.so/my-integrations, then share your databases with it. Every shared database with a date property becomes a calendar.'
+            );
+            if (token?.trim()) addOauth(() => calendarV2.addNotionAccount(token.trim()));
+          }}
+          disabled={busy}
+        >
+          Add Notion
+        </P.Button>
         <span className="text-[11px] text-app-muted">
-          iCloud uses an app-specific password (below, legacy section for now). Notion arrives next.
+          iCloud connects with an app-specific password (legacy section below for now).
         </span>
       </div>
       {error && <P.Note tone="danger">{error}</P.Note>}

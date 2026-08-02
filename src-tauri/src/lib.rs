@@ -649,6 +649,7 @@ pub fn run() {
       calendar_v2::commands::cal2_account_add_google,
       calendar_v2::commands::cal2_account_add_microsoft,
       calendar_v2::commands::cal2_account_add_caldav,
+      calendar_v2::commands::cal2_account_add_notion,
       calendar_v2::commands::cal2_account_add_ical,
       calendar_v2::commands::cal2_account_remove,
       calendar_v2::commands::cal2_sync_now,

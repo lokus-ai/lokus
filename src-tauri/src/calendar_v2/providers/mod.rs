@@ -3,6 +3,7 @@ pub mod common;
 pub mod google;
 pub mod ical;
 pub mod microsoft;
+pub mod notion;
 
 use std::sync::Arc;
 
@@ -19,6 +20,7 @@ pub fn connector_for(account: &Account) -> Option<Arc<dyn CalendarConnector>> {
             account.id.clone(),
             account.config.clone(),
         ))),
+        "notion" => Some(Arc::new(notion::NotionConnector::new(account.id.clone()))),
         "ical" => Some(Arc::new(ical::IcalConnector {
             url: account.identity.clone(),
             name: account.label.clone(),

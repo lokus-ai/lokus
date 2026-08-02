@@ -153,6 +153,9 @@ export const calendarV2 = {
   async addIcalAccount(url, name = null) {
     return invoke('cal2_account_add_ical', { url, name });
   },
+  async addNotionAccount(token, label = null) {
+    return invoke('cal2_account_add_notion', { token, label });
+  },
   async removeAccount(accountId) {
     return invoke('cal2_account_remove', { accountId });
   },

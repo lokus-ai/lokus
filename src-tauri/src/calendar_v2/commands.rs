@@ -425,6 +425,67 @@ async fn finish_microsoft_link(
     Ok(email)
 }
 
+/// Connect Notion via an internal-integration token (paste). Validates the
+/// token against /users/me; databases with date properties auto-appear as
+/// calendars on the next sync.
+#[tauri::command]
+pub async fn cal2_account_add_notion(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+    token: String,
+    label: Option<String>,
+) -> Result<String, String> {
+    let http = reqwest::Client::new();
+    let me: serde_json::Value = http
+        .get("https://api.notion.com/v1/users/me")
+        .bearer_auth(token.trim())
+        .header("Notion-Version", "2022-06-28")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let bot_id = me["id"]
+        .as_str()
+        .ok_or_else(|| format!("token rejected: {me}"))?
+        .to_string();
+    let workspace = me["bot"]["workspace_name"].as_str().unwrap_or("Notion").to_string();
+
+    let now = now_ms();
+    let account = Account {
+        id: Uuid::new_v4().to_string(),
+        provider: "notion".into(),
+        label: label.unwrap_or(workspace),
+        identity: bot_id,
+        status: "connected".into(),
+        color: None,
+        config: serde_json::json!({}),
+        created_at: now,
+        updated_at: now,
+    };
+    let acc = account.clone();
+    store.with(move |c| store::upsert_account(c, &acc)).await?;
+    let identity = account.identity.clone();
+    let real_id: String = store
+        .with(move |c| {
+            c.query_row(
+                "SELECT id FROM accounts WHERE provider='notion' AND identity=?1",
+                rusqlite::params![identity],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+        })
+        .await?;
+    creds::store(&real_id, &creds::StoredCreds { access: token.trim().to_string(), refresh: None, expires_at: None })?;
+
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
+    emit_changed(&app);
+    Ok(real_id)
+}
+
 /// Connect a CalDAV / iCloud account: verifies credentials + discovers the
 /// calendar home via the V1 client, then registers the account.
 #[tauri::command]
