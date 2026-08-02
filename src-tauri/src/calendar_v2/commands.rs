@@ -2,11 +2,13 @@
 //! Reads are always local; mutations write the store optimistically and (from
 //! Phase 2) enqueue outbox ops for the sync engine to push.
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
+use super::engine::{enqueue_outbox, SyncEngine};
 use super::models::{now_ms, Account, CalendarRow, EventRow, OccurrenceView};
 use super::store::{self, CalendarStore};
+use super::{auth, creds};
 
 /// Debounced change signal — every mutation path funnels through this.
 pub fn emit_changed(app: &AppHandle) {
@@ -68,7 +70,18 @@ pub async fn cal2_event_create(
     event.pending = true;
     event.created_at = now_ms();
     event.updated_at = event.created_at;
-    let id = store.with(move |c| store::upsert_event(c, &event)).await?;
+    let id = store
+        .with(move |c| {
+            let id = store::upsert_event(c, &event)?;
+            let mut ev = event.clone();
+            ev.id = id.clone();
+            enqueue_outbox(c, &ev, "create")?;
+            Ok(id)
+        })
+        .await?;
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
     emit_changed(&app);
     Ok(id)
 }
@@ -81,7 +94,15 @@ pub async fn cal2_event_update(
 ) -> Result<(), String> {
     event.pending = true;
     event.updated_at = now_ms();
-    store.with(move |c| store::upsert_event(c, &event).map(|_| ())).await?;
+    store
+        .with(move |c| {
+            store::upsert_event(c, &event)?;
+            enqueue_outbox(c, &event, "update")
+        })
+        .await?;
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
     emit_changed(&app);
     Ok(())
 }
@@ -100,11 +121,194 @@ pub async fn cal2_event_delete(
             ev.deleted = true;
             ev.pending = true;
             ev.updated_at = now_ms();
-            store::upsert_event(c, &ev).map(|_| ())
+            store::upsert_event(c, &ev)?;
+            if ev.provider_event_id.is_some() {
+                enqueue_outbox(c, &ev, "delete")?;
+            } else {
+                // Never left the device: hard-delete, nothing to push.
+                c.execute("DELETE FROM events WHERE id=?1", rusqlite::params![ev.id])
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(())
         })
         .await?;
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
     emit_changed(&app);
     Ok(())
+}
+
+/// Begin linking a Google account: returns the URL to open in the browser.
+/// Completion runs in the background — when the loopback callback delivers
+/// the code, the account row + credentials are created and a sync kicks off.
+/// Multiple flows can run concurrently (per-flow state + PKCE).
+#[tauri::command]
+pub async fn cal2_account_add_google(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+) -> Result<String, String> {
+    let client_id =
+        std::env::var("GOOGLE_CLIENT_ID").map_err(|_| "GOOGLE_CLIENT_ID not set".to_string())?;
+
+    let flow_id = Uuid::new_v4().to_string();
+    let pkce = auth::pkce_pair();
+    let redirect = auth::redirect_uri();
+
+    let scopes = [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events",
+        "https://www.googleapis.com/auth/userinfo.email",
+    ]
+    .join(" ");
+    let url = format!(
+        "https://accounts.google.com/o/oauth2/v2/auth?client_id={}&redirect_uri={}&response_type=code&scope={}&state={}&code_challenge={}&code_challenge_method=S256&access_type=offline&prompt=consent%20select_account",
+        urlencoding::encode(&client_id),
+        urlencoding::encode(&redirect),
+        urlencoding::encode(&scopes),
+        urlencoding::encode(&flow_id),
+        urlencoding::encode(&pkce.challenge),
+    );
+
+    let rx = auth::register_flow(&flow_id);
+    let store = store.inner().clone();
+    let flow_for_task = flow_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let code = match tokio::time::timeout(std::time::Duration::from_secs(300), rx).await {
+            Ok(Ok(code)) => code,
+            _ => {
+                auth::cancel_flow(&flow_for_task);
+                return;
+            }
+        };
+        match finish_google_link(&code, &pkce.verifier, &redirect, &store).await {
+            Ok(email) => {
+                tracing::info!("calendar_v2: linked google account {email}");
+                if let Some(engine) = app.try_state::<super::SyncEngine>() {
+                    engine.sync_now();
+                }
+                let _ = app.emit("calendar://account-linked", email);
+                emit_changed(&app);
+            }
+            Err(e) => {
+                tracing::error!("calendar_v2: google link failed: {e}");
+                let _ = app.emit("calendar://account-link-failed", e);
+            }
+        }
+    });
+
+    Ok(url)
+}
+
+async fn finish_google_link(
+    code: &str,
+    verifier: &str,
+    redirect: &str,
+    store: &CalendarStore,
+) -> Result<String, String> {
+    let client_id = std::env::var("GOOGLE_CLIENT_ID").map_err(|_| "GOOGLE_CLIENT_ID not set")?;
+    let client_secret = std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default();
+    let http = reqwest::Client::new();
+
+    let mut form = vec![
+        ("client_id", client_id),
+        ("code", code.to_string()),
+        ("code_verifier", verifier.to_string()),
+        ("grant_type", "authorization_code".to_string()),
+        ("redirect_uri", redirect.to_string()),
+    ];
+    if !client_secret.is_empty() {
+        form.push(("client_secret", client_secret));
+    }
+    let body: serde_json::Value = http
+        .post("https://oauth2.googleapis.com/token")
+        .form(&form)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let access = body["access_token"].as_str().ok_or_else(|| format!("token exchange failed: {body}"))?;
+    let refresh = body["refresh_token"].as_str().map(String::from);
+    let ttl = body["expires_in"].as_u64().unwrap_or(3600);
+
+    let userinfo: serde_json::Value = http
+        .get("https://www.googleapis.com/oauth2/v2/userinfo")
+        .bearer_auth(access)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+    let email = userinfo["email"].as_str().unwrap_or("google account").to_string();
+
+    let now = now_ms();
+    let account = Account {
+        id: Uuid::new_v4().to_string(),
+        provider: "google".into(),
+        label: email.clone(),
+        identity: email.clone(),
+        status: "connected".into(),
+        color: None,
+        config: serde_json::json!({}),
+        created_at: now,
+        updated_at: now,
+    };
+    let acc_for_store = account.clone();
+    store.with(move |c| store::upsert_account(c, &acc_for_store)).await?;
+
+    // Re-link of an existing identity reuses its row id — look it up so the
+    // credentials land on the right account.
+    let identity = account.identity.clone();
+    let real_id: String = store
+        .with(move |c| {
+            c.query_row(
+                "SELECT id FROM accounts WHERE provider='google' AND identity=?1",
+                rusqlite::params![identity],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+        })
+        .await?;
+
+    let now_s = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    creds::store(
+        &real_id,
+        &creds::StoredCreds {
+            access: access.to_string(),
+            refresh,
+            expires_at: Some(now_s + ttl),
+        },
+    )?;
+    Ok(email)
+}
+
+#[tauri::command]
+pub async fn cal2_account_remove(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+    account_id: String,
+) -> Result<(), String> {
+    let _ = creds::delete(&account_id);
+    store.with(move |c| store::delete_account(c, &account_id)).await?;
+    emit_changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cal2_sync_now(app: AppHandle) -> Result<(), String> {
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+        Ok(())
+    } else {
+        Err("sync engine not running".into())
+    }
 }
 
 /// Startup hook: re-expand occurrences when the timezone changed or the
@@ -116,6 +320,11 @@ pub async fn maybe_reexpand(app: AppHandle, store: CalendarStore) {
             .with(|c| {
                 let n = store::reexpand_all(c)?;
                 store::mark_horizon_anchored(c)?;
+                // Cursors are pinned to the old window (Google syncToken
+                // remembers its timeMin/timeMax) — clear them so the next
+                // sync refetches the new window.
+                c.execute("UPDATE sync_state SET cursor = NULL", [])
+                    .map_err(|e| e.to_string())?;
                 Ok(n)
             })
             .await

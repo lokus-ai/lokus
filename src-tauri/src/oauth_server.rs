@@ -101,6 +101,7 @@ async fn handle_request(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn
     match (method, path) {
         (&Method::GET, "/gmail-callback") => handle_gmail_callback(req).await,
         (&Method::GET, "/calendar-callback") => handle_calendar_callback(req).await,
+        (&Method::GET, "/cal2-callback") => handle_cal2_callback(req).await,
         (&Method::GET, "/auth-callback") => handle_supabase_auth_callback(req).await,
         (&Method::POST, "/complete-auth") => handle_complete_auth(req).await,
         (&Method::GET, "/health") => handle_health_check().await,
@@ -182,6 +183,36 @@ async fn handle_gmail_callback(req: Request<Incoming>) -> Result<HyperResponse, 
             </html>
             "#
         ))))?)
+}
+
+/// Calendar V2 loopback callback: resolves the in-memory flow waiter keyed by
+/// the OAuth `state` (a per-flow uuid). No temp files, no polling — this is
+/// what lets several account-link flows run concurrently.
+async fn handle_cal2_callback(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn std::error::Error + Send + Sync>> {
+    let query_params = parse_query_params(req.uri().query().unwrap_or(""));
+    let page = |title: &str, body: &str, ok: bool| {
+        hyper::Response::builder()
+            .status(if ok { StatusCode::OK } else { StatusCode::BAD_REQUEST })
+            .header("Content-Type", "text/html")
+            .body(Full::new(Bytes::from(format!(
+                r#"<html><body style="font-family:-apple-system,Arial,sans-serif;text-align:center;padding:60px;background:#141416;color:#e2e2e5;">
+                <h2>{title}</h2><p style="color:#9a9aa2;">{body}</p></body></html>"#
+            ))))
+    };
+
+    if let Some(err) = query_params.get("error") {
+        return Ok(page("Calendar connection failed", &format!("{err}. You can close this window."), false)?);
+    }
+    match (query_params.get("code"), query_params.get("state")) {
+        (Some(code), Some(state)) => {
+            if crate::calendar_v2::auth::complete_flow(state, code) {
+                Ok(page("Calendar connected", "You can close this window and return to Lokus.", true)?)
+            } else {
+                Ok(page("Nothing waiting for this login", "The connect flow may have timed out — try again from Lokus.", false)?)
+            }
+        }
+        _ => Ok(page("Missing parameters", "You can close this window and try again.", false)?),
+    }
 }
 
 async fn handle_calendar_callback(req: Request<Incoming>) -> Result<HyperResponse, Box<dyn std::error::Error + Send + Sync>> {

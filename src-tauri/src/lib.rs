@@ -646,6 +646,9 @@ pub fn run() {
       calendar_v2::commands::cal2_event_create,
       calendar_v2::commands::cal2_event_update,
       calendar_v2::commands::cal2_event_delete,
+      calendar_v2::commands::cal2_account_add_google,
+      calendar_v2::commands::cal2_account_remove,
+      calendar_v2::commands::cal2_sync_now,
       handlers::files::create_file_in_workspace,
       handlers::files::create_folder_in_workspace,
       handlers::files::read_file_content,
@@ -976,6 +979,8 @@ pub fn run() {
             Ok(dir) => match calendar_v2::CalendarStore::open(dir.join("calendar")) {
               Ok(store) => {
                 app.manage(store.clone());
+                let engine = calendar_v2::SyncEngine::start(app.handle().clone(), store.clone());
+                app.manage(engine);
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                   calendar_v2::commands::maybe_reexpand(handle, store).await;
