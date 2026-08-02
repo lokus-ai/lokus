@@ -225,15 +225,13 @@ function FileEntryComponentImpl({ entry, level, onFileClick, toggleFolder, onRef
               onDragLeave={handleExternalDragLeave}
               className={`${baseClasses} ${stateClasses} ${selectedClasses} ${dropTargetClasses} ${draggingClasses} ${willExpandClasses} ${externalDropTargetClasses} ${entry.is_directory ? '' : 'file-leaf'} file-entry-item`}
             >
-              {entry.is_directory && (
-                <ColoredFileIcon
-                  fileName={entry.name}
-                  isDirectory={entry.is_directory}
-                  isExpanded={isExpanded}
-                  className="obsidian-file-icon"
-                  showChevron={true}
-                />
-              )}
+              <ColoredFileIcon
+                fileName={entry.name}
+                isDirectory={entry.is_directory}
+                isExpanded={isExpanded}
+                className="obsidian-file-icon"
+                showChevron={true}
+              />
               {isRenaming ? (
                 <InlineRenameInput
                   initialValue={entry.name}

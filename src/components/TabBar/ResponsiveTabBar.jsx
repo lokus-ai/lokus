@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { useResponsiveTabBar } from '../../hooks/useResponsiveTabBar';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -8,10 +7,19 @@ import {
   DropdownMenuSeparator
 } from '../ui/dropdown-menu';
 import { MoreHorizontal } from 'lucide-react';
+import { ColoredFileIcon } from '../FileIcon.jsx';
 
 /**
- * ResponsiveTabBar - Adaptive tab bar with overflow menu
- * Maintains Obsidian-style tab appearance while handling responsive overflow
+ * ResponsiveTabBar — scrollable tab strip (browser/Notion style).
+ *
+ * The previous version budgeted tabs into a visible set + a "…" overflow
+ * menu, but never prioritized the active tab, so the tab you were ON could
+ * sit invisible inside the menu. Now:
+ *  - every tab lives in one horizontally scrollable strip (trackpad swipe
+ *    or mouse wheel scrolls it; the scrollbar itself stays hidden)
+ *  - gradient fades on either edge signal there are more tabs that way
+ *  - the active tab is auto-scrolled into view whenever it changes
+ *  - the "…" menu remains as a jump list of ALL tabs when overflowing
  */
 export function ResponsiveTabBar({
   tabs = [],
@@ -20,28 +28,58 @@ export function ResponsiveTabBar({
   onTabClose,
   onNewTab,
   unsavedChanges = new Set(),
-  reservedSpace = 0
+  reservedSpace = 0, // kept for API compatibility
 }) {
   const [hoveredTab, setHoveredTab] = useState(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const scrollerRef = useRef(null);
 
-  const {
-    containerRef,
-    visibleTabs,
-    overflowTabs,
-    hasOverflow,
-    actualTabWidth,
-    handleOverflowTabClick,
-    isTabActive
-  } = useResponsiveTabBar({
-    tabs,
-    activeTabPath: activeTab,
-    reservedSpace
-  });
+  const updateScrollState = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 1);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
 
-  /**
-   * Render a single tab button with Obsidian styling
-   */
-  const renderTab = (tab, index, isVisible = true) => {
+  // Keep the fade indicators in sync with scroll position and size changes.
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    updateScrollState();
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(updateScrollState) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateScrollState);
+      ro?.disconnect();
+    };
+  }, [updateScrollState]);
+
+  useEffect(() => {
+    updateScrollState();
+  }, [tabs, updateScrollState]);
+
+  // The selected tab must always be visible: scroll it into view on change.
+  useEffect(() => {
+    if (!activeTab) return;
+    const el = scrollerRef.current?.querySelector(`[data-tab-path="${CSS.escape(activeTab)}"]`);
+    el?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }, [activeTab, tabs.length]);
+
+  // Vertical mouse-wheel scrolls the strip horizontally (trackpads already
+  // send deltaX for horizontal swipes).
+  const handleWheel = useCallback((e) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      el.scrollLeft += e.deltaY;
+    }
+  }, []);
+
+  const isTabActive = (path) => path === activeTab;
+
+  const renderTab = (tab, index) => {
     const isActive = isTabActive(tab.path);
     const isHovered = hoveredTab === tab.path;
     const hasUnsavedChanges = unsavedChanges.has(tab.path);
@@ -49,6 +87,7 @@ export function ResponsiveTabBar({
     return (
       <div
         key={tab.path}
+        data-tab-path={tab.path}
         role="button"
         tabIndex={0}
         onClick={() => onTabClick?.(tab.path)}
@@ -60,14 +99,20 @@ export function ResponsiveTabBar({
         `}
         style={{
           pointerEvents: 'auto',
-          marginLeft: index > 0 && isVisible ? '2px' : '0',
+          marginLeft: index > 0 ? '2px' : '0',
           maxWidth: '240px',
           minWidth: '140px',
-          flexShrink: 1,
+          flexShrink: 0,
         }}
         onMouseEnter={() => !isActive && setHoveredTab(tab.path)}
         onMouseLeave={() => setHoveredTab(null)}
       >
+        <ColoredFileIcon
+          fileName={tab.name}
+          isDirectory={false}
+          className="tab-file-icon"
+          showChevron={false}
+        />
         <span className="truncate flex-1">{tab.name}</span>
         {hasUnsavedChanges && (
           <span className="w-2 h-2 rounded-full bg-app-accent flex-shrink-0" />
@@ -102,10 +147,10 @@ export function ResponsiveTabBar({
     );
   };
 
-  /**
-   * Render overflow menu for hidden tabs
-   */
-  const renderOverflowMenu = () => {
+  const hasOverflow = canScrollLeft || canScrollRight;
+
+  /** "…" menu: jump list of every tab (overflow affordance + quick nav). */
+  const renderAllTabsMenu = () => {
     if (!hasOverflow) return null;
 
     return (
@@ -113,27 +158,33 @@ export function ResponsiveTabBar({
         <DropdownMenuTrigger asChild>
           <button
             className="overflow-menu-button hover:bg-app-panel"
-            title="More tabs"
+            title="All tabs"
             data-tauri-drag-region="false"
           >
             <MoreHorizontal className="w-4 h-4 text-app-text" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-[200px]">
+        <DropdownMenuContent align="end" className="min-w-[200px] max-h-[60vh] overflow-y-auto">
           <div className="px-2 py-1.5 text-xs font-medium text-app-muted">
-            Hidden Tabs ({overflowTabs.length})
+            All Tabs ({tabs.length})
           </div>
           <DropdownMenuSeparator />
-          {overflowTabs.map((tab) => {
+          {tabs.map((tab) => {
             const isActive = isTabActive(tab.path);
             const hasUnsavedChanges = unsavedChanges.has(tab.path);
 
             return (
               <DropdownMenuItem
                 key={tab.path}
-                onClick={() => handleOverflowTabClick(tab.path, onTabClick)}
+                onClick={() => onTabClick?.(tab.path)}
                 className="flex items-center justify-between gap-2"
               >
+                <ColoredFileIcon
+                  fileName={tab.name}
+                  isDirectory={false}
+                  className="tab-file-icon"
+                  showChevron={false}
+                />
                 <span className="truncate flex-1">{tab.name}</span>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {hasUnsavedChanges && (
@@ -172,7 +223,6 @@ export function ResponsiveTabBar({
 
   return (
     <div
-      ref={containerRef}
       className="responsive-tab-bar"
       data-tauri-drag-region
       style={{
@@ -182,16 +232,27 @@ export function ResponsiveTabBar({
         alignItems: 'stretch',
         paddingTop: '6px',
         height: '40px',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        position: 'relative',
       }}
     >
-      {/* Visible tabs */}
-      <div className="flex items-stretch" style={{ minWidth: 0 }}>
-        {visibleTabs.map((tab, index) => renderTab(tab, index, true))}
+      {/* Scrollable strip + edge fades */}
+      <div className="relative flex items-stretch" style={{ minWidth: 0, flexShrink: 1 }}>
+        <div
+          ref={scrollerRef}
+          onWheel={handleWheel}
+          className="no-scrollbar flex items-stretch"
+          data-tauri-drag-region
+          style={{ minWidth: 0, overflowX: 'auto', scrollBehavior: 'smooth' }}
+        >
+          {tabs.map((tab, index) => renderTab(tab, index))}
+        </div>
+        {canScrollLeft && <div className="tab-strip-fade tab-strip-fade-left" />}
+        {canScrollRight && <div className="tab-strip-fade tab-strip-fade-right" />}
       </div>
 
-      {/* Overflow menu */}
-      {renderOverflowMenu()}
+      {/* All-tabs menu (only when overflowing) */}
+      {renderAllTabsMenu()}
 
       {/* New tab — sits right after the tabs (Vellum), not at the window edge */}
       {onNewTab && (

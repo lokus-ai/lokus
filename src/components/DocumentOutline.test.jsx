@@ -64,20 +64,18 @@ describe('DocumentOutline Component', () => {
         expect(screen.queryByText('text')).not.toBeInTheDocument()
     })
 
-    it('scrolls to heading on click using setTextSelection and editor.coordsAtPos', () => {
+    it('scrolls to heading on click via setTextSelection (which scrollIntoViews the editor)', () => {
         render(<DocumentOutline editor={mockEditor} />)
 
         fireEvent.click(screen.getByText('Heading 1'))
 
         // setTextSelection is imported from commands/index.js and called with
-        // (editor, pos). Heading 1 is at pos=0 (first node, index 0 * 10 = 0).
-        expect(setTextSelection).toHaveBeenCalledWith(mockEditor, 0)
-
-        // coordsAtPos is called directly on the editor view object
-        expect(mockEditor.coordsAtPos).toHaveBeenCalledWith(0)
-
-        // window.scrollTo is called with the coords
-        expect(window.scrollTo).toHaveBeenCalled()
+        // (editor, pos + 1) — pos+1 places the cursor INSIDE the heading node,
+        // and setTextSelection itself dispatches scrollIntoView on the editor's
+        // scroll container. window.scrollTo scrolled the window, not the
+        // editor, so it was removed.
+        expect(setTextSelection).toHaveBeenCalledWith(mockEditor, 1)
+        expect(window.scrollTo).not.toHaveBeenCalled()
     })
 
     // The outline listens for the editor's own update event rather than
