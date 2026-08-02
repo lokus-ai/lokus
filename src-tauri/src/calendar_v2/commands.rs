@@ -596,6 +596,76 @@ pub async fn cal2_sync_now(app: AppHandle) -> Result<(), String> {
     }
 }
 
+
+/// Unresolved conflicts joined with event titles for display.
+#[tauri::command]
+pub async fn cal2_conflicts_list(store: State<'_, CalendarStore>) -> Result<serde_json::Value, String> {
+    store
+        .with(|c| {
+            let mut stmt = c
+                .prepare(
+                    "SELECT cf.id, cf.event_id, cf.local_json, cf.created_at, e.title
+                     FROM conflicts cf JOIN events e ON e.id = cf.event_id
+                     WHERE cf.resolved = 0 ORDER BY cf.created_at DESC LIMIT 100",
+                )
+                .map_err(|e| e.to_string())?;
+            let rows: Vec<serde_json::Value> = stmt
+                .query_map([], |r| {
+                    Ok(serde_json::json!({
+                        "id": r.get::<_, String>(0)?,
+                        "eventId": r.get::<_, String>(1)?,
+                        "localJson": r.get::<_, String>(2)?,
+                        "createdAt": r.get::<_, i64>(3)?,
+                        "title": r.get::<_, String>(4)?,
+                    }))
+                })
+                .map_err(|e| e.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?;
+            Ok(serde_json::Value::Array(rows))
+        })
+        .await
+}
+
+/// Resolve a conflict: keep_local re-pushes the local snapshot through the
+/// outbox; otherwise the remote version (already pulled) stands.
+#[tauri::command]
+pub async fn cal2_conflict_resolve(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+    id: String,
+    keep_local: bool,
+) -> Result<(), String> {
+    store
+        .with(move |c| {
+            let (event_id, local_json): (String, String) = c
+                .query_row(
+                    "SELECT event_id, local_json FROM conflicts WHERE id=?1",
+                    rusqlite::params![id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .map_err(|e| e.to_string())?;
+            if keep_local {
+                if let Ok(mut ev) = serde_json::from_str::<EventRow>(&local_json) {
+                    ev.id = event_id.clone();
+                    ev.pending = true;
+                    ev.updated_at = now_ms();
+                    store::upsert_event(c, &ev)?;
+                    enqueue_outbox(c, &ev, "update")?;
+                }
+            }
+            c.execute("UPDATE conflicts SET resolved=1 WHERE id=?1", rusqlite::params![id])
+                .map_err(|e| e.to_string())?;
+            Ok(())
+        })
+        .await?;
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
+    emit_changed(&app);
+    Ok(())
+}
+
 /// Startup hook: re-expand occurrences when the timezone changed or the
 /// horizon drifted. Cheap no-op otherwise.
 pub async fn maybe_reexpand(app: AppHandle, store: CalendarStore) {

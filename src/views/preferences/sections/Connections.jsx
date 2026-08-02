@@ -67,7 +67,8 @@ export default function Connections({
     setIcalError("");
     setIcalLoading(true);
     try {
-      const sub = await calendarService.ical.addSubscription(icalUrl.trim());
+      const { default: calendarV2 } = await import('../../../services/calendarV2.js');
+      const sub = await calendarV2.addIcalAccount(icalUrl.trim());
       setIcalSubscriptions((prev) => [...prev, sub]);
       setIcalUrl("");
     } catch (err) {

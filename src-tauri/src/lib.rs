@@ -653,6 +653,8 @@ pub fn run() {
       calendar_v2::commands::cal2_account_add_ical,
       calendar_v2::commands::cal2_account_remove,
       calendar_v2::commands::cal2_sync_now,
+      calendar_v2::commands::cal2_conflicts_list,
+      calendar_v2::commands::cal2_conflict_resolve,
       handlers::files::create_file_in_workspace,
       handlers::files::create_folder_in_workspace,
       handlers::files::read_file_content,

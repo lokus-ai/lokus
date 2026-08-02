@@ -20,6 +20,12 @@ export default function CalendarAccountsV2() {
   const accounts = useCalendarV2Store((s) => s.accounts);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [showCaldav, setShowCaldav] = useState(false);
+  const [caldavUrl, setCaldavUrl] = useState('https://caldav.icloud.com');
+  const [caldavUser, setCaldavUser] = useState('');
+  const [caldavPass, setCaldavPass] = useState('');
+  const calendars = useCalendarV2Store((s) => s.calendars);
+  const conflicts = useCalendarV2Store((s) => s.conflicts);
 
   useEffect(() => {
     useCalendarV2Store.getState().init();
@@ -78,12 +84,95 @@ export default function CalendarAccountsV2() {
         </div>
       ))}
 
+      {/* Per-calendar visibility */}
+      {calendars.length > 0 && (
+        <div className="pt-2 pb-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-app-muted mb-1">Calendars</div>
+          {calendars.map((cal) => {
+            const acct = accounts.find((a) => a.id === cal.account_id);
+            return (
+              <label key={cal.id} className="flex items-center gap-2 py-1 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={cal.visible}
+                  onChange={(e) => calendarV2.setCalendarVisible(cal.id, e.target.checked)}
+                  className="accent-[rgb(var(--accent))]"
+                />
+                <span className="w-2 h-2 rounded-full flex-none" style={{ backgroundColor: cal.color || 'rgb(var(--muted))' }} />
+                <span className="text-[13px] text-app-text truncate">{cal.name}</span>
+                <span className="text-[11px] text-app-muted truncate">{acct?.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Sync conflicts */}
+      {conflicts.length > 0 && (
+        <div className="pt-2 pb-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-red-400 mb-1">
+            Sync conflicts ({conflicts.length})
+          </div>
+          {conflicts.map((cf) => (
+            <div key={cf.id} className="flex items-center gap-2 py-1.5 border-b border-app-border/40 last:border-b-0">
+              <span className="text-[13px] text-app-text truncate flex-1">
+                {cf.title || 'Untitled event'}
+                <span className="text-[11px] text-app-muted ml-2">edited in two places</span>
+              </span>
+              <P.Button tone="ghost" onClick={() => calendarV2.resolveConflict(cf.id, false)}>
+                Keep remote
+              </P.Button>
+              <P.Button tone="ghost" onClick={() => calendarV2.resolveConflict(cf.id, true)}>
+                Keep mine
+              </P.Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* iCloud / CalDAV connect form */}
+      {showCaldav && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError(null);
+            try {
+              await calendarV2.addCaldavAccount(caldavUrl.trim(), caldavUser.trim(), caldavPass, null);
+              setShowCaldav(false);
+              setCaldavUser('');
+              setCaldavPass('');
+            } catch (err) {
+              setError(String(err?.message || err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="mt-3 p-3 rounded-lg bg-[rgb(var(--text)/0.04)] space-y-2"
+        >
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-app-muted">iCloud / CalDAV</div>
+          <P.TextField mono value={caldavUrl} onChange={setCaldavUrl} placeholder="https://caldav.icloud.com" />
+          <P.TextField value={caldavUser} onChange={setCaldavUser} placeholder="Apple ID / username" />
+          <P.TextField type="password" value={caldavPass} onChange={setCaldavPass} placeholder="App-specific password" />
+          <div className="flex items-center gap-2">
+            <P.Button type="submit" tone="primary" disabled={busy || !caldavUrl.trim() || !caldavUser.trim() || !caldavPass}>
+              {busy ? 'Verifying…' : 'Connect'}
+            </P.Button>
+            <P.Button tone="ghost" onClick={() => setShowCaldav(false)}>Cancel</P.Button>
+            <span className="text-[11px] text-app-muted">iCloud needs an app-specific password (appleid.apple.com)</span>
+          </div>
+        </form>
+      )}
+
       <div className="pt-3 flex items-center gap-2 flex-wrap">
         <P.Button tone="primary" onClick={() => addOauth(calendarV2.addGoogleAccount)} disabled={busy}>
           {busy ? 'Opening browser…' : 'Add Google'}
         </P.Button>
         <P.Button onClick={() => addOauth(calendarV2.addMicrosoftAccount)} disabled={busy}>
           Add Microsoft
+        </P.Button>
+        <P.Button onClick={() => setShowCaldav((v) => !v)} disabled={busy}>
+          Add iCloud / CalDAV
         </P.Button>
         <P.Button
           onClick={() => {
@@ -96,9 +185,7 @@ export default function CalendarAccountsV2() {
         >
           Add Notion
         </P.Button>
-        <span className="text-[11px] text-app-muted">
-          iCloud connects with an app-specific password (legacy section below for now).
-        </span>
+
       </div>
       {error && <P.Note tone="danger">{error}</P.Note>}
     </>

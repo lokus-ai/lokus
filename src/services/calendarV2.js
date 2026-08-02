@@ -162,6 +162,12 @@ export const calendarV2 = {
   async syncNow() {
     return invoke('cal2_sync_now');
   },
+  async conflicts() {
+    return invoke('cal2_conflicts_list');
+  },
+  async resolveConflict(id, keepLocal) {
+    return invoke('cal2_conflict_resolve', { id, keepLocal });
+  },
   /** Subscribe to store changes; returns unlisten. Client-side debounced. */
   async onChanged(cb) {
     let t = null;

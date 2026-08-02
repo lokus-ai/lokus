@@ -12,6 +12,7 @@ export const useCalendarV2Store = create((set, get) => ({
   accounts: [],
   calendars: [],
   upcoming: [],           // next 7 days, powers widget/agenda
+  conflicts: [],
   ready: false,
   _unlisten: null,
 
@@ -25,12 +26,13 @@ export const useCalendarV2Store = create((set, get) => ({
 
   async refresh() {
     try {
-      const [accounts, calendars, upcoming] = await Promise.all([
+      const [accounts, calendars, upcoming, conflicts] = await Promise.all([
         calendarV2.accounts(),
         calendarV2.calendars(),
         calendarV2.eventsInRange(Date.now(), Date.now() + 7 * 86400000),
+        calendarV2.conflicts().catch(() => []),
       ]);
-      set({ accounts, calendars, upcoming, ready: true });
+      set({ accounts, calendars, upcoming, conflicts, ready: true });
     } catch (e) {
       console.error('[calendarV2] refresh failed:', e);
     }
