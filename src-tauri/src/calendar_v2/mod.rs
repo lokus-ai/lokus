@@ -12,6 +12,7 @@ pub mod connector;
 pub mod creds;
 pub mod engine;
 pub mod expand;
+pub mod migrate;
 pub mod models;
 pub mod providers;
 pub mod schema;

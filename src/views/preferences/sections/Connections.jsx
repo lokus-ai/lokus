@@ -25,6 +25,7 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { CalendarSettings } from "../../../components/Calendar/index.js";
+import CalendarAccountsV2 from './CalendarAccountsV2.jsx';
 import calendarService from "../../../services/calendar.js";
 import * as P from "../primitives.jsx";
 
@@ -148,7 +149,14 @@ export default function Connections({
 
   return (
     <P.Page title="Connections" lede="Link a calendar and its events sit alongside your notes.">
-      <P.Group label="Google Calendar">
+      <P.Group
+        label="Calendar accounts"
+        hint="Multiple accounts sync in the background into a local store — the calendar reads instantly, even offline."
+      >
+        <CalendarAccountsV2 />
+      </P.Group>
+
+      <P.Group label="Google Calendar (legacy)">
         <CalendarSettings />
       </P.Group>
 

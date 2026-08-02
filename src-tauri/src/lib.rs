@@ -983,6 +983,7 @@ pub fn run() {
                 app.manage(engine);
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
+                  calendar_v2::migrate::run(&store).await;
                   calendar_v2::commands::maybe_reexpand(handle, store).await;
                 });
               }

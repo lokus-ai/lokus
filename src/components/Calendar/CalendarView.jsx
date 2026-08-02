@@ -44,10 +44,10 @@ import {
   parseISO
 } from 'date-fns';
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
-import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
+import calendarV2 from '../../services/calendarV2.js';
+import { useCalendarV2Store } from '../../stores/calendarV2.js';
 import { useScheduleContext } from '../../contexts/ScheduleContext.jsx';
 import { useViewStore } from '../../stores/views.js';
-import calendarService from '../../services/calendar.js';
 import EventCard from './EventCard.jsx';
 import TaskScheduleSidebar from './TaskScheduleSidebar.jsx';
 import ScheduleBlockComponent, { ScheduleBlockContextMenu } from './ScheduleBlockComponent.jsx';
@@ -58,18 +58,15 @@ import ScheduleBlockComponent, { ScheduleBlockContextMenu } from './ScheduleBloc
  * Full calendar view with month, week, and day views
  */
 export default function CalendarView({ workspacePath, onClose, onOpenSettings }) {
-  const {
-    isAuthenticated,
-    calendars,
-    upcomingEvents,
-    upcomingEventsLoading,
-    eventsByDate,
-    syncInProgress,
-    triggerSync,
-    connectGoogle,
-    getVisibleCalendars,
-    getWritableCalendars
-  } = useCalendarContext();
+  // V2: one local store, no network reads, no context caches.
+  const calendars = useCalendarV2Store((s) => s.calendars);
+  const accounts = useCalendarV2Store((s) => s.accounts);
+  const [syncInProgress, setSyncInProgress] = useState(false);
+  const triggerSync = useCallback(async () => {
+    setSyncInProgress(true);
+    try { await calendarV2.syncNow(); } finally { setTimeout(() => setSyncInProgress(false), 1500); }
+  }, []);
+  useEffect(() => { useCalendarV2Store.getState().init(); }, []);
   const calendarNavigationTarget = useViewStore((state) => state.calendarNavigationTarget);
   const setCalendarNavigationTarget = useViewStore((state) => state.setCalendarNavigationTarget);
 
@@ -448,19 +445,16 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
     return { start, end };
   }, []);
 
-  // Fetch events with smart caching
+  // V2: read the exact view range from the local store — reads are ~1ms
+  // SQLite queries, so there is nothing to cache. Re-query on navigation and
+  // whenever the backend signals a change.
   useEffect(() => {
-    const fetchEventsForView = async () => {
-      if (!isAuthenticated) return;
-
+    let cancelled = false;
+    const query = async () => {
       let viewStart, viewEnd;
-
-      // Calculate current view range
       if (viewMode === 'month') {
-        const monthStart = startOfMonth(currentDate);
-        const monthEnd = endOfMonth(currentDate);
-        viewStart = startOfWeek(monthStart);
-        viewEnd = endOfWeek(monthEnd);
+        viewStart = startOfWeek(startOfMonth(currentDate));
+        viewEnd = endOfWeek(endOfMonth(currentDate));
       } else if (viewMode === 'week') {
         viewStart = startOfWeek(currentDate);
         viewEnd = endOfWeek(currentDate);
@@ -470,51 +464,18 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
         viewEnd = new Date(currentDate);
         viewEnd.setHours(23, 59, 59, 999);
       }
-
-      // INSTANT: Always show cached data first (stale-while-revalidate)
-      const cachedEvents = getEventsFromCache(viewStart, viewEnd);
-      if (cachedEvents.length > 0 || eventsCacheRef.current.events.size > 0) {
-        setViewEvents(cachedEvents);
-      }
-
-      // Check if we need to fetch
-      if (isRangeCovered(viewStart, viewEnd)) {
-        // Cache hit - no fetch needed
-        if (cachedEvents.length === 0 && eventsCacheRef.current.events.size > 0) {
-          setViewEvents(cachedEvents);
-        }
-        return;
-      }
-
-      // Calculate extended range to pre-fetch
-      const { start: fetchStart, end: fetchEnd } = getExtendedRange(viewStart, viewEnd, viewMode);
-
-      setViewEventsLoading(true);
       try {
-        // Ensure calendars are loaded (uses its own cache)
-        const calendarsLoaded = await calendarService.calendars.getCachedCalendars();
-        if (calendarsLoaded.length === 0) {
-          await calendarService.calendars.getCalendars();
-        }
-
-        // Fetch extended range
-        const events = await calendarService.events.getAllEvents(fetchStart, fetchEnd);
-
-        // Add to cache
-        addToCache(events, fetchStart, fetchEnd);
-
-        // Update view with events for current range
-        const viewEvents = getEventsFromCache(viewStart, viewEnd);
-        setViewEvents(viewEvents);
-      } catch (error) {
-        console.error('Failed to fetch events for view:', error);
-      } finally {
-        setViewEventsLoading(false);
+        const events = await calendarV2.eventsInRange(viewStart, viewEnd);
+        if (!cancelled) setViewEvents(events);
+      } catch (e) {
+        console.error('[calendarV2] range query failed:', e);
       }
     };
-
-    fetchEventsForView();
-  }, [isAuthenticated, currentDate, viewMode, isRangeCovered, getEventsFromCache, addToCache, getExtendedRange]);
+    query();
+    let un = null;
+    calendarV2.onChanged(query).then((u) => { un = u; if (cancelled) u(); });
+    return () => { cancelled = true; un?.(); };
+  }, [currentDate, viewMode]);
 
   // Navigation handlers
   const goToPrevious = useCallback(() => {
@@ -737,7 +698,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
             setViewEvents(prev => prev.filter(e => e.id !== event.id));
 
             // Delete in background (pass etag for CalDAV concurrency)
-            calendarService.events.deleteEvent(event.calendar_id, event.id, event.etag)
+            calendarV2.deleteEvent(event.id)
               .then(() => {
                 toast.success('Event deleted', { description: event.title });
                 updateEventInCache(event.id, null); // Remove from cache
@@ -775,7 +736,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
           setViewEvents(prev => [...prev, optimisticEvent].sort((a, b) => new Date(a.start) - new Date(b.start)));
 
           // Create in background
-          calendarService.events.createEvent(targetCalendar.id, {
+          calendarV2.createEvent(targetCalendar.id, {
             title: event.title + ' (copy)',
             description: event.description,
             start: event.start,
@@ -936,7 +897,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
 
       // Update in background (pass etag for CalDAV concurrency)
       try {
-        await calendarService.events.updateEvent(event.calendar_id, event.id, {
+        await calendarV2.updateEvent(event.id, {
           title: event.title,
           start: newStart.toISOString(),
           end: newEnd.toISOString(),
@@ -1005,7 +966,7 @@ export default function CalendarView({ workspacePath, onClose, onOpenSettings })
 
     try {
       // Pass etag for CalDAV concurrency
-      await calendarService.events.updateEvent(event.calendar_id, event.id, {
+      await calendarV2.updateEvent(event.id, {
         title: event.title,
         start: newStart.toISOString(),
         end: newEnd.toISOString(),
@@ -2270,7 +2231,7 @@ function EventDetailsModal({ event, calendars, anchor = null, onClose, onOptimis
 
     // Save in background (pass etag for CalDAV concurrency)
     try {
-      await calendarService.events.updateEvent(event.calendar_id, event.id, {
+      await calendarV2.updateEvent(event.id, {
         title,
         location: location || null,
         description: description || null,
@@ -2306,7 +2267,7 @@ function EventDetailsModal({ event, calendars, anchor = null, onClose, onOptimis
 
     // Delete in background (pass etag for CalDAV concurrency)
     try {
-      await calendarService.events.deleteEvent(event.calendar_id, event.id, event.etag);
+      await calendarV2.deleteEvent(event.id);
       toast.success('Event deleted', { description: event.title });
     } catch (err) {
       console.error('Failed to delete event:', err);
@@ -2558,7 +2519,7 @@ function CreateEventModal({ initialData, calendars, onClose, onOptimisticAdd, on
 
     // Create in background
     try {
-      const createdEvent = await calendarService.events.createEvent(selectedCalendarId, {
+      const createdEvent = await calendarV2.createEvent(selectedCalendarId, {
         title,
         location: location || null,
         description: description || null,
@@ -2566,8 +2527,9 @@ function CreateEventModal({ initialData, calendars, onClose, onOptimisticAdd, on
         end: endDateTime,
         allDay
       });
-      // Replace temp event with real one
-      onReplaceTemp?.(tempId, createdEvent);
+      // The calendar://changed re-query delivers the real row and replaces
+      // the optimistic temp automatically.
+      void createdEvent;
       toast.success('Event created', { description: title });
     } catch (err) {
       console.error('Failed to create event:', err);
