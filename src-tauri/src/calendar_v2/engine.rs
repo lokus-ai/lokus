@@ -33,8 +33,9 @@ impl SyncEngine {
         tauri::async_runtime::spawn(async move {
             // Small delay so app startup isn't competing with a sync burst.
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            let mut last_synced: HashMap<String, i64> = HashMap::new();
             loop {
-                let changed = sync_all(&store).await;
+                let changed = sync_all(&store, &mut last_synced).await;
                 if changed {
                     emit_changed(&app);
                 }
@@ -53,7 +54,9 @@ impl SyncEngine {
 }
 
 /// Sync every connected account; returns whether anything changed.
-async fn sync_all(store: &CalendarStore) -> bool {
+/// `last_synced` gates per-provider cadence (CalDAV/iCal poll slower than
+/// delta APIs) — a sync_now poke still respects nothing older than 5s.
+async fn sync_all(store: &CalendarStore, last_synced: &mut HashMap<String, i64>) -> bool {
     let accounts = match store.with(store::list_accounts).await {
         Ok(a) => a,
         Err(_) => return false,
@@ -63,7 +66,14 @@ async fn sync_all(store: &CalendarStore) -> bool {
         if account.status == "disabled" {
             continue;
         }
+        let min_interval = super::providers::min_sync_interval_ms(&account.provider);
+        if let Some(last) = last_synced.get(&account.id) {
+            if now_ms() - last < min_interval {
+                continue;
+            }
+        }
         let Some(conn) = connector_for(&account) else { continue };
+        last_synced.insert(account.id.clone(), now_ms());
         match sync_account(store, &account, conn.clone()).await {
             Ok(changed) => {
                 any_changes |= changed;

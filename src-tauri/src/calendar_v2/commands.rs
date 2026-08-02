@@ -289,6 +289,94 @@ async fn finish_google_link(
     Ok(email)
 }
 
+/// Connect a CalDAV / iCloud account: verifies credentials + discovers the
+/// calendar home via the V1 client, then registers the account.
+#[tauri::command]
+pub async fn cal2_account_add_caldav(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+    server_url: String,
+    username: String,
+    password: String,
+    label: Option<String>,
+) -> Result<String, String> {
+    let verified = crate::calendar::caldav::test_connection(&server_url, &username, &password)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let provider = if server_url.contains("icloud.com") { "icloud" } else { "caldav" };
+    let now = now_ms();
+    let account = Account {
+        id: Uuid::new_v4().to_string(),
+        provider: provider.into(),
+        label: label.unwrap_or_else(|| username.clone()),
+        identity: format!("{username}@{server_url}"),
+        status: "connected".into(),
+        color: None,
+        config: serde_json::json!({
+            "server_url": server_url,
+            "username": username,
+            "principal_url": verified.principal_url,
+            "calendar_home_url": verified.calendar_home_url,
+        }),
+        created_at: now,
+        updated_at: now,
+    };
+    let acc = account.clone();
+    store.with(move |c| store::upsert_account(c, &acc)).await?;
+    let (prov, identity) = (account.provider.clone(), account.identity.clone());
+    let real_id: String = store
+        .with(move |c| {
+            c.query_row(
+                "SELECT id FROM accounts WHERE provider=?1 AND identity=?2",
+                rusqlite::params![prov, identity],
+                |r| r.get(0),
+            )
+            .map_err(|e| e.to_string())
+        })
+        .await?;
+    creds::store(&real_id, &creds::StoredCreds { access: password, refresh: None, expires_at: None })?;
+
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
+    emit_changed(&app);
+    Ok(real_id)
+}
+
+/// Follow an iCal feed (or import a local .ics via a file:// identity).
+#[tauri::command]
+pub async fn cal2_account_add_ical(
+    app: AppHandle,
+    store: State<'_, CalendarStore>,
+    url: String,
+    name: Option<String>,
+) -> Result<String, String> {
+    let url = url.trim().replace("webcal://", "https://");
+    let label = name.unwrap_or_else(|| {
+        url.rsplit('/').next().unwrap_or("Subscription").trim_end_matches(".ics").to_string()
+    });
+    let now = now_ms();
+    let account = Account {
+        id: Uuid::new_v4().to_string(),
+        provider: "ical".into(),
+        label,
+        identity: url,
+        status: "connected".into(),
+        color: None,
+        config: serde_json::json!({}),
+        created_at: now,
+        updated_at: now,
+    };
+    let id = account.id.clone();
+    store.with(move |c| store::upsert_account(c, &account)).await?;
+    if let Some(engine) = app.try_state::<SyncEngine>() {
+        engine.sync_now();
+    }
+    emit_changed(&app);
+    Ok(id)
+}
+
 #[tauri::command]
 pub async fn cal2_account_remove(
     app: AppHandle,

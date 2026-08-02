@@ -647,6 +647,8 @@ pub fn run() {
       calendar_v2::commands::cal2_event_update,
       calendar_v2::commands::cal2_event_delete,
       calendar_v2::commands::cal2_account_add_google,
+      calendar_v2::commands::cal2_account_add_caldav,
+      calendar_v2::commands::cal2_account_add_ical,
       calendar_v2::commands::cal2_account_remove,
       calendar_v2::commands::cal2_sync_now,
       handlers::files::create_file_in_workspace,
