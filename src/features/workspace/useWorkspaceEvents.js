@@ -7,6 +7,8 @@ import { useViewStore } from "../../stores/views";
 import { useEditorGroupStore } from "../../stores/editorGroups";
 import { useFileTreeStore } from "../../stores/fileTree";
 import { getEditor } from "../../stores/editorRegistry";
+import { deleteTabModel } from "../../stores/tabModels";
+import { getTabMeta } from "../../stores/tabMeta";
 import { useGraphStore } from "../../core/graph2/graphStore.js";
 import { useLayoutDefaults } from "../../contexts/RemoteConfigContext";
 import { getActiveShortcuts } from "../../core/shortcuts/registry.js";
@@ -444,4 +446,68 @@ export function useWorkspaceEvents({
     window.addEventListener('lokus:insert-template', handleInsertTemplate);
     return () => window.removeEventListener('lokus:insert-template', handleInsertTemplate);
   }, []);
+
+  // -------------------------------------------------------------------------
+  // Workspace filesystem watcher (external changes: Finder, git, other apps)
+  // -------------------------------------------------------------------------
+  // Rust watches the workspace root (FSEvents) and emits a debounced
+  // workspace:fs-change with the affected paths. Here: always refresh the
+  // file tree; for open CLEAN tabs whose content actually differs on disk,
+  // reload (active tab via lokus:external-file-reload, handled in
+  // EditorGroup) or drop the cached model (inactive tab, re-read on
+  // activation). Dirty tabs are never touched — unsaved edits win.
+  useEffect(() => {
+    if (!isTauriEnv() || !workspacePath) return;
+    let unlisten = null;
+    let disposed = false;
+
+    (async () => {
+      try {
+        await invoke('start_workspace_watch', { workspacePath });
+      } catch (e) {
+        console.warn('[watcher] unavailable:', e);
+        return;
+      }
+      if (disposed) return;
+      unlisten = await listen('workspace:fs-change', async (event) => {
+        const { workspace, paths = [] } = event.payload || {};
+        if (workspace !== workspacePath) return;
+
+        useFileTreeStore.getState().refreshTree();
+
+        const changed = new Set(paths);
+        const { getAllGroups } = useEditorGroupStore.getState();
+        for (const g of getAllGroups()) {
+          for (const tab of g.tabs || []) {
+            if (!changed.has(tab.path)) continue;
+            const meta = getTabMeta(g.id, tab.path);
+            if (meta?.dirty) continue;
+            // Self-save guard: our own writes fire the watcher too. Only
+            // reload when the disk content actually differs from what the
+            // tab last saw.
+            try {
+              const raw = await invoke('read_file_content', { path: tab.path });
+              if (typeof meta?.savedContent === 'string' && meta.savedContent === raw) continue;
+            } catch {
+              continue; // deleted/unreadable — the tree refresh reflects it
+            }
+            if (g.activeTab === tab.path) {
+              window.dispatchEvent(new CustomEvent('lokus:external-file-reload', {
+                detail: { groupId: g.id, path: tab.path },
+              }));
+            } else {
+              deleteTabModel(g.id, tab.path);
+            }
+          }
+        }
+      });
+      if (disposed) unlisten?.();
+    })();
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+      invoke('stop_workspace_watch', { workspacePath }).catch(() => {});
+    };
+  }, [workspacePath]);
 }

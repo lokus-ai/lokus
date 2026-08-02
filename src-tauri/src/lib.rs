@@ -635,6 +635,8 @@ pub fn run() {
       theme::get_theme_tokens,
       theme::save_theme_tokens,
       handlers::files::read_workspace_files,
+      handlers::watcher::start_workspace_watch,
+      handlers::watcher::stop_workspace_watch,
       handlers::files::create_file_in_workspace,
       handlers::files::create_folder_in_workspace,
       handlers::files::read_file_content,

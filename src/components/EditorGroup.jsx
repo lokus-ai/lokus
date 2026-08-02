@@ -9,7 +9,7 @@ import WelcomeScreen from './WelcomeScreen';
 import { canvasManager } from '../core/canvas/manager';
 import { createLokusParser, createLokusSerializer } from '../core/markdown/lokus-md-pipeline';
 import { registerEditor } from '../stores/editorRegistry';
-import { getTabModel, setTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
+import { getTabModel, setTabModel, deleteTabModel, getSavedDoc, setSavedDoc } from '../stores/tabModels';
 import GraphView from './graph2/GraphView.jsx';
 import { getGraphEngine } from '../core/graph2/graphEngine.js';
 import { useTabMetaStore, getTabMeta, selectGroupDirtyPaths } from '../stores/tabMeta';
@@ -233,6 +233,22 @@ export default function EditorGroup({
     setTabModel(group.id, filePath, view.state, scrollContainerRef.current?.scrollTop ?? 0);
   }, [group.id]);
 
+  // ── External-change reload ────────────────────────────────────────────────
+  // The workspace watcher (useWorkspaceEvents) verified this file changed on
+  // disk and the tab is clean. Drop the cached model and bump the nonce so
+  // the tab-switching effect below re-runs and reloads from disk.
+  const [externalReloadNonce, setExternalReloadNonce] = useState(0);
+  useEffect(() => {
+    const onExternalReload = (e) => {
+      const { groupId, path } = e.detail || {};
+      if (groupId !== group.id || !path || path !== activeFileRef.current) return;
+      deleteTabModel(group.id, path);
+      setExternalReloadNonce((n) => n + 1);
+    };
+    window.addEventListener('lokus:external-file-reload', onExternalReload);
+    return () => window.removeEventListener('lokus:external-file-reload', onExternalReload);
+  }, [group.id]);
+
   // ── Tab-switching effect ──────────────────────────────────────────────────
 
   // Runs as a LAYOUT effect: the view is re-pointed synchronously, before the
@@ -341,7 +357,7 @@ export default function EditorGroup({
       if (loadingFileRef.current === activeFile) loadingFileRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFile, group.id]);
+  }, [activeFile, group.id, externalReloadNonce]);
 
   // ── Tab bar handlers ──────────────────────────────────────────────────────
 
