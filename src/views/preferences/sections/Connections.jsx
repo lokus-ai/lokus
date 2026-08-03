@@ -104,15 +104,15 @@ export default function Connections({
     setCaldavError("");
     setCaldavLoading(true);
     try {
-      const account = await calendarService.caldav.connect(
+      // V2: registers a multi-account row; the sync engine pulls calendars.
+      const { default: calendarV2 } = await import('../../../services/calendarV2.js');
+      await calendarV2.addCaldavAccount(
         caldavForm.serverUrl,
         caldavForm.username,
         caldavForm.password
       );
-      setCaldavAccount(account);
+      setCaldavAccount({ username: caldavForm.username });
       setCaldavForm({ serverUrl: "https://caldav.icloud.com", username: "", password: "" });
-      const cals = await calendarService.caldav.refreshCalendars();
-      setCaldavCalendars(cals);
     } catch (err) {
       console.error("Failed to connect:", err);
       setCaldavError(err.message || "iCloud rejected those details. An app-specific password is required.");

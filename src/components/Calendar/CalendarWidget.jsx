@@ -27,9 +27,11 @@ import { useCalendarV2Store, selectTodayEvents, selectEventsByDate } from '../..
 export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
   const accounts = useCalendarV2Store((s) => s.accounts);
   const upcomingEvents = useCalendarV2Store((s) => s.upcoming);
-  const todayEvents = useCalendarV2Store(selectTodayEvents);
-  const eventsByDate = useCalendarV2Store(selectEventsByDate);
   const ready = useCalendarV2Store((s) => s.ready);
+  // Derived values MUST be memoized — selector functions that return fresh
+  // arrays/objects on every call make zustand re-render forever.
+  const todayEvents = useMemo(() => selectTodayEvents({ upcoming: upcomingEvents }), [upcomingEvents]);
+  const eventsByDate = useMemo(() => selectEventsByDate({ upcoming: upcomingEvents }), [upcomingEvents]);
   useEffect(() => { useCalendarV2Store.getState().init(); }, []);
 
   const isAuthenticated = accounts.length > 0;
