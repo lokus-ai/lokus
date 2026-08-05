@@ -120,3 +120,5 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 .rollup.cache/
+packages/plugin-sdk/tsconfig.tsbuildinfo
+packages/plugin-sdk/.rollup.cache/
