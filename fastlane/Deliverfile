@@ -8,6 +8,7 @@ platform "osx"
 # Listing only — binaries ship via the release-appstore workflow.
 skip_binary_upload true
 run_precheck_before_submit false
+submit_for_review true
 
 # Don't nuke fields we haven't modeled yet.
 skip_app_version_update false
