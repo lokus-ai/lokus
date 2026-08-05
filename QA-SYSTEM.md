@@ -47,7 +47,7 @@ qa/
     recorder.js          steps, screenshots, console errors, findings per journey
     server.js            reuse/spawn `npm run dev` (with QA_FS_SHIM=1)
     node-shims/          fs-promises + path browser shims (QA only; see bug 00)
-  journeys/              00–08 deterministic critical journeys
+  journeys/              00–10 deterministic critical journeys
   ai-user/
     agent.js             observe(screenshot+DOM) → decide → act loop
     llm.js               Anthropic Messages API (ANTHROPIC_API_KEY) or documented stub persona

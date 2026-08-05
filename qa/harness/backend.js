@@ -23,6 +23,8 @@ export class QaBackend {
     this.windowEvents = []; // close/hide/show requests recorded by the window plugin mock
     this.unknownCommands = new Set();
     this.vaultCounter = 0;
+    this.pluginEnabled = [];      // plugin folder names currently enabled
+    this.pluginPermissions = {};  // plugin folder name -> granted capabilities
   }
 
   async init() {
@@ -36,6 +38,8 @@ export class QaBackend {
     this.pickerQueue = [];
     this.windowEvents = [];
     this.latency = {};
+    this.pluginEnabled = [];
+    this.pluginPermissions = {};
   }
 
   async createVault(name) {
@@ -296,6 +300,21 @@ export class QaBackend {
       }
       case '__qa_home_dir':
         return this.runRoot;
+      case '__qa_path_join': {
+        const parts = (Array.isArray(args?.paths) ? args.paths : []).filter(Boolean);
+        return parts.join('/').replace(/\/+/g, '/');
+      }
+      case '__qa_read_bytes': {
+        const buf = await fs.readFile(this.guard(args?.path));
+        return Array.from(buf);
+      }
+      case '__qa_path_exists':
+        try {
+          await fs.access(this.guard(args?.path));
+          return true;
+        } catch {
+          return false;
+        }
       case '__qa_window_event':
         this.windowEvents.push({ ...args, ts: Date.now() });
         return true;
@@ -306,10 +325,37 @@ export class QaBackend {
       case 'list_kanban_boards':
       case 'get_all_tasks':
       case 'search_in_files':
-      case 'list_plugins':
-      case 'get_enabled_plugins':
       case 'git_status_summary':
         return [];
+      // ---- plugin system v3 (reads {runRoot}/.lokus/plugins like the real app) ----
+      case 'list_plugins':
+        return this.listPlugins();
+      case 'get_enabled_plugins':
+        return [...this.pluginEnabled];
+      case 'enable_plugin': {
+        const folder = this.resolvePluginFolder(args?.name);
+        if (folder && !this.pluginEnabled.includes(folder)) this.pluginEnabled.push(folder);
+        return null;
+      }
+      case 'disable_plugin': {
+        const folder = this.resolvePluginFolder(args?.name);
+        this.pluginEnabled = this.pluginEnabled.filter((f) => f !== folder && f !== args?.name);
+        return null;
+      }
+      case 'set_plugin_permission':
+        this.pluginPermissions[args?.pluginName] = args?.permissions || [];
+        return null;
+      case 'get_plugin_permissions':
+        return this.pluginPermissions[args?.pluginName] || [];
+      case 'uninstall_plugin': {
+        const folder = this.resolvePluginFolder(args?.name);
+        if (folder) {
+          await fs.rm(join(this.pluginsDir(), folder), { recursive: true, force: true });
+        }
+        this.pluginEnabled = this.pluginEnabled.filter((f) => f !== folder);
+        delete this.pluginPermissions[folder];
+        return null;
+      }
       case 'open_kanban_board':
         return { columns: [], cards: [] };
       case 'is_development_mode':
@@ -319,5 +365,62 @@ export class QaBackend {
         this.unknownCommands.add(cmd);
         return null;
     }
+  }
+
+  // ---------- plugin system v3 helpers ----------
+
+  pluginsDir() {
+    return join(this.runRoot, '.lokus', 'plugins');
+  }
+
+  async listPlugins() {
+    const dir = this.pluginsDir();
+    let entries = [];
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    const out = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const manifest = JSON.parse(
+          await fs.readFile(join(dir, entry.name, 'plugin.json'), 'utf8')
+        );
+        out.push({
+          manifest,
+          path: join(dir, entry.name),
+          enabled: this.pluginEnabled.includes(entry.name),
+          installed_at: new Date().toISOString(),
+          size: 0,
+        });
+      } catch {
+        // folder without a readable manifest — skip, like the real installer would
+      }
+    }
+    return out;
+  }
+
+  resolvePluginFolder(nameOrId) {
+    if (!nameOrId) return null;
+    if (fsSync.existsSync(join(this.pluginsDir(), nameOrId))) return nameOrId;
+    const dir = this.pluginsDir();
+    try {
+      for (const entry of fsSync.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        try {
+          const manifest = JSON.parse(
+            fsSync.readFileSync(join(dir, entry.name, 'plugin.json'), 'utf8')
+          );
+          if (manifest.id === nameOrId || manifest.name === nameOrId) return entry.name;
+        } catch {
+          // unreadable manifest — not a match
+        }
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 }

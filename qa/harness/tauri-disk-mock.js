@@ -140,10 +140,13 @@
     if (cmd.startsWith('plugin:path|')) {
       const op = cmd.split('|')[1];
       if (op === 'resolve_directory' || op === 'resolve') return forward('__qa_home_dir', {});
+      if (op === 'join' || op === 'join_dir') return forward('__qa_path_join', args);
       return forward('__qa_home_dir', {});
     }
     if (cmd.startsWith('plugin:fs|')) {
-      // App mostly uses custom commands; return null for the rare plugin-fs call.
+      const op = cmd.split('|')[1];
+      if (op === 'read_file' || op === 'read_text_file') return forward('__qa_read_bytes', args);
+      if (op === 'exists') return forward('__qa_path_exists', args);
       return null;
     }
     if (cmd.startsWith('plugin:global-shortcut|') || cmd.startsWith('plugin:updater|') ||
@@ -168,6 +171,8 @@
   window.__TAURI_INTERNALS__ = {
     invoke,
     transformCallback,
+    convertFileSrc: (filePath, protocol) =>
+      `${protocol || 'asset'}://localhost/${encodeURIComponent(filePath)}`,
     metadata: {
       currentWindow: { label: 'main' },
       currentWebview: { label: 'main', windowLabel: 'main' },

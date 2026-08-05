@@ -1,0 +1,34 @@
+{
+  "apiVersion": 3,
+  "id": "live-clock",
+  "name": "Live Clock",
+  "version": "1.0.0",
+  "description": "A ticking clock in your status bar, an animated clock panel, and timestamp commands.",
+  "author": "Lokus",
+  "main": "index.js",
+  "capabilities": ["ui", "editor"],
+  "activation": ["startup"],
+  "contributes": {
+    "commands": [
+      { "id": "insert-timestamp", "title": "Insert timestamp", "icon": "clock" }
+    ],
+    "slashCommands": [
+      {
+        "name": "clock",
+        "description": "Insert a clock divider",
+        "insert": "\n---\n\n> 🕐 *Time flies like an arrow. Fruit flies like a banana.*\n\n---\n"
+      }
+    ],
+    "statusBar": [
+      { "id": "clock", "position": "right", "text": "…", "tooltip": "Live Clock" }
+    ],
+    "panels": [
+      {
+        "id": "clock-panel",
+        "title": "Clock",
+        "position": "right",
+        "content": { "type": "webview", "src": "panel.html" }
+      }
+    ]
+  }
+}

@@ -116,9 +116,15 @@ export function PluginProvider({ children }) {
 
   const uninstallPlugin = useCallback((pluginId) => host.uninstall(pluginId), []);
 
-  const togglePlugin = useCallback((pluginId, enabled) => {
-    return enabled ? host.enable(pluginId) : host.disable(pluginId);
-  }, []);
+  const togglePlugin = useCallback(async (pluginId, enabled) => {
+    if (!enabled) return host.disable(pluginId);
+    const rec = host.get(pluginId);
+    if (!rec) throw new Error(`plugin not found: ${pluginId}`);
+    const caps = await askForGrants(rec.manifest);
+    if (caps === null) throw new Error('Enable cancelled');
+    await host.backend.saveGrants(rec.folder, caps);
+    return host.enable(pluginId);
+  }, [askForGrants]);
 
   const updatePluginSettings = useCallback(async (pluginId, settings) => {
     const rec = host.get(pluginId);
