@@ -5,6 +5,27 @@ All notable changes to Lokus will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-04
+
+### Added — Plugin System v3
+- Plugins now run in a dedicated Worker: no DOM, no IPC, no access to your notes, tokens, or files unless you grant it. The old same-realm runtime is gone.
+- **Ask Screen**: every install and enable lists the plugin's requested capabilities (read notes, network, overlay, …) and requires your explicit approval. Unchecked capabilities are denied forever until you allow them.
+- Capability gate checks every plugin request against your grants; denied calls are recorded and visible in the new per-plugin console (logs + blocked calls).
+- Declarative contribution points: commands (palette), slash commands, status-bar items, editor toolbar, side/bottom panels, and transparent always-on-top overlay windows.
+- Activation events — plugins boot lazily on `command:` / `view:` / `file:` triggers instead of all at startup.
+- Crashing plugins get three strikes and are stopped; the app keeps running.
+- `lokus-plugin-sdk@3.0.0`: typed v3 API, manifest v3 types, `definePlugin`, templates, and testing mocks. SDK major now matches the manifest `apiVersion` it speaks.
+
+### Changed
+- Plugin identity is a single `id`: installs folder-named by manifest id; legacy manifests (no `apiVersion: 3`) are listed as unsupported and never execute.
+- Deep-link and registry installs require confirmation before any code is fetched or run.
+
+### Removed
+- ~38k lines of unreachable/half-built plugin subsystems (five overlapping systems, fake sandbox, imperative panel manager) and their tests.
+
+### Known gaps
+- Plugin auto-updates are manual for v1; package signing lands with registry-side infra; the CLI still scaffolds legacy plugins (its output is refused by the v3 host).
+
 ## [1.2.0] - 2026-07-31
 
 ### Performance

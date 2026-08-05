@@ -1,7 +1,7 @@
 {
   "name": "lokus-plugin-sdk",
-  "version": "1.1.0",
-  "description": "Official Plugin Development Kit (PDK) for Lokus - Build powerful plugins with TypeScript-first development experience",
+  "version": "3.0.0",
+  "description": "Official Plugin Development Kit for Lokus v3 \u2014 typed API, manifest v3, templates, and testing mocks",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "module": "dist/index.esm.js",
@@ -20,11 +20,6 @@
       "import": "./dist/templates/index.esm.js",
       "require": "./dist/templates/index.js",
       "types": "./dist/templates/index.d.ts"
-    },
-    "./utils": {
-      "import": "./dist/utils/index.esm.js",
-      "require": "./dist/utils/index.js",
-      "types": "./dist/utils/index.d.ts"
     }
   },
   "files": [
