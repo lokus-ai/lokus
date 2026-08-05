@@ -13,8 +13,7 @@ import BacklinksPanel from '../BacklinksPanel.jsx';
 import VersionHistoryPanel from '../../components/VersionHistoryPanel.jsx';
 import { DailyNotesPanel } from '../../components/DailyNotes/index.js';
 import { AgendaPanel, CalendarWidget } from '../../components/Calendar/index.js';
-import { PanelRegion } from '../../plugins/ui/PanelManager.jsx';
-import { PANEL_POSITIONS } from '../../plugins/api/UIAPI.js';
+import { PluginPanelsRegion } from '../../features/plugin-v3/PluginPanels.jsx';
 
 /**
  * RightSidebar — graph preview, document outline, backlinks, version history,
@@ -197,11 +196,8 @@ export default function RightSidebar({
         )}
       </div>
 
-      {/* Plugin panels registered to the right sidebar region */}
-      <PanelRegion
-        position={PANEL_POSITIONS.SIDEBAR_RIGHT}
-        className="border-t border-app-border"
-      />
+      {/* Plugin system v3 panels */}
+      <PluginPanelsRegion position="right" />
     </aside>
   );
 }

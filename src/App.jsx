@@ -26,7 +26,7 @@ import { useWorkspaceActivation } from "./hooks/useWorkspaceActivation";
 import { useDeepLink } from "./hooks/useDeepLink";
 import { registerGlobalShortcuts, unregisterGlobalShortcuts } from "./core/shortcuts/registry.js";
 import { PluginProvider } from "./hooks/usePlugins.jsx";
-import pluginStateAdapter from "./core/plugins/PluginStateAdapter.js";
+import { host } from "./core/plugin-v3/index.js";
 import { AuthProvider } from "./core/auth/AuthContext.jsx";
 import { ScheduleProvider } from "./contexts/ScheduleContext.jsx";
 import platformService from "./services/platform/PlatformService.js";
@@ -67,7 +67,7 @@ function App() {
 
   useEffect(() => {
     if (activePath) {
-      pluginStateAdapter.setWorkspacePath(activePath);
+      host.setWorkspacePath(activePath);
     }
   }, [activePath]);
 
