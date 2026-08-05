@@ -48,6 +48,11 @@ app.post('/api/v1/registry/publish', upload.single('file'), async (req, res) => 
         const manifest = JSON.parse(manifestStr);
         const { name, version } = manifest;
 
+        const safeNameRegex = /^[a-zA-Z0-9_-]+$/;
+        if (!name || !version || !safeNameRegex.test(name) || !safeNameRegex.test(version)) {
+            return res.status(400).json({ message: 'Invalid plugin name or version' });
+        }
+
         console.log(`Received publish request for ${name}@${version}`);
 
         // Create plugin directory
