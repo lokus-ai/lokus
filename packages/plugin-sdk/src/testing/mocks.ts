@@ -36,7 +36,7 @@ export function createMockLokusAPI(): MockLokus {
   const api: LokusAPI = {
     commands: {
       execute: async (id, args) => {
-        state.commandsExecuted.push({ id, args });
+        state.commandsExecuted.push({ id, args: args ?? {} });
         return null;
       },
     },

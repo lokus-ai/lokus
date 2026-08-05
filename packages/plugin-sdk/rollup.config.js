@@ -29,7 +29,10 @@ const plugins = [
   typescript({
     tsconfig: './tsconfig.json',
     declaration: false,
-    declarationMap: false
+    declarationMap: false,
+    // incremental + a cold tsbuildinfo cache makes the plugin silently skip
+    // emitting transformed sources (fresh CI clones failed; warm local builds passed)
+    incremental: false
   }),
   resolve({
     preferBuiltins: true
