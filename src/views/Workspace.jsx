@@ -10,7 +10,7 @@ import '../core/editor/live-settings.js';
 // Context providers
 import { FolderScopeProvider, useFolderScope } from '../contexts/FolderScopeContext.jsx';
 import { BasesProvider, useBases } from '../bases/BasesContext.jsx';
-import { PanelManager } from '../plugins/ui/PanelManager.jsx';
+import { PluginPanelsRegion } from '../features/plugin-v3/PluginPanels.jsx';
 
 // Stores
 import { useEditorGroupStore } from '../stores/editorGroups';
@@ -251,7 +251,7 @@ function WorkspaceInner({ path }) {
   // Render
   // ---------------------------------------------------------------------------
   return (
-    <PanelManager>
+    <>
       <ShortcutListener
         workspacePath={path}
         onSave={handleSave}
@@ -329,6 +329,7 @@ function WorkspaceInner({ path }) {
           bottomPanel={<BottomPanel workspacePath={path} onResizeStart={handleBottomPanelResizeStart} />}
           statusBar={null}
         />
+        <PluginPanelsRegion position="bottom" />
       </div>
 
       <ErrorBoundary name="ModalLayer" message="Modal crashed">
@@ -342,7 +343,7 @@ function WorkspaceInner({ path }) {
           onCloseReferenceModal={handleCloseReferenceModal}
         />
       </ErrorBoundary>
-    </PanelManager>
+    </>
   );
 }
 

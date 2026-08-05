@@ -362,6 +362,8 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
   height: 16px;
   margin-right: 8px;
   opacity: 0.7;
+  stroke-width: 1.75; /* lucide default 2 looks chunky at 16px */
+  flex-shrink: 0;
 }
 
 .obsidian-file-badge {
@@ -698,6 +700,119 @@ aside, nav, .obsidian-tab, .obsidian-button, .obsidian-file-item,
 .overflow-menu-button:hover {
   background-color: rgb(var(--panel-secondary));
   color: rgb(var(--text));
+}
+
+/* ===== Document Outline ===== */
+.outline-panel {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.outline-header {
+  padding: 12px 12px 8px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: rgb(var(--muted));
+  letter-spacing: 0.6px;
+}
+.outline-list {
+  padding: 2px 6px 12px;
+}
+.outline-empty {
+  padding: 16px;
+  color: rgb(var(--muted));
+  font-size: 13px;
+}
+.outline-item {
+  display: flex;
+  align-items: center;
+  min-height: 26px;
+  padding-right: 8px;
+  margin: 1px 0;
+  border-radius: 5px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: rgb(var(--muted));
+  cursor: pointer;
+  transition: background-color .12s ease, color .12s ease;
+}
+.outline-item:hover {
+  background-color: rgb(var(--text) / 0.06);
+  color: rgb(var(--text));
+}
+.outline-item-active {
+  background-color: rgb(var(--accent) / 0.12);
+  color: rgb(var(--text));
+}
+.outline-item-active:hover {
+  background-color: rgb(var(--accent) / 0.16);
+}
+.outline-level-1 {
+  font-weight: 600;
+  color: rgb(var(--text));
+}
+.outline-level-2 {
+  font-weight: 500;
+}
+.outline-item-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* File-type icon inside tabs (muted, matches the file tree's) */
+.tab-file-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.65;
+  stroke-width: 1.75;
+}
+
+/* Anchored popovers (calendar event create/edit) */
+.lokus-popover {
+  animation: lokus-pop-in 140ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes lokus-pop-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+/* Chat-bubble tail: rotated square peeking out the side facing the anchor */
+.lokus-popover-arrow {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  background: rgb(var(--panel));
+  transform: translateY(-50%) rotate(45deg);
+}
+.lokus-popover-arrow-left {
+  left: -6px;
+  border-left: 1px solid rgb(var(--border) / 0.7);
+  border-bottom: 1px solid rgb(var(--border) / 0.7);
+}
+.lokus-popover-arrow-right {
+  right: -6px;
+  border-right: 1px solid rgb(var(--border) / 0.7);
+  border-top: 1px solid rgb(var(--border) / 0.7);
+}
+
+/* Edge fades on the scrollable tab strip: signal more tabs off-screen */
+.tab-strip-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  z-index: 20;
+}
+.tab-strip-fade-left {
+  left: 0;
+  background: linear-gradient(to right, rgb(var(--panel)), rgb(var(--panel) / 0));
+}
+.tab-strip-fade-right {
+  right: 0;
+  background: linear-gradient(to left, rgb(var(--panel)), rgb(var(--panel) / 0));
 }
 
 /* ===== Responsive Status Bar ===== */

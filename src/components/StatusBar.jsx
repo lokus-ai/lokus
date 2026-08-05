@@ -3,7 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { useStatusBar } from '../hooks/useStatusBar';
 import { usePluginStatusItems } from '../hooks/usePluginStatusItems.js';
 import StatusBarContextMenu from './StatusBarContextMenu.jsx';
-import pluginStateAdapter from '../core/plugins/PluginStateAdapter.js';
+import { host } from '../core/plugin-v3/index.js';
 import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
 
 /**
@@ -27,7 +27,7 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     e.preventDefault();
 
     // Get plugin commands
-    const plugin = pluginStateAdapter.getPlugin(pluginId);
+    const plugin = host.get(pluginId);
     const commands = plugin?.manifest?.contributes?.commands || [];
 
     if (commands.length > 0) {
@@ -41,10 +41,8 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
   };
 
   const handleExecuteCommand = async (commandId) => {
-    if (typeof window !== 'undefined' && window.lokus && window.lokus.commands) {
-      // Execute via global command registry
-      window.lokus.commands.executeCommand(commandId);
-    } else {
+    if (contextMenu.pluginId) {
+      host.triggerCommand(`${contextMenu.pluginId}.${commandId}`).catch(() => {});
     }
   };
 
@@ -132,10 +130,7 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
   };
 
   const handleCommand = (command) => {
-    // Execute command through plugin system
-    if (typeof window !== 'undefined' && window.pluginRuntime) {
-      window.pluginRuntime.executeCommand(command);
-    }
+    if (command) host.triggerCommand(command).catch(() => {});
   };
 
   // Separate plugin status items by alignment

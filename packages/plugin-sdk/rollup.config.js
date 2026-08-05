@@ -97,24 +97,8 @@ export default [
   },
   
   // Utils bundle
-  {
-    input: 'src/utils/index.ts',
-    output: [
-      {
-        file: 'dist/utils/index.js',
-        format: 'cjs',
-        sourcemap: true
-      },
-      {
-        file: 'dist/utils/index.esm.js',
-        format: 'esm',
-        sourcemap: true
-      }
-    ],
-    external,
-    plugins
-  },
-  
+  // (removed in v3 — the old helper classes targeted the deleted runtime)
+
   // Type definitions
   {
     input: 'src/index.ts',
@@ -142,17 +126,6 @@ export default [
     input: 'src/templates/index.ts',
     output: {
       file: 'dist/templates/index.d.ts',
-      format: 'esm'
-    },
-    plugins: [dts()],
-    external
-  },
-  
-  // Utils type definitions
-  {
-    input: 'src/utils/index.ts',
-    output: {
-      file: 'dist/utils/index.d.ts',
       format: 'esm'
     },
     plugins: [dts()],

@@ -93,7 +93,7 @@ describe('Live Editor Settings', () => {
       tableCellPadding: 12,
 
       // Selection
-      selectionColor: 'rgba(99, 102, 241, 0.2)'
+      selectionColor: null // null = CSS fallback to theme accent
     })
   })
 

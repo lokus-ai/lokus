@@ -158,4 +158,12 @@ describe('FileTreeView', () => {
 
     expect(row().className).toContain('active');
   });
+
+  it('renders a file-type icon (svg) for plain file rows', () => {
+    const { container } = setup();
+    const fileRows = Array.from(container.querySelectorAll('.file-leaf'));
+    expect(fileRows.length).toBeGreaterThan(0);
+    const withIcon = fileRows.filter((row) => row.querySelector('svg'));
+    expect(withIcon.length).toBe(fileRows.length);
+  });
 });

@@ -1,0 +1,5 @@
+1.2.0 — polish everywhere:
+• Redesigned calendar with week, day, and month views
+• Cleaner selection, tabs, outline, and file-tree with file-type icons
+• Faster startup and lighter memory footprint
+• Many fixes and stability improvements

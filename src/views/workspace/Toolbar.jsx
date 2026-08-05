@@ -19,6 +19,10 @@ import { closeTabWithGuard } from '../../features/tabs/closeGuard';
 /** Stand-in tab shown when the group is empty. Never enters the store. */
 const WELCOME_TAB = '__welcome__';
 
+/** Stand-in tab for full-pane views that replace the editor (calendar…).
+    Presentational only — closing it returns to the editor view. */
+const CALENDAR_TAB = '__view_calendar__';
+
 /**
  * Toolbar — fixed titlebar with action buttons and responsive tab bar.
  *
@@ -71,17 +75,31 @@ export default function Toolbar({
   // has something in it. Presentational only — it is never added to the
   // group, so `activeFile` stays null and EditorGroup keeps rendering
   // WelcomeScreen underneath it.
-  const displayTabs = hasActiveTabs
+  // Full-pane views (calendar) replace the editor content, so the tab strip
+  // must show them as the active "tab" — otherwise it claims a file is open
+  // while the calendar is on screen.
+  const currentView = useViewStore((s) => s.currentView);
+  const isCalendarView = currentView === 'calendar';
+
+  let displayTabs = hasActiveTabs
     ? openTabs
     : [{ path: WELCOME_TAB, name: 'Welcome', closable: false }];
-  const displayActiveTab = hasActiveTabs ? activeFile : WELCOME_TAB;
+  let displayActiveTab = hasActiveTabs ? activeFile : WELCOME_TAB;
+  if (isCalendarView) {
+    displayTabs = [...(hasActiveTabs ? openTabs : []), { path: CALENDAR_TAB, name: 'Calendar', kind: 'calendar' }];
+    displayActiveTab = CALENDAR_TAB;
+  }
   // Dirty flags live in the tabMeta store (off the layout tree) — subscribe
   // to a shallow-compared array of dirty paths for the focused group.
   const dirtyPaths = useTabMetaStore(useShallow(selectGroupDirtyPaths(focusedGroup?.id)));
   const unsavedChanges = new Set(dirtyPaths);
 
   const handleTabClick = (path) => {
-    if (path === WELCOME_TAB) return; // placeholder, already what's showing
+    if (path === WELCOME_TAB || path === CALENDAR_TAB) return; // already showing
+    // Clicking a file tab while a full-pane view is up returns to the editor.
+    if (useViewStore.getState().currentView !== 'editor') {
+      useViewStore.getState().switchView('editor');
+    }
     const groupId = useEditorGroupStore.getState().focusedGroupId;
     if (groupId) {
       useEditorGroupStore.getState().setActiveTab(groupId, path);
@@ -90,6 +108,10 @@ export default function Toolbar({
 
   const handleTabClose = (path) => {
     if (path === WELCOME_TAB) return; // not closable
+    if (path === CALENDAR_TAB) {
+      useViewStore.getState().switchView('editor');
+      return;
+    }
     const groupId = useEditorGroupStore.getState().focusedGroupId;
     if (groupId) {
       closeTabWithGuard(groupId, path);

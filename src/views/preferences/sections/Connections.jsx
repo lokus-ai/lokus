@@ -24,7 +24,7 @@
  */
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { CalendarSettings } from "../../../components/Calendar/index.js";
+import CalendarAccountsV2 from './CalendarAccountsV2.jsx';
 import calendarService from "../../../services/calendar.js";
 import * as P from "../primitives.jsx";
 
@@ -67,7 +67,8 @@ export default function Connections({
     setIcalError("");
     setIcalLoading(true);
     try {
-      const sub = await calendarService.ical.addSubscription(icalUrl.trim());
+      const { default: calendarV2 } = await import('../../../services/calendarV2.js');
+      const sub = await calendarV2.addIcalAccount(icalUrl.trim());
       setIcalSubscriptions((prev) => [...prev, sub]);
       setIcalUrl("");
     } catch (err) {
@@ -103,15 +104,15 @@ export default function Connections({
     setCaldavError("");
     setCaldavLoading(true);
     try {
-      const account = await calendarService.caldav.connect(
+      // V2: registers a multi-account row; the sync engine pulls calendars.
+      const { default: calendarV2 } = await import('../../../services/calendarV2.js');
+      await calendarV2.addCaldavAccount(
         caldavForm.serverUrl,
         caldavForm.username,
         caldavForm.password
       );
-      setCaldavAccount(account);
+      setCaldavAccount({ username: caldavForm.username });
       setCaldavForm({ serverUrl: "https://caldav.icloud.com", username: "", password: "" });
-      const cals = await calendarService.caldav.refreshCalendars();
-      setCaldavCalendars(cals);
     } catch (err) {
       console.error("Failed to connect:", err);
       setCaldavError(err.message || "iCloud rejected those details. An app-specific password is required.");
@@ -148,9 +149,13 @@ export default function Connections({
 
   return (
     <P.Page title="Connections" lede="Link a calendar and its events sit alongside your notes.">
-      <P.Group label="Google Calendar">
-        <CalendarSettings />
+      <P.Group
+        label="Calendar accounts"
+        hint="Multiple accounts sync in the background into a local store — the calendar reads instantly, even offline."
+      >
+        <CalendarAccountsV2 />
       </P.Group>
+
 
       <P.Group label="iCal subscriptions" hint="Read-only feeds from any webcal:// or https:// address.">
         <form onSubmit={addSubscription} className="flex items-center gap-2 pb-3 border-b border-app-border/60">

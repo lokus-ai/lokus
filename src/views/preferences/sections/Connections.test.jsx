@@ -12,6 +12,30 @@ const calendarService = vi.hoisted(() => ({
 }));
 vi.mock("../../../services/calendar.js", () => ({ default: calendarService }));
 
+// The "Follow" form now adds feeds to the V2 account store. (vi.mock is
+// hoisted, so the mock object must live inside the factory; grab it back
+// via the mocked module import below.)
+vi.mock("../../../services/calendarV2.js", () => {
+  const mock = {
+    addIcalAccount: vi.fn(),
+    accounts: vi.fn().mockResolvedValue([]),
+    calendars: vi.fn().mockResolvedValue([]),
+    eventsInRange: vi.fn().mockResolvedValue([]),
+    conflicts: vi.fn().mockResolvedValue([]),
+    onChanged: vi.fn().mockResolvedValue(() => {}),
+    setCalendarVisible: vi.fn(),
+    resolveConflict: vi.fn(),
+    addGoogleAccount: vi.fn(),
+    addMicrosoftAccount: vi.fn(),
+    addCaldavAccount: vi.fn(),
+    addNotionAccount: vi.fn(),
+    removeAccount: vi.fn(),
+    syncNow: vi.fn(),
+  };
+  return { default: mock, calendarV2: mock };
+});
+import calendarV2 from "../../../services/calendarV2.js";
+
 function baseProps(overrides = {}) {
   return {
     icalSubscriptions: [],
@@ -53,7 +77,7 @@ describe("Connections preferences", () => {
   });
 
   it("reports an add failure inline instead of alerting", async () => {
-    calendarService.ical.addSubscription.mockRejectedValueOnce(new Error("Not a calendar"));
+    calendarV2.addIcalAccount.mockRejectedValueOnce(new Error("Not a calendar"));
     const props = baseProps({ icalUrl: "https://example.com/x.ics" });
     render(<Connections {...props} />);
     fireEvent.click(screen.getByText("Follow"));

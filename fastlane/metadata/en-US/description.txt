@@ -1,0 +1,28 @@
+Lokus is a local-first workspace for people who think in writing. Your notes are plain Markdown files in a folder you control — no lock-in, no cloud requirement, no telemetry.
+
+WRITE WITHOUT FRICTION
+• A fast, beautiful Markdown editor with live formatting, tables, callouts, math (LaTeX), diagrams, and code blocks
+• Wiki links between notes with instant autocomplete — build a knowledge base as you type
+• Command palette and keyboard-first workflows throughout
+
+SEE YOUR THINKING
+• An interactive graph view maps every connection between your notes — in 2D or 3D
+• Backlinks show every note that references the one you're reading
+• Infinite canvas for freeform diagrams and visual thinking
+
+ORGANIZE REAL WORK
+• Kanban boards stored as plain files alongside your notes
+• Tasks captured anywhere with checkbox syntax, tracked in one place
+• Database views ("Bases") turn note frontmatter into sortable, filterable tables
+
+YOUR CALENDAR, EVERYWHERE
+• Connect multiple Google, iCloud, Outlook, and Notion accounts plus iCal feeds
+• Every event syncs into a local database — the calendar opens instantly and works offline
+• Create and edit events without leaving your notes; changes sync back automatically
+
+PRIVATE BY ARCHITECTURE
+• Everything lives on your device: notes, boards, calendar data, credentials in the system keychain
+• Works fully offline
+• No account required, no tracking
+
+Your files. Your machine. Your second brain.

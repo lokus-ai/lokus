@@ -12,10 +12,10 @@ import {
 } from 'lucide-react';
 import { endOfWeek, format, isSameDay, startOfDay } from 'date-fns';
 import { toast } from 'sonner';
-import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
+import calendarV2 from '../../services/calendarV2.js';
+import { useCalendarV2Store } from '../../stores/calendarV2.js';
 import { taskManager } from '../../core/tasks/manager.js';
 import { parseTasksFromContent } from '../../core/tasks/parser.js';
-import calendarService from '../../services/calendar.js';
 import { useViewStore } from '../../stores/views';
 import { getFilename } from '../../utils/pathUtils.js';
 import { buildAgendaSections, getAgendaItemDate } from './agenda-utils.js';
@@ -310,12 +310,15 @@ function Section({ section, expanded, onToggle, onOpenEvent, onOpenTask, onCompl
 }
 
 export default function AgendaPanel({ workspacePath, onFileOpen, onOpenCalendarView }) {
-  const {
-    calendars,
-    isAuthenticated,
-    syncInProgress,
-    triggerSync,
-  } = useCalendarContext();
+  const calendars = useCalendarV2Store((s) => s.calendars);
+  const accounts = useCalendarV2Store((s) => s.accounts);
+  const isAuthenticated = accounts.length > 0;
+  useEffect(() => { useCalendarV2Store.getState().init(); }, []);
+  const [syncInProgress, setSyncInProgress] = useState(false);
+  const triggerSync = async () => {
+    setSyncInProgress(true);
+    try { await calendarV2.syncNow(); } finally { setTimeout(() => setSyncInProgress(false), 1500); }
+  };
   const switchView = useViewStore((state) => state.switchView);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -470,7 +473,7 @@ export default function AgendaPanel({ workspacePath, onFileOpen, onOpenCalendarV
 
     const rangeStart = startOfDay(new Date());
     const rangeEnd = endOfWeek(new Date());
-    const events = await calendarService.events.getAllEvents(rangeStart, rangeEnd);
+    const events = await calendarV2.eventsInRange(rangeStart, rangeEnd);
 
     return (events || [])
       .map((event) => {
@@ -561,7 +564,7 @@ export default function AgendaPanel({ workspacePath, onFileOpen, onOpenCalendarV
       loadAgenda({ silent: true });
     }, 60000);
 
-    calendarService.listeners.onSyncComplete(() => {
+    calendarV2.onChanged(() => {
       loadAgenda({ silent: true });
     }).then((unsubscribe) => {
       removeCalendarListener = unsubscribe;

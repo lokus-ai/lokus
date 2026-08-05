@@ -19,9 +19,13 @@ pub struct PluginManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>, // Plugin identifier (defaults to name if not provided)
     pub version: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(default)]
     pub author: String,
+    #[serde(default = "default_main")]
     pub main: String, // Entry point file
+    #[serde(default)]
     pub permissions: Vec<String>,
     pub dependencies: Option<HashMap<String, String>>,
     pub keywords: Option<Vec<String>>,
@@ -29,6 +33,22 @@ pub struct PluginManifest {
     pub homepage: Option<String>,
     pub license: Option<String>,
     pub contributes: Option<serde_json::Value>,
+    // Plugin-system v3 fields (ignored by older installs)
+    #[serde(rename = "apiVersion", skip_serializing_if = "Option::is_none")]
+    pub api_version: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub activation: Option<Vec<String>>,
+}
+
+fn default_main() -> String {
+    "index.js".to_string()
+}
+
+/// v3 identity rule: the manifest id is the folder name; legacy manifests fall back to name.
+pub fn plugin_folder_name(manifest: &PluginManifest) -> String {
+    manifest.id.clone().unwrap_or_else(|| manifest.name.clone())
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -187,8 +207,11 @@ pub fn list_plugins(app: AppHandle) -> Result<Vec<PluginInfo>, String> {
         
         if plugin_path.is_dir() {
             if let Ok(mut plugin_info) = load_plugin_info(&plugin_path) {
-                // Set correct enabled state from storage
-                plugin_info.enabled = enabled_plugins.contains(&plugin_info.manifest.name);
+                // Enabled list may hold the folder name, the manifest id, or the manifest name
+                let folder_name = entry.file_name().to_string_lossy().to_string();
+                plugin_info.enabled = enabled_plugins.contains(&folder_name)
+                    || plugin_info.manifest.id.as_ref().map_or(false, |id| enabled_plugins.contains(id))
+                    || enabled_plugins.contains(&plugin_info.manifest.name);
                 plugins.push(plugin_info);
             }
         }
@@ -430,18 +453,19 @@ async fn install_plugin_from_directory(source_dir: &Path, plugins_dir: &Path) ->
     
     let manifest: PluginManifest = serde_json::from_str(&manifest_content)
         .map_err(|e| format!("Failed to parse plugin.json: {}", e))?;
-    
+
     // Check if plugin already exists
-    let dest_dir = plugins_dir.join(&manifest.name);
+    let folder_name = plugin_folder_name(&manifest);
+    let dest_dir = plugins_dir.join(&folder_name);
     if dest_dir.exists() {
-        return Err(format!("Plugin '{}' is already installed", manifest.name));
+        return Err(format!("Plugin '{}' is already installed", folder_name));
     }
-    
+
     // Copy plugin directory
     copy_directory(source_dir, &dest_dir)
         .map_err(|e| format!("Failed to copy plugin: {}", e))?;
-    
-    Ok(manifest.name)
+
+    Ok(folder_name)
 }
 
 async fn install_plugin_from_zip(zip_path: &Path, plugins_dir: &Path) -> Result<String, String> {
@@ -485,14 +509,15 @@ async fn install_plugin_from_zip(zip_path: &Path, plugins_dir: &Path) -> Result<
     if !validation_result.valid {
         return Err(format!("Plugin manifest validation failed: {:?}", validation_result.errors));
     }
-    
+
     let manifest: PluginManifest = serde_json::from_str(&manifest_content)
         .map_err(|e| format!("Failed to parse plugin.json: {}", e))?;
-    
+
     // Check if plugin already exists
-    let dest_dir = plugins_dir.join(&manifest.name);
+    let folder_name = plugin_folder_name(&manifest);
+    let dest_dir = plugins_dir.join(&folder_name);
     if dest_dir.exists() {
-        return Err(format!("Plugin '{}' is already installed", manifest.name));
+        return Err(format!("Plugin '{}' is already installed", folder_name));
     }
     
     // Extract the ZIP archive
@@ -544,8 +569,8 @@ async fn install_plugin_from_zip(zip_path: &Path, plugins_dir: &Path) -> Result<
     // Copy to the final destination
     copy_directory(&source_dir, &dest_dir)
         .map_err(|e| format!("Failed to copy extracted plugin: {}", e))?;
-    
-    Ok(manifest.name)
+
+    Ok(folder_name)
 }
 
 fn copy_directory(src: &Path, dest: &Path) -> std::io::Result<()> {

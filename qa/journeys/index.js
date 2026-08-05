@@ -8,6 +8,7 @@ import splitUndo from './06-split-pane-undo.js';
 import graphHotkey from './07-graph-hotkey.js';
 import windowLifecycle from './08-window-lifecycle.js';
 import tabIsolation from './09-tab-isolation.js';
+import pluginSystem from './10-plugin-system.js';
 
 export const journeys = [
   clientNodeImports,
@@ -20,4 +21,5 @@ export const journeys = [
   graphHotkey,
   windowLifecycle,
   tabIsolation,
+  pluginSystem,
 ];

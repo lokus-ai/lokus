@@ -1,5 +1,1 @@
-/**
- * @fileoverview Plugin testing utilities
- */
-
-export * from './mocks.js'
+export * from './mocks.js';

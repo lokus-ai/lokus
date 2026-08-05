@@ -57,7 +57,7 @@ fn parse_ical_event(ical_event: &IcalEvent, calendar_id: &str) -> Option<Calenda
                         .unwrap_or(false) || value.len() == 8;
 
                     all_day = is_date_only;
-                    dtstart = parse_ical_datetime(value, is_date_only);
+                    dtstart = parse_ical_datetime_tz(value, is_date_only, prop_tzid(property).as_deref());
                 }
             }
             "DTEND" => {
@@ -66,7 +66,7 @@ fn parse_ical_event(ical_event: &IcalEvent, calendar_id: &str) -> Option<Calenda
                         .map(|p| p.iter().any(|(k, _)| k == "VALUE"))
                         .unwrap_or(false) || value.len() == 8;
 
-                    dtend = parse_ical_datetime(value, is_date_only);
+                    dtend = parse_ical_datetime_tz(value, is_date_only, prop_tzid(property).as_deref());
                 }
             }
             "LOCATION" => location = property.value.clone(),
@@ -130,8 +130,19 @@ fn parse_ical_event(ical_event: &IcalEvent, calendar_id: &str) -> Option<Calenda
     })
 }
 
-/// Parse iCal datetime string to DateTime<Utc>
+/// Parse iCal datetime string to DateTime<Utc>.
 fn parse_ical_datetime(value: &str, is_date_only: bool) -> Option<DateTime<Utc>> {
+    parse_ical_datetime_tz(value, is_date_only, None)
+}
+
+/// TZID-aware variant: a naive DATE-TIME with a TZID param is wall-clock time
+/// in that zone — interpreting it as UTC (the old behavior) shifted events by
+/// the UTC offset (e.g. a 6:30 PM Pacific meeting displayed at 11:30 AM).
+fn parse_ical_datetime_tz(
+    value: &str,
+    is_date_only: bool,
+    tzid: Option<&str>,
+) -> Option<DateTime<Utc>> {
     if is_date_only || value.len() == 8 {
         // DATE format: YYYYMMDD
         NaiveDate::parse_from_str(value, "%Y%m%d")
@@ -145,11 +156,29 @@ fn parse_ical_datetime(value: &str, is_date_only: bool) -> Option<DateTime<Utc>>
             .ok()
             .map(|dt| Utc.from_utc_datetime(&dt))
     } else {
-        // Local datetime: YYYYMMDDTHHmmss (treat as UTC for simplicity)
-        NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S")
-            .ok()
-            .map(|dt| Utc.from_utc_datetime(&dt))
+        let naive = NaiveDateTime::parse_from_str(value, "%Y%m%dT%H%M%S").ok()?;
+        if let Some(tz) = tzid.and_then(|t| t.parse::<chrono_tz::Tz>().ok()) {
+            use chrono::offset::LocalResult;
+            match tz.from_local_datetime(&naive) {
+                LocalResult::Single(dt) => Some(dt.with_timezone(&Utc)),
+                LocalResult::Ambiguous(dt, _) => Some(dt.with_timezone(&Utc)),
+                LocalResult::None => Some(Utc.from_utc_datetime(&naive)),
+            }
+        } else {
+            // Floating time or unmappable TZID (e.g. Windows names): UTC fallback.
+            Some(Utc.from_utc_datetime(&naive))
+        }
     }
+}
+
+/// TZID parameter of a property, if present.
+fn prop_tzid(property: &ical::property::Property) -> Option<String> {
+    property.params.as_ref().and_then(|params| {
+        params
+            .iter()
+            .find(|(k, _)| k == "TZID")
+            .and_then(|(_, v)| v.first().cloned())
+    })
 }
 
 /// Fetch ICS content from a URL

@@ -1,0 +1,18 @@
+# Lokus — App Store listing as code.
+# Push metadata + screenshots:  fastlane deliver --api_key_path fastlane/asc_api_key.json
+# (CI: .github/workflows/appstore-metadata.yml provides the key from secrets)
+
+app_identifier "io.lokus.app"
+platform "osx"
+
+# Listing only — binaries ship via the release-appstore workflow.
+skip_binary_upload true
+run_precheck_before_submit false
+
+# Don't nuke fields we haven't modeled yet.
+skip_app_version_update false
+overwrite_screenshots true
+force true
+
+metadata_path "./fastlane/metadata"
+screenshots_path "./fastlane/screenshots"

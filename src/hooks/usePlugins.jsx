@@ -1,260 +1,209 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { listen } from "@tauri-apps/api/event";
-import { toast } from "sonner";
-import pluginManager from "../core/plugins/PluginStateAdapter.js";
-
-const IS_APPSTORE = import.meta.env.VITE_APPSTORE === 'true';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
+import { confirm } from '@tauri-apps/plugin-dialog';
+import { host, contributions } from '../core/plugin-v3/index.js';
+import { startSlotSync } from '../core/plugin-v3/slots.js';
+import { usePluginSnapshot, useContributed } from '../features/plugin-v3/hooks.js';
+import AskScreen from '../features/plugin-v3/AskScreen.jsx';
+import PluginConsole from '../features/plugin-v3/PluginConsole.jsx';
 
 const PluginContext = createContext(null);
+const IS_APPSTORE = import.meta.env.VITE_APPSTORE === 'true';
 
 export function PluginProvider({ children }) {
-  const [plugins, setPlugins] = useState(pluginManager.allPlugins);
-  const [loading, setLoading] = useState(pluginManager.isLoading);
-  const [error, setError] = useState(pluginManager.currentError);
-  const [installingPlugins, setInstallingPlugins] = useState(pluginManager.installingPluginIds);
-  const [enabledPlugins, setEnabledPlugins] = useState(pluginManager.enabledPluginIds);
+  const snap = usePluginSnapshot();
+  const panels = useContributed('panels');
+  const [ask, setAsk] = useState(null);
+  const [consoleId, setConsoleId] = useState(null);
+  const [installingPlugins, setInstallingPlugins] = useState(new Set());
 
-  // Subscribe to plugin manager state changes
+  const askForGrants = useCallback(
+    (manifest) => new Promise((resolve) => setAsk({ manifest, resolve })),
+    []
+  );
+
   useEffect(() => {
-    const unsubscribe = pluginManager.onPluginStateChange((state) => {
-      setPlugins(state.plugins);
-      setLoading(state.loading);
-      setError(state.error);
-      setInstallingPlugins(state.installingPlugins);
-      setEnabledPlugins(state.enabledPlugins);
-    });
+    host.confirmGrants = (manifest) => askForGrants(manifest);
+    const stopSlots = startSlotSync(host, contributions);
+    host.init();
 
-    // Trigger initial load
-    pluginManager.loadPlugins();
-
-    return unsubscribe;
-  }, []);
-
-  // Listen for plugin system events
-  useEffect(() => {
-    let isTauri = false;
-    try {
-      const w = window;
-      isTauri = !!(
-        (w.__TAURI_INTERNALS__ && typeof w.__TAURI_INTERNALS__.invoke === 'function') ||
-        w.__TAURI_METADATA__ ||
-        (navigator?.userAgent || '').includes('Tauri')
-      );
-    } catch { }
-
-    // Expose manual loader for dev mode
+    let unlistenDeep = null;
     if (!IS_APPSTORE) {
-      window.loadDevPlugin = async (url) => {
-        try {
-          await pluginManager.loadDevPlugin(url);
-          return "Success";
-        } catch (e) {
-          throw e;
-        }
-      };
+      listen('deep-link-received', async (event) => {
+        const urlStr = event.payload;
+        if (typeof urlStr !== 'string' || !urlStr.startsWith('lokus://plugin-dev')) return;
+        let devUrl = null;
+        try { devUrl = new URL(urlStr).searchParams.get('url'); } catch { return; }
+        if (!devUrl) return;
+        const ok = await confirm(
+          `Load a development plugin from:\n\n${devUrl}\n\nThis runs third-party code on your computer. Only continue if you trust this source.`,
+          { title: 'Load development plugin?', kind: 'warning' }
+        ).catch(() => false);
+        if (ok) host.loadDevPlugin(devUrl).catch((e) => console.error('[plugins v3] dev load failed:', e));
+      }).then((un) => { unlistenDeep = un; }).catch(() => {});
     }
 
-    // Handle plugin installation from registry (triggered by deep links)
-    const handleRegistryInstall = async (event) => {
-      const { slug } = event.detail;
-      if (!slug) return;
-
+    const onRegistryInstall = async (event) => {
+      const slug = event?.detail?.slug;
+      if (!slug || IS_APPSTORE) return;
+      const ok = await confirm(
+        `Install plugin "${slug}" from the Lokus registry?\n\nYou will see its permission requests before it is enabled.`,
+        { title: 'Install plugin?', kind: 'question' }
+      ).catch(() => false);
+      if (!ok) return;
       try {
-        toast.info("Installing Plugin", {
-          description: `Fetching ${slug} from registry...`,
-        });
-
-        // Fetch plugin metadata from registry
-        const response = await fetch(`https://lokusmd.com/api/v1/registry/plugin/${slug}`);
-        if (!response.ok) {
-          throw new Error(`Plugin not found: ${slug}`);
+        const rec = await host.installMarketplace(slug, event?.detail?.version);
+        const caps = await askForGrants(rec.manifest);
+        if (caps === null) {
+          await host.uninstall(rec.id);
+          return;
         }
-
-        const plugin = await response.json();
-        console.log('[PluginProvider] Installing from registry:', plugin);
-
-        // Use the existing install method with fromMarketplace flag
-        await pluginManager.installPlugin(plugin.id, {
-          fromMarketplace: true,
-          version: plugin.latest_version
-        });
-
-        toast.success("Plugin Installed", {
-          description: `${plugin.name} v${plugin.latest_version} has been installed.`,
-        });
-
-      } catch (error) {
-        console.error('[PluginProvider] Registry install failed:', error);
-        toast.error("Installation Failed", {
-          description: error.message || 'Failed to install plugin',
-        });
+        await host.approveInstall(rec.id, caps);
+      } catch (e) {
+        console.error('[plugins v3] registry install failed:', e);
       }
     };
+    window.addEventListener('plugin-install-from-registry', onRegistryInstall);
 
-    if (!IS_APPSTORE) {
-      window.addEventListener('plugin-install-from-registry', handleRegistryInstall);
-    }
+    return () => {
+      stopSlots();
+      if (typeof unlistenDeep === 'function') unlistenDeep();
+      window.removeEventListener('plugin-install-from-registry', onRegistryInstall);
+    };
+  }, [askForGrants]);
 
-    if (isTauri) {
-      const unlistenPromise = listen("plugins:updated", () => {
-        pluginManager.loadPlugins(true); // Force reload on external updates
+  const installPlugin = useCallback(async (pluginId, data = {}) => {
+    setInstallingPlugins((prev) => new Set(prev).add(pluginId));
+    try {
+      if (data.fromMarketplace) {
+        const rec = await host.installMarketplace(pluginId, data.version);
+        const caps = await askForGrants(rec.manifest);
+        if (caps === null) {
+          await host.uninstall(rec.id);
+          throw new Error('Install cancelled');
+        }
+        await host.approveInstall(rec.id, caps);
+        return true;
+      }
+
+      if (data.path) {
+        const before = new Set(host.getSnapshot().plugins.map((p) => p.id));
+        await invoke('install_plugin', { path: data.path });
+        await host.refresh();
+        const rec = host.getSnapshot().plugins
+          .map((p) => host.get(p.id))
+          .find((r) => r && !before.has(r.id));
+        if (!rec) throw new Error('Install finished but the plugin was not found');
+        const caps = await askForGrants(rec.manifest);
+        if (caps === null) {
+          await host.uninstall(rec.id);
+          throw new Error('Install cancelled');
+        }
+        await host.approveInstall(rec.id, caps);
+        return true;
+      }
+
+      throw new Error('No install source provided');
+    } finally {
+      setInstallingPlugins((prev) => {
+        const next = new Set(prev);
+        next.delete(pluginId);
+        return next;
       });
-
-      // Listen for deep links (e.g. lokus://plugin-dev?url=...)
-      const deepLinkUnlistenPromise = !IS_APPSTORE
-        ? listen("deep-link-received", async (event) => {
-            const urlStr = event.payload;
-            if (typeof urlStr === 'string' && urlStr.startsWith('lokus://plugin-dev')) {
-              try {
-                const urlObj = new URL(urlStr);
-                const devUrl = urlObj.searchParams.get('url');
-                if (devUrl) {
-                  toast.info("Loading Dev Plugin", {
-                    description: `Connecting to ${devUrl}...`,
-                  });
-
-                  await pluginManager.loadDevPlugin(devUrl);
-
-                  toast.success("Plugin Loaded", {
-                    description: "Development plugin loaded successfully.",
-                  });
-                }
-              } catch (error) {
-                toast.error("Plugin Load Failed", {
-                  description: error.message,
-                });
-              }
-            }
-          })
-        : Promise.resolve(null);
-
-      return () => {
-        if (!IS_APPSTORE) {
-          window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
-        }
-        unlistenPromise.then(unlisten => {
-          if (typeof unlisten === 'function') unlisten();
-        }).catch(() => {});
-        deepLinkUnlistenPromise.then(unlisten => {
-          if (typeof unlisten === 'function') unlisten();
-        }).catch(() => {});
-      };
-    } else {
-      const onDom = () => pluginManager.loadPlugins(true);
-      window.addEventListener('plugins:updated', onDom);
-      return () => {
-        if (!IS_APPSTORE) {
-          window.removeEventListener('plugin-install-from-registry', handleRegistryInstall);
-        }
-        window.removeEventListener('plugins:updated', onDom);
-      };
     }
-  }, []);
+  }, [askForGrants]);
 
-  // Delegate methods to plugin manager
-  const loadPlugins = useCallback((forceReload = false) => {
-    return pluginManager.loadPlugins(forceReload);
-  }, []);
+  const uninstallPlugin = useCallback((pluginId) => host.uninstall(pluginId), []);
 
-  const installPlugin = useCallback((pluginId, pluginData) => {
-    return pluginManager.installPlugin(pluginId, pluginData);
-  }, []);
+  const togglePlugin = useCallback(async (pluginId, enabled) => {
+    if (!enabled) return host.disable(pluginId);
+    const rec = host.get(pluginId);
+    if (!rec) throw new Error(`plugin not found: ${pluginId}`);
+    const caps = await askForGrants(rec.manifest);
+    if (caps === null) throw new Error('Enable cancelled');
+    await host.backend.saveGrants(rec.folder, caps);
+    return host.enable(pluginId);
+  }, [askForGrants]);
 
-  const uninstallPlugin = useCallback((pluginId) => {
-    return pluginManager.uninstallPlugin(pluginId);
-  }, []);
-
-  const togglePlugin = useCallback((pluginId, enabled) => {
-    return pluginManager.togglePlugin(pluginId, enabled);
-  }, []);
-
-  const updatePluginSettings = useCallback((pluginId, settings) => {
-    return pluginManager.updatePluginSettings(pluginId, settings);
+  const updatePluginSettings = useCallback(async (pluginId, settings) => {
+    const rec = host.get(pluginId);
+    if (!rec) return false;
+    await host.backend.saveSetting(rec.folder, 'settings', settings);
+    return true;
   }, []);
 
   const getPlugin = useCallback((pluginId) => {
-    return pluginManager.getPlugin(pluginId);
+    const rec = host.get(pluginId);
+    if (!rec) return null;
+    return {
+      id: rec.id,
+      name: rec.manifest?.name || rec.id,
+      version: rec.manifest?.version,
+      description: rec.manifest?.description,
+      enabled: rec.enabled,
+      status: rec.status,
+      v3: rec.v3,
+      manifest: rec.manifest,
+      path: rec.path,
+      capabilities: rec.manifest?.capabilities || [],
+    };
   }, []);
 
-  const getEnabledPlugins = useCallback(() => {
-    return pluginManager.getEnabledPlugins();
-  }, []);
-
-  const getPluginPanels = useCallback(() => {
-    return pluginManager.getPluginPanels();
-  }, []);
+  const plugins = snap.plugins.map((p) => {
+    const rec = host.get(p.id);
+    return {
+      ...p,
+      manifest: rec?.manifest,
+      author: rec?.manifest?.author,
+      path: rec?.path,
+      devUrl: rec?.devUrl,
+      capabilities: rec?.manifest?.capabilities || [],
+    };
+  });
 
   const value = {
     plugins,
-    loading,
-    error,
+    loading: snap.loading,
+    error: snap.error,
     installingPlugins,
-    enabledPlugins,
+    enabledPlugins: new Set(plugins.filter((p) => p.enabled).map((p) => p.id)),
     installPlugin,
     uninstallPlugin,
     togglePlugin,
     updatePluginSettings,
     getPlugin,
-    getEnabledPlugins,
-    getPluginPanels,
-    refreshPlugins: loadPlugins
+    getEnabledPlugins: () => plugins.filter((p) => p.enabled),
+    getPluginPanels: () => panels,
+    refreshPlugins: () => host.refresh(),
+    openConsole: setConsoleId,
+    getLogs: (id) => host.getLogs(id),
+    getBlockedCalls: (id) => host.getAudit(id).filter((d) => !d.allowed),
   };
 
-  return <PluginContext.Provider value={value}>{children}</PluginContext.Provider>;
+  return (
+    <PluginContext.Provider value={value}>
+      {children}
+      <AskScreen
+        request={ask}
+        onAllow={(caps) => { ask?.resolve(caps); setAsk(null); }}
+        onCancel={() => { ask?.resolve(null); setAsk(null); }}
+      />
+      <PluginConsole pluginId={consoleId} onClose={() => setConsoleId(null)} />
+    </PluginContext.Provider>
+  );
 }
 
 export function usePlugins() {
   const context = useContext(PluginContext);
   if (!context) {
-    throw new Error("usePlugins must be used within a PluginProvider");
+    throw new Error('usePlugins must be used within a PluginProvider');
   }
   return context;
 }
 
-// Hook for managing plugin panels
 export function usePluginPanels() {
   const { getPluginPanels } = usePlugins();
-  const [activePanel, setActivePanel] = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
-  const [pinned, setPinned] = useState(false);
-
   const panels = getPluginPanels();
-
-  // Auto-select first available panel
-  useEffect(() => {
-    if (panels.length > 0 && !activePanel) {
-      setActivePanel(panels[0].id);
-    } else if (panels.length === 0) {
-      setActivePanel(null);
-    }
-  }, [panels, activePanel]);
-
-  const openPanel = useCallback((panelId) => {
-    setActivePanel(panelId);
-    setCollapsed(false);
-  }, []);
-
-  const closePanel = useCallback(() => {
-    setActivePanel(null);
-  }, []);
-
-  const toggleCollapse = useCallback(() => {
-    setCollapsed(prev => !prev);
-  }, []);
-
-  const togglePin = useCallback(() => {
-    setPinned(prev => !prev);
-  }, []);
-
-  return {
-    panels,
-    activePanel,
-    collapsed,
-    pinned,
-    openPanel,
-    closePanel,
-    toggleCollapse,
-    togglePin,
-    setActivePanel
-  };
+  return { panels };
 }

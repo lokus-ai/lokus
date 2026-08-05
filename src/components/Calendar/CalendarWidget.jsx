@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Calendar,
   ChevronRight,
@@ -12,7 +12,8 @@ import {
   X
 } from 'lucide-react';
 import { format, isToday, isTomorrow, parseISO, startOfDay } from 'date-fns';
-import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
+import calendarV2 from '../../services/calendarV2.js';
+import { useCalendarV2Store, selectTodayEvents, selectEventsByDate } from '../../stores/calendarV2.js';
 
 /**
  * Calendar Widget Component
@@ -24,20 +25,29 @@ import { useCalendarContext } from '../../contexts/CalendarContext.jsx';
  * - Quick sync button
  */
 export default function CalendarWidget({ onOpenCalendarView, onOpenSettings }) {
-  const {
-    isAuthenticated,
-    account,
-    authLoading,
-    connectGoogle,
-    disconnect,
-    upcomingEvents,
-    upcomingEventsLoading,
-    eventsByDate,
-    todayEvents,
-    syncInProgress,
-    triggerSync,
-    refreshUpcomingEvents
-  } = useCalendarContext();
+  const accounts = useCalendarV2Store((s) => s.accounts);
+  const upcomingEvents = useCalendarV2Store((s) => s.upcoming);
+  const ready = useCalendarV2Store((s) => s.ready);
+  // Derived values MUST be memoized — selector functions that return fresh
+  // arrays/objects on every call make zustand re-render forever.
+  const todayEvents = useMemo(() => selectTodayEvents({ upcoming: upcomingEvents }), [upcomingEvents]);
+  const eventsByDate = useMemo(() => selectEventsByDate({ upcoming: upcomingEvents }), [upcomingEvents]);
+  useEffect(() => { useCalendarV2Store.getState().init(); }, []);
+
+  const isAuthenticated = accounts.length > 0;
+  const account = accounts[0] ? { email: accounts[0].identity, provider: accounts[0].provider } : null;
+  const authLoading = !ready;
+  const upcomingEventsLoading = !ready;
+  const [syncInProgress, setSyncInProgress] = useState(false);
+  const triggerSync = async () => {
+    setSyncInProgress(true);
+    try { await calendarV2.syncNow(); } finally { setTimeout(() => setSyncInProgress(false), 1500); }
+  };
+  const refreshUpcomingEvents = () => useCalendarV2Store.getState().refresh();
+  const connectGoogle = () => calendarV2.addGoogleAccount();
+  const disconnect = async () => {
+    for (const a of accounts) await calendarV2.removeAccount(a.id);
+  };
 
   const [showUpcoming, setShowUpcoming] = useState(true);
   const [isConnecting, setIsConnecting] = useState(false);

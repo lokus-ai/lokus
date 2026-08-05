@@ -1,0 +1,39 @@
+name: App Store Listing
+
+# Pushes the App Store listing (description, keywords, screenshots) from
+# fastlane/metadata + fastlane/screenshots to App Store Connect.
+# The listing is code: edit the files, run this workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'fastlane/metadata/**'
+      - 'fastlane/screenshots/**'
+      - 'fastlane/Deliverfile'
+
+jobs:
+  deliver:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Push listing to App Store Connect
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_PATH_BASE64: ${{ secrets.APPLE_API_KEY_PATH_BASE64 }}
+        run: |
+          # fastlane api-key json (key content inline, base64)
+          cat > /tmp/asc_api_key.json <<KEY
+          {
+            "key_id": "$APPLE_API_KEY",
+            "issuer_id": "$APPLE_API_ISSUER",
+            "key": "$APPLE_API_KEY_PATH_BASE64",
+            "is_key_content_base64": true,
+            "in_house": false
+          }
+          KEY
+          fastlane deliver --api_key_path /tmp/asc_api_key.json
