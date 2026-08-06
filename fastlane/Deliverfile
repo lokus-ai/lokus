@@ -13,7 +13,7 @@ submit_for_review true
 # Export-compliance declaration: Lokus uses only HTTPS/TLS and standard
 # AES-256-GCM (exempt mass-market crypto) — no non-exempt encryption.
 submission_information({
-  add_id_info_uses_encryption: false
+  export_compliance_uses_encryption: false
 })
 
 # Don't nuke fields we haven't modeled yet.
