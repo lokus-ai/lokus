@@ -125,7 +125,7 @@
     "html2canvas": "^1.4.1",
     "isolated-vm": "^6.0.2",
     "js-yaml": "^4.1.0",
-    "jspdf": "^4.2.0",
+    "jspdf": "^4.2.1",
     "jsxgraph": "^1.12.2",
     "jszip": "^3.10.1",
     "katex": "^0.16.23",
