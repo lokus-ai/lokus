@@ -48,6 +48,24 @@ export default {
     );
     if (!listed) return;
 
+    // ---- 1b. Marketplace (Browse) tab renders and handles the registry ----
+    // NOTE: the registry backend (lokusmd.com/api/v1/registry) is a known
+    // missing server — every route 404s. The UI must degrade gracefully.
+    await d.click('text=Browse');
+    await d.page.waitForTimeout(2500);
+    const shotMarket = await d.screenshot('marketplace');
+    const errState = await d.page.locator('text=Failed to connect').count();
+    const cards = await d.page.locator('button:has-text("Install")').count();
+    t.expect(
+      errState > 0 || cards > 0,
+      'Marketplace UI handles the registry response gracefully',
+      'Browse shows registry plugin cards, or a clean error state (registry API is a known missing backend)',
+      `cards=${cards}, errorState=${errState}`,
+      shotMarket
+    );
+    await d.click('text=Installed');
+    await d.page.waitForTimeout(400);
+
     // ---- 2. Enable → Ask Screen appears before any code runs ----
     await d.click('button[title="Enable plugin"]');
     await d.page.waitForTimeout(500);
