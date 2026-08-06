@@ -18,7 +18,8 @@ import {
   Star,
   TrendingUp,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Terminal
 } from "lucide-react";
 
 const registry = new RegistryAPI();
@@ -33,7 +34,8 @@ export default function PluginSettings({ onOpenPluginDetail }) {
     installPlugin,
     uninstallPlugin,
     refreshPlugins,
-    installingPlugins
+    installingPlugins,
+    openConsole
   } = usePlugins();
 
   // Create a set of installed plugin IDs for quick lookup (include both id and slug)
@@ -199,6 +201,7 @@ export default function PluginSettings({ onOpenPluginDetail }) {
             onSelect={setSelectedPlugin}
             selectedPlugin={selectedPlugin}
             onOpenDetail={onOpenPluginDetail}
+            onConsole={openConsole}
           />
         ) : (
           <PluginMarketplace
@@ -224,7 +227,7 @@ export default function PluginSettings({ onOpenPluginDetail }) {
   );
 }
 
-function InstalledPlugins({ plugins, enabledPlugins, onToggle, onUninstall, onSelect, selectedPlugin, onOpenDetail }) {
+function InstalledPlugins({ plugins, enabledPlugins, onToggle, onUninstall, onSelect, selectedPlugin, onOpenDetail, onConsole }) {
   if (plugins.length === 0) {
     return (
       <div className="text-center py-8">
@@ -250,6 +253,7 @@ function InstalledPlugins({ plugins, enabledPlugins, onToggle, onUninstall, onSe
           onUninstall={() => onUninstall(plugin.id)}
           onSelect={() => onSelect(plugin)}
           onOpenDetail={() => onOpenDetail(plugin)}
+          onConsole={() => onConsole(plugin.id)}
           isSelected={selectedPlugin?.id === plugin.id}
         />
         );
@@ -258,7 +262,7 @@ function InstalledPlugins({ plugins, enabledPlugins, onToggle, onUninstall, onSe
   );
 }
 
-function PluginCard({ plugin, isEnabled, onToggle, onUninstall, onSelect, onOpenDetail, isSelected }) {
+function PluginCard({ plugin, isEnabled, onToggle, onUninstall, onSelect, onOpenDetail, onConsole, isSelected }) {
   const handleConfirmUninstall = async () => {
     if (window.confirm(`Are you sure you want to uninstall "${plugin.name}"?`)) {
       try {
@@ -329,6 +333,16 @@ function PluginCard({ plugin, isEnabled, onToggle, onUninstall, onSelect, onOpen
 
             {/* Actions */}
             <div className="flex items-center gap-1 flex-shrink-0">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConsole();
+                }}
+                className="p-1.5 rounded text-app-muted hover:text-app-text hover:bg-app-border"
+                title="Plugin console (logs & blocked calls)"
+              >
+                <Terminal className="w-4 h-4" />
+              </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
