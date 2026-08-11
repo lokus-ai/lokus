@@ -185,17 +185,17 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
     }
   }, [onRefresh, toast]);
 
-  const onCreateFolderHere = useCallback(async (file) => {
-    const name = window.prompt("New folder name:");
-    if (!name) return;
-    try {
-      const base = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
-      await invoke("create_folder_in_workspace", { workspacePath: base, name });
-      onRefresh && onRefresh();
-    } catch (e) {
-      toast?.error(`Failed to create folder: ${e.message || e}`);
+  // window.prompt() is a no-op in the Tauri webview, so folder creation goes
+  // through the same inline-input flow as the Cmd+Shift+N shortcut: set
+  // creatingItem in the store and let the row render a NewItemInput.
+  const onCreateFolderHere = useCallback((file) => {
+    const base = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
+    const store = useFileTreeStore.getState();
+    if (file.is_directory && !store.expandedFolders.has(base)) {
+      store.toggleFolder(base);
     }
-  }, [onRefresh, toast]);
+    store.startCreate('folder', base);
+  }, []);
 
   const onRename = useCallback((file) => {
     // For .md files: open them (the note header handles renaming)
