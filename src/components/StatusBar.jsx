@@ -120,9 +120,9 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     return (
       <div
         key={id}
-        className={`obsidian - status - bar - item ${command ? 'clickable' : ''} ${
+        className={`obsidian-status-bar-item ${command ? 'clickable' : ''} ${
           command && mobile ? 'min-w-[44px] min-h-[44px]' : ''
-        } ${className || ''} `}
+        } ${className || ''}`}
         title={tooltip}
         onClick={command ? () => handleCommand(command) : undefined}
         onContextMenu={(e) => pluginId && handleContextMenu(e, pluginId)}
