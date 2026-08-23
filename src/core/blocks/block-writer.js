@@ -7,6 +7,7 @@
  */
 
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { noteMutationClient } from '../notes/NoteMutationClient.js'
 
 /**
  * Insert block ID into file
@@ -80,7 +81,20 @@ async function insertBlockIdIntoHTML(html, filePath, lineNumber, blockId) {
       targetElement.setAttribute('data-block-id', blockId)
 
       // Write back to file
-      await writeTextFile(filePath, doc.body.innerHTML)
+      if (
+        globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation
+        && /\.(md|markdown|txt)$/i.test(filePath)
+      ) {
+        await noteMutationClient.writeNote({
+          workspacePath: globalThis.__WORKSPACE_PATH__,
+          path: filePath,
+          content: doc.body.innerHTML,
+          baseContent: html,
+          source: 'block-id',
+        })
+      } else {
+        await writeTextFile(filePath, doc.body.innerHTML)
+      }
       return true
     }
 
@@ -119,7 +133,17 @@ async function insertBlockIdIntoMarkdown(markdown, filePath, lineNumber, blockId
     lines[lineIndex] = `${line.trimEnd()} ^${blockId}`
 
     // Write back to file
-    await writeTextFile(filePath, lines.join('\n'))
+    if (globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation) {
+      await noteMutationClient.writeNote({
+        workspacePath: globalThis.__WORKSPACE_PATH__,
+        path: filePath,
+        content: lines.join('\n'),
+        baseContent: markdown,
+        source: 'block-id',
+      })
+    } else {
+      await writeTextFile(filePath, lines.join('\n'))
+    }
     return true
   } catch (error) {
     return false

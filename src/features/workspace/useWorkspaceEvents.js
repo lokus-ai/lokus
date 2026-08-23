@@ -17,6 +17,8 @@ import { isImageFile } from "../../utils/imageUtils.js";
 import { generatePreview } from "../../core/canvas/preview-generator.js";
 import { generateGraphPreview } from "../../core/mathgraph/preview-generator.js";
 import { insertContent, insertText } from "../../editor/commands/index.js";
+import { normalizeWatcherPayload } from "../../core/notes/reconcileWatcherPayload.js";
+import { noteMutationClient } from "../../core/notes/NoteMutationClient.js";
 
 /** Returns true when the app is running inside Tauri. */
 function isTauriEnv() {
@@ -470,14 +472,45 @@ export function useWorkspaceEvents({
       }
       if (disposed) return;
       unlisten = await listen('workspace:fs-change', async (event) => {
-        const { workspace, paths = [] } = event.payload || {};
+        const { workspace, ...rawPayload } = event.payload || {};
         if (workspace !== workspacePath) return;
+        const { paths, changes } = normalizeWatcherPayload(rawPayload);
 
         useFileTreeStore.getState().refreshTree();
 
         const changed = new Set(paths);
         const { getAllGroups } = useEditorGroupStore.getState();
-        for (const g of getAllGroups()) {
+        const groups = getAllGroups();
+        if (globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation) {
+          const dirtyPaths = groups.flatMap((group) =>
+            (group.tabs || [])
+              .filter((tab) => getTabMeta(group.id, tab.path)?.dirty)
+              .map((tab) => tab.path)
+          );
+          try {
+            const normalizedChanges = await invoke('reconcile_note_changes', {
+              workspacePath,
+              changes,
+              dirtyPaths,
+            });
+            for (const change of normalizedChanges || []) {
+              const absolutePath = `${workspacePath}/${change.path}`.replace(/\/+/g, '/');
+              noteMutationClient.forgetPath(absolutePath);
+              window.dispatchEvent(new CustomEvent('notes://changed', { detail: change }));
+              if (change.kind === 'recovery_required') {
+                window.dispatchEvent(new CustomEvent('lokus:team-conflict', {
+                  detail: {
+                    workspacePath,
+                    noteId: change.note_id,
+                  },
+                }));
+              }
+            }
+          } catch (error) {
+            console.error('[NoteEngine] external reconciliation failed:', error);
+          }
+        }
+        for (const g of groups) {
           for (const tab of g.tabs || []) {
             if (!changed.has(tab.path)) continue;
             const meta = getTabMeta(g.id, tab.path);

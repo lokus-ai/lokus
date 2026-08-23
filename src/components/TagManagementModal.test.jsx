@@ -2,9 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import TagManagementModal from './TagManagementModal'
 import { invoke } from '@tauri-apps/api/core'
+import { noteMutationClient } from '../core/notes/NoteMutationClient'
 
 vi.mock('@tauri-apps/api/core', () => ({
     invoke: vi.fn()
+}))
+vi.mock('../core/notes/NoteMutationClient', () => ({
+    noteMutationClient: {
+        writeNote: vi.fn().mockResolvedValue({ legacy: true })
+    }
 }))
 
 describe('TagManagementModal Component', () => {
@@ -17,6 +23,7 @@ describe('TagManagementModal Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        window.__WORKSPACE_PATH__ = '/test'
     })
 
     it('loads tags from file on open', async () => {
@@ -25,7 +32,10 @@ describe('TagManagementModal Component', () => {
         render(<TagManagementModal {...defaultProps} />)
 
         await waitFor(() => {
-            expect(invoke).toHaveBeenCalledWith('read_file_content', { path: '/test/note.md' })
+            expect(invoke).toHaveBeenCalledWith('read_file_content', {
+                workspacePath: '/test',
+                path: '/test/note.md'
+            })
         })
 
         expect(screen.getByText('tag1')).toBeInTheDocument()
@@ -83,9 +93,12 @@ describe('TagManagementModal Component', () => {
         fireEvent.click(screen.getByText('Save Changes'))
 
         await waitFor(() => {
-            expect(invoke).toHaveBeenCalledWith('write_file_content', {
+            expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+                workspacePath: '/test',
                 path: '/test/note.md',
-                content: expect.stringContaining('tags: ["old", "new"]')
+                content: expect.stringContaining('tags: ["old", "new"]'),
+                baseContent: '---\ntags: [old]\n---\nContent',
+                source: 'tag-management'
             })
         })
 
@@ -105,9 +118,12 @@ describe('TagManagementModal Component', () => {
         fireEvent.click(screen.getByText('Save Changes'))
 
         await waitFor(() => {
-            expect(invoke).toHaveBeenCalledWith('write_file_content', {
+            expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+                workspacePath: '/test',
                 path: '/test/note.md',
-                content: expect.stringContaining('---\ntags: ["tag1"]\n---\n\nJust content')
+                content: expect.stringContaining('---\ntags: ["tag1"]\n---\n\nJust content'),
+                baseContent: 'Just content',
+                source: 'tag-management'
             })
         })
     })

@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 // Side-effect import: constructing the singleton is what applies the editor
 // CSS variables to this window's document root and subscribes it to changes
 // broadcast from the Preferences window. It belongs to the window, not to a
@@ -34,6 +35,11 @@ import { useTheme } from '../hooks/theme.jsx';
 import { useFeatureFlags } from '../contexts/RemoteConfigContext';
 import dailyNotesManager from '../core/daily-notes/manager.js';
 import { syncScheduler } from '../core/sync/SyncScheduler';
+import { initializeNoteFoundation } from '../core/notes/initializeNoteFoundation.js';
+import {
+  initializeTeamFoundation,
+  stopTeamFoundation,
+} from '../core/team/initializeTeamFoundation.js';
 import { useAuth } from '../core/auth/AuthContext';
 import { useGraphStore } from '../core/graph2/graphStore.js';
 import { warmLazyViews } from '../core/perf/prefetch.js';
@@ -120,10 +126,65 @@ function WorkspaceInner({ path }) {
     return () => syncScheduler.stop();
   }, [path, isAuthenticated, isGuest, user?.id]);
 
+  useEffect(() => {
+    const handlePromotion = (event) => {
+      if (event.detail?.workspacePath === path) {
+        syncScheduler.onFileSaved(null);
+      }
+    };
+    window.addEventListener('lokus:team-note-promoted', handlePromotion);
+    return () => window.removeEventListener('lokus:team-note-promoted', handlePromotion);
+  }, [path]);
+
+  useEffect(() => {
+    const handleKeyPending = (event) => {
+      if (event.detail?.workspacePath === path) {
+        toast.info('This device is waiting for a team admin to provision encrypted keys.');
+      }
+    };
+    window.addEventListener('lokus:team-key-pending', handleKeyPending);
+    return () => window.removeEventListener('lokus:team-key-pending', handleKeyPending);
+  }, [path]);
+
   // Sync feature flags to globalThis for non-React code (slash commands, shortcuts)
   useEffect(() => {
     globalThis.__LOKUS_FEATURE_FLAGS__ = featureFlags;
   }, [featureFlags]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const startFoundations = async () => {
+      await initializeNoteFoundation(
+        path,
+        featureFlags.enable_note_engine_foundation,
+      );
+      if (cancelled) return;
+      window.dispatchEvent(new CustomEvent('lokus:note-foundation-ready', {
+        detail: { workspacePath: path },
+      }));
+      const teamEnabled = featureFlags.enable_note_engine_foundation
+        && featureFlags.enable_team_notes_foundation
+        && isAuthenticated
+        && !isGuest;
+      await initializeTeamFoundation(user?.id, teamEnabled, {
+        workspacePath: path,
+      });
+    };
+    startFoundations()
+      .catch((error) => console.error('[NoteFoundation] initialization failed:', error));
+    return () => {
+      cancelled = true;
+      stopTeamFoundation()
+        .catch((error) => console.error('[TeamNotes] shutdown failed:', error));
+    };
+  }, [
+    path,
+    user?.id,
+    isAuthenticated,
+    isGuest,
+    featureFlags.enable_note_engine_foundation,
+    featureFlags.enable_team_notes_foundation,
+  ]);
 
   // ---------------------------------------------------------------------------
   // File tree filtering (base scope > folder scope)

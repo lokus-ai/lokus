@@ -10,11 +10,13 @@ vi.mock('../../core/sync/SyncScheduler', () => ({
   syncScheduler: { onFileSaved: vi.fn() },
 }));
 
-vi.mock('../../core/sync/guardedWrite', () => ({
-  writeFileGuarded: vi.fn(() => Promise.resolve()),
+vi.mock('../../core/notes/NoteMutationClient', () => ({
+  noteMutationClient: {
+    writeNote: vi.fn(() => Promise.resolve({ legacy: true })),
+  },
 }));
 
-import { writeFileGuarded } from '../../core/sync/guardedWrite';
+import { noteMutationClient } from '../../core/notes/NoteMutationClient';
 import { saveTab, flushAllDirtyTabs, registerTabStateProvider } from './tabSaver';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useTabMetaStore, getTabMeta } from '../../stores/tabMeta';
@@ -46,7 +48,8 @@ describe('tabSaver autosave provider wiring', () => {
   beforeEach(() => {
     useEditorGroupStore.getState().initLayout([{ path: PATH, name: 'note.txt' }], PATH);
     groupId = useEditorGroupStore.getState().focusedGroupId;
-    writeFileGuarded.mockClear();
+    globalThis.__WORKSPACE_PATH__ = '/ws';
+    noteMutationClient.writeNote.mockClear();
   });
 
   afterEach(() => {
@@ -58,7 +61,7 @@ describe('tabSaver autosave provider wiring', () => {
     useTabMetaStore.getState().setDirty(groupId, PATH, true);
 
     expect(await saveTab(groupId, PATH)).toBe(false);
-    expect(writeFileGuarded).not.toHaveBeenCalled();
+    expect(noteMutationClient.writeNote).not.toHaveBeenCalled();
     expect(getTabMeta(groupId, PATH)?.dirty).toBe(true);
   });
 
@@ -68,7 +71,7 @@ describe('tabSaver autosave provider wiring', () => {
 
     await flushAllDirtyTabs();
 
-    expect(writeFileGuarded).not.toHaveBeenCalled();
+    expect(noteMutationClient.writeNote).not.toHaveBeenCalled();
     expect(getTabMeta(groupId, PATH)?.dirty).toBe(true);
   });
 
@@ -80,8 +83,14 @@ describe('tabSaver autosave provider wiring', () => {
 
     await flushAllDirtyTabs();
 
-    expect(writeFileGuarded).toHaveBeenCalledTimes(1);
-    expect(writeFileGuarded).toHaveBeenCalledWith(PATH, 'hello');
+    expect(noteMutationClient.writeNote).toHaveBeenCalledTimes(1);
+    expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+      workspacePath: '/ws',
+      path: PATH,
+      content: 'hello',
+      baseContent: undefined,
+      source: 'tab-saver',
+    });
     expect(getTabMeta(groupId, PATH)?.dirty).toBe(false);
     // The written doc becomes the saved doc (O(1) dirty identity stays clean).
     expect(getSavedDoc(groupId, PATH)).toBe(state.doc);
@@ -95,7 +104,7 @@ describe('tabSaver autosave provider wiring', () => {
 
     await flushAllDirtyTabs();
 
-    expect(writeFileGuarded).not.toHaveBeenCalled();
+    expect(noteMutationClient.writeNote).not.toHaveBeenCalled();
   });
 
   it('does not rewrite when content matches savedContent', async () => {
@@ -106,7 +115,7 @@ describe('tabSaver autosave provider wiring', () => {
     registerTabStateProvider(groupId, modelProvider(groupId));
 
     expect(await saveTab(groupId, PATH)).toBe(true);
-    expect(writeFileGuarded).not.toHaveBeenCalled();
+    expect(noteMutationClient.writeNote).not.toHaveBeenCalled();
     expect(getTabMeta(groupId, PATH)?.dirty).toBe(false);
   });
 });

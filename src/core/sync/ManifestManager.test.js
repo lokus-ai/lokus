@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
-// ManifestManager imports the supabase client at module load — stub it since
-// diff() (the unit under test) never touches the network.
-vi.mock('../auth/supabase', () => ({ supabase: {} }));
+const { rpc } = vi.hoisted(() => ({ rpc: vi.fn() }));
+
+vi.mock('../auth/supabase', () => ({ supabase: { rpc } }));
 
 import { ManifestManager } from './ManifestManager';
 
@@ -18,6 +18,10 @@ function makeCache(entries = {}) {
 }
 
 const mm = new ManifestManager();
+
+beforeEach(() => {
+  rpc.mockReset();
+});
 
 // Every scan-miss test needs a verifier; default to "confirmed gone".
 const alwaysDeleted = { verifyDeleted: async () => true };
@@ -153,5 +157,59 @@ describe('ManifestManager.diff — conflict + delete safety', () => {
     expect(res.skip).toContain('x.md');
     expect(res.upload).toHaveLength(0);
     expect(res.download).toHaveLength(0);
+  });
+});
+
+describe('ManifestManager.update — table-returning RPC contract', () => {
+  it('returns true when the RPC row reports a successful update', async () => {
+    rpc.mockResolvedValue({
+      data: [{ ok: true, manifest_version: 2 }],
+      error: null,
+    });
+
+    const result = await mm.update('user-1', 'workspace-1', { files: {} }, 1);
+
+    expect(result).toBe(true);
+    expect(rpc).toHaveBeenCalledWith('update_manifest', {
+      p_user_id: 'user-1',
+      p_workspace_id: 'workspace-1',
+      p_manifest: { files: {} },
+      p_expected_version: 1,
+    });
+  });
+
+  it('returns false when the RPC row reports a version conflict', async () => {
+    rpc.mockResolvedValue({
+      data: [{ ok: false, manifest_version: 2 }],
+      error: null,
+    });
+
+    await expect(mm.update('user-1', 'workspace-1', { files: {} }, 1))
+      .resolves.toBe(false);
+  });
+
+  it('fails closed when the RPC returns no row', async () => {
+    rpc.mockResolvedValue({ data: [], error: null });
+
+    await expect(mm.update('user-1', 'workspace-1', { files: {} }, 1))
+      .resolves.toBe(false);
+  });
+
+  it('fails closed when the RPC row omits the ok field', async () => {
+    rpc.mockResolvedValue({
+      data: [{ manifest_version: 2 }],
+      error: null,
+    });
+
+    await expect(mm.update('user-1', 'workspace-1', { files: {} }, 1))
+      .resolves.toBe(false);
+  });
+
+  it('rethrows Supabase RPC errors', async () => {
+    const error = new Error('rpc unavailable');
+    rpc.mockResolvedValue({ data: null, error });
+
+    await expect(mm.update('user-1', 'workspace-1', { files: {} }, 1))
+      .rejects.toThrow('rpc unavailable');
   });
 });

@@ -7,7 +7,7 @@ import { isPlainTextNotePath, docToPlainTextString } from '../../utils/plainText
 import { isImageFile } from '../../utils/imageUtils';
 import { isPDFFile } from '../../utils/pdfUtils';
 import { syncScheduler } from '../../core/sync/SyncScheduler';
-import { writeFileGuarded } from '../../core/sync/guardedWrite';
+import { noteMutationClient } from '../../core/notes/NoteMutationClient';
 import { useGraphStore } from '../../core/graph2/graphStore.js';
 
 /**
@@ -73,7 +73,13 @@ export async function saveTab(groupId, path) {
     return true;
   }
 
-  await writeFileGuarded(path, serialized);
+  await noteMutationClient.writeNote({
+    workspacePath: globalThis.__WORKSPACE_PATH__,
+    path,
+    content: serialized,
+    baseContent: meta?.savedContent,
+    source: 'tab-saver',
+  });
   syncScheduler.onFileSaved(path);
   store.setTabContent(groupId, path, { savedContent: serialized });
   setSavedDoc(groupId, path, state.doc);

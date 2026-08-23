@@ -12,7 +12,10 @@ import { useGraphStore } from '../../../core/graph2/graphStore.js';
 import { confirm, save } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
 import { syncScheduler } from '../../../core/sync/SyncScheduler';
-import { writeFileGuarded } from '../../../core/sync/guardedWrite';
+import {
+  isSupportedNotePath,
+  noteMutationClient,
+} from '../../../core/notes/NoteMutationClient';
 
 const lokusSerializer = createLokusSerializer();
 
@@ -60,6 +63,7 @@ export function useSave({ workspacePath, onRefreshFiles }) {
     }
 
     let pathToSave = filePath;
+    const baseContent = groupId ? getTabMeta(groupId, filePath)?.savedContent : undefined;
 
     try {
       // Check if title was changed — if so, rename the file first
@@ -67,7 +71,7 @@ export function useSave({ workspacePath, onRefreshFiles }) {
         const store = useEditorGroupStore.getState();
         const title = getTabMeta(groupId, filePath)?.title;
         if (title) {
-          const currentFileName = (filePath.split('/').pop() || '').replace(/\.(md|txt)$/i, '');
+          const currentFileName = (filePath.split('/').pop() || '').replace(/\.(md|markdown|txt)$/i, '');
           if (title !== currentFileName && title.trim()) {
             const dir = filePath.substring(0, filePath.lastIndexOf('/'));
             const ext = filePath.includes('.') ? filePath.substring(filePath.lastIndexOf('.')) : '.md';
@@ -75,7 +79,10 @@ export function useSave({ workspacePath, onRefreshFiles }) {
             try {
               // Rust handler is rename_file(path, new_name) — new_name is the
               // file NAME (with extension), not a full path.
-              await invoke('rename_file', { path: filePath, newName: `${title}${ext}` });
+              await noteMutationClient.renameNote(filePath, `${title}${ext}`, {
+                workspacePath,
+                source: 'editor-save',
+              });
               store.updateTabPath(filePath, newPath);
               pathToSave = newPath;
               if (onRefreshFiles) onRefreshFiles();
@@ -92,7 +99,13 @@ export function useSave({ workspacePath, onRefreshFiles }) {
         ? docToPlainTextString(docToSave)
         : lokusSerializer.serialize(docToSave);
 
-      await writeFileGuarded(pathToSave, contentToSave);
+      await noteMutationClient.writeNote({
+        workspacePath,
+        path: pathToSave,
+        content: contentToSave,
+        baseContent,
+        source: 'editor-save',
+      });
 
       // Trigger sync for this specific file (debounced + batched inside scheduler)
       syncScheduler.onFileSaved(pathToSave);
@@ -123,7 +136,9 @@ export function useSave({ workspacePath, onRefreshFiles }) {
       try {
         useGraphStore.getState().noteSaved(pathToSave, contentToSave);
       } catch (_) {}
-    } catch (_) {}
+    } catch (error) {
+      toast.error(`Failed to save file: ${error?.message || error}`);
+    }
   }, [workspacePath, onRefreshFiles]);
 
   const handleSaveAs = useCallback(async (editorArg, filePathArg) => {
@@ -211,7 +226,16 @@ export function useSave({ workspacePath, onRefreshFiles }) {
       }
       // .md and other formats use the markdown content already set above
 
-      await invoke('write_file_content', { path: savePath, content: contentToSave });
+      if (isSupportedNotePath(savePath)) {
+        await noteMutationClient.writeNote({
+          workspacePath,
+          path: savePath,
+          content: contentToSave,
+          source: 'editor-save-as',
+        });
+      } else {
+        await invoke('write_file_content', { path: savePath, content: contentToSave });
+      }
 
       // Update tab path to the new file
       const store = useEditorGroupStore.getState();

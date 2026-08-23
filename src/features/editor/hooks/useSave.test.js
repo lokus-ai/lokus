@@ -20,13 +20,18 @@ vi.mock('../../../core/sync/SyncScheduler', () => ({
   syncScheduler: { onFileSaved: vi.fn() },
 }));
 
-vi.mock('../../../core/sync/guardedWrite', () => ({
-  writeFileGuarded: vi.fn(() => Promise.resolve()),
+vi.mock('../../../core/notes/NoteMutationClient', () => ({
+  isSupportedNotePath: (path) => /\.(md|markdown|txt)$/i.test(path),
+  noteMutationClient: {
+    writeNote: vi.fn(() => Promise.resolve({ legacy: true })),
+    renameNote: vi.fn(() => Promise.resolve()),
+  },
 }));
 
 import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 import { toast } from 'sonner';
-import { writeFileGuarded } from '../../../core/sync/guardedWrite';
+import { noteMutationClient } from '../../../core/notes/NoteMutationClient';
 import { useSave } from './useSave';
 import { useEditorGroupStore } from '../../../stores/editorGroups';
 import { useTabMetaStore, getTabMeta } from '../../../stores/tabMeta';
@@ -62,7 +67,10 @@ describe('useSave rename-on-title-change', () => {
   beforeEach(() => {
     useEditorGroupStore.getState().initLayout([{ path: PATH, name: 'original.txt' }], PATH);
     invoke.mockClear();
-    writeFileGuarded.mockClear();
+    noteMutationClient.writeNote.mockClear();
+    noteMutationClient.renameNote.mockClear();
+    save.mockReset();
+    save.mockResolvedValue(null);
     toast.error.mockClear();
   });
 
@@ -72,9 +80,18 @@ describe('useSave rename-on-title-change', () => {
 
     await result.current.handleSave({}, PATH, groupId);
 
-    expect(invoke).toHaveBeenCalledWith('rename_file', { path: PATH, newName: 'Renamed.txt' });
+    expect(noteMutationClient.renameNote).toHaveBeenCalledWith(PATH, 'Renamed.txt', {
+      workspacePath: '/ws',
+      source: 'editor-save',
+    });
     // Tab path + metadata follow the rename, and the write goes to the new path.
-    expect(writeFileGuarded).toHaveBeenCalledWith('/ws/Renamed.txt', expect.any(String));
+    expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+      workspacePath: '/ws',
+      path: '/ws/Renamed.txt',
+      content: expect.any(String),
+      baseContent: undefined,
+      source: 'editor-save',
+    });
     expect(getTabMeta(groupId, '/ws/Renamed.txt')?.title).toBe('Renamed');
     expect(getTabMeta(groupId, PATH)).toBeNull();
   });
@@ -96,22 +113,63 @@ describe('useSave rename-on-title-change', () => {
 
     await result.current.handleSave({}, PATH, groupId);
 
-    expect(invoke).not.toHaveBeenCalledWith('rename_file', expect.anything());
-    expect(writeFileGuarded).toHaveBeenCalledWith(PATH, expect.any(String));
+    expect(noteMutationClient.renameNote).not.toHaveBeenCalled();
+    expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+      workspacePath: '/ws',
+      path: PATH,
+      content: expect.any(String),
+      baseContent: undefined,
+      source: 'editor-save',
+    });
   });
 
   it('surfaces a toast and still saves to the original path when rename fails', async () => {
     const { groupId } = setupTab({ title: 'Renamed' });
-    invoke.mockImplementation((cmd) =>
-      cmd === 'rename_file' ? Promise.reject(new Error('destination exists')) : Promise.resolve()
-    );
+    noteMutationClient.renameNote.mockRejectedValueOnce(new Error('destination exists'));
     const { result } = renderUseSave();
 
     await result.current.handleSave({}, PATH, groupId);
 
     expect(toast.error).toHaveBeenCalledTimes(1);
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('destination exists'));
-    expect(writeFileGuarded).toHaveBeenCalledWith(PATH, expect.any(String));
+    expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+      workspacePath: '/ws',
+      path: PATH,
+      content: expect.any(String),
+      baseContent: undefined,
+      source: 'editor-save',
+    });
     expect(getTabModel(groupId, PATH)).not.toBeNull();
+  });
+
+  it('keeps the tab dirty and surfaces a stale-session save rejection', async () => {
+    const { groupId } = setupTab({ title: 'original' });
+    useTabMetaStore.getState().setDirty(groupId, PATH, true);
+    noteMutationClient.writeNote.mockRejectedValueOnce(new Error('stale note session'));
+    const { result } = renderUseSave();
+
+    await result.current.handleSave({}, PATH, groupId);
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('stale note session'));
+    expect(getTabMeta(groupId, PATH)?.dirty).toBe(true);
+  });
+
+  it('routes Save As note files through the universal mutation seam', async () => {
+    setupTab({ title: 'original' });
+    save.mockResolvedValue('/ws/copy.md');
+    const { result } = renderUseSave();
+
+    await result.current.handleSaveAs(null, PATH);
+
+    expect(noteMutationClient.writeNote).toHaveBeenCalledWith({
+      workspacePath: '/ws',
+      path: '/ws/copy.md',
+      content: expect.any(String),
+      source: 'editor-save-as',
+    });
+    expect(invoke).not.toHaveBeenCalledWith(
+      'write_file_content',
+      expect.objectContaining({ path: '/ws/copy.md' }),
+    );
   });
 });

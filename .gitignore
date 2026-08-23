@@ -86,6 +86,15 @@ schema.md
 docs/
 examples/
 
+# Canonical Team Notes V1 architecture is versioned with its implementation.
+!docs/
+docs/*
+!docs/architecture/
+docs/architecture/*
+!docs/architecture/team-notes-v1-data-schema.md
+!docs/architecture/team-notes-v1-cloud.dbml
+!docs/architecture/team-notes-v1-local.dbml
+
 # Generated API documentation
 openapi.yaml
 

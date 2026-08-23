@@ -10,6 +10,7 @@ import { trashManager } from './TrashManager';
 import { syncLock } from './SyncLock';
 import { invoke } from '@tauri-apps/api/core';
 import { MAX_FILE_SIZE, MAX_WORKSPACE_SIZE, MAX_CONCURRENT } from './constants';
+import { personalSyncAdapter } from './PersonalSyncAdapter.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -336,7 +337,11 @@ export class SyncEngine {
       await this._waitForSaves();
 
       const mek = keyManager.getMEK();
-      const localFiles = await fileScanner.scanFiles(this.workspacePath, absolutePaths);
+      const scannedFiles = await fileScanner.scanFiles(this.workspacePath, absolutePaths);
+      const localFiles = await personalSyncAdapter.excludeTeamNotes(
+        this.workspacePath,
+        scannedFiles,
+      );
 
       // Fetch current manifest
       const manifestData = await manifestManager.fetch(this.userId);
@@ -359,6 +364,7 @@ export class SyncEngine {
 
         const remote = remoteManifest.files?.[filePath];
         if (remote && local.hash === remote.hash) {
+          await this._acknowledgePersonalUploads([filePath], remoteManifest);
           skipped++;
           return;
         }
@@ -417,6 +423,8 @@ export class SyncEngine {
         if (!ok) {
           console.warn('[Sync] Manifest version conflict, will retry next cycle');
           await this._savePendingManifest(newManifest);
+        } else {
+          await this._acknowledgePersonalUploads(uploadedPaths, newManifest);
         }
       }
 
@@ -474,7 +482,11 @@ export class SyncEngine {
       await this._pushPendingManifest();
 
       const mek = keyManager.getMEK();
-      const localFiles = await fileScanner.scan(this.workspacePath, syncCache);
+      const scannedFiles = await fileScanner.scan(this.workspacePath, syncCache);
+      const localFiles = await personalSyncAdapter.excludeTeamNotes(
+        this.workspacePath,
+        scannedFiles,
+      );
 
       // Guard: check total workspace size
       let totalLocalSize = 0;
@@ -500,6 +512,7 @@ export class SyncEngine {
         verifyDeleted: (relPath) => this._verifyFileDeleted(relPath),
       });
       const conflicts = actions.conflict || [];
+      await this._acknowledgePersonalUploads(actions.skip, remoteManifest);
       const total = actions.upload.length + actions.download.length + actions.delete.length;
       console.log(`[Sync] Plan — ↑${actions.upload.length} ↓${actions.download.length} ✗${actions.delete.length} skip:${actions.skip.length} conflict:${conflicts.length}`);
 
@@ -651,6 +664,9 @@ export class SyncEngine {
           await this._savePendingManifest(newManifest);
         }
       }
+      if (manifestOk) {
+        await this._acknowledgePersonalUploads(uploadedPaths, newManifest);
+      }
 
       await syncCache.save(this.workspacePath);
 
@@ -752,7 +768,13 @@ export class SyncEngine {
           await invoke('write_binary_file', { path: fullPath, content: chunks });
         } else {
           const text = new TextDecoder().decode(plaintext);
-          await invoke('write_file_content', { path: fullPath, content: text });
+          await personalSyncAdapter.applyTextFile({
+            workspacePath: targetPath,
+            workspaceId: workspace_id,
+            path: fullPath,
+            content: text,
+            remoteRevisionId: fileMeta.hash || `manifest:${filePath}`,
+          });
         }
         if (fileMeta.hash) cacheSeed[filePath] = { hash: fileMeta.hash, mtime: nowSec, size: fileMeta.size || 0 };
         pulled++;
@@ -809,7 +831,13 @@ export class SyncEngine {
       await invoke('write_binary_file', { path: fullPath, content: chunks });
     } else {
       const text = new TextDecoder().decode(plaintext);
-      await invoke('write_file_content', { path: fullPath, content: text });
+      await personalSyncAdapter.applyTextFile({
+        workspacePath: this.workspacePath,
+        workspaceId: this.workspaceId,
+        path: fullPath,
+        content: text,
+        remoteRevisionId: remote.hash || `manifest:${filePath}`,
+      });
     }
   }
 
@@ -852,8 +880,32 @@ export class SyncEngine {
       await invoke('write_binary_file', { path: absPath, content: chunks });
     } else {
       const text = new TextDecoder().decode(bytes);
-      await invoke('write_file_content', { path: absPath, content: text });
+      await personalSyncAdapter.applyTextFile({
+        workspacePath: this.workspacePath,
+        workspaceId: this.workspaceId,
+        path: absPath,
+        content: text,
+        remoteRevisionId: `conflict:${relPath}`,
+      });
     }
+  }
+
+  async _acknowledgePersonalUploads(paths, manifest) {
+    if (!globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation) return;
+    await Promise.all(paths.map(async (relPath) => {
+      const remoteRevisionId = manifest?.files?.[relPath]?.hash;
+      if (!remoteRevisionId) return;
+      try {
+        await personalSyncAdapter.acknowledgeUpload({
+          workspacePath: this.workspacePath,
+          workspaceId: this.workspaceId,
+          path: joinPath(this.workspacePath, relPath),
+          remoteRevisionId,
+        });
+      } catch (error) {
+        console.warn(`[Sync] local ledger acknowledgement failed for ${relPath}: ${error.message}`);
+      }
+    }));
   }
 
   /** Encrypt + upload a conflict copy and register it for the manifest build. */
@@ -979,6 +1031,7 @@ export class SyncEngine {
       const ok = await manifestManager.update(this.userId, this.workspaceId, pending, version);
       if (ok) {
         console.log('[Sync] Pushed pending manifest');
+        await this._acknowledgePersonalUploads(Object.keys(pending.files || {}), pending);
         try {
           await invoke('write_file_content', {
             path: `${this.workspacePath}/.lokus/pending-manifest.json`,

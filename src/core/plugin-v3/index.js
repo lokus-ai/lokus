@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { PluginHost } from './host.js';
 import { ContributionRegistry } from './contributions.js';
 import { backend, isTauri } from './store.js';
+import { noteMutationClient } from '../notes/NoteMutationClient.js';
 
 export const contributions = new ContributionRegistry();
 
@@ -77,7 +78,12 @@ export const effects = {
     if (typeof content !== 'string') throw new Error('content must be a string');
     if (content.length > MAX_NOTE_BYTES) throw new Error('content is too large to write through the plugin API');
     const abs = resolveVaultPath(relPath.endsWith('.md') ? relPath : `${relPath}.md`);
-    await invoke('write_file_content', { path: abs, content });
+    await noteMutationClient.writeNote({
+      workspacePath: host.workspacePath,
+      path: abs,
+      content,
+      source: 'plugin',
+    });
     return true;
   },
 

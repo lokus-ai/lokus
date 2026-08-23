@@ -101,6 +101,10 @@ const DEFAULT_CONFIG = {
         enable_daily_notes: true,
         enable_backlinks: true,
         enable_import_export: true,
+        // Internal rollout gate: universal local note identity/database.
+        enable_note_engine_foundation: false,
+        // Internal rollout gate: encrypted team control and revision sync clients.
+        enable_team_notes_foundation: false,
         // Advanced — off by default, revealed by the "Advanced features" toggle
         enable_sync: false,
         enable_plugins: false,

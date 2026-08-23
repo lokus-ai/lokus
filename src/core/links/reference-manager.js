@@ -10,6 +10,7 @@
  */
 
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import { noteMutationClient } from '../notes/NoteMutationClient.js'
 
 /**
  * Escape special regex characters in a string
@@ -260,7 +261,17 @@ export async function updateAllReferences(affectedFiles, oldName, newName, oldPa
       )
 
       if (count > 0) {
-        await writeTextFile(file.path, newContent)
+        if (globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation) {
+          await noteMutationClient.writeNote({
+            workspacePath: globalThis.__WORKSPACE_PATH__,
+            path: file.path,
+            content: newContent,
+            baseContent: file.content,
+            source: 'reference-update',
+          })
+        } else {
+          await writeTextFile(file.path, newContent)
+        }
         updated++
       }
     } catch (e) {

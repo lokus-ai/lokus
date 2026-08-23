@@ -15,6 +15,7 @@ import dailyNotesManager from '../../../core/daily-notes/manager.js';
 import posthog from '../../../services/posthog.js';
 import { setGlobalActiveTheme } from '../../../core/theme/manager.js';
 import { createLokusSerializer } from '../../../core/markdown/lokus-md-pipeline.js';
+import { isSupportedNotePath, noteMutationClient } from '../../../core/notes/NoteMutationClient.js';
 
 const emitKanbanUpdated = (boardPath = null) => {
   if (typeof window === 'undefined') return;
@@ -123,9 +124,12 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     try {
       if (creatingItem.type === 'file') {
         const fileName = name.endsWith('.md') ? name : `${name}.md`;
-        const newPath = await invoke('create_file_in_workspace', {
-          workspacePath: creatingItem.targetPath,
-          name: fileName,
+        const newPath = `${creatingItem.targetPath}/${fileName}`;
+        await noteMutationClient.writeNote({
+          workspacePath,
+          path: newPath,
+          content: '',
+          source: 'file-tree-create',
         });
         refreshTree();
         useGraphStore.getState().fileCreated(newPath);
@@ -142,7 +146,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     }
 
     useFileTreeStore.getState().cancelCreate();
-  }, [refreshTree, handleFileOpen]);
+  }, [refreshTree, handleFileOpen, workspacePath]);
 
   // ---------------------------------------------------------------------------
   // Canvas creation
@@ -368,7 +372,15 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     if (!shouldDelete) return;
 
     try {
-      await invoke('delete_file', { path });
+      if (isSupportedNotePath(path)) {
+        await noteMutationClient.removeNote({
+          workspacePath,
+          path,
+          source: 'file-tree-delete',
+        });
+      } else {
+        await invoke('delete_file', { path });
+      }
       useGraphStore.getState().fileRemoved(path);
       const egStore = useEditorGroupStore.getState();
       const focusedGroup = egStore.getFocusedGroup();
@@ -379,7 +391,7 @@ export function useFileOperations({ workspacePath, featureFlags, handleFileOpen,
     } catch (e) {
       console.error('Failed to delete:', e);
     }
-  }, [refreshTree]);
+  }, [refreshTree, workspacePath]);
 
   const handleCheckReferences = useCallback(async (oldPath, newPath) => {
     try {

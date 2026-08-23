@@ -28,6 +28,7 @@ import Account from "./preferences/sections/Account.jsx";
 import Updates from "./preferences/sections/Updates.jsx";
 import Import from "./preferences/sections/Import.jsx";
 import SyncPreferences from "./preferences/SyncPreferences.jsx";
+import TeamPreferences from "./preferences/TeamPreferences.jsx";
 import { getAppVersion } from "../utils/appInfo.js";
 import { isDesktop } from '../platform/index.js';
 import { getCalloutConfig, saveCalloutConfig } from "@/core/editor/callout-config.js";
@@ -685,6 +686,7 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
                 label: "Data", items: [
                   ...(featureFlags.enable_import_export ? ["Import"] : []),
                   ...(featureFlags.enable_sync ? ["Sync"] : []),
+                  ...(featureFlags.enable_team_notes_foundation ? ["Teams"] : []),
                   ...(featureFlags.enable_calendar ? ["Connections"] : []),
                 ]
               },
@@ -887,6 +889,10 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
 
             {featureFlags.enable_sync && section === "Sync" && (
               <SyncPreferences isAuthenticated={isAuthenticated} isGuest={isGuest} userId={user?.id} workspacePath={workspacePath} />
+            )}
+
+            {featureFlags.enable_team_notes_foundation && section === "Teams" && (
+              <TeamPreferences userId={user?.id} />
             )}
 
 

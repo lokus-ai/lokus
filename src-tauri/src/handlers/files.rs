@@ -2,6 +2,8 @@ use serde::{Serialize, Deserialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::note_engine::identity::rename_path_case_safe;
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FileEntry {
     name: String,
@@ -262,33 +264,7 @@ fn find_workspace_root(start_path: &Path) -> Result<PathBuf, String> {
 
 #[tauri::command]
 pub fn rename_file(path: String, new_name: String) -> Result<String, String> {
-
-    let path = PathBuf::from(&path);
-
-    // Validate that the source file exists
-    if !path.exists() {
-        return Err(format!("File or folder '{}' does not exist", path.display()));
-    }
-
-    // Validate new name is not empty
-    if new_name.trim().is_empty() {
-        return Err("New name cannot be empty".to_string());
-    }
-
-    let mut new_path = path.clone();
-    new_path.set_file_name(new_name.trim());
-
-    // Check if destination already exists
-    if new_path.exists() {
-        let file_name = new_path.file_name()
-            .ok_or_else(|| "Invalid file path: no filename".to_string())?;
-        return Err(format!("A file or folder named '{}' already exists", file_name.to_string_lossy()));
-    }
-
-    fs::rename(&path, &new_path).map_err(|e| {
-        format!("Failed to rename: {}", e)
-    })?;
-
+    let new_path = rename_path_case_safe(Path::new(&path), &new_name)?;
     Ok(new_path.to_string_lossy().to_string())
 }
 

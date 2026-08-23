@@ -9,6 +9,7 @@ import { useFileTreeStore } from "../../stores/fileTree";
 import referenceWorkerClient from "../../workers/referenceWorkerClient.js";
 import { InlineRenameInput } from "./InlineRenameInput.jsx";
 import { NewItemInput } from "./NewItemInput.jsx";
+import { isSupportedNotePath, noteMutationClient } from "../../core/notes/NoteMutationClient.js";
 
 // Helper to get filename without extension
 export function getNameWithoutExtension(filename) {
@@ -168,7 +169,11 @@ function FileEntryComponentImpl({ entry, level, onFileClick, toggleFolder, onRef
           affectedFiles,
           operation: async () => {
             try {
-              await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              if (isSupportedNotePath(oldPath)) {
+                await noteMutationClient.renameNote(oldPath, trimmedName);
+              } else {
+                await invoke("rename_file", { path: oldPath, newName: trimmedName });
+              }
               useGraphStore.getState().fileRenamed(oldPath, newPath);
               onUpdateTabPath?.(oldPath, newPath);
               setRenamingPath(null);
@@ -187,7 +192,11 @@ function FileEntryComponentImpl({ entry, level, onFileClick, toggleFolder, onRef
 
     // No references to update, proceed directly
     try {
-      await invoke("rename_file", { path: oldPath, newName: trimmedName });
+      if (isSupportedNotePath(oldPath)) {
+        await noteMutationClient.renameNote(oldPath, trimmedName);
+      } else {
+        await invoke("rename_file", { path: oldPath, newName: trimmedName });
+      }
       useGraphStore.getState().fileRenamed(oldPath, newPath);
       onUpdateTabPath?.(oldPath, newPath);
       setRenamingPath(null);

@@ -5,7 +5,15 @@
  * Templates directory: <workspace>/templates/
  */
 
-import { readTextFile, writeTextFile, readDir, exists, mkdir, remove } from '@tauri-apps/plugin-fs';
+import {
+  readTextFile,
+  writeTextFile,
+  readDir,
+  exists,
+  mkdir,
+  remove,
+} from '@tauri-apps/plugin-fs';
+import { noteMutationClient } from '../notes/NoteMutationClient.js';
 
 export class FileBasedTemplateStorage {
   constructor(options = {}) {
@@ -67,7 +75,16 @@ export class FileBasedTemplateStorage {
       const fileContent = `---\n${frontmatter}---\n\n${template.content || ''}`;
 
       // Write to file
-      await writeTextFile(filepath, fileContent);
+      if (globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation) {
+        await noteMutationClient.writeNote({
+          workspacePath: globalThis.__WORKSPACE_PATH__,
+          path: filepath,
+          content: fileContent,
+          source: 'template-storage',
+        });
+      } else {
+        await writeTextFile(filepath, fileContent);
+      }
 
       // Verify file was written
       const fileExists = await exists(filepath);
@@ -195,7 +212,15 @@ export class FileBasedTemplateStorage {
       const fileExists = await exists(filepath);
 
       if (fileExists) {
-        await remove(filepath);
+        if (globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation) {
+          await noteMutationClient.removeNote({
+            workspacePath: globalThis.__WORKSPACE_PATH__,
+            path: filepath,
+            source: 'template-storage',
+          });
+        } else {
+          await remove(filepath);
+        }
       }
 
       // Remove from cache

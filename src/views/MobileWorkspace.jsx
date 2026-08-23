@@ -15,6 +15,7 @@ import { useTheme } from "../hooks/theme.jsx";
 import { setGlobalActiveTheme, getSystemPreferredTheme, setupSystemThemeListener } from "../core/theme/manager.js";
 import { Toaster } from "../components/ui/sonner";
 import { toast } from "../components/ui/enhanced-toast";
+import { noteMutationClient } from "../core/notes/NoteMutationClient.js";
 
 console.log('[MobileWorkspace] Module loading...');
 
@@ -121,11 +122,14 @@ export default function MobileWorkspace({ initialPath }) {
 
     try {
       const content = editorRef.current?.getContent?.() || fileContent;
-      await invoke('write_file_content', {
+      await noteMutationClient.writeNote({
         workspacePath: initialPath,
         path: activeFile.path,
-        content
+        content,
+        baseContent: fileContent,
+        source: 'mobile-save',
       });
+      setFileContent(content);
       toast.success('Saved');
     } catch (e) {
       console.error('[MobileWorkspace] Error saving:', e);
