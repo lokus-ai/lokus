@@ -4,7 +4,11 @@ import { toast } from 'sonner';
 import { teamControlClient } from '../../core/team/TeamControlClient';
 import * as P from './primitives.jsx';
 
-export default function TeamPreferences({ userId }) {
+export default function TeamPreferences({
+  userId,
+  isAuthenticated,
+  isGuest,
+}) {
   const [teams, setTeams] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState('');
   const [members, setMembers] = useState([]);
@@ -23,7 +27,7 @@ export default function TeamPreferences({ userId }) {
   const canAdmin = ['owner', 'admin'].includes(selectedTeam?.membership?.role);
 
   const refresh = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || !isAuthenticated || isGuest) return;
     setLoading(true);
     try {
       await teamControlClient.initialize(userId);
@@ -39,7 +43,7 @@ export default function TeamPreferences({ userId }) {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [isAuthenticated, isGuest, userId]);
 
   useEffect(() => {
     refresh();
@@ -139,6 +143,14 @@ export default function TeamPreferences({ userId }) {
       setBusy('');
     }
   };
+
+  if (!isAuthenticated || isGuest || !userId || userId === 'guest') {
+    return (
+      <P.Page title="Teams">
+        <P.Empty>Sign in to create or join teams.</P.Empty>
+      </P.Page>
+    );
+  }
 
   if (loading) {
     return (

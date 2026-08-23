@@ -892,7 +892,11 @@ export default function Preferences({ workspacePath: workspacePathProp }) {
             )}
 
             {featureFlags.enable_team_notes_foundation && section === "Teams" && (
-              <TeamPreferences userId={user?.id} />
+              <TeamPreferences
+                userId={user?.id}
+                isAuthenticated={isAuthenticated}
+                isGuest={isGuest}
+              />
             )}
 
 
