@@ -222,6 +222,21 @@ const deepMerge = (target, source) => {
     return result;
 };
 
+export function applyInternalDevFlags(
+    flags,
+    {
+        dev = import.meta.env.DEV,
+        mode = import.meta.env.MODE,
+    } = {},
+) {
+    if (!dev || mode === 'test') return flags;
+    return {
+        ...flags,
+        enable_note_engine_foundation: true,
+        enable_team_notes_foundation: true,
+    };
+}
+
 export const RemoteConfigContext = createContext({
     config: DEFAULT_CONFIG,
     loading: true,
@@ -269,7 +284,7 @@ export const RemoteConfigProvider = ({ children }) => {
         const base = config.feature_flags || {};
         const result = { ...base };
         for (const flag of ADVANCED_FEATURE_FLAGS) result[flag] = !!advancedFeatures;
-        return result;
+        return applyInternalDevFlags(result);
     }, [config.feature_flags, advancedFeatures]);
 
     const fetchConfig = async () => {

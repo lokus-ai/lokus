@@ -5,6 +5,7 @@ import {
   useFeatureFlags,
   useAdvancedFeatures,
   ADVANCED_FEATURE_FLAGS,
+  applyInternalDevFlags,
   detectExistingUser,
 } from './RemoteConfigContext.jsx';
 
@@ -88,5 +89,27 @@ describe('Simple feature-flag default', () => {
 
   it('detectExistingUser returns false outside Tauri (fresh browser/test env → Simple)', async () => {
     await expect(detectExistingUser()).resolves.toBe(false);
+  });
+
+  it('enables the internal Team Notes foundation in interactive dev builds only', () => {
+    const flags = {
+      enable_note_engine_foundation: false,
+      enable_team_notes_foundation: false,
+    };
+    expect(applyInternalDevFlags(flags, {
+      dev: true,
+      mode: 'development',
+    })).toEqual({
+      enable_note_engine_foundation: true,
+      enable_team_notes_foundation: true,
+    });
+    expect(applyInternalDevFlags(flags, {
+      dev: true,
+      mode: 'test',
+    })).toEqual(flags);
+    expect(applyInternalDevFlags(flags, {
+      dev: false,
+      mode: 'production',
+    })).toEqual(flags);
   });
 });
