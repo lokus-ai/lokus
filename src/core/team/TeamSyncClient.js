@@ -59,15 +59,11 @@ export class TeamSyncClient {
       permissionEpoch,
       keyEpoch,
     });
-    const identity = await this.invoke('get_note_identity', {
-      workspacePath,
-      path,
-    });
     emitTeamQueued({
       queued_for_sync: true,
       scope_kind: 'team',
       scope_id: spaceId,
-      note_id: identity.note_id,
+      note_id: null,
     }, workspacePath);
     try {
       const result = await this.waitForOperation(workspacePath, opId);
@@ -114,15 +110,11 @@ export class TeamSyncClient {
       permissionEpoch,
       keyEpoch,
     });
-    const identity = await this.invoke('get_note_identity', {
-      workspacePath,
-      path,
-    });
     emitTeamQueued({
       queued_for_sync: true,
       scope_kind: 'team',
       scope_id: targetSpaceId,
-      note_id: identity.note_id,
+      note_id: null,
     }, workspacePath);
     return this.waitForOperation(workspacePath, opId);
   }
@@ -724,11 +716,13 @@ function emitTeamQueued(result, workspacePath) {
   ) {
     return;
   }
-  const current = teamCollaboration.get(result.scope_id, result.note_id);
-  teamCollaboration.update(result.scope_id, result.note_id, {
-    syncState: globalThis.navigator?.onLine === false ? 'offline' : 'idle',
-    outboxCount: current.outboxCount + 1,
-  });
+  if (result.note_id) {
+    const current = teamCollaboration.get(result.scope_id, result.note_id);
+    teamCollaboration.update(result.scope_id, result.note_id, {
+      syncState: globalThis.navigator?.onLine === false ? 'offline' : 'idle',
+      outboxCount: current.outboxCount + 1,
+    });
+  }
   globalThis.dispatchEvent(new CustomEvent('lokus:team-note-queued', {
     detail: {
       workspacePath,
