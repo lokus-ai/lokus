@@ -114,7 +114,7 @@ export class TeamRealtimeCoordinator {
   }
 
   async handleMembershipHint(hint, token = this.lifecycleToken) {
-    if (!hint?.team_id) return;
+    if (!hint?.team_id || token !== this.lifecycleToken) return;
     const workspacePath = this.workspacePath;
     if (hint.membership_status === 'active') {
       try {
@@ -122,13 +122,15 @@ export class TeamRealtimeCoordinator {
         if (token !== this.lifecycleToken) return;
         await this.controlClient.getTeamKey(hint.team_id, hint.team_key_epoch);
       } catch (error) {
-        if (!String(error?.message ?? error).includes('awaiting provisioning')) throw error;
+        if (token !== this.lifecycleToken) return;
+        if (!isProvisioningPendingError(error)) throw error;
         await this.invoke('apply_team_membership_hint', {
           workspacePath,
           teamId: hint.team_id,
           membershipStatus: 'key_pending',
           permissionEpoch: hint.permission_epoch,
         });
+        if (token !== this.lifecycleToken) return;
         globalThis.dispatchEvent?.(new CustomEvent('lokus:team-key-pending', {
           detail: { workspacePath, teamId: hint.team_id },
         }));
@@ -136,17 +138,38 @@ export class TeamRealtimeCoordinator {
       }
       if (token !== this.lifecycleToken) return;
       const spaces = await this.loadSpaces(hint.team_id);
+      if (token !== this.lifecycleToken) return;
+      const readySpaces = [];
       for (const space of spaces) {
-        await this.controlClient.getSpaceKey(space.id, space.current_key_epoch);
         if (token !== this.lifecycleToken) return;
+        try {
+          await this.controlClient.getSpaceKey(space.id, space.current_key_epoch);
+        } catch (error) {
+          if (token !== this.lifecycleToken) return;
+          if (!isProvisioningPendingError(error)) throw error;
+          this.spaces.delete(space.id);
+          const queuedPush = this.queuedPushes.get(space.id);
+          if (queuedPush !== undefined) {
+            this.clearTimeout(queuedPush);
+            this.queuedPushes.delete(space.id);
+          }
+          globalThis.dispatchEvent?.(new CustomEvent('lokus:team-key-pending', {
+            detail: { workspacePath, teamId: hint.team_id, spaceId: space.id },
+          }));
+          continue;
+        }
+        if (token !== this.lifecycleToken) return;
+        readySpaces.push(space);
       }
+      if (token !== this.lifecycleToken) return;
       await this.invoke('apply_team_membership_hint', {
         workspacePath,
         teamId: hint.team_id,
         membershipStatus: hint.membership_status,
         permissionEpoch: hint.permission_epoch,
       });
-      for (const space of spaces) {
+      if (token !== this.lifecycleToken) return;
+      for (const space of readySpaces) {
         if (token !== this.lifecycleToken) return;
         await this.invoke('refresh_team_note_scope', {
           workspacePath,
@@ -155,8 +178,10 @@ export class TeamRealtimeCoordinator {
           permissionEpoch: hint.permission_epoch,
           keyEpoch: space.current_key_epoch,
         });
+        if (token !== this.lifecycleToken) return;
         this.spaces.set(space.id, space);
         await this.syncClient.pushSpace(workspacePath, space.id);
+        if (token !== this.lifecycleToken) return;
         await this.pullSpace(space, workspacePath, token);
       }
       return;
@@ -167,8 +192,10 @@ export class TeamRealtimeCoordinator {
       membershipStatus: hint.membership_status,
       permissionEpoch: hint.permission_epoch,
     });
+    if (token !== this.lifecycleToken) return;
     if (hint.membership_status === 'removed' || hint.membership_status === 'suspended') {
       await this.controlClient.deleteCachedTeamKeys(hint.team_id, scopes);
+      if (token !== this.lifecycleToken) return;
       for (const [spaceId, space] of this.spaces) {
         if (space.team_id === hint.team_id) this.spaces.delete(spaceId);
       }
@@ -238,6 +265,11 @@ export class TeamRealtimeCoordinator {
     if (error) throw error;
     return data ?? [];
   }
+}
+
+function isProvisioningPendingError(error) {
+  return error?.code === 'TEAM_KEY_PENDING'
+    || String(error?.message ?? error).includes('awaiting provisioning');
 }
 
 export const teamRealtimeCoordinator = new TeamRealtimeCoordinator();

@@ -116,17 +116,14 @@ pub fn configure_note_team_scope(
     if pending_count != 0 {
         return Err("note has unsynchronized operations".to_string());
     }
-    if matches!(current_scope.as_str(), "personal" | "local_only") {
-        let identity_scope = if current_scope == "personal" {
-            current_scope_id.as_str()
-        } else {
-            "local-path"
-        };
-        let promoted_id = promoted_team_note_id(team_id, identity_scope, &path_key);
-        if promoted_id != note_id {
-            adopt_personal_note_identity(store, &note_id, &promoted_id)?;
-            note_id = promoted_id;
-        }
+    let promoted_id = if current_scope == "personal" {
+        promoted_team_note_id(team_id, &current_scope_id, &path_key)
+    } else {
+        stable_local_team_note_id(&note_id)
+    };
+    if promoted_id != note_id {
+        adopt_personal_note_identity(store, &note_id, &promoted_id)?;
+        note_id = promoted_id;
     }
 
     let op_id = new_note_id();
@@ -1225,17 +1222,14 @@ pub fn apply_team_remote_action(
                     && matches!(scope_kind.as_str(), "personal" | "local_only")
                     && pending == 0
                 {
-                    let identity_scope = if scope_kind == "personal" {
-                        scope_id.as_str()
-                    } else {
-                        "local-path"
-                    };
-                    let expected_note_id = promoted_team_note_id(
-                        &action.team_id,
-                        identity_scope,
-                        &normalized_path_key(&requested_relative),
-                    );
-                    if action.note_id != expected_note_id {
+                    let expected_note_id = (scope_kind == "personal").then(|| {
+                        promoted_team_note_id(
+                            &action.team_id,
+                            &scope_id,
+                            &normalized_path_key(&requested_relative),
+                        )
+                    });
+                    if expected_note_id.as_deref() != Some(action.note_id.as_str()) {
                         let conflict_path = team_collision_path(action)?;
                         commit_create_with_note_id(
                             store,
@@ -2209,6 +2203,13 @@ fn promoted_team_note_id(team_id: &str, identity_scope: &str, normalized_path: &
     .to_string()
 }
 
+fn stable_local_team_note_id(local_note_id: &str) -> String {
+    match uuid::Uuid::parse_str(local_note_id) {
+        Ok(note_id) if note_id.get_version_num() == 7 => local_note_id.to_string(),
+        _ => new_note_id(),
+    }
+}
+
 fn team_collision_path(action: &TeamRemoteAction) -> Result<String, String> {
     let requested = safe_relative_path(&action.relative_path)?;
     let filename = requested
@@ -2413,9 +2414,83 @@ mod tests {
     }
 
     #[test]
+    fn independent_local_only_promotions_keep_distinct_stable_team_identities() {
+        let (workspace_a, store_a) = setup();
+        let (workspace_b, store_b) = setup();
+        let local_id_a: String = store_a
+            .with_blocking(|conn| {
+                conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))
+            })
+            .unwrap();
+        let local_id_b: String = store_b
+            .with_blocking(|conn| {
+                conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))
+            })
+            .unwrap();
+        assert_ne!(local_id_a, local_id_b);
+
+        configure_note_team_scope(
+            &store_a,
+            workspace_a.path(),
+            "note.md",
+            "team-1",
+            "space-1",
+            1,
+            1,
+        )
+        .unwrap();
+        configure_note_team_scope(
+            &store_b,
+            workspace_b.path(),
+            "note.md",
+            "team-1",
+            "space-1",
+            1,
+            1,
+        )
+        .unwrap();
+
+        let entry_a = claim_next_team_outbox(&store_a, workspace_a.path(), 1)
+            .unwrap()
+            .remove(0);
+        let entry_b = claim_next_team_outbox(&store_b, workspace_b.path(), 1)
+            .unwrap()
+            .remove(0);
+        assert_eq!(entry_a.note_id, local_id_a);
+        assert_eq!(entry_b.note_id, local_id_b);
+        assert_ne!(entry_a.note_id, entry_b.note_id);
+
+        for (store, expected_note_id) in
+            [(&store_a, &entry_a.note_id), (&store_b, &entry_b.note_id)]
+        {
+            let history_note_id: String = store
+                .with_blocking(|conn| {
+                    conn.query_row(
+                        "SELECT note_id FROM note_path_history ORDER BY id LIMIT 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                })
+                .unwrap();
+            assert_eq!(&history_note_id, expected_note_id);
+        }
+    }
+
+    #[test]
     fn personal_promotions_use_the_same_cross_device_team_identity() {
         let (workspace_a, store_a) = setup();
         let (workspace_b, store_b) = setup();
+        let local_id_a: String = store_a
+            .with_blocking(|conn| {
+                conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))
+            })
+            .unwrap();
+        let local_id_b: String = store_b
+            .with_blocking(|conn| {
+                conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))
+            })
+            .unwrap();
+        assert_ne!(local_id_a, local_id_b);
         for store in [&store_a, &store_b] {
             store
                 .with_blocking(|conn| {
@@ -2466,6 +2541,22 @@ mod tests {
             })
             .unwrap();
         assert_eq!(id_a, id_b);
+        assert_eq!(
+            id_a,
+            promoted_team_note_id("team-1", "personal-workspace", "note.md")
+        );
+        for store in [&store_a, &store_b] {
+            let history_note_id: String = store
+                .with_blocking(|conn| {
+                    conn.query_row(
+                        "SELECT note_id FROM note_path_history ORDER BY id LIMIT 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                })
+                .unwrap();
+            assert_eq!(history_note_id, id_a);
+        }
     }
 
     #[test]
@@ -2906,6 +2997,11 @@ mod tests {
     #[test]
     fn rejected_initial_share_restores_previous_local_scope() {
         let (workspace, store) = setup();
+        let original_note_id: String = store
+            .with_blocking(|conn| {
+                conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))
+            })
+            .unwrap();
         let op_id = configure_note_team_scope(
             &store,
             workspace.path(),
@@ -2919,6 +3015,7 @@ mod tests {
         let entry = claim_next_team_outbox(&store, workspace.path(), 1)
             .unwrap()
             .remove(0);
+        assert_eq!(entry.note_id, original_note_id);
         complete_team_push(
             &store,
             workspace.path(),
@@ -2932,12 +3029,22 @@ mod tests {
 
         rollback_rejected_team_share(&store, &op_id).unwrap();
 
-        let scope: String = store
+        let (scope, note_id, history_note_id): (String, String, String) = store
             .with_blocking(|conn| {
-                conn.query_row("SELECT scope_kind FROM local_notes", [], |row| row.get(0))
+                Ok((
+                    conn.query_row("SELECT scope_kind FROM local_notes", [], |row| row.get(0))?,
+                    conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))?,
+                    conn.query_row(
+                        "SELECT note_id FROM note_path_history ORDER BY id LIMIT 1",
+                        [],
+                        |row| row.get(0),
+                    )?,
+                ))
             })
             .unwrap();
         assert_eq!(scope, "local_only");
+        assert_eq!(note_id, original_note_id);
+        assert_eq!(history_note_id, original_note_id);
     }
 
     #[test]
