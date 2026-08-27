@@ -94,6 +94,7 @@ docs/architecture/*
 !docs/architecture/team-notes-v1-data-schema.md
 !docs/architecture/team-notes-v1-cloud.dbml
 !docs/architecture/team-notes-v1-local.dbml
+!docs/architecture/team-collaboration-roadmap.md
 
 # Generated API documentation
 openapi.yaml
