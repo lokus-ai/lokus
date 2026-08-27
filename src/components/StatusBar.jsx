@@ -5,7 +5,7 @@ import { usePluginStatusItems } from '../hooks/usePluginStatusItems.js';
 import StatusBarContextMenu from './StatusBarContextMenu.jsx';
 import { host } from '../core/plugin-v3/index.js';
 import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
-
+import { isMobile } from '../platform/index.js';
 /**
  * Pluginable Status Bar Component
  * Supports left and right sections with priority-based ordering of widgets
@@ -166,7 +166,7 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
   };
 
   return (
-    <div className="obsidian-status-bar">
+    <div className={`obsidian-status-bar ${isMobile() ? 'safe-area-inset-bottom' : ''}`}>
       {/* Left section - plugin items and core items */}
       <div className="obsidian-status-bar-section">
         {/* Core status items - hide on small screens */}
