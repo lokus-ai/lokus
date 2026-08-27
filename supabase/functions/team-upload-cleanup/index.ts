@@ -1,8 +1,12 @@
-import { createClient } from 'npm:@supabase/supabase-js@2';
-
 const BUCKET = 'team-note-revisions';
 const BATCH_SIZE = 100;
 const MAX_BATCHES = 10;
+
+type DeletionClaim = {
+  queue_id: string;
+  object_key: string;
+  claim_token: string;
+};
 
 Deno.serve(async (request) => {
   if (request.method !== 'POST') {
@@ -22,35 +26,32 @@ Deno.serve(async (request) => {
     return response(500, { error: 'configuration_error' });
   }
 
-  const client = createClient(supabaseUrl, secretKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
   let processedCount = 0;
   for (let batch = 0; batch < MAX_BATCHES; batch += 1) {
-    const { data: claims, error: claimError } = await client.rpc(
-      'claim_team_revision_deletions',
-      {
-        p_limit: BATCH_SIZE,
-        p_lease_seconds: 120,
-      },
-    );
-    if (claimError) {
-      console.error('[team-upload-cleanup] claim failed', safeError(claimError));
+    let claims: DeletionClaim[];
+    try {
+      claims = await callRpc(
+        supabaseUrl,
+        secretKey,
+        'claim_team_revision_deletions',
+        {
+          p_limit: BATCH_SIZE,
+          p_lease_seconds: 120,
+        },
+      ) as DeletionClaim[];
+    } catch (error) {
+      console.error('[team-upload-cleanup] claim failed', safeError(error));
       return response(500, { error: 'claim_failed', processed: processedCount });
     }
     if (!claims?.length) break;
 
     const objectKeys = claims.map(({ object_key }) => object_key);
-    const { error: storageError } = await client.storage
-      .from(BUCKET)
-      .remove(objectKeys);
-    if (storageError) {
+    try {
+      await removeStorageObjects(supabaseUrl, secretKey, objectKeys);
+    } catch (error) {
       console.error(
         '[team-upload-cleanup] Storage API deletion failed',
-        safeError(storageError),
+        safeError(error),
       );
       return response(500, {
         error: 'storage_delete_failed',
@@ -60,17 +61,21 @@ Deno.serve(async (request) => {
 
     const claimToken = claims[0].claim_token;
     const queueIds = claims.map(({ queue_id }) => queue_id);
-    const { data: acknowledged, error: acknowledgeError } = await client.rpc(
-      'complete_team_revision_deletions',
-      {
-        p_claim_token: claimToken,
-        p_queue_ids: queueIds,
-      },
-    );
-    if (acknowledgeError) {
+    let acknowledged;
+    try {
+      acknowledged = await callRpc(
+        supabaseUrl,
+        secretKey,
+        'complete_team_revision_deletions',
+        {
+          p_claim_token: claimToken,
+          p_queue_ids: queueIds,
+        },
+      );
+    } catch (error) {
       console.error(
         '[team-upload-cleanup] acknowledgement failed',
-        safeError(acknowledgeError),
+        safeError(error),
       );
       return response(500, {
         error: 'acknowledge_failed',
@@ -83,6 +88,77 @@ Deno.serve(async (request) => {
 
   return response(200, { processed: processedCount });
 });
+
+async function callRpc(
+  supabaseUrl: string,
+  secretKey: string,
+  name: string,
+  parameters: Record<string, unknown>,
+) {
+  return apiRequest(
+    `${supabaseUrl}/rest/v1/rpc/${encodeURIComponent(name)}`,
+    secretKey,
+    {
+      method: 'POST',
+      headers: {
+        'content-profile': 'public',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(parameters),
+    },
+  );
+}
+
+async function removeStorageObjects(
+  supabaseUrl: string,
+  secretKey: string,
+  objectKeys: string[],
+) {
+  return apiRequest(
+    `${supabaseUrl}/storage/v1/object/${encodeURIComponent(BUCKET)}`,
+    secretKey,
+    {
+      method: 'DELETE',
+      body: JSON.stringify({ prefixes: objectKeys }),
+    },
+  );
+}
+
+async function apiRequest(
+  url: string,
+  secretKey: string,
+  init: RequestInit,
+) {
+  const result = await fetch(url, {
+    ...init,
+    headers: {
+      apikey: secretKey,
+      ...(isLegacyJwt(secretKey)
+        ? { authorization: `Bearer ${secretKey}` }
+        : {}),
+      'content-type': 'application/json',
+      ...init.headers,
+    },
+  });
+  const text = await result.text();
+  if (!result.ok) {
+    let message = text;
+    let code = null;
+    try {
+      const body = JSON.parse(text);
+      message = body.message ?? body.error ?? text;
+      code = body.code ?? null;
+    } catch {
+      // Keep the bounded raw response when the service did not return JSON.
+    }
+    throw {
+      code,
+      statusCode: result.status,
+      message: String(message).slice(0, 240),
+    };
+  }
+  return text ? JSON.parse(text) : null;
+}
 
 function response(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), {
@@ -103,19 +179,20 @@ function constantTimeEqual(left: string, right: string) {
   return difference === 0;
 }
 
-function safeError(error: {
-  code?: string;
-  statusCode?: string | number;
-  message?: string;
-}) {
+function safeError(error: unknown) {
+  const details = error && typeof error === 'object'
+    ? error as Record<string, unknown>
+    : {};
   return {
-    code: error.code ?? null,
-    status: error.statusCode ?? null,
-    message: String(error.message ?? 'unknown error').slice(0, 240),
+    code: details.code ?? null,
+    status: details.statusCode ?? null,
+    message: String(details.message ?? 'unknown error').slice(0, 240),
   };
 }
 
 function getSupabaseSecretKey() {
+  const legacyKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacyKey) return legacyKey;
   const encoded = Deno.env.get('SUPABASE_SECRET_KEYS');
   if (encoded) {
     try {
@@ -125,5 +202,9 @@ function getSupabaseSecretKey() {
       // Fall through for projects still using legacy JWT-based API keys.
     }
   }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  return '';
+}
+
+function isLegacyJwt(value: string) {
+  return value.split('.').length === 3;
 }
