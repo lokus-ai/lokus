@@ -158,6 +158,20 @@ BEGIN
 END $$;
 
 RESET ROLE;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM public.team_revision_deletion_queue
+     WHERE revision_id = '50000000-0000-0000-0000-000000000401'
+  ) THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: accepted revision was queued for deletion';
+  END IF;
+END
+$$;
+
 UPDATE public.devices
    SET status = 'revoked', revoked_at = now()
  WHERE id = '20000000-0000-0000-0000-000000000401';
@@ -250,6 +264,157 @@ BEGIN
 END $$;
 
 RESET ROLE;
+
+DO $$
+DECLARE
+  v_queue_id uuid;
+  v_object_key text;
+  v_claim_token uuid;
+  v_processed integer;
+  v_old_object_key text;
+  v_new_object_key text;
+  v_retry_result public.mutation_result;
+BEGIN
+  IF (
+    SELECT count(*)
+      FROM public.team_revision_deletion_queue
+     WHERE revision_id = '50000000-0000-0000-0000-000000000402'
+       AND reason = 'discarded'
+  ) <> 1 THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: conflicting revision was not queued';
+  END IF;
+
+  UPDATE public.team_revision_deletion_queue
+     SET next_attempt_at = clock_timestamp() - interval '1 second'
+   WHERE revision_id = '50000000-0000-0000-0000-000000000402';
+
+  SELECT claim.queue_id, claim.object_key, claim.claim_token
+    INTO v_queue_id, v_object_key, v_claim_token
+    FROM public.claim_team_revision_deletions(100, 120) claim
+   WHERE claim.object_key =
+     'spaces/30000000-0000-0000-0000-000000000401/notes/40000000-0000-0000-0000-000000000401/revisions/50000000-0000-0000-0000-000000000402.bin';
+
+  IF v_queue_id IS NULL OR v_claim_token IS NULL OR v_object_key IS NULL THEN
+    RAISE EXCEPTION 'DELETION QUEUE FAILED: queued object was not claimable';
+  END IF;
+  IF public.complete_team_revision_deletions(
+    gen_random_uuid(),
+    ARRAY[v_queue_id]
+  ) <> 0 THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: wrong claim token acknowledged deletion';
+  END IF;
+  v_processed := public.complete_team_revision_deletions(
+    v_claim_token,
+    ARRAY[v_queue_id]
+  );
+  IF v_processed <> 1 THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: first pass acknowledgement was not accepted';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public.team_revision_deletion_queue queue
+     WHERE queue.id = v_queue_id
+       AND queue.delete_passes = 1
+       AND queue.claim_token IS NULL
+  ) THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: first pass did not retain its tombstone';
+  END IF;
+
+  SELECT public.begin_revision_upload(
+    '60000000-0000-0000-0000-000000000403',
+    '50000000-0000-0000-0000-000000000403',
+    '10000000-0000-0000-0000-000000000401',
+    '30000000-0000-0000-0000-000000000401',
+    '40000000-0000-0000-0000-000000000401',
+    '20000000-0000-0000-0000-000000000401',
+    3,
+    1,
+    1,
+    digest('sync-ciphertext-3', 'sha256')
+  ) INTO v_old_object_key;
+  UPDATE public.pending_revision_uploads
+     SET created_at = clock_timestamp() - interval '20 minutes',
+         expires_at = clock_timestamp() - interval '1 second'
+   WHERE op_id = '60000000-0000-0000-0000-000000000403';
+
+  SELECT public.begin_revision_upload(
+    '60000000-0000-0000-0000-000000000403',
+    '50000000-0000-0000-0000-000000000403',
+    '10000000-0000-0000-0000-000000000401',
+    '30000000-0000-0000-0000-000000000401',
+    '40000000-0000-0000-0000-000000000401',
+    '20000000-0000-0000-0000-000000000401',
+    3,
+    1,
+    1,
+    digest('sync-ciphertext-3', 'sha256')
+  ) INTO v_new_object_key;
+  IF v_new_object_key = v_old_object_key
+     OR NOT EXISTS (
+       SELECT 1
+         FROM public.team_revision_deletion_queue
+        WHERE object_key = v_old_object_key
+     ) THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: expired upload did not receive a fresh object';
+  END IF;
+
+  INSERT INTO storage.objects (bucket_id, name, owner_id, metadata)
+  VALUES (
+    'team-note-revisions',
+    v_new_object_key,
+    '00000000-0000-0000-0000-000000000401',
+    '{"size": 1}'::jsonb
+  );
+  SELECT result.result INTO v_retry_result
+    FROM public.push_note_revision(
+      '60000000-0000-0000-0000-000000000403',
+      '50000000-0000-0000-0000-000000000401',
+      1
+    ) result;
+  IF v_retry_result <> 'accepted'
+     OR EXISTS (
+       SELECT 1
+         FROM public.team_revision_deletion_queue
+        WHERE object_key = v_new_object_key
+     ) THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: fresh retry did not finalize safely';
+  END IF;
+
+  UPDATE public.team_revision_deletion_queue
+     SET next_attempt_at = clock_timestamp() - interval '1 second',
+         retain_until = clock_timestamp() - interval '1 second'
+   WHERE id = v_queue_id;
+  SELECT claim.claim_token INTO v_claim_token
+    FROM public.claim_team_revision_deletions(100, 120) claim
+   WHERE claim.queue_id = v_queue_id;
+  IF v_claim_token IS NULL THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: retained tombstone was not reclaimable';
+  END IF;
+  v_processed := public.complete_team_revision_deletions(
+    v_claim_token,
+    ARRAY[v_queue_id]
+  );
+  IF v_processed <> 1 THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: final acknowledgement was not accepted';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM public.team_revision_deletion_queue
+     WHERE id = v_queue_id
+  ) THEN
+    RAISE EXCEPTION
+      'DELETION QUEUE FAILED: retained tombstone did not finish after its bound';
+  END IF;
+END
+$$;
 
 SELECT set_config(
   'request.jwt.claim.sub',
