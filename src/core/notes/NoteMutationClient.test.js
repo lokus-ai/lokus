@@ -195,6 +195,37 @@ describe('NoteMutationClient', () => {
     expect(result.note_id).toBe('note-create');
   });
 
+  it.each([
+    ['Unix', 'No such file or directory (os error 2)'],
+    ['Windows', 'The system cannot find the file specified. (os error 2)'],
+  ])('creates a new note when %s canonicalization reports a missing path', async (_, error) => {
+    const client = new NoteMutationClient({ foundationEnabled: () => true });
+    invoke
+      .mockRejectedValueOnce(new Error(error))
+      .mockResolvedValueOnce({ created: 0, reused: 0 })
+      .mockRejectedValueOnce(new Error(error))
+      .mockResolvedValueOnce({
+        op_id: 'op-create',
+        note_id: 'note-create',
+        local_generation: 1,
+        queued_for_sync: false,
+      });
+
+    await expect(client.writeNote({
+      workspacePath: '/vault',
+      path: '/vault/new.md',
+      content: '# New',
+      source: 'daily-note',
+    })).resolves.toMatchObject({ note_id: 'note-create' });
+
+    expect(invoke).toHaveBeenLastCalledWith('create_note_content', {
+      workspacePath: '/vault',
+      path: '/vault/new.md',
+      content: '# New',
+      source: 'daily-note',
+    });
+  });
+
   it('backfills an unindexed existing file before using a generation write', async () => {
     const client = new NoteMutationClient({ foundationEnabled: () => true });
     invoke

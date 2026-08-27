@@ -259,7 +259,10 @@ function normalizedPathKey(path) {
 function isMissingNoteIdentityError(error) {
   const message = String(error?.message ?? error).toLowerCase();
   return message.includes('note identity not found')
-    || message.includes('query returned no rows');
+    || message.includes('query returned no rows')
+    || message.includes('no such file or directory')
+    || message.includes('the system cannot find the file specified')
+    || message.includes('os error 2');
 }
 
 function siblingPath(path, newName) {
