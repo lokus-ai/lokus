@@ -42,7 +42,9 @@ INSERT INTO public.profiles (id, display_name)
 VALUES
   ('00000000-0000-0000-0000-000000000101', 'RLS Owner'),
   ('00000000-0000-0000-0000-000000000102', 'RLS Member'),
-  ('00000000-0000-0000-0000-000000000103', 'RLS Outsider');
+  ('00000000-0000-0000-0000-000000000103', 'RLS Outsider')
+ON CONFLICT (id) DO UPDATE
+  SET display_name = EXCLUDED.display_name;
 
 INSERT INTO public.teams (
   id, name, created_by, current_permission_epoch, current_key_epoch

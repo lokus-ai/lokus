@@ -48,7 +48,9 @@ BEGIN
     (v_user2, 'team-schema-2@example.test', now());
 
   INSERT INTO public.profiles (id, display_name)
-  VALUES (v_user1, 'Schema One'), (v_user2, 'Schema Two');
+  VALUES (v_user1, 'Schema One'), (v_user2, 'Schema Two')
+  ON CONFLICT (id) DO UPDATE
+    SET display_name = EXCLUDED.display_name;
 
   INSERT INTO public.teams (
     id, name, created_by, current_permission_epoch, current_key_epoch
