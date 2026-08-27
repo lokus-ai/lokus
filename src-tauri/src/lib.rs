@@ -22,6 +22,7 @@ mod connections;
 #[cfg(desktop)]
 mod calendar;
 mod calendar_v2;
+mod note_engine;
 #[cfg(desktop)]
 mod oauth_server;
 mod secure_storage;
@@ -635,6 +636,37 @@ pub fn run() {
       theme::list_custom_themes,
       theme::get_theme_tokens,
       theme::save_theme_tokens,
+      note_engine::commands::initialize_note_engine,
+      note_engine::commands::get_note_identity,
+      note_engine::commands::get_team_note_paths,
+      note_engine::commands::get_note_path_by_id,
+      note_engine::commands::write_note_content,
+      note_engine::commands::create_note_content,
+      note_engine::commands::apply_remote_note_content,
+      note_engine::commands::acknowledge_personal_note_sync,
+      note_engine::commands::tombstone_note_content,
+      note_engine::commands::relocate_note_content,
+      note_engine::commands::restore_note_content,
+      note_engine::commands::reconcile_note_changes,
+      note_engine::commands::configure_note_team_scope,
+      note_engine::commands::claim_team_note_outbox,
+      note_engine::commands::claim_next_team_note_outbox,
+      note_engine::commands::cache_team_note_ciphertext,
+      note_engine::commands::queue_team_note_space_move,
+      note_engine::commands::complete_team_note_push,
+      note_engine::commands::finalize_team_note_conflict,
+      note_engine::commands::rollback_rejected_team_share,
+      note_engine::commands::get_team_note_outbox_status,
+      note_engine::commands::get_team_note_checkpoint,
+      note_engine::commands::apply_team_note_remote_action,
+      note_engine::commands::apply_team_membership_hint,
+      note_engine::commands::refresh_team_note_scope,
+      note_engine::commands::set_team_note_sequence_floor,
+      note_engine::commands::stage_team_note_conflict,
+      note_engine::commands::get_team_note_conflict,
+      note_engine::commands::resolve_team_note_conflict,
+      note_engine::commands::resolve_local_note_recovery,
+      note_engine::commands::list_team_note_conflicts,
       handlers::files::read_workspace_files,
       handlers::watcher::start_workspace_watch,
       handlers::watcher::stop_workspace_watch,
@@ -933,6 +965,7 @@ pub fn run() {
       // Tracks the last focused window so window-scoped menu commands can be
       // routed to it (updated from the on_window_event handler).
       app.manage(FocusTracker::default());
+      app.manage(note_engine::engine::NoteEngineRegistry::default());
 
       // Non-essential init is best-effort: a failure here must never unwind setup and
       // leave the app with no visible window. The final guard at the end of setup

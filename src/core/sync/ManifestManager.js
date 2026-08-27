@@ -167,7 +167,8 @@ export class ManifestManager {
     });
 
     if (error) throw error;
-    return data === true;
+    const result = Array.isArray(data) ? data[0] : null;
+    return result?.ok === true;
   }
 
   /**

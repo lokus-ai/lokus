@@ -5,9 +5,9 @@
  */
 
 import { format, parse, isValid, subDays, addDays, getWeek } from 'date-fns';
-import { invoke } from '@tauri-apps/api/core';
 import { mkdir, exists, readDir } from '@tauri-apps/plugin-fs';
 import { updateConfig, readConfig } from '../config/store.js';
+import { noteMutationClient } from '../notes/NoteMutationClient';
 import { joinPath } from '../../utils/pathUtils.js';
 
 export class DailyNotesManager {
@@ -234,7 +234,12 @@ export class DailyNotesManager {
     const content = await this.getDailyNoteContent(date);
 
     try {
-      await invoke('write_file_content', { workspacePath: this.workspacePath, path: filePath, content });
+      await noteMutationClient.writeNote({
+        workspacePath: this.workspacePath,
+        path: filePath,
+        content,
+        source: 'daily-note',
+      });
       return filePath;
     } catch (error) {
       throw new Error(`Failed to create daily note: ${error.message}`);

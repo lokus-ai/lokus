@@ -42,6 +42,7 @@ import {
   FolderTree,
   ArrowRight,
   Clock,
+  Users,
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
 import { isDesktop } from '../services/platform/PlatformService';
@@ -383,6 +384,14 @@ export default function FileContextMenu({
             {/* Rename and Delete */}
             {file && (
               <>
+                {featureFlags.enable_team_notes_foundation
+                  && isFile
+                  && /\.(md|markdown|txt)$/i.test(file.path || '') && (
+                  <ContextMenuItem onClick={() => handleAction('teamShare')}>
+                    <Users className="mr-2 h-4 w-4" />
+                    Share with team…
+                  </ContextMenuItem>
+                )}
                 <ContextMenuItem onClick={() => handleAction('rename')}>
                   <Pencil className="mr-2 h-4 w-4" />
                   Rename

@@ -25,6 +25,7 @@ import { isImageFile } from '../utils/imageUtils';
 import { isPDFFile } from '../utils/pdfUtils';
 import { LazyImageViewer, LazyPDFViewer } from './OptimizedWrapper';
 import { useFeatureFlags } from '../contexts/RemoteConfigContext';
+import { noteMutationClient } from '../core/notes/NoteMutationClient.js';
 
 // True for tabs that are not handled by the ProseMirror editor
 // (special views, canvases, boards, graphs, images, PDFs).
@@ -189,8 +190,8 @@ export default function EditorGroup({
   const applyModel = useCallback((filePath, model) => {
     const view = rawEditorRef.current;
     if (!view || !model) return;
-    view.updateState(model.state);
     viewFileRef.current = filePath;
+    view.updateState(model.state);
     if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = model.scrollTop || 0;
   }, []);
 
@@ -395,7 +396,12 @@ export default function EditorGroup({
 
       // The view is read-only while a tab's model is loading from disk —
       // keystrokes can't land in the placeholder (or a stale document).
-      view.setProps({ editable: () => !loadingFileRef.current });
+      view.setProps({
+        editable: () => (
+          !loadingFileRef.current
+          && !noteMutationClient.isRemotePathLocked(viewFileRef.current)
+        ),
+      });
 
       if (!lokusParserRef.current) {
         lokusParserRef.current = createLokusParser(view.state.schema);

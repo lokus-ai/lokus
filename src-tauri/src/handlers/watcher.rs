@@ -25,6 +25,16 @@ fn watchers() -> &'static Mutex<HashMap<String, RecommendedWatcher>> {
 /// these never affect what the tree shows.
 const EXCLUDED: &[&str] = &[".lokus", ".git", "node_modules", ".DS_Store"];
 
+fn classify_event_kind(kind: &notify::EventKind) -> &'static str {
+    match kind {
+        notify::EventKind::Create(_) => "create",
+        notify::EventKind::Remove(_) => "remove",
+        notify::EventKind::Modify(notify::event::ModifyKind::Name(_)) => "rename",
+        notify::EventKind::Modify(_) => "modify",
+        _ => "other",
+    }
+}
+
 fn is_excluded(path: &Path) -> bool {
     path.components().any(|c| {
         let s = c.as_os_str().to_string_lossy();
@@ -35,6 +45,14 @@ fn is_excluded(path: &Path) -> bool {
 #[derive(Serialize, Clone)]
 pub struct FsChangePayload {
     workspace: String,
+    sequence: u64,
+    paths: Vec<String>,
+    changes: Vec<FsChangeEntry>,
+}
+
+#[derive(Serialize, Clone, PartialEq, Eq)]
+pub struct FsChangeEntry {
+    kind: String,
     paths: Vec<String>,
 }
 
@@ -63,21 +81,37 @@ pub fn start_workspace_watch(app: AppHandle, workspace_path: String) -> Result<(
     // window. Exits when the watcher is dropped (channel disconnects).
     std::thread::spawn(move || {
         let debounce = Duration::from_millis(400);
+        let mut sequence = 0_u64;
         loop {
             let first = match rx.recv() {
                 Ok(ev) => ev,
                 Err(_) => break,
             };
             let mut paths: Vec<String> = Vec::new();
+            let mut changes: Vec<FsChangeEntry> = Vec::new();
             let mut collect = |ev: notify::Result<Event>| {
                 if let Ok(ev) = ev {
+                    let kind = classify_event_kind(&ev.kind).to_string();
+                    let mut event_paths = Vec::new();
                     for p in ev.paths {
                         if is_excluded(&p) {
                             continue;
                         }
                         let s = p.to_string_lossy().to_string();
+                        if !event_paths.contains(&s) {
+                            event_paths.push(s.clone());
+                        }
                         if !paths.contains(&s) {
                             paths.push(s);
+                        }
+                    }
+                    if !event_paths.is_empty() {
+                        let entry = FsChangeEntry {
+                            kind,
+                            paths: event_paths,
+                        };
+                        if !changes.contains(&entry) {
+                            changes.push(entry);
                         }
                     }
                 }
@@ -89,11 +123,14 @@ pub fn start_workspace_watch(app: AppHandle, workspace_path: String) -> Result<(
             if paths.is_empty() {
                 continue;
             }
+            sequence = sequence.saturating_add(1);
             let _ = app.emit(
                 "workspace:fs-change",
                 FsChangePayload {
                     workspace: workspace_path.clone(),
+                    sequence,
                     paths,
+                    changes,
                 },
             );
         }
@@ -108,4 +145,35 @@ pub fn stop_workspace_watch(workspace_path: String) -> Result<(), String> {
     // Dropping the watcher stops it; its thread exits on channel disconnect.
     map.remove(&workspace_path);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+
+    use super::*;
+
+    #[test]
+    fn event_kinds_preserve_create_modify_remove_and_rename() {
+        assert_eq!(
+            classify_event_kind(&notify::EventKind::Create(CreateKind::File)),
+            "create"
+        );
+        assert_eq!(
+            classify_event_kind(&notify::EventKind::Modify(ModifyKind::Data(
+                notify::event::DataChange::Content,
+            ))),
+            "modify"
+        );
+        assert_eq!(
+            classify_event_kind(&notify::EventKind::Remove(RemoveKind::File)),
+            "remove"
+        );
+        assert_eq!(
+            classify_event_kind(&notify::EventKind::Modify(ModifyKind::Name(
+                RenameMode::Both,
+            ))),
+            "rename"
+        );
+    }
 }

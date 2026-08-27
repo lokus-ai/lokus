@@ -27,7 +27,8 @@ export default function MainContent({ workspacePath, welcomeProps }) {
   // but keeps EditorGroupsView as the main content.
   const showEditor = currentView === 'editor'
     || (currentView === 'kanban' && featureFlags.enable_kanban)
-    || currentView === 'marketplace';
+    || currentView === 'marketplace'
+    || (currentView === 'teams' && featureFlags.enable_team_notes_foundation);
 
   return (
     <ErrorBoundary name="MainContent" message="View crashed">

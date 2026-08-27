@@ -9,6 +9,10 @@
  */
 
 import { readTextFile, writeTextFile } from '@tauri-apps/plugin-fs'
+import {
+  isSupportedNotePath,
+  noteMutationClient,
+} from '../notes/NoteMutationClient.js'
 
 // Reference patterns to match in markdown files
 const PATTERNS = {
@@ -363,7 +367,20 @@ class ReferenceManager {
       }
 
       if (content !== originalContent) {
-        await writeTextFile(filePath, content)
+        if (
+          globalThis.__LOKUS_FEATURE_FLAGS__?.enable_note_engine_foundation
+          && isSupportedNotePath(filePath)
+        ) {
+          await noteMutationClient.writeNote({
+            workspacePath: this.workspacePath,
+            path: filePath,
+            content,
+            baseContent: originalContent,
+            source: 'reference-update',
+          })
+        } else {
+          await writeTextFile(filePath, content)
+        }
         this.contentCache.set(filePath, content)
         return true
       }

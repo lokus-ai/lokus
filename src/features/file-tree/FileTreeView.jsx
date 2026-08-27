@@ -14,6 +14,7 @@ import { getFilename } from "../../utils/pathUtils.js";
 import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
 import { NewItemInput } from "./NewItemInput.jsx";
 import { FileEntryComponent } from "./FileEntryComponent.jsx";
+import { isSupportedNotePath, noteMutationClient } from "../../core/notes/NoteMutationClient.js";
 
 // Props that rows used to receive and thread down (expandedFolders, keymap,
 // renamingPath, hoveredFolder, …) are gone: each row now reads its own slice
@@ -26,6 +27,23 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
   const { dropPosition, updatePosition, clearPosition } = useDropPosition();
   const [selectedPaths, setSelectedPaths] = useState(new Set());
   const [lastSelectedPath, setLastSelectedPath] = useState(null);
+  const deletePath = useCallback(async (path) => {
+    if (isSupportedNotePath(path)) {
+      return noteMutationClient.removeNote({
+        workspacePath,
+        path,
+        source: "file-tree-delete",
+      });
+    }
+    return invoke("delete_file", { path });
+  }, [workspacePath]);
+  const movePath = useCallback(async (path, destinationDir) => {
+    if (isSupportedNotePath(path)) {
+      return noteMutationClient.moveNote(path, destinationDir, { workspacePath });
+    }
+    await invoke("move_file", { sourcePath: path, destinationDir });
+    return `${destinationDir}/${path.split(/[/\\]/).pop()}`;
+  }, [workspacePath]);
   const flatEntries = useMemo(() => {
     const list = [];
     const walk = (nodes) => {
@@ -147,7 +165,7 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
         const confirmed = await confirm(`Delete ${count} item${count > 1 ? 's' : ''}?`);
         if (confirmed) {
           for (const p of selectedPaths) {
-            try { await invoke('delete_file', { path: p }); } catch {}
+            try { await deletePath(p); } catch {}
           }
           setSelectedPaths(new Set());
           onRefresh?.();
@@ -156,7 +174,7 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [flatEntries, onRefresh, selectedPaths]);
+  }, [deletePath, flatEntries, onRefresh, selectedPaths]);
 
   // Click on empty space in file tree clears selection
   const handleContainerClick = useCallback((e) => {
@@ -178,12 +196,17 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
   const onCreateFileHere = useCallback(async (file) => {
     try {
       const base = file.is_directory ? file.path : file.path.split("/").slice(0, -1).join("/");
-      await invoke("write_file_content", { path: `${base}/Untitled.md`, content: "" });
+      await noteMutationClient.writeNote({
+        workspacePath,
+        path: `${base}/Untitled.md`,
+        content: "",
+        source: "file-tree-create",
+      });
       onRefresh && onRefresh();
     } catch (e) {
       toast?.error(`Failed to create file: ${e.message || e}`);
     }
-  }, [onRefresh, toast]);
+  }, [onRefresh, toast, workspacePath]);
 
   // window.prompt() is a no-op in the Tauri webview, so folder creation goes
   // through the same inline-input flow as the Cmd+Shift+N shortcut: set
@@ -307,11 +330,19 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
       case 'rename':
         onRename(file);
         break;
+      case 'teamShare':
+        window.dispatchEvent(new CustomEvent('lokus:share-team-note', {
+          detail: {
+            workspacePath,
+            path: file.path,
+          },
+        }));
+        break;
       case 'delete':
         try {
           const confirmed = await confirm(`Are you sure you want to delete "${file.name}"?`);
           if (confirmed) {
-            await invoke('delete_file', { path: file.path });
+            await deletePath(file.path);
             onRefresh && onRefresh();
           }
         } catch (err) {
@@ -364,7 +395,7 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
           if (confirmed) {
             for (const p of data.selectedPaths) {
               try {
-                await invoke('delete_file', { path: p });
+                await deletePath(p);
               } catch (err) {
                 console.error(`Failed to delete ${p}:`, err);
               }
@@ -420,8 +451,8 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
               let movedCount = 0;
               for (const p of data.selectedPaths) {
                 try {
-                  await invoke('move_file', { sourcePath: p, destinationDir: selectedFolder });
-                  onUpdateTabPath?.(p, selectedFolder + '/' + p.split('/').pop());
+                  const newPath = await movePath(p, selectedFolder);
+                  onUpdateTabPath?.(p, newPath);
                   movedCount++;
                 } catch (err) {
                   console.error(`Failed to move ${p}:`, err);
@@ -474,7 +505,7 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
   }, [
     onFileClick, activeFile, setUseSplitView, setRightPaneFile, setRightPaneTitle,
     setRightPaneContent, onViewHistory, onRefresh, setTagModalFile, toast,
-    onUpdateTabPath, onCreateFileHere, onCreateFolderHere, onRename,
+    onUpdateTabPath, onCreateFileHere, onCreateFolderHere, onRename, deletePath, movePath,
   ]);
 
   const sensors = useSensors(
@@ -554,12 +585,8 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
     let movedCount = 0;
     for (const oldPath of pathsToMove) {
       try {
-        await invoke("move_file", {
-          sourcePath: oldPath,
-          destinationDir: destinationDir,
-        });
-        const fileName = oldPath.split('/').pop();
-        onUpdateTabPath?.(oldPath, destinationDir + '/' + fileName);
+        const newPath = await movePath(oldPath, destinationDir);
+        onUpdateTabPath?.(oldPath, newPath);
         movedCount++;
       } catch (err) {
         console.error(`Failed to move ${oldPath}:`, err);

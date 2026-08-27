@@ -1,0 +1,571 @@
+Project lokus_team_notes_v1_cloud {
+  database_type: "PostgreSQL"
+  Note: "Canonical Supabase schema for Team Notes V1. Note content, titles, paths, tags, and links remain encrypted."
+}
+
+Enum team_role {
+  owner
+  admin
+  member
+}
+
+Enum membership_status {
+  key_pending
+  active
+  suspended
+  removed
+}
+
+Enum space_kind {
+  team
+  restricted
+}
+
+Enum space_role {
+  reader
+  editor
+  manager
+}
+
+Enum device_status {
+  active
+  revoked
+}
+
+Enum note_status {
+  active
+  tombstoned
+}
+
+Enum mutation_result {
+  accepted
+  conflict
+  rejected_access
+  rejected_epoch
+  retry_predecessor
+}
+
+Enum sync_action_type {
+  note_created
+  revision_accepted
+  note_tombstoned
+  note_restored
+  note_moved_out
+  note_moved_in
+}
+
+Enum revision_operation {
+  write
+  tombstone
+  restore
+  move
+}
+
+Table auth.users {
+  id uuid [pk]
+
+  Note: "Supabase-managed identity. Passwords, providers, and sessions remain owned by Supabase Auth."
+}
+
+Table public.profiles {
+  id uuid [pk, ref: > auth.users.id]
+  display_name text [not null]
+  avatar_url text
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table public.teams {
+  id uuid [pk, default: `gen_random_uuid()`]
+  name text [not null]
+  created_by uuid [not null, ref: > auth.users.id]
+  current_permission_epoch bigint [not null, default: 1]
+  current_key_epoch integer [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+  archived_by uuid [ref: > auth.users.id]
+  retention_expires_at timestamptz
+}
+
+Table public.team_permission_epochs {
+  team_id uuid [not null, ref: > public.teams.id]
+  epoch bigint [not null]
+  reason_code text [not null]
+  changed_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, epoch) [pk]
+  }
+}
+
+Table public.team_memberships {
+  team_id uuid [not null, ref: > public.teams.id]
+  user_id uuid [not null, ref: > auth.users.id]
+  role team_role [not null]
+  status membership_status [not null]
+  membership_version bigint [not null, default: 1]
+  invited_by uuid [ref: > auth.users.id]
+  joined_at timestamptz [not null, default: `now()`]
+  suspended_at timestamptz
+  removed_at timestamptz
+
+  indexes {
+    (team_id, user_id) [pk]
+    (user_id, status)
+  }
+}
+
+Table public.team_membership_realtime_hints {
+  team_id uuid [not null]
+  user_id uuid [not null]
+  membership_status membership_status [not null]
+  membership_version bigint [not null]
+  permission_epoch bigint [not null]
+  team_key_epoch integer [not null]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, user_id) [pk]
+  }
+
+  Note: "Content-free per-user membership and epoch poke. Durable local checkpoints remain authoritative."
+}
+
+Table public.team_invites {
+  id uuid [pk, default: `gen_random_uuid()`]
+  team_id uuid [not null, ref: > public.teams.id]
+  email_normalized citext [not null]
+  token_hash bytea [not null, unique]
+  role team_role [not null]
+  invited_by uuid [not null, ref: > auth.users.id]
+  expires_at timestamptz [not null]
+  accepted_by uuid [ref: > auth.users.id]
+  accepted_at timestamptz
+  revoked_at timestamptz
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, id) [unique]
+    (team_id, email_normalized)
+    (team_id, expires_at)
+  }
+}
+
+Table public.team_groups {
+  id uuid [pk, default: `gen_random_uuid()`]
+  team_id uuid [not null, ref: > public.teams.id]
+  system_key text
+  name_ciphertext bytea [not null]
+  name_nonce bytea [not null]
+  key_epoch integer [not null]
+  created_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+
+  indexes {
+    (team_id, id) [unique]
+    (team_id, system_key) [unique]
+  }
+
+  Note: "system_key is NULL for custom groups or 'everyone' for the singleton system group. Migration adds a CHECK constraint."
+}
+
+Table public.team_group_members {
+  team_id uuid [not null]
+  group_id uuid [not null]
+  user_id uuid [not null, ref: > auth.users.id]
+  added_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, group_id, user_id) [pk]
+    (team_id, user_id)
+  }
+}
+
+Table public.spaces {
+  id uuid [pk, default: `gen_random_uuid()`]
+  team_id uuid [not null, ref: > public.teams.id]
+  kind space_kind [not null]
+  name_ciphertext bytea [not null]
+  name_nonce bytea [not null]
+  current_key_epoch integer [not null, default: 1]
+  created_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+  deleted_at timestamptz
+  archived_by uuid [ref: > auth.users.id]
+  retention_expires_at timestamptz
+  archived_with_team boolean [not null, default: false]
+
+  indexes {
+    (team_id, id) [unique]
+    (team_id, kind)
+  }
+}
+
+Table public.space_member_grants {
+  team_id uuid [not null]
+  space_id uuid [not null]
+  user_id uuid [not null, ref: > auth.users.id]
+  role space_role [not null]
+  granted_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, space_id, user_id) [pk]
+    (team_id, user_id)
+  }
+}
+
+Table public.space_group_grants {
+  team_id uuid [not null]
+  space_id uuid [not null]
+  group_id uuid [not null]
+  role space_role [not null]
+  granted_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, space_id, group_id) [pk]
+    (team_id, group_id)
+  }
+}
+
+Table public.invite_space_grants {
+  team_id uuid [not null]
+  invite_id uuid [not null]
+  space_id uuid [not null]
+  role space_role [not null]
+
+  indexes {
+    (team_id, invite_id, space_id) [pk]
+  }
+}
+
+Table public.devices {
+  id uuid [pk, default: `gen_random_uuid()`]
+  user_id uuid [not null, ref: > auth.users.id]
+  client_instance_id uuid [not null]
+  public_key bytea [not null]
+  public_key_fingerprint bytea [not null]
+  key_algorithm text [not null]
+  status device_status [not null, default: "active"]
+  created_at timestamptz [not null, default: `now()`]
+  last_seen_at timestamptz [not null, default: `now()`]
+  revoked_at timestamptz
+
+  indexes {
+    (user_id, client_instance_id) [unique]
+    (user_id, public_key_fingerprint) [unique]
+    (user_id, status)
+  }
+}
+
+Table public.team_key_epochs {
+  team_id uuid [not null, ref: > public.teams.id]
+  epoch integer [not null]
+  reason_code text [not null]
+  created_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, epoch) [pk]
+  }
+
+  Note: "Encrypts team metadata such as group names. Note content continues to use space keys."
+}
+
+Table public.team_key_envelopes {
+  team_id uuid [not null]
+  epoch integer [not null]
+  recipient_device_id uuid [not null, ref: > public.devices.id]
+  wrapped_key bytea [not null]
+  wrapping_nonce bytea [not null]
+  algorithm text [not null]
+  created_by_device_id uuid [not null, ref: > public.devices.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, epoch, recipient_device_id) [pk]
+    (recipient_device_id)
+  }
+}
+
+Table public.space_key_epochs {
+  space_id uuid [not null, ref: > public.spaces.id]
+  epoch integer [not null]
+  reason text [not null]
+  created_by uuid [not null, ref: > auth.users.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (space_id, epoch) [pk]
+  }
+}
+
+Table public.space_key_envelopes {
+  space_id uuid [not null]
+  epoch integer [not null]
+  recipient_device_id uuid [not null, ref: > public.devices.id]
+  wrapped_key bytea [not null]
+  wrapping_nonce bytea [not null]
+  algorithm text [not null]
+  created_by_device_id uuid [not null, ref: > public.devices.id]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (space_id, epoch, recipient_device_id) [pk]
+    (recipient_device_id)
+  }
+}
+
+Table public.notes {
+  id uuid [pk]
+  team_id uuid [not null]
+  space_id uuid [not null]
+  created_by uuid [not null, ref: > auth.users.id]
+  status note_status [not null, default: "active"]
+  schema_version integer [not null, default: 1]
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, id) [unique]
+    (team_id, space_id, status)
+  }
+
+  Note: "Stable routing metadata only. No plaintext title, path, body, tags, links, or content hash."
+}
+
+Table public.note_revisions {
+  id uuid [pk]
+  team_id uuid [not null]
+  space_id uuid [not null]
+  note_id uuid [not null]
+  base_revision_id uuid
+  previous_head_id uuid
+  author_user_id uuid [not null, ref: > auth.users.id]
+  author_device_id uuid [not null, ref: > public.devices.id]
+  key_epoch integer [not null]
+  codec_version integer [not null]
+  object_key text [not null, unique]
+  ciphertext_size bigint [not null]
+  ciphertext_sha256 bytea [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, note_id, id) [unique]
+    (team_id, space_id, id) [unique]
+    (note_id, id) [unique]
+    (space_id, id) [unique]
+    (note_id, created_at)
+    (author_device_id, created_at)
+  }
+}
+
+Table public.note_heads {
+  note_id uuid [pk, ref: > public.notes.id]
+  revision_id uuid [not null, unique]
+  head_version bigint [not null]
+  updated_at timestamptz [not null, default: `now()`]
+}
+
+Table public.pending_revision_uploads {
+  op_id uuid [pk]
+  revision_id uuid [not null, unique]
+  team_id uuid [not null]
+  note_id uuid [not null]
+  space_id uuid [not null]
+  actor_user_id uuid [not null, ref: > auth.users.id]
+  actor_device_id uuid [not null, ref: > public.devices.id]
+  client_sequence bigint [not null]
+  operation_kind revision_operation [not null, default: "write"]
+  key_epoch integer [not null]
+  object_key text [not null, unique]
+  ciphertext_size bigint [not null]
+  ciphertext_sha256 bytea [not null]
+  expires_at timestamptz [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_device_id, client_sequence) [unique]
+    (actor_user_id, expires_at)
+    (space_id, expires_at)
+  }
+}
+
+Table public.space_sync_counters {
+  space_id uuid [pk, ref: > public.spaces.id]
+  last_sequence bigint [not null, default: 0]
+}
+
+Table public.sync_actions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  team_id uuid [not null]
+  space_id uuid [not null]
+  sequence bigint [not null]
+  action_type sync_action_type [not null]
+  note_id uuid [not null]
+  revision_id uuid
+  actor_user_id uuid [not null, ref: > auth.users.id]
+  actor_device_id uuid [not null, ref: > public.devices.id]
+  op_id uuid [not null]
+  permission_epoch bigint [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (space_id, sequence) [unique]
+    (actor_device_id, op_id, space_id) [unique]
+    (note_id, sequence)
+  }
+}
+
+Table public.mutation_receipts {
+  actor_device_id uuid [not null, ref: > public.devices.id]
+  op_id uuid [not null]
+  client_sequence bigint [not null]
+  team_id uuid [not null]
+  space_id uuid [not null]
+  note_id uuid [not null]
+  result mutation_result [not null]
+  result_revision_id uuid
+  result_action_sequence bigint
+  error_code text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (actor_device_id, op_id) [pk]
+    (actor_device_id, client_sequence) [unique]
+  }
+}
+
+Table public.replica_checkpoint_observations {
+  device_id uuid [not null, ref: > public.devices.id]
+  space_id uuid [not null, ref: > public.spaces.id]
+  reported_applied_sequence bigint [not null]
+  reported_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (device_id, space_id) [pk]
+    (space_id, reported_applied_sequence)
+  }
+
+  Note: "Observability/retention hint only. pull_sync_actions always trusts the client-supplied cursor from local SQLite."
+}
+
+Table public.note_tombstones {
+  team_id uuid [not null]
+  note_id uuid [pk, ref: > public.notes.id]
+  space_id uuid [not null]
+  revision_id uuid [not null]
+  deleted_by_user_id uuid [not null, ref: > auth.users.id]
+  deleted_by_device_id uuid [not null, ref: > public.devices.id]
+  deleted_at timestamptz [not null, default: `now()`]
+  retention_expires_at timestamptz [not null]
+  restored_by_revision_id uuid
+  restored_at timestamptz
+}
+
+Table public.note_space_transitions {
+  id uuid [pk, default: `gen_random_uuid()`]
+  team_id uuid [not null]
+  note_id uuid [not null, ref: > public.notes.id]
+  from_space_id uuid [not null]
+  to_space_id uuid [not null]
+  target_revision_id uuid [not null]
+  source_action_sequence bigint [not null]
+  target_action_sequence bigint [not null]
+  moved_by_user_id uuid [not null, ref: > auth.users.id]
+  moved_by_device_id uuid [not null, ref: > public.devices.id]
+  op_id uuid [not null]
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (note_id, created_at)
+    (moved_by_device_id, op_id) [unique]
+  }
+
+  Note: "A move keeps note_id, accepts a fresh snapshot encrypted for the target space, and emits moved-out/moved-in actions atomically."
+}
+
+Table public.team_audit_events {
+  id uuid [pk, default: `gen_random_uuid()`]
+  team_id uuid [not null, ref: > public.teams.id]
+  actor_user_id uuid [ref: > auth.users.id]
+  actor_device_id uuid [ref: > public.devices.id]
+  event_type text [not null]
+  target_type text [not null]
+  target_id uuid
+  affected_user_id uuid [ref: > auth.users.id]
+  affected_space_id uuid [ref: > public.spaces.id]
+  old_status text
+  new_status text
+  permission_epoch bigint
+  team_key_epoch integer
+  space_key_epoch integer
+  reason_code text
+  created_at timestamptz [not null, default: `now()`]
+
+  indexes {
+    (team_id, created_at)
+    (target_type, target_id)
+  }
+
+  Note: "Typed audit columns only. V1 intentionally has no free-form JSON metadata field."
+}
+
+Ref: public.team_group_members.(team_id, group_id) > public.team_groups.(team_id, id)
+Ref: public.team_group_members.(team_id, user_id) > public.team_memberships.(team_id, user_id)
+
+Ref: public.space_member_grants.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.space_member_grants.(team_id, user_id) > public.team_memberships.(team_id, user_id)
+Ref: public.space_group_grants.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.space_group_grants.(team_id, group_id) > public.team_groups.(team_id, id)
+Ref: public.invite_space_grants.(team_id, invite_id) > public.team_invites.(team_id, id)
+Ref: public.invite_space_grants.(team_id, space_id) > public.spaces.(team_id, id)
+
+Ref: public.team_groups.(team_id, key_epoch) > public.team_key_epochs.(team_id, epoch)
+Ref: public.team_key_envelopes.(team_id, epoch) > public.team_key_epochs.(team_id, epoch)
+Ref: public.teams.(id, current_key_epoch) > public.team_key_epochs.(team_id, epoch)
+Ref: public.teams.(id, current_permission_epoch) > public.team_permission_epochs.(team_id, epoch)
+Ref: public.space_key_envelopes.(space_id, epoch) > public.space_key_epochs.(space_id, epoch)
+Ref: public.spaces.(id, current_key_epoch) > public.space_key_epochs.(space_id, epoch)
+
+Ref: public.notes.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.note_revisions.(team_id, note_id) > public.notes.(team_id, id)
+Ref: public.note_revisions.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.note_revisions.(space_id, key_epoch) > public.space_key_epochs.(space_id, epoch)
+Ref: public.note_revisions.(note_id, base_revision_id) > public.note_revisions.(note_id, id)
+Ref: public.note_revisions.(note_id, previous_head_id) > public.note_revisions.(note_id, id)
+Ref: public.note_heads.(note_id, revision_id) > public.note_revisions.(note_id, id)
+Ref: public.pending_revision_uploads.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.pending_revision_uploads.(space_id, key_epoch) > public.space_key_epochs.(space_id, epoch)
+
+Ref: public.sync_actions.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.sync_actions.(team_id, permission_epoch) > public.team_permission_epochs.(team_id, epoch)
+Ref: public.sync_actions.(team_id, note_id) > public.notes.(team_id, id)
+Ref: public.sync_actions.(team_id, note_id, revision_id) > public.note_revisions.(team_id, note_id, id)
+Ref: public.sync_actions.(team_id, space_id, revision_id) > public.note_revisions.(team_id, space_id, id)
+
+Ref: public.mutation_receipts.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.mutation_receipts.(team_id, note_id) > public.notes.(team_id, id)
+Ref: public.mutation_receipts.(team_id, note_id, result_revision_id) > public.note_revisions.(team_id, note_id, id)
+
+Ref: public.note_tombstones.(team_id, space_id) > public.spaces.(team_id, id)
+Ref: public.note_tombstones.(team_id, note_id) > public.notes.(team_id, id)
+Ref: public.note_tombstones.(team_id, note_id, revision_id) > public.note_revisions.(team_id, note_id, id)
+Ref: public.note_tombstones.(team_id, note_id, restored_by_revision_id) > public.note_revisions.(team_id, note_id, id)
+
+Ref: public.note_space_transitions.(team_id, note_id) > public.notes.(team_id, id)
+Ref: public.note_space_transitions.(team_id, note_id, target_revision_id) > public.note_revisions.(team_id, note_id, id)
+Ref: public.note_space_transitions.(team_id, to_space_id, target_revision_id) > public.note_revisions.(team_id, space_id, id)
+Ref: public.note_space_transitions.(team_id, from_space_id) > public.spaces.(team_id, id)
+Ref: public.note_space_transitions.(team_id, to_space_id) > public.spaces.(team_id, id)
+
+Ref: public.team_audit_events.(team_id, permission_epoch) > public.team_permission_epochs.(team_id, epoch)
+Ref: public.team_audit_events.(team_id, team_key_epoch) > public.team_key_epochs.(team_id, epoch)
+Ref: public.team_audit_events.(affected_space_id, space_key_epoch) > public.space_key_epochs.(space_id, epoch)

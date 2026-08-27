@@ -1,0 +1,296 @@
+Project lokus_team_notes_v1_local {
+  database_type: "SQLite"
+  Note: "Workspace-local metadata at .lokus/notes.sqlite3. Committed note bodies remain ordinary files."
+}
+
+Enum local_note_kind {
+  markdown
+  plain_text
+}
+
+Enum local_note_status {
+  active
+  missing
+  tombstoned
+  detached
+}
+
+Enum sync_scope_kind {
+  local_only
+  personal
+  team
+}
+
+Enum scope_status {
+  active
+  key_pending
+  suspended
+  removed
+}
+
+Enum mutation_kind {
+  create
+  write
+  rename
+  move
+  delete
+  restore
+  apply_remote
+  reconcile_external
+}
+
+Enum mutation_state {
+  prepared
+  file_applied
+  committed
+  recovery_required
+}
+
+Enum outbox_state {
+  pending
+  in_flight
+  accepted
+  conflicted
+  rejected
+}
+
+Enum inbox_state {
+  received
+  applying
+  applied
+  recovery_required
+}
+
+Enum recovery_kind {
+  local
+  remote
+  base
+  external
+  rejected
+}
+
+Table schema_meta {
+  key text [pk]
+  value text [not null]
+  updated_at_ms integer [not null]
+}
+
+Table workspace_replica {
+  singleton_id integer [pk, default: 1]
+  client_instance_id text [not null, unique]
+  device_id text
+  user_id text
+  workspace_fingerprint text [not null]
+  schema_version integer [not null]
+  created_at_ms integer [not null]
+  updated_at_ms integer [not null]
+
+  Note: "Exactly one row. Device private keys remain in OS-backed secure storage."
+}
+
+Table migration_runs {
+  migration_id text [pk]
+  scan_generation integer [not null]
+  state text [not null]
+  started_at_ms integer [not null]
+  committed_at_ms integer
+  error_code text
+}
+
+Table sync_scopes {
+  scope_kind sync_scope_kind [not null]
+  scope_id text [not null]
+  pending_scope_id text
+  team_id text
+  permission_epoch integer
+  key_epoch integer
+  status scope_status [not null]
+  last_membership_check_ms integer
+  created_at_ms integer [not null]
+  updated_at_ms integer [not null]
+
+  indexes {
+    (scope_kind, scope_id) [pk]
+    (team_id)
+  }
+}
+
+Table local_notes {
+  note_id text [pk]
+  relative_path text [not null]
+  normalized_path_key text [not null, unique]
+  note_kind local_note_kind [not null]
+  status local_note_status [not null]
+  scope_kind sync_scope_kind [not null]
+  scope_id text [not null]
+  file_device integer
+  file_inode integer
+  file_size integer [not null]
+  file_mtime_ns integer [not null]
+  created_at_ms integer [not null]
+  updated_at_ms integer [not null]
+  missing_since_ms integer
+
+  indexes {
+    (scope_kind, scope_id)
+    (file_device, file_inode)
+    (status)
+  }
+
+  Note: "UUIDv7 note identity. Paths are mutable metadata and note content is not stored here."
+}
+
+Table note_heads {
+  note_id text [pk, ref: > local_notes.note_id]
+  local_generation integer [not null, default: 0]
+  local_hash text
+  remote_revision_id text
+  remote_sequence integer
+  remote_space_id text
+  base_revision_id text
+  base_hash text
+  updated_at_ms integer [not null]
+}
+
+Table note_path_history {
+  id integer [pk, increment]
+  note_id text [not null, ref: > local_notes.note_id]
+  relative_path text [not null]
+  normalized_path_key text [not null]
+  reason text [not null]
+  first_seen_at_ms integer [not null]
+  last_seen_at_ms integer [not null]
+
+  indexes {
+    (note_id, last_seen_at_ms)
+    (normalized_path_key, last_seen_at_ms)
+  }
+}
+
+Table mutation_intents {
+  op_id text [pk]
+  note_id text [not null, ref: > local_notes.note_id]
+  mutation_kind mutation_kind [not null]
+  source text [not null]
+  expected_local_generation integer
+  target_relative_path text
+  journal_relative_path text [not null, unique]
+  payload_size integer [not null]
+  payload_sha256 text [not null]
+  state mutation_state [not null]
+  created_at_ms integer [not null]
+  file_applied_at_ms integer
+  committed_at_ms integer
+  error_code text
+}
+
+Table note_mutation_locks {
+  note_id text [pk, ref: > local_notes.note_id]
+  op_id text [not null, unique, ref: > mutation_intents.op_id]
+  acquired_at_ms integer [not null]
+
+  Note: "DB-level one-in-flight mutation backstop. Startup recovery owns stale locks until the referenced intent commits or enters recovery_required."
+}
+
+Table outbox_operations {
+  op_id text [pk, ref: - mutation_intents.op_id]
+  note_id text [not null, ref: > local_notes.note_id]
+  scope_kind sync_scope_kind [not null]
+  scope_id text [not null]
+  client_sequence integer [not null]
+  base_revision_id text
+  payload_relative_path text [not null]
+  encrypted_payload_relative_path text
+  encrypted_payload_sha256 text
+  encrypted_payload_size integer
+  encrypted_payload_key_epoch integer
+  claim_token text
+  claim_expires_at_ms integer
+  move_source_scope_id text
+  state outbox_state [not null]
+  attempt_count integer [not null, default: 0]
+  retry_after_ms integer
+  accepted_revision_id text
+  accepted_action_sequence integer
+  last_error_code text
+  created_at_ms integer [not null]
+  updated_at_ms integer [not null]
+
+  indexes {
+    (scope_kind, scope_id, client_sequence) [unique]
+    (state, retry_after_ms)
+  }
+}
+
+Table inbox_actions {
+  action_id text [pk]
+  scope_id text [not null]
+  action_sequence integer [not null]
+  action_type text [not null]
+  note_id text [not null]
+  revision_id text
+  encrypted_object_key text
+  staged_payload_relative_path text
+  team_id text
+  permission_epoch integer
+  key_epoch integer
+  relative_path text
+  state inbox_state [not null]
+  received_at_ms integer [not null]
+  applied_at_ms integer
+  error_code text
+
+  indexes {
+    (scope_id, action_sequence) [unique]
+    (state, received_at_ms)
+  }
+}
+
+Table team_sequence_state {
+  singleton_id integer [pk]
+  next_sequence integer [not null]
+  updated_at_ms integer [not null]
+
+  Note: "Durable device-global team mutation sequence floor, bootstrapped from server receipts."
+}
+
+Table sync_checkpoints {
+  scope_kind sync_scope_kind [not null]
+  scope_id text [not null]
+  last_applied_sequence integer [not null, default: 0]
+  updated_at_ms integer [not null]
+
+  indexes {
+    (scope_kind, scope_id) [pk]
+  }
+}
+
+Table local_tombstones {
+  note_id text [pk, ref: > local_notes.note_id]
+  op_id text [not null, ref: > mutation_intents.op_id]
+  local_generation integer [not null]
+  remote_revision_id text
+  retention_expires_at_ms integer
+  restored_at_ms integer
+  created_at_ms integer [not null]
+}
+
+Table recovery_branches {
+  id text [pk]
+  note_id text [not null, ref: > local_notes.note_id]
+  kind recovery_kind [not null]
+  payload_relative_path text [not null, unique]
+  payload_sha256 text [not null]
+  base_revision_id text
+  remote_revision_id text
+  source_op_id text
+  created_at_ms integer [not null]
+  resolved_at_ms integer
+
+  indexes {
+    (note_id, resolved_at_ms)
+    (kind, created_at_ms)
+  }
+}
+
+Ref: local_notes.(scope_kind, scope_id) > sync_scopes.(scope_kind, scope_id)

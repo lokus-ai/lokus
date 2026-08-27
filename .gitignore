@@ -77,6 +77,7 @@ temp/
 .claude/
 *.claude
 .mcp.json
+.cursor/mcp.json
 findings.md
 progress.md
 task_plan.md
@@ -85,6 +86,16 @@ schema.md
 # Docs and examples (hosted separately)
 docs/
 examples/
+
+# Canonical Team Notes V1 architecture is versioned with its implementation.
+!docs/
+docs/*
+!docs/architecture/
+docs/architecture/*
+!docs/architecture/team-notes-v1-data-schema.md
+!docs/architecture/team-notes-v1-cloud.dbml
+!docs/architecture/team-notes-v1-local.dbml
+!docs/architecture/team-collaboration-roadmap.md
 
 # Generated API documentation
 openapi.yaml

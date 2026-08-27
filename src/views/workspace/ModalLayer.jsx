@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useViewStore } from '../../stores/views';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { useLayoutStore } from '../../stores/layout';
@@ -14,6 +16,8 @@ import CreateTemplate from '../../components/CreateTemplate.jsx';
 import TagManagementModal from '../../components/TagManagementModal.jsx';
 import AboutDialog from '../../components/AboutDialog.jsx';
 import ReferenceUpdateModal from '../../components/ReferenceUpdateModal.jsx';
+import TeamConflictModal from '../../components/TeamConflictModal.jsx';
+import TeamShareModal from '../../components/TeamShareModal.jsx';
 import CanvasPreviewPopup from '../../components/CanvasPreviewPopup.jsx';
 import GraphPreviewPopup from '../../components/GraphPreviewPopup.jsx';
 import { DatePickerModal } from '../../components/DailyNotes/index.js';
@@ -105,6 +109,55 @@ export default function ModalLayer({
   // Focused group id for editor registry lookup
   const focusedGroupId = useEditorGroupStore((s) => s.focusedGroupId);
   const featureFlags = useFeatureFlags();
+  const [teamConflict, setTeamConflict] = useState(null);
+  const [teamShare, setTeamShare] = useState(null);
+
+  useEffect(() => {
+    if (!featureFlags.enable_team_notes_foundation) return undefined;
+    const handleConflict = (event) => {
+      if (event.detail?.workspacePath !== workspacePath) return;
+      setTeamConflict({ noteId: event.detail.noteId });
+    };
+    window.addEventListener('lokus:team-conflict', handleConflict);
+    return () => window.removeEventListener('lokus:team-conflict', handleConflict);
+  }, [featureFlags.enable_team_notes_foundation, workspacePath]);
+
+  useEffect(() => {
+    if (!featureFlags.enable_team_notes_foundation) return undefined;
+    const handleShare = (event) => {
+      if (event.detail?.workspacePath !== workspacePath) return;
+      setTeamShare({ path: event.detail.path });
+    };
+    window.addEventListener('lokus:share-team-note', handleShare);
+    return () => window.removeEventListener('lokus:share-team-note', handleShare);
+  }, [featureFlags.enable_team_notes_foundation, workspacePath]);
+
+  useEffect(() => {
+    if (
+      !featureFlags.enable_team_notes_foundation
+      || !featureFlags.enable_note_engine_foundation
+    ) {
+      return undefined;
+    }
+    const loadConflicts = async (event) => {
+      if (event?.detail?.workspacePath && event.detail.workspacePath !== workspacePath) {
+        return;
+      }
+      try {
+        const noteIds = await invoke('list_team_note_conflicts', { workspacePath });
+        if (noteIds[0]) setTeamConflict((current) => current ?? { noteId: noteIds[0] });
+      } catch {
+        // The ready event retries after the local note engine is initialized.
+      }
+    };
+    window.addEventListener('lokus:note-foundation-ready', loadConflicts);
+    loadConflicts();
+    return () => window.removeEventListener('lokus:note-foundation-ready', loadConflicts);
+  }, [
+    featureFlags.enable_note_engine_foundation,
+    featureFlags.enable_team_notes_foundation,
+    workspacePath,
+  ]);
 
   // Tab/file state from useEditorGroupStore
   const focusedGroup = useEditorGroupStore((s) => {
@@ -344,6 +397,26 @@ export default function ModalLayer({
         result={referenceUpdateModal?.result}
         onConfirm={onConfirmReferenceUpdate}
         onClose={onCloseReferenceModal}
+      />
+
+      <TeamConflictModal
+        isOpen={!!teamConflict}
+        workspacePath={workspacePath}
+        noteId={teamConflict?.noteId}
+        onClose={() => {
+          setTeamConflict(null);
+          useFileTreeStore.getState().refreshTree();
+        }}
+      />
+
+      <TeamShareModal
+        isOpen={!!teamShare}
+        workspacePath={workspacePath}
+        path={teamShare?.path}
+        onClose={() => {
+          setTeamShare(null);
+          useFileTreeStore.getState().refreshTree();
+        }}
       />
 
       {/* Canvas preview popup */}

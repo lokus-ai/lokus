@@ -22,6 +22,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // Use dummy values if missing (for local dev)
 const finalUrl = supabaseUrl || 'https://dummy-project.supabase.co';
 const finalKey = supabaseAnonKey || 'dummy-anon-key-for-local-dev';
+const projectRef = new URL(finalUrl).hostname.split('.')[0];
 
 export const supabase = createClient(finalUrl, finalKey, {
   auth: {
@@ -31,7 +32,7 @@ export const supabase = createClient(finalUrl, finalKey, {
     // Use PKCE flow for better security
     flowType: 'pkce',
     // Storage key for the session
-    storageKey: 'lokus-auth',
+    storageKey: `lokus-auth-${projectRef}`,
   },
 });
 

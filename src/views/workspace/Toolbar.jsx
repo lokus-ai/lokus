@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import platformService from '../../services/platform/PlatformService.js';
 import { closeTabWithGuard } from '../../features/tabs/closeGuard';
+import TeamCollaborationControls from '../../components/team/TeamCollaborationControls.jsx';
 
 /** Stand-in tab shown when the group is empty. Never enters the store. */
 const WELCOME_TAB = '__welcome__';
@@ -34,6 +35,7 @@ const CALENDAR_TAB = '__view_calendar__';
  * for sidebar widths and toggle actions.
  */
 export default function Toolbar({
+  workspacePath,
   onCreateFile,
   onCreateFolder,
   onCreateCanvas,
@@ -143,6 +145,7 @@ export default function Toolbar({
           backdropFilter: 'blur(8px)',
         }}
       >
+        <TeamCollaborationControls workspacePath={workspacePath} />
         {uiVisibility.toolbar_split_view && hasActiveTabs && (
           <button
             onClick={() => {
@@ -245,6 +248,7 @@ export default function Toolbar({
 
       {/* Right: split view toggle, sidebar toggle */}
       <div className="flex items-center gap-1">
+        <TeamCollaborationControls workspacePath={workspacePath} />
         {uiVisibility.toolbar_split_view && hasActiveTabs && (
           <button
             onClick={() => {

@@ -30,6 +30,7 @@ import FilterDropdown from './FilterDropdown.jsx'
 import { FrontmatterWriter } from '../data/FrontmatterWriter.js'
 import { formatProperty } from '../data/FrontmatterParser.js'
 import { invoke } from '@tauri-apps/api/core'
+import { isSupportedNotePath, noteMutationClient } from '../../core/notes/NoteMutationClient.js'
 
 // Helper function to get filename from path
 const getFileName = (filePath) => {
@@ -607,7 +608,15 @@ export default function BaseTableView({
 
     try {
       for (const path of selectedRows) {
-        await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path });
+        if (isSupportedNotePath(path)) {
+          await noteMutationClient.removeNote({
+            workspacePath: window.__WORKSPACE_PATH__,
+            path,
+            source: 'bases-delete',
+          });
+        } else {
+          await invoke('delete_file', { workspacePath: window.__WORKSPACE_PATH__, path });
+        }
       }
       setSelectedRows(new Set());
       // Trigger refresh
@@ -626,7 +635,13 @@ export default function BaseTableView({
         const writer = new FrontmatterWriter(content);
         writer.setProperty(property, value);
         const newContent = writer.toString();
-        await invoke('write_file_content', { workspacePath: window.__WORKSPACE_PATH__, path, content: newContent });
+        await noteMutationClient.writeNote({
+          workspacePath: window.__WORKSPACE_PATH__,
+          path,
+          content: newContent,
+          baseContent: content,
+          source: 'bases-frontmatter',
+        });
       }
       setSelectedRows(new Set());
       // Trigger refresh
@@ -858,10 +873,12 @@ export default function BaseTableView({
       const updatedContent = FrontmatterWriter.updateProperty(fileContent, editingCell.column, newValue)
 
       // Write back to file
-      await invoke('write_file_content', {
+      await noteMutationClient.writeNote({
         workspacePath: window.__WORKSPACE_PATH__,
         path: editingCell.rowPath,
-        content: updatedContent
+        content: updatedContent,
+        baseContent: fileContent,
+        source: 'bases-frontmatter',
       })
 
       setSaveStatus('saved')

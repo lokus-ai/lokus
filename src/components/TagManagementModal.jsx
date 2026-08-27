@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Tag, Plus } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
+import { noteMutationClient } from '../core/notes/NoteMutationClient';
 
 /**
  * TagManagementModal - Modal for adding and managing tags on markdown files
@@ -151,10 +152,12 @@ const TagManagementModal = ({ isOpen, onClose, file, onTagsUpdated }) => {
       const updatedContent = updateFrontmatter(content, tags);
 
       // Write back to file
-      await invoke('write_file_content', {
+      await noteMutationClient.writeNote({
         workspacePath: window.__WORKSPACE_PATH__,
         path: file.path,
-        content: updatedContent
+        content: updatedContent,
+        baseContent: content,
+        source: 'tag-management',
       });
 
       // Notify parent component
