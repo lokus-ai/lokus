@@ -282,6 +282,27 @@ describe('NoteMutationClient', () => {
     });
   });
 
+  it.each([
+    ['ENOTDIR', 'Not a directory (os error 20)'],
+    ['ENOSPC', 'No space left on device (os error 28)'],
+  ])('does not treat %s as a missing path', async (_, error) => {
+    const client = new NoteMutationClient({ foundationEnabled: () => true });
+    invoke.mockRejectedValue(new Error(error));
+
+    await expect(client.writeNote({
+      workspacePath: '/vault',
+      path: '/vault/note.md',
+      content: 'content',
+      source: 'editor-save',
+    })).rejects.toThrow(error);
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).not.toHaveBeenCalledWith(
+      'create_note_content',
+      expect.anything(),
+    );
+  });
+
   it('blocks non-editor writers while any pane has unsaved changes', async () => {
     const client = new NoteMutationClient({ foundationEnabled: () => false });
     useTabMetaStore.getState().setDirty('group-1', '/vault/note.md', true);

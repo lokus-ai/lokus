@@ -262,7 +262,7 @@ function isMissingNoteIdentityError(error) {
     || message.includes('query returned no rows')
     || message.includes('no such file or directory')
     || message.includes('the system cannot find the file specified')
-    || message.includes('os error 2');
+    || /\bos error 2\b/.test(message);
 }
 
 function siblingPath(path, newName) {
