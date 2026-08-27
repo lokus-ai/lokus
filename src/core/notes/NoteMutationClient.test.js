@@ -163,6 +163,8 @@ describe('NoteMutationClient', () => {
     const client = new NoteMutationClient({ foundationEnabled: () => true });
     invoke
       .mockRejectedValueOnce(new Error('note identity not found'))
+      .mockResolvedValueOnce({ created: 0, reused: 0 })
+      .mockRejectedValueOnce(new Error('note identity not found'))
       .mockResolvedValueOnce({
         op_id: 'op-create',
         note_id: 'note-create',
@@ -177,13 +179,76 @@ describe('NoteMutationClient', () => {
       source: 'daily-note',
     });
 
-    expect(invoke).toHaveBeenNthCalledWith(2, 'create_note_content', {
+    expect(invoke).toHaveBeenNthCalledWith(2, 'initialize_note_engine', {
+      workspacePath: '/vault',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'get_note_identity', {
+      workspacePath: '/vault',
+      path: '/vault/new.md',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, 'create_note_content', {
       workspacePath: '/vault',
       path: '/vault/new.md',
       content: '# New',
       source: 'daily-note',
     });
     expect(result.note_id).toBe('note-create');
+  });
+
+  it('backfills an unindexed existing file before using a generation write', async () => {
+    const client = new NoteMutationClient({ foundationEnabled: () => true });
+    invoke
+      .mockRejectedValueOnce(new Error('query returned no rows'))
+      .mockResolvedValueOnce({ created: 1, reused: 0 })
+      .mockResolvedValueOnce({ note_id: 'adopted-note', local_generation: 0 })
+      .mockResolvedValueOnce({
+        op_id: 'op-write',
+        note_id: 'adopted-note',
+        local_generation: 1,
+        queued_for_sync: false,
+      });
+
+    const result = await client.writeNote({
+      workspacePath: '/vault',
+      path: '/vault/finder-drop.md',
+      content: 'edited after import',
+      source: 'editor-save',
+    });
+
+    expect(invoke).toHaveBeenNthCalledWith(2, 'initialize_note_engine', {
+      workspacePath: '/vault',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(3, 'get_note_identity', {
+      workspacePath: '/vault',
+      path: '/vault/finder-drop.md',
+    });
+    expect(invoke).toHaveBeenNthCalledWith(4, 'write_note_content', {
+      workspacePath: '/vault',
+      path: '/vault/finder-drop.md',
+      content: 'edited after import',
+      expectedLocalGeneration: 0,
+      source: 'editor-save',
+    });
+    expect(invoke).not.toHaveBeenCalledWith('create_note_content', expect.anything());
+    expect(result.note_id).toBe('adopted-note');
+  });
+
+  it('does not turn an arbitrary identity lookup failure into a create', async () => {
+    const client = new NoteMutationClient({ foundationEnabled: () => true });
+    invoke.mockRejectedValue(new Error('note engine is not initialized for workspace'));
+
+    await expect(client.writeNote({
+      workspacePath: '/vault',
+      path: '/vault/note.md',
+      content: 'content',
+      source: 'editor-save',
+    })).rejects.toThrow('note engine is not initialized');
+
+    expect(invoke).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith('get_note_identity', {
+      workspacePath: '/vault',
+      path: '/vault/note.md',
+    });
   });
 
   it('blocks non-editor writers while any pane has unsaved changes', async () => {

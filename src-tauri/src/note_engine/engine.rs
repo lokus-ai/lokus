@@ -210,37 +210,30 @@ impl NoteEngineRegistry {
             .ok_or_else(|| "note engine is not initialized for workspace".to_string())?;
         let scope_id = personal_scope_id.to_string();
         let path_key = normalized_path_key(Path::new(relative_path));
-        store.with_blocking(move |conn| {
-            let existing_scope: Option<String> = conn
-                .query_row(
-                    "SELECT scope_kind FROM local_notes
-                      WHERE normalized_path_key=?1",
-                    [&path_key],
-                    |row| row.get(0),
-                )
-                .optional()?;
-            if existing_scope.as_deref() == Some("team") {
-                return Err(rusqlite::Error::InvalidParameterName(
-                    "personal sync cannot own team note".to_string(),
-                ));
+        let existing = store.with_blocking({
+            let path_key = path_key.clone();
+            move |conn| {
+                let existing: Option<(String, String)> = conn
+                    .query_row(
+                        "SELECT scope_kind, status FROM local_notes
+                          WHERE normalized_path_key=?1",
+                        [&path_key],
+                        |row| Ok((row.get(0)?, row.get(1)?)),
+                    )
+                    .optional()?;
+                if existing.as_ref().map(|value| value.0.as_str()) == Some("team") {
+                    return Err(rusqlite::Error::InvalidParameterName(
+                        "personal sync cannot own team note".to_string(),
+                    ));
+                }
+                Ok(existing)
             }
-            conn.execute(
-                "INSERT INTO sync_scopes (
-                   scope_kind, scope_id, status, created_at_ms, updated_at_ms
-                 ) VALUES ('personal', ?1, 'active', 0, 0)
-                 ON CONFLICT (scope_kind, scope_id) DO NOTHING",
-                [&scope_id],
-            )?;
-            conn.execute(
-                "UPDATE local_notes
-                    SET scope_kind='personal', scope_id=?2
-                  WHERE normalized_path_key=?1",
-                rusqlite::params![path_key, scope_id],
-            )?;
-            Ok(())
         })?;
+        if remote_revision_id.is_empty() {
+            return Err("remote revision id is required".to_string());
+        }
 
-        if workspace_path.join(relative_path).exists() {
+        let commit = if existing.is_some() {
             apply_remote_write(
                 &store,
                 &workspace_path,
@@ -248,36 +241,44 @@ impl NoteEngineRegistry {
                 payload,
                 remote_revision_id,
                 remote_sequence,
-            )
+            )?
         } else {
-            let commit = commit_create(
+            commit_create(
                 &store,
                 &workspace_path,
                 relative_path,
                 payload,
                 "personal-sync",
+            )?
+        };
+        let note_id = commit.note_id.clone();
+        let remote_revision_id = remote_revision_id.to_string();
+        store.with_blocking(move |conn| {
+            let tx = conn.transaction()?;
+            tx.execute(
+                "INSERT INTO sync_scopes (
+                   scope_kind, scope_id, status, created_at_ms, updated_at_ms
+                 ) VALUES ('personal', ?1, 'active', 0, 0)
+                 ON CONFLICT (scope_kind, scope_id) DO NOTHING",
+                [&scope_id],
             )?;
-            let note_id = commit.note_id.clone();
-            let scope_id = personal_scope_id.to_string();
-            let remote_revision_id = remote_revision_id.to_string();
-            store.with_blocking(move |conn| {
-                conn.execute(
-                    "UPDATE local_notes
-                        SET scope_kind='personal', scope_id=?2
-                      WHERE note_id=?1",
-                    rusqlite::params![note_id, scope_id],
-                )?;
-                conn.execute(
-                    "UPDATE note_heads
-                        SET remote_revision_id=?2, remote_sequence=?3,
-                            base_revision_id=?2, base_hash=local_hash
-                      WHERE note_id=?1",
-                    rusqlite::params![note_id, remote_revision_id, remote_sequence],
-                )?;
-                Ok(())
-            })?;
-            Ok(commit)
-        }
+            tx.execute(
+                "UPDATE local_notes
+                    SET scope_kind='personal', scope_id=?2
+                  WHERE note_id=?1",
+                rusqlite::params![note_id, scope_id],
+            )?;
+            tx.execute(
+                "UPDATE note_heads
+                    SET remote_revision_id=?2, remote_sequence=?3,
+                        base_revision_id=?2, base_hash=local_hash
+                  WHERE note_id=?1",
+                rusqlite::params![note_id, remote_revision_id, remote_sequence],
+            )?;
+            tx.commit()?;
+            Ok(())
+        })?;
+        Ok(commit)
     }
 
     pub fn reconcile_external(
@@ -1067,5 +1068,192 @@ mod tests {
             .unwrap();
         assert_eq!(identity.scope_kind, "personal");
         assert_eq!(identity.scope_id, "shared-personal-workspace");
+    }
+
+    #[test]
+    fn remote_apply_reactivates_indexed_missing_personal_identity() {
+        let workspace = tempfile::tempdir().unwrap();
+        let path = workspace.path().join("note.md");
+        fs::write(&path, "local").unwrap();
+        let registry = NoteEngineRegistry::default();
+        registry.initialize(workspace.path()).unwrap();
+        let original = registry
+            .identity_for_path(workspace.path(), "note.md")
+            .unwrap();
+        fs::remove_file(&path).unwrap();
+        registry
+            .reconcile_external(
+                workspace.path(),
+                &[ExternalChange {
+                    kind: "remove".to_string(),
+                    paths: vec![path.to_string_lossy().to_string()],
+                }],
+                &HashSet::new(),
+            )
+            .unwrap();
+
+        let commit = registry
+            .apply_remote_note(
+                workspace.path(),
+                "note.md",
+                b"remote",
+                "personal-1",
+                "remote-1",
+                Some(9),
+            )
+            .unwrap();
+
+        let identity = registry
+            .identity_for_path(workspace.path(), "note.md")
+            .unwrap();
+        assert_eq!(commit.note_id, original.note_id);
+        assert_eq!(identity.note_id, original.note_id);
+        assert_eq!(identity.scope_kind, "personal");
+        assert_eq!(identity.scope_id, "personal-1");
+        assert_eq!(fs::read(&path).unwrap(), b"remote");
+        let canonical = fs::canonicalize(workspace.path()).unwrap();
+        let store = registry.stores.lock().get(&canonical).cloned().unwrap();
+        let (status, remote_revision, remote_sequence, outbox): (String, String, i64, i64) = store
+            .with_blocking(|conn| {
+                Ok((
+                    conn.query_row("SELECT status FROM local_notes", [], |row| row.get(0))?,
+                    conn.query_row("SELECT remote_revision_id FROM note_heads", [], |row| {
+                        row.get(0)
+                    })?,
+                    conn.query_row("SELECT remote_sequence FROM note_heads", [], |row| {
+                        row.get(0)
+                    })?,
+                    conn.query_row("SELECT count(*) FROM outbox_operations", [], |row| {
+                        row.get(0)
+                    })?,
+                ))
+            })
+            .unwrap();
+        assert_eq!(status, "active");
+        assert_eq!(remote_revision, "remote-1");
+        assert_eq!(remote_sequence, 9);
+        assert_eq!(outbox, 0);
+    }
+
+    #[test]
+    fn remote_apply_failure_does_not_partially_claim_local_note() {
+        let workspace = tempfile::tempdir().unwrap();
+        fs::write(workspace.path().join("note.md"), "local").unwrap();
+        let registry = NoteEngineRegistry::default();
+        registry.initialize(workspace.path()).unwrap();
+
+        let error = registry
+            .apply_remote_note(
+                workspace.path(),
+                "note.md",
+                b"remote",
+                "personal-1",
+                "",
+                None,
+            )
+            .unwrap_err();
+
+        assert!(error.contains("remote revision id"));
+        let identity = registry
+            .identity_for_path(workspace.path(), "note.md")
+            .unwrap();
+        assert_eq!(identity.scope_kind, "local_only");
+        assert_eq!(identity.scope_id, "workspace");
+        let canonical = fs::canonicalize(workspace.path()).unwrap();
+        let store = registry.stores.lock().get(&canonical).cloned().unwrap();
+        let personal_scopes: i64 = store
+            .with_blocking(|conn| {
+                conn.query_row(
+                    "SELECT count(*) FROM sync_scopes WHERE scope_kind='personal'",
+                    [],
+                    |row| row.get(0),
+                )
+            })
+            .unwrap();
+        assert_eq!(personal_scopes, 0);
+    }
+
+    #[test]
+    fn personal_remote_apply_never_claims_a_missing_team_identity() {
+        let workspace = tempfile::tempdir().unwrap();
+        let path = workspace.path().join("note.md");
+        fs::write(&path, "team").unwrap();
+        let registry = NoteEngineRegistry::default();
+        registry.initialize(workspace.path()).unwrap();
+        let canonical = fs::canonicalize(workspace.path()).unwrap();
+        let store = registry.stores.lock().get(&canonical).cloned().unwrap();
+        store
+            .with_blocking(|conn| {
+                conn.execute(
+                    "INSERT INTO sync_scopes (
+                       scope_kind, scope_id, team_id, permission_epoch, key_epoch,
+                       status, created_at_ms, updated_at_ms
+                     ) VALUES ('team', 'space-1', 'team-1', 1, 1, 'active', 1, 1)",
+                    [],
+                )?;
+                conn.execute(
+                    "UPDATE local_notes SET scope_kind='team', scope_id='space-1'",
+                    [],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        fs::remove_file(&path).unwrap();
+        registry
+            .reconcile_external(
+                workspace.path(),
+                &[ExternalChange {
+                    kind: "remove".to_string(),
+                    paths: vec![path.to_string_lossy().to_string()],
+                }],
+                &HashSet::new(),
+            )
+            .unwrap();
+
+        let error = registry
+            .apply_remote_note(
+                workspace.path(),
+                "note.md",
+                b"personal",
+                "personal-1",
+                "remote-1",
+                None,
+            )
+            .unwrap_err();
+
+        assert!(error.contains("personal sync cannot own team note"));
+        let identity = registry
+            .identity_for_path(workspace.path(), "note.md")
+            .unwrap();
+        assert_eq!(identity.scope_kind, "team");
+        assert_eq!(identity.scope_id, "space-1");
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn direct_create_rejects_an_unindexed_existing_file_without_overwriting_it() {
+        let workspace = tempfile::tempdir().unwrap();
+        let registry = NoteEngineRegistry::default();
+        registry.initialize(workspace.path()).unwrap();
+        let path = workspace.path().join("finder-drop.md");
+        fs::write(&path, "original finder content").unwrap();
+
+        let identity_error = registry
+            .identity_for_path(workspace.path(), "finder-drop.md")
+            .unwrap_err();
+        let create_error = registry
+            .create_note(
+                workspace.path(),
+                "finder-drop.md",
+                b"replacement content",
+                "editor-save",
+            )
+            .unwrap_err();
+
+        assert!(identity_error
+            .to_lowercase()
+            .contains("query returned no rows"));
+        assert!(create_error.contains("note already exists"));
+        assert_eq!(fs::read_to_string(path).unwrap(), "original finder content");
     }
 }

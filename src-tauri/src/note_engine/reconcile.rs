@@ -112,7 +112,7 @@ pub fn reconcile_external_changes(
                 }
             })?;
 
-            if change.kind == "remove" || !absolute_path.exists() {
+            if change.kind == "remove" || (change.kind != "rename" && !absolute_path.exists()) {
                 if let Some((note_id, generation, _, _, _)) = existing {
                     let now_ms = unix_ms();
                     store.with_blocking({
@@ -736,5 +736,53 @@ mod tests {
             })
             .unwrap();
         assert_eq!(pending, 1);
+    }
+
+    #[test]
+    fn two_path_rename_never_emits_missing_for_the_old_source() {
+        let workspace = tempfile::tempdir().unwrap();
+        let old_path = workspace.path().join("old.md");
+        let new_path = workspace.path().join("new.md");
+        fs::write(&old_path, "content").unwrap();
+        let store = NoteStore::open(workspace.path().to_path_buf()).unwrap();
+        backfill_workspace(&store, workspace.path()).unwrap();
+        let original_id: String = store
+            .with_blocking(|conn| {
+                conn.query_row("SELECT note_id FROM local_notes", [], |row| row.get(0))
+            })
+            .unwrap();
+        fs::rename(&old_path, &new_path).unwrap();
+
+        let changes = reconcile_external_changes(
+            &store,
+            workspace.path(),
+            &[ExternalChange {
+                kind: "rename".to_string(),
+                paths: vec![
+                    old_path.to_string_lossy().to_string(),
+                    new_path.to_string_lossy().to_string(),
+                ],
+            }],
+            &HashSet::new(),
+        )
+        .unwrap();
+
+        assert!(
+            changes.iter().all(|change| change.kind != "missing"),
+            "rename emitted a stale missing event: {changes:?}"
+        );
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].kind, "external_rename");
+        assert_eq!(changes[0].note_id, original_id);
+        assert_eq!(changes[0].path, "new.md");
+        let (relative_path, status): (String, String) = store
+            .with_blocking(|conn| {
+                conn.query_row("SELECT relative_path, status FROM local_notes", [], |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })
+            })
+            .unwrap();
+        assert_eq!(relative_path, "new.md");
+        assert_eq!(status, "active");
     }
 }

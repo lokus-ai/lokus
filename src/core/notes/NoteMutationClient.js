@@ -55,16 +55,24 @@ export class NoteMutationClient {
     try {
       identity = await invoke('get_note_identity', { workspacePath, path });
     } catch (error) {
-      if (baseContent !== undefined) throw error;
-      const result = await invoke('create_note_content', {
-        workspacePath,
-        path,
-        content,
-        source,
-      });
-      notifyTeamQueued(result, workspacePath);
-      this.lastWrittenContent.set(pathKey, content);
-      return result;
+      if (!isMissingNoteIdentityError(error)) throw error;
+      await invoke('initialize_note_engine', { workspacePath });
+      try {
+        identity = await invoke('get_note_identity', { workspacePath, path });
+      } catch (retryError) {
+        if (!isMissingNoteIdentityError(retryError) || baseContent !== undefined) {
+          throw retryError;
+        }
+        const result = await invoke('create_note_content', {
+          workspacePath,
+          path,
+          content,
+          source,
+        });
+        notifyTeamQueued(result, workspacePath);
+        this.lastWrittenContent.set(pathKey, content);
+        return result;
+      }
     }
     const result = await invoke('write_note_content', {
       workspacePath,
@@ -246,6 +254,12 @@ export const noteMutationClient = new NoteMutationClient();
 
 function normalizedPathKey(path) {
   return path.replace(/\\/g, '/').toLowerCase();
+}
+
+function isMissingNoteIdentityError(error) {
+  const message = String(error?.message ?? error).toLowerCase();
+  return message.includes('note identity not found')
+    || message.includes('query returned no rows');
 }
 
 function siblingPath(path, newName) {
