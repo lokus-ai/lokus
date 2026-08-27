@@ -16,6 +16,26 @@ BEGIN
     RAISE EXCEPTION 'TEAM UPLOAD CLEANUP FAILED: scheduled job is missing';
   END IF;
 
+  IF NOT has_schema_privilege('postgres', 'cron', 'USAGE')
+     OR NOT has_table_privilege('postgres', 'cron.job', 'SELECT') THEN
+    RAISE EXCEPTION
+      'TEAM UPLOAD CLEANUP FAILED: postgres lacks cron schema privileges';
+  END IF;
+
+  IF (
+    SELECT count(*)
+      FROM vault.decrypted_secrets
+     WHERE (
+       name = 'lokus_project_url'
+       AND decrypted_secret ~ '^https://[a-z0-9]+[.]supabase[.]co$'
+     ) OR (
+       name = 'lokus_team_cleanup_token'
+       AND length(decrypted_secret) >= 32
+     )
+  ) <> 2 THEN
+    RAISE EXCEPTION 'TEAM UPLOAD CLEANUP FAILED: Vault setup is incomplete';
+  END IF;
+
   IF to_regprocedure(
     'public.cleanup_expired_team_uploads(integer)'
   ) IS NOT NULL THEN

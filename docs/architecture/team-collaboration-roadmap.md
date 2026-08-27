@@ -216,7 +216,10 @@ transactional RPC and adversarial authorization tests.
 1. Inventory Auth users, legacy sync rows, Storage objects, and current Realtime
    publication membership.
 2. Back up the production database and Storage inventory.
-3. Apply the complete additive migration chain with Teams flags off.
+3. Configure `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_URL`,
+   `SUPABASE_PROJECT_ID`, and `SUPABASE_URL` as runtime secrets, then run
+   `scripts/deploy-team-cleanup.sh`. It creates one cleanup token in both Edge
+   Function secrets and Vault before deploying the worker and migrations.
 4. Verify that legacy personal sync, authentication, and plugins are unchanged.
 5. Run owner/member/outsider authorization probes and private channel checks.
 6. Enable Teams for internal accounts only.

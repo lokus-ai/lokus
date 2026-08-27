@@ -492,10 +492,30 @@ DROP FUNCTION IF EXISTS public.cleanup_expired_team_uploads(integer);
 
 CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
 
+GRANT USAGE ON SCHEMA cron TO postgres;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cron TO postgres;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA cron TO postgres;
+
 DO $migration$
 DECLARE
   v_job_id bigint;
 BEGIN
+  IF (
+    SELECT count(*)
+      FROM vault.decrypted_secrets
+     WHERE (
+       name = 'lokus_project_url'
+       AND decrypted_secret ~ '^https://[a-z0-9]+[.]supabase[.]co$'
+     ) OR (
+       name = 'lokus_team_cleanup_token'
+       AND length(decrypted_secret) >= 32
+     )
+  ) <> 2 THEN
+    RAISE EXCEPTION
+      'team upload cleanup requires lokus_project_url and lokus_team_cleanup_token in Vault'
+      USING ERRCODE = '55000';
+  END IF;
+
   SELECT jobid INTO v_job_id
     FROM cron.job
    WHERE jobname = 'lokus-team-upload-cleanup';
