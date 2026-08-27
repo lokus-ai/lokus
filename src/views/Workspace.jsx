@@ -332,6 +332,7 @@ function WorkspaceInner({ path }) {
         <WorkspaceShell
           toolbar={
             <Toolbar
+              workspacePath={path}
               onCreateFile={fileOps.handleCreateFile}
               onCreateFolder={fileOps.handleCreateFolder}
               onCreateCanvas={fileOps.handleCreateCanvas}

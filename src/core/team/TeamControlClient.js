@@ -9,10 +9,12 @@ export class TeamControlClient {
     supabaseClient = supabase,
     keyManager = teamKeyManager,
     invokeFn = invoke,
+    nowFn = Date.now,
   } = {}) {
     this.supabase = supabaseClient;
     this.keyManager = keyManager;
     this.invoke = invokeFn;
+    this.now = nowFn;
     this.identity = null;
   }
 
@@ -104,40 +106,106 @@ export class TeamControlClient {
         this.supabase
           .from('teams')
           .select('id,name,current_permission_epoch,current_key_epoch')
-          .in('id', teamIds),
+          .in('id', teamIds)
+          .is('deleted_at', null),
         this.supabase
           .from('spaces')
-          .select('id,team_id,current_key_epoch')
+          .select('id,team_id,kind,name_ciphertext,name_nonce,current_key_epoch')
           .in('team_id', teamIds)
           .is('deleted_at', null),
       ]);
     if (teamError) throw teamError;
     if (spaceError) throw spaceError;
-    const writableByTeam = new Map(await Promise.all(teamIds.map(async (teamId) => {
+    const readableTeams = teams ?? [];
+    const writableByTeam = new Map(await Promise.all(readableTeams.map(async ({ id }) => {
       const { data, error } = await this.supabase.rpc(
         'list_writable_team_spaces',
-        { p_team_id: teamId },
+        { p_team_id: id },
       );
       if (error) throw error;
-      return [teamId, new Set((data ?? []).map(({ space_id }) => space_id))];
+      return [id, new Set((data ?? []).map(({ space_id }) => space_id))];
     })));
-    return (teams ?? []).map((team) => ({
-      ...team,
-      membership: memberships.find(({ team_id }) => team_id === team.id),
-      spaces: (spaces ?? []).filter(({ team_id, id }) => (
-        team_id === team.id && writableByTeam.get(team.id)?.has(id)
-      )),
+    return Promise.all(readableTeams.map(async (team) => {
+      const writableSpaceIds = writableByTeam.get(team.id) ?? new Set();
+      const readableSpaces = (spaces ?? []).filter(({ team_id }) => team_id === team.id);
+      const hydratedSpaces = await Promise.all(readableSpaces.map(async (space) => {
+        const result = {
+          id: space.id,
+          team_id: space.team_id,
+          kind: space.kind,
+          current_key_epoch: space.current_key_epoch,
+          can_write: writableSpaceIds.has(space.id),
+        };
+        try {
+          const spaceKey = await this.getSpaceKey(space.id, space.current_key_epoch);
+          return {
+            ...result,
+            name: await decryptMetadata(
+              spaceKey,
+              fromPgBytea(space.name_ciphertext),
+              fromPgBytea(space.name_nonce),
+            ),
+            key_pending: false,
+          };
+        } catch (error) {
+          if (!isKeyPendingError(error)) throw error;
+          return {
+            ...result,
+            name: null,
+            key_pending: true,
+          };
+        }
+      }));
+      return {
+        ...team,
+        membership: memberships.find(({ team_id }) => team_id === team.id),
+        spaces: hydratedSpaces,
+      };
     }));
   }
 
   async listTeamMembers(teamId) {
-    const { data, error } = await this.supabase
+    const { data: memberships, error: membershipError } = await this.supabase
       .from('team_memberships')
       .select('user_id,role,status,membership_version')
       .eq('team_id', teamId)
       .neq('status', 'removed');
+    if (membershipError) throw membershipError;
+    const members = memberships ?? [];
+    const userIds = [...new Set(members.map(({ user_id }) => user_id))];
+    if (!userIds.length) return [];
+    const { data: profiles, error: profileError } = await this.supabase
+      .from('profiles')
+      .select('id,display_name,avatar_url')
+      .in('id', userIds);
+    if (profileError) throw profileError;
+    const profilesById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
+    return members.map((membership) => {
+      const profile = profilesById.get(membership.user_id);
+      return {
+        ...membership,
+        display_name: profile?.display_name ?? null,
+        email: profile?.email ?? null,
+        avatar_url: profile?.avatar_url ?? null,
+      };
+    });
+  }
+
+  async listPendingInvites(teamId) {
+    const { data, error } = await this.supabase
+      .from('team_invites')
+      .select(
+        'id,team_id,email_normalized,role,invited_by,expires_at,accepted_by,accepted_at,revoked_at,created_at',
+      )
+      .eq('team_id', teamId)
+      .is('accepted_at', null)
+      .is('revoked_at', null)
+      .gt('expires_at', new Date(this.now()).toISOString());
     if (error) throw error;
-    return data ?? [];
+    return (data ?? []).map((invite) => ({
+      ...invite,
+      email: invite.email_normalized,
+    }));
   }
 
   async createInvite({
@@ -167,12 +235,16 @@ export class TeamControlClient {
       p_token_hash: pgBytea(tokenHash),
       p_role: role,
       p_expires_at: new Date(
-        Date.now() + expiresInDays * 24 * 60 * 60 * 1000,
+        this.now() + expiresInDays * 24 * 60 * 60 * 1000,
       ).toISOString(),
       p_initial_grants: grants,
     });
     if (error) throw error;
     return { inviteId: data ?? inviteId, token };
+  }
+
+  buildInviteUrl(inviteId, token) {
+    return buildTeamInviteUrl(inviteId, token);
   }
 
   async acceptInvite(inviteId, token) {
@@ -184,6 +256,57 @@ export class TeamControlClient {
     });
     if (error) throw error;
     return data;
+  }
+
+  async revokeInvite(inviteId) {
+    return this.callControlRpc('revoke_team_invite', {
+      p_invite_id: inviteId,
+    });
+  }
+
+  async transferOwnership(teamId, newOwnerUserId) {
+    this.assertInitialized();
+    return this.callControlRpc('transfer_ownership', {
+      p_team_id: teamId,
+      p_new_owner_user_id: newOwnerUserId,
+      p_actor_device_id: this.identity.deviceId,
+    });
+  }
+
+  async archiveTeam(teamId, retentionExpiresAt) {
+    this.assertInitialized();
+    return this.callControlRpc('archive_team', {
+      p_team_id: teamId,
+      p_actor_device_id: this.identity.deviceId,
+      p_retention_expires_at: retentionExpiresAt,
+    });
+  }
+
+  async restoreTeam(teamId) {
+    this.assertInitialized();
+    return this.callControlRpc('restore_team', {
+      p_team_id: teamId,
+      p_actor_device_id: this.identity.deviceId,
+    });
+  }
+
+  async archiveSpace(teamId, spaceId, retentionExpiresAt) {
+    this.assertInitialized();
+    return this.callControlRpc('archive_space', {
+      p_team_id: teamId,
+      p_space_id: spaceId,
+      p_actor_device_id: this.identity.deviceId,
+      p_retention_expires_at: retentionExpiresAt,
+    });
+  }
+
+  async restoreSpace(teamId, spaceId) {
+    this.assertInitialized();
+    return this.callControlRpc('restore_space', {
+      p_team_id: teamId,
+      p_space_id: spaceId,
+      p_actor_device_id: this.identity.deviceId,
+    });
   }
 
   async storeContentKey(key, bytes) {
@@ -216,7 +339,7 @@ export class TeamControlClient {
     );
     if (envelopeError) throw envelopeError;
     const envelope = Array.isArray(data) ? data[0] : data;
-    if (!envelope) throw new Error(`space key epoch ${keyEpoch} is awaiting provisioning`);
+    if (!envelope) throw new KeyPendingError('space', keyEpoch);
     const key = await this.keyManager.unwrapKeyEnvelope(
       {
         wrappedKey: fromPgBytea(envelope.wrapped_key),
@@ -256,7 +379,7 @@ export class TeamControlClient {
     );
     if (envelopeError) throw envelopeError;
     const envelope = Array.isArray(data) ? data[0] : data;
-    if (!envelope) throw new Error(`team key epoch ${keyEpoch} is awaiting provisioning`);
+    if (!envelope) throw new KeyPendingError('team', keyEpoch);
     const key = await this.keyManager.unwrapKeyEnvelope(
       {
         wrappedKey: fromPgBytea(envelope.wrapped_key),
@@ -452,9 +575,27 @@ export class TeamControlClient {
     localStorage.setItem(CACHED_KEY_INDEX, JSON.stringify([...index].sort()));
   }
 
+  async callControlRpc(name, parameters) {
+    const { data, error } = await this.supabase.rpc(name, parameters);
+    if (error) throw error;
+    return data;
+  }
+
   assertInitialized() {
     if (!this.identity) throw new Error('team control client is not initialized');
   }
+}
+
+class KeyPendingError extends Error {
+  constructor(scope, keyEpoch) {
+    super(`${scope} key epoch ${keyEpoch} is awaiting provisioning`);
+    this.name = 'KeyPendingError';
+    this.code = 'TEAM_KEY_PENDING';
+  }
+}
+
+function isKeyPendingError(error) {
+  return error?.code === 'TEAM_KEY_PENDING';
 }
 
 async function encryptMetadata(keyBytes, text) {
@@ -472,6 +613,25 @@ async function encryptMetadata(keyBytes, text) {
     new TextEncoder().encode(text),
   ));
   return { ciphertext, nonce };
+}
+
+async function decryptMetadata(keyBytes, ciphertext, nonce) {
+  if (keyBytes.length !== 32) throw new Error('invalid metadata key');
+  if (nonce.length !== 12) throw new Error('invalid metadata nonce');
+  if (ciphertext.length < 16) throw new Error('invalid metadata ciphertext');
+  const key = await crypto.subtle.importKey(
+    'raw',
+    keyBytes,
+    { name: 'AES-GCM' },
+    false,
+    ['decrypt'],
+  );
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: nonce },
+    key,
+    ciphertext,
+  );
+  return new TextDecoder('utf-8', { fatal: true }).decode(plaintext);
 }
 
 function pgBytea(bytes) {
@@ -542,6 +702,16 @@ function fromHex(value) {
     bytes[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
   }
   return bytes;
+}
+
+export function buildTeamInviteUrl(inviteId, token) {
+  if (typeof inviteId !== 'string' || !inviteId) {
+    throw new Error('invite id is required');
+  }
+  if (typeof token !== 'string' || !token) {
+    throw new Error('invite token is required');
+  }
+  return `lokus://team-invite?invite_id=${encodeURIComponent(inviteId)}&token=${encodeURIComponent(token)}`;
 }
 
 export const teamControlClient = new TeamControlClient();

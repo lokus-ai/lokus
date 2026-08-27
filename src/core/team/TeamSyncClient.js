@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { supabase } from '../auth/supabase';
 import { noteMutationClient } from '../notes/NoteMutationClient';
+import { teamCollaboration } from '../../stores/teamCollaboration';
 import { teamControlClient } from './TeamControlClient';
 
 const REVISION_CODEC_VERSION = 1;
@@ -58,6 +59,16 @@ export class TeamSyncClient {
       permissionEpoch,
       keyEpoch,
     });
+    const identity = await this.invoke('get_note_identity', {
+      workspacePath,
+      path,
+    });
+    emitTeamQueued({
+      queued_for_sync: true,
+      scope_kind: 'team',
+      scope_id: spaceId,
+      note_id: identity.note_id,
+    }, workspacePath);
     try {
       const result = await this.waitForOperation(workspacePath, opId);
       if (
@@ -103,6 +114,16 @@ export class TeamSyncClient {
       permissionEpoch,
       keyEpoch,
     });
+    const identity = await this.invoke('get_note_identity', {
+      workspacePath,
+      path,
+    });
+    emitTeamQueued({
+      queued_for_sync: true,
+      scope_kind: 'team',
+      scope_id: targetSpaceId,
+      note_id: identity.note_id,
+    }, workspacePath);
     return this.waitForOperation(workspacePath, opId);
   }
 
@@ -155,11 +176,13 @@ export class TeamSyncClient {
   }
 
   async waitForOperation(workspacePath, opId) {
-    for (let attempt = 0; attempt < 400; attempt += 1) {
-      try {
-        await this.pushPending(workspacePath);
-      } catch (error) {
-        if (error?.opId === opId) throw error;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (attempt === 0 || attempt % 4 === 0) {
+        try {
+          await this.pushPending(workspacePath);
+        } catch (error) {
+          if (error?.opId === opId) throw error;
+        }
       }
       const status = await this.invoke('get_team_note_outbox_status', {
         workspacePath,
@@ -180,9 +203,12 @@ export class TeamSyncClient {
         error.result = status.last_error_code;
         throw error;
       }
-      await new Promise((resolve) => setTimeout(resolve, 25));
+      if (globalThis.navigator?.onLine === false) {
+        return { accepted: 0, conflicted: 0, retried: 0, queued: 1 };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    throw new Error('team note operation did not reach a terminal state');
+    return { accepted: 0, conflicted: 0, retried: 0, queued: 1 };
   }
 
   async pushPending(workspacePath) {
@@ -204,12 +230,16 @@ export class TeamSyncClient {
       });
       if (!entries.length) break;
       const entry = entries[0];
+      markSyncing(entry);
       let result;
       try {
         result = await this.pushEntry(workspacePath, entry);
       } catch (error) {
         const rejection = classifyPushRejection(error);
-        if (!rejection) throw error;
+        if (!rejection) {
+          markSyncError(entry, error);
+          throw error;
+        }
         result = {
           result: rejection,
           revision_id: null,
@@ -226,6 +256,7 @@ export class TeamSyncClient {
         actionSequence: result.action_sequence ?? null,
       });
       if (result.result === 'conflict') {
+        markPushResult(entry, result);
         await this.materializeConflict(workspacePath, entry, result);
         await this.invoke('finalize_team_note_conflict', {
           workspacePath,
@@ -233,6 +264,7 @@ export class TeamSyncClient {
           claimToken: entry.claim_token,
         });
       } else if (result.result === 'rejected_access' || result.result === 'rejected_epoch') {
+        markPushResult(entry, result);
         emitRecoveryRequired(workspacePath, entry.note_id);
         const rejection = new Error(
           result.result === 'rejected_epoch'
@@ -243,6 +275,7 @@ export class TeamSyncClient {
         rejection.result = result.result;
         throw rejection;
       }
+      markPushResult(entry, result);
       if (result.result === 'accepted') summary.accepted += 1;
       else if (result.result === 'conflict') summary.conflicted += 1;
       else summary.retried += 1;
@@ -370,6 +403,7 @@ export class TeamSyncClient {
       );
       if (error) throw error;
       for (const action of actions ?? []) {
+        markPulling(spaceId, action.note_id);
         let decoded = { relative_path: '', content: null };
         let keyEpoch = 0;
         const currentPath = await this.assertNoteClean(workspacePath, action.note_id);
@@ -423,6 +457,7 @@ export class TeamSyncClient {
         summary.checkpoint = checkpoint;
         if (outcome.status === 'conflict') summary.conflicted += 1;
         else if (outcome.status === 'applied') summary.applied += 1;
+        markPullResult(spaceId, action.note_id, outcome);
       }
       hasMore = (actions?.length ?? 0) === 500;
     }
@@ -689,6 +724,11 @@ function emitTeamQueued(result, workspacePath) {
   ) {
     return;
   }
+  const current = teamCollaboration.get(result.scope_id, result.note_id);
+  teamCollaboration.update(result.scope_id, result.note_id, {
+    syncState: globalThis.navigator?.onLine === false ? 'offline' : 'idle',
+    outboxCount: current.outboxCount + 1,
+  });
   globalThis.dispatchEvent(new CustomEvent('lokus:team-note-queued', {
     detail: {
       workspacePath,
@@ -696,6 +736,71 @@ function emitTeamQueued(result, workspacePath) {
       noteId: result.note_id,
     },
   }));
+}
+
+function markSyncing(entry) {
+  const current = teamCollaboration.get(entry.space_id, entry.note_id);
+  teamCollaboration.update(entry.space_id, entry.note_id, {
+    syncState: 'syncing',
+    outboxCount: Math.max(1, current.outboxCount),
+  });
+}
+
+function markSyncError(entry) {
+  const current = teamCollaboration.get(entry.space_id, entry.note_id);
+  teamCollaboration.update(entry.space_id, entry.note_id, {
+    syncState: globalThis.navigator?.onLine === false ? 'offline' : 'error',
+    outboxCount: Math.max(1, current.outboxCount),
+  });
+}
+
+function markPushResult(entry, result) {
+  const current = teamCollaboration.get(entry.space_id, entry.note_id);
+  if (result.result === 'accepted') {
+    const outboxCount = Math.max(0, current.outboxCount - 1);
+    teamCollaboration.update(entry.space_id, entry.note_id, {
+      syncState: outboxCount ? 'idle' : 'synced',
+      outboxCount,
+      lastSyncedAt: Date.now(),
+    });
+    return;
+  }
+  if (result.result === 'conflict') {
+    teamCollaboration.update(entry.space_id, entry.note_id, {
+      syncState: 'conflict',
+      outboxCount: Math.max(1, current.outboxCount),
+    });
+    return;
+  }
+  if (result.result === 'rejected_epoch') {
+    teamCollaboration.update(entry.space_id, entry.note_id, {
+      syncState: 'key_pending',
+      outboxCount: Math.max(1, current.outboxCount),
+    });
+    return;
+  }
+  if (result.result === 'rejected_access') {
+    teamCollaboration.update(entry.space_id, entry.note_id, {
+      syncState: 'error',
+      outboxCount: Math.max(1, current.outboxCount),
+    });
+  }
+}
+
+function markPulling(spaceId, noteId) {
+  teamCollaboration.update(spaceId, noteId, { syncState: 'syncing' });
+}
+
+function markPullResult(spaceId, noteId, outcome) {
+  teamCollaboration.update(spaceId, noteId, {
+    syncState: outcome.status === 'conflict' ? 'conflict' : 'synced',
+    lastSyncedAt: Date.now(),
+  });
+  if (outcome.status === 'applied') {
+    globalThis.dispatchEvent?.(new CustomEvent('lokus:team-note-applied', {
+      detail: { spaceId, noteId },
+    }));
+  }
 }
 
 function emitRecoveryRequired(workspacePath, noteId) {

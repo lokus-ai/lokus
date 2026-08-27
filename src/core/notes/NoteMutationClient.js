@@ -3,6 +3,7 @@ import { writeFileGuarded } from '../sync/guardedWrite';
 import { useTabMetaStore } from '../../stores/tabMeta';
 import { useEditorGroupStore } from '../../stores/editorGroups';
 import { getEditor } from '../../stores/editorRegistry';
+import { teamCollaboration } from '../../stores/teamCollaboration';
 
 const EDITOR_SOURCES = new Set(['editor-save', 'tab-saver']);
 
@@ -273,6 +274,11 @@ function notifyTeamQueued(result, workspacePath) {
   ) {
     return;
   }
+  const current = teamCollaboration.get(result.scope_id, result.note_id);
+  teamCollaboration.update(result.scope_id, result.note_id, {
+    syncState: globalThis.navigator?.onLine === false ? 'offline' : 'idle',
+    outboxCount: current.outboxCount + 1,
+  });
   globalThis.dispatchEvent(new CustomEvent('lokus:team-note-queued', {
     detail: {
       workspacePath,
