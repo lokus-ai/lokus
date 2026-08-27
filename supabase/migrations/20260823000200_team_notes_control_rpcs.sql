@@ -276,6 +276,16 @@ BEGIN
   LOOP
     v_space_id := (v_grant ->> 'space_id')::uuid;
     v_space_role := (v_grant ->> 'role')::public.space_role;
+    IF NOT EXISTS (
+      SELECT 1
+        FROM public.spaces space
+       WHERE space.id = v_space_id
+         AND space.team_id = p_team_id
+         AND space.deleted_at IS NULL
+    ) THEN
+      RAISE EXCEPTION 'initial invite grant requires an active team space'
+        USING ERRCODE = '23514';
+    END IF;
     INSERT INTO public.invite_space_grants (
       team_id, invite_id, space_id, role
     ) VALUES (p_team_id, p_invite_id, v_space_id, v_space_role);
@@ -296,12 +306,13 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.accept_invite(
   p_invite_id uuid,
+  p_token text,
   p_device_id uuid
 )
 RETURNS public.membership_status
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth, pg_temp
+SET search_path = public, auth, extensions, pg_temp
 AS $$
 DECLARE
   v_actor uuid := auth.uid();
@@ -316,6 +327,9 @@ BEGIN
   IF NOT private.owns_device(p_device_id, v_actor) THEN
     RAISE EXCEPTION 'device is not owned by actor' USING ERRCODE = '42501';
   END IF;
+  IF nullif(p_token, '') IS NULL OR length(p_token) > 512 THEN
+    RAISE EXCEPTION 'invalid invite token' USING ERRCODE = '42501';
+  END IF;
 
   SELECT lower(email)::extensions.citext INTO v_actor_email
     FROM auth.users
@@ -328,6 +342,9 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'invite not found' USING ERRCODE = 'P0002';
+  END IF;
+  IF v_invite.token_hash <> digest(p_token, 'sha256') THEN
+    RAISE EXCEPTION 'invite token is invalid' USING ERRCODE = '42501';
   END IF;
 
   IF v_invite.accepted_by = v_actor THEN
@@ -410,7 +427,7 @@ REVOKE ALL ON FUNCTION public.create_team(
 REVOKE ALL ON FUNCTION public.create_invite(
   uuid, uuid, text, bytea, public.team_role, timestamptz, jsonb
 ) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.accept_invite(uuid, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.accept_invite(uuid, text, uuid) FROM PUBLIC, anon;
 
 GRANT EXECUTE ON FUNCTION public.register_device(uuid, uuid, bytea, bytea, text)
   TO authenticated;
@@ -421,5 +438,5 @@ GRANT EXECUTE ON FUNCTION public.create_team(
 GRANT EXECUTE ON FUNCTION public.create_invite(
   uuid, uuid, text, bytea, public.team_role, timestamptz, jsonb
 ) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.accept_invite(uuid, uuid)
+GRANT EXECUTE ON FUNCTION public.accept_invite(uuid, text, uuid)
   TO authenticated;

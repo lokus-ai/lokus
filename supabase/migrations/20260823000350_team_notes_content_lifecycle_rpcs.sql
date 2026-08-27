@@ -567,7 +567,7 @@ $$;
 
 REVOKE ALL ON FUNCTION private.claim_pending_revision(
   uuid, public.revision_operation
-) FROM PUBLIC, anon;
+) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.tombstone_note(
   uuid, uuid, integer, timestamptz
 ) FROM PUBLIC, anon;
@@ -580,7 +580,7 @@ REVOKE ALL ON FUNCTION public.move_note_to_space(
 
 GRANT EXECUTE ON FUNCTION private.claim_pending_revision(
   uuid, public.revision_operation
-) TO authenticated, service_role;
+) TO service_role;
 GRANT EXECUTE ON FUNCTION public.tombstone_note(
   uuid, uuid, integer, timestamptz
 ) TO authenticated;

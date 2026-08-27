@@ -117,9 +117,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.accept_invite(uuid, uuid)
-  FROM PUBLIC, anon, authenticated;
+DROP FUNCTION IF EXISTS public.accept_invite(uuid, uuid);
+
 REVOKE ALL ON FUNCTION public.accept_invite(uuid, text, uuid)
-  FROM PUBLIC, anon;
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.accept_invite(uuid, text, uuid)
   TO authenticated;

@@ -5,7 +5,7 @@ SET search_path TO public, auth, extensions;
 
 CREATE SCHEMA IF NOT EXISTS private;
 REVOKE ALL ON SCHEMA private FROM PUBLIC, anon, authenticated;
-GRANT USAGE ON SCHEMA private TO authenticated, service_role;
+GRANT USAGE ON SCHEMA private TO service_role;
 
 CREATE OR REPLACE FUNCTION private.team_role_rank(p_role public.team_role)
 RETURNS integer
@@ -246,29 +246,95 @@ AS $$
       OR private.shares_active_team(p_profile_id, p_user_id);
 $$;
 
-REVOKE ALL ON FUNCTION private.team_role_rank(public.team_role) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.space_role_rank(public.space_role) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.is_active_team_member(uuid, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.has_team_role(uuid, public.team_role, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.shares_active_team(uuid, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.effective_space_role(uuid, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.has_space_role(uuid, public.space_role, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.owns_device(uuid, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.can_read_device(uuid, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.can_read_note(uuid, uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION private.can_read_profile(uuid, uuid) FROM PUBLIC, anon;
+CREATE SCHEMA IF NOT EXISTS team_notes_rls;
+REVOKE ALL ON SCHEMA team_notes_rls FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SCHEMA team_notes_rls TO authenticated, service_role;
 
-GRANT EXECUTE ON FUNCTION private.team_role_rank(public.team_role) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.space_role_rank(public.space_role) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.is_active_team_member(uuid, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.has_team_role(uuid, public.team_role, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.shares_active_team(uuid, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.effective_space_role(uuid, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.has_space_role(uuid, public.space_role, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.owns_device(uuid, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.can_read_device(uuid, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.can_read_note(uuid, uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION private.can_read_profile(uuid, uuid) TO authenticated, service_role;
+CREATE OR REPLACE FUNCTION team_notes_rls.authorize(
+  p_check text,
+  p_resource_id uuid,
+  p_required_role text DEFAULT NULL
+)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+  v_actor uuid := auth.uid();
+BEGIN
+  IF v_actor IS NULL OR p_resource_id IS NULL THEN
+    RETURN false;
+  END IF;
+
+  CASE p_check
+    WHEN 'active_team_member' THEN
+      RETURN private.is_active_team_member(p_resource_id, v_actor);
+    WHEN 'team_role' THEN
+      CASE p_required_role
+        WHEN 'member' THEN
+          RETURN private.has_team_role(p_resource_id, 'member', v_actor);
+        WHEN 'admin' THEN
+          RETURN private.has_team_role(p_resource_id, 'admin', v_actor);
+        WHEN 'owner' THEN
+          RETURN private.has_team_role(p_resource_id, 'owner', v_actor);
+        ELSE
+          RETURN false;
+      END CASE;
+    WHEN 'space_role' THEN
+      CASE p_required_role
+        WHEN 'reader' THEN
+          RETURN private.has_space_role(p_resource_id, 'reader', v_actor);
+        WHEN 'editor' THEN
+          RETURN private.has_space_role(p_resource_id, 'editor', v_actor);
+        WHEN 'manager' THEN
+          RETURN private.has_space_role(p_resource_id, 'manager', v_actor);
+        ELSE
+          RETURN false;
+      END CASE;
+    WHEN 'owns_device' THEN
+      RETURN private.owns_device(p_resource_id, v_actor);
+    WHEN 'read_device' THEN
+      RETURN private.can_read_device(p_resource_id, v_actor);
+    WHEN 'read_note' THEN
+      RETURN private.can_read_note(p_resource_id, v_actor);
+    WHEN 'read_profile' THEN
+      RETURN private.can_read_profile(p_resource_id, v_actor);
+    ELSE
+      RETURN false;
+  END CASE;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION team_notes_rls.authorize(text, uuid, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION team_notes_rls.authorize(text, uuid, text)
+  TO authenticated, service_role;
+
+REVOKE ALL ON FUNCTION private.team_role_rank(public.team_role) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.space_role_rank(public.space_role) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.is_active_team_member(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.has_team_role(uuid, public.team_role, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.shares_active_team(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.effective_space_role(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.has_space_role(uuid, public.space_role, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.owns_device(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.can_read_device(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.can_read_note(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.can_read_profile(uuid, uuid) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION private.team_role_rank(public.team_role) TO service_role;
+GRANT EXECUTE ON FUNCTION private.space_role_rank(public.space_role) TO service_role;
+GRANT EXECUTE ON FUNCTION private.is_active_team_member(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.has_team_role(uuid, public.team_role, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.shares_active_team(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.effective_space_role(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.has_space_role(uuid, public.space_role, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.owns_device(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.can_read_device(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.can_read_note(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION private.can_read_profile(uuid, uuid) TO service_role;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teams ENABLE ROW LEVEL SECURITY;
@@ -353,7 +419,7 @@ TO service_role;
 
 CREATE POLICY profiles_select_visible ON public.profiles
   FOR SELECT TO authenticated
-  USING (private.can_read_profile(id));
+  USING (team_notes_rls.authorize('read_profile', id));
 CREATE POLICY profiles_insert_own ON public.profiles
   FOR INSERT TO authenticated
   WITH CHECK (id = (SELECT auth.uid()));
@@ -364,20 +430,26 @@ CREATE POLICY profiles_update_own ON public.profiles
 
 CREATE POLICY teams_select_member ON public.teams
   FOR SELECT TO authenticated
-  USING (deleted_at IS NULL AND private.is_active_team_member(id));
+  USING (
+    deleted_at IS NULL
+    AND team_notes_rls.authorize('active_team_member', id)
+  );
 
 CREATE POLICY team_permission_epochs_select_member ON public.team_permission_epochs
   FOR SELECT TO authenticated
-  USING (private.is_active_team_member(team_id));
+  USING (team_notes_rls.authorize('active_team_member', team_id));
 
 CREATE POLICY team_memberships_select_team_or_self ON public.team_memberships
   FOR SELECT TO authenticated
-  USING (user_id = (SELECT auth.uid()) OR private.is_active_team_member(team_id));
+  USING (
+    user_id = (SELECT auth.uid())
+    OR team_notes_rls.authorize('active_team_member', team_id)
+  );
 
 CREATE POLICY team_invites_select_admin_or_recipient ON public.team_invites
   FOR SELECT TO authenticated
   USING (
-    private.has_team_role(team_id, 'admin')
+    team_notes_rls.authorize('team_role', team_id, 'admin')
     OR (
       email_normalized = lower((SELECT auth.jwt()) ->> 'email')::citext
       AND accepted_at IS NULL
@@ -388,23 +460,29 @@ CREATE POLICY team_invites_select_admin_or_recipient ON public.team_invites
 
 CREATE POLICY team_groups_select_member ON public.team_groups
   FOR SELECT TO authenticated
-  USING (deleted_at IS NULL AND private.is_active_team_member(team_id));
+  USING (
+    deleted_at IS NULL
+    AND team_notes_rls.authorize('active_team_member', team_id)
+  );
 
 CREATE POLICY team_group_members_select_member ON public.team_group_members
   FOR SELECT TO authenticated
-  USING (private.is_active_team_member(team_id));
+  USING (team_notes_rls.authorize('active_team_member', team_id));
 
 CREATE POLICY spaces_select_granted ON public.spaces
   FOR SELECT TO authenticated
-  USING (deleted_at IS NULL AND private.has_space_role(id, 'reader'));
+  USING (
+    deleted_at IS NULL
+    AND team_notes_rls.authorize('space_role', id, 'reader')
+  );
 
 CREATE POLICY space_member_grants_select_granted ON public.space_member_grants
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY space_group_grants_select_granted ON public.space_group_grants
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY invite_space_grants_select_invite ON public.invite_space_grants
   FOR SELECT TO authenticated
@@ -414,7 +492,7 @@ CREATE POLICY invite_space_grants_select_invite ON public.invite_space_grants
         FROM public.team_invites invite
        WHERE invite.id = invite_id
          AND (
-           private.has_team_role(invite.team_id, 'admin')
+           team_notes_rls.authorize('team_role', invite.team_id, 'admin')
            OR (
              invite.email_normalized = lower((SELECT auth.jwt()) ->> 'email')::citext
              AND invite.accepted_at IS NULL
@@ -427,77 +505,77 @@ CREATE POLICY invite_space_grants_select_invite ON public.invite_space_grants
 
 CREATE POLICY devices_select_related ON public.devices
   FOR SELECT TO authenticated
-  USING (private.can_read_device(id));
+  USING (team_notes_rls.authorize('read_device', id));
 
 CREATE POLICY team_key_epochs_select_member ON public.team_key_epochs
   FOR SELECT TO authenticated
-  USING (private.is_active_team_member(team_id));
+  USING (team_notes_rls.authorize('active_team_member', team_id));
 
 CREATE POLICY team_key_envelopes_select_recipient ON public.team_key_envelopes
   FOR SELECT TO authenticated
   USING (
-    private.is_active_team_member(team_id)
-    AND private.owns_device(recipient_device_id)
+    team_notes_rls.authorize('active_team_member', team_id)
+    AND team_notes_rls.authorize('owns_device', recipient_device_id)
   );
 
 CREATE POLICY space_key_epochs_select_granted ON public.space_key_epochs
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY space_key_envelopes_select_recipient ON public.space_key_envelopes
   FOR SELECT TO authenticated
   USING (
-    private.has_space_role(space_id, 'reader')
-    AND private.owns_device(recipient_device_id)
+    team_notes_rls.authorize('space_role', space_id, 'reader')
+    AND team_notes_rls.authorize('owns_device', recipient_device_id)
   );
 
 CREATE POLICY notes_select_granted ON public.notes
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY note_revisions_select_granted ON public.note_revisions
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY note_heads_select_granted ON public.note_heads
   FOR SELECT TO authenticated
-  USING (private.can_read_note(note_id));
+  USING (team_notes_rls.authorize('read_note', note_id));
 
 CREATE POLICY pending_revision_uploads_select_owner ON public.pending_revision_uploads
   FOR SELECT TO authenticated
   USING (
     actor_user_id = (SELECT auth.uid())
-    AND private.owns_device(actor_device_id)
+    AND team_notes_rls.authorize('owns_device', actor_device_id)
   );
 
 CREATE POLICY space_sync_counters_select_granted ON public.space_sync_counters
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY sync_actions_select_granted ON public.sync_actions
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY mutation_receipts_select_owner ON public.mutation_receipts
   FOR SELECT TO authenticated
-  USING (private.owns_device(actor_device_id));
+  USING (team_notes_rls.authorize('owns_device', actor_device_id));
 
 CREATE POLICY replica_checkpoint_observations_select_owner
   ON public.replica_checkpoint_observations
   FOR SELECT TO authenticated
   USING (
-    private.owns_device(device_id)
-    AND private.has_space_role(space_id, 'reader')
+    team_notes_rls.authorize('owns_device', device_id)
+    AND team_notes_rls.authorize('space_role', space_id, 'reader')
   );
 
 CREATE POLICY note_tombstones_select_granted ON public.note_tombstones
   FOR SELECT TO authenticated
-  USING (private.has_space_role(space_id, 'reader'));
+  USING (team_notes_rls.authorize('space_role', space_id, 'reader'));
 
 CREATE POLICY note_space_transitions_select_admin ON public.note_space_transitions
   FOR SELECT TO authenticated
-  USING (private.has_team_role(team_id, 'admin'));
+  USING (team_notes_rls.authorize('team_role', team_id, 'admin'));
 
 CREATE POLICY team_audit_events_select_admin ON public.team_audit_events
   FOR SELECT TO authenticated
-  USING (private.has_team_role(team_id, 'admin'));
+  USING (team_notes_rls.authorize('team_role', team_id, 'admin'));

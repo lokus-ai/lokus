@@ -30,9 +30,16 @@ CREATE POLICY team_note_revisions_insert_pending
         FROM public.pending_revision_uploads pending
        WHERE pending.object_key = name
          AND pending.actor_user_id = (SELECT auth.uid())
-         AND private.owns_device(pending.actor_device_id)
+         AND team_notes_rls.authorize(
+           'owns_device',
+           pending.actor_device_id
+         )
          AND pending.expires_at > now()
-         AND private.has_space_role(pending.space_id, 'editor')
+         AND team_notes_rls.authorize(
+           'space_role',
+           pending.space_id,
+           'editor'
+         )
     )
   );
 
@@ -47,7 +54,11 @@ CREATE POLICY team_note_revisions_select_authorized
       SELECT 1
         FROM public.note_revisions revision
        WHERE revision.object_key = name
-         AND private.has_space_role(revision.space_id, 'reader')
+         AND team_notes_rls.authorize(
+           'space_role',
+           revision.space_id,
+           'reader'
+         )
     )
   );
 

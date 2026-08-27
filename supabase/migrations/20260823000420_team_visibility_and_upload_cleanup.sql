@@ -28,9 +28,9 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION private.shares_active_team(uuid, uuid)
-  FROM PUBLIC, anon;
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.shares_active_team(uuid, uuid)
-  TO authenticated, service_role;
+  TO service_role;
 
 CREATE OR REPLACE FUNCTION public.cleanup_expired_team_uploads(
   p_limit integer DEFAULT 500
