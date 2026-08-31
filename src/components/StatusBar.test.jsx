@@ -3,14 +3,22 @@ import { render, screen } from '@testing-library/react'
 import StatusBar from './StatusBar'
 
 // Mock useStatusBar hook
-const mockLeftItems = []
-const mockRightItems = []
+const { mockLeftItems, mockRightItems, mockIsMobile } = vi.hoisted(() => ({
+    mockLeftItems: [],
+    mockRightItems: [],
+    mockIsMobile: vi.fn(() => false)
+}))
 
 vi.mock('../hooks/useStatusBar', () => ({
     useStatusBar: () => ({
         leftItems: mockLeftItems,
         rightItems: mockRightItems
     })
+}))
+
+
+vi.mock('../platform/index.js', () => ({
+    isMobile: mockIsMobile
 }))
 
 
@@ -24,6 +32,9 @@ describe('StatusBar Component', () => {
 
     beforeEach(() => {
         vi.clearAllMocks()
+        mockLeftItems.length = 0
+        mockRightItems.length = 0
+        mockIsMobile.mockReturnValue(false)
     })
 
     it('should render core items', () => {
@@ -80,5 +91,24 @@ describe('StatusBar Component', () => {
         expect(screen.getByText(/Words: 2/)).toBeInTheDocument()
         expect(screen.getByText(/Chars: 11/)).toBeInTheDocument()
         expect(screen.getByText(/~1 min/)).toBeInTheDocument()
+    })
+
+    it('should provide 44px touch targets for command items on mobile', () => {
+        mockIsMobile.mockReturnValue(true)
+
+        const commandItem = {
+            id: 'test-command',
+            text: 'Test Command',
+            command: 'test.command'
+        }
+
+        mockLeftItems.push(commandItem)
+
+        render(<StatusBar {...defaultProps} />)
+
+        const item = screen.getByText('Test Command').parentElement
+
+        expect(item).toHaveClass('min-w-[44px]')
+        expect(item).toHaveClass('min-h-[44px]')
     })
 })

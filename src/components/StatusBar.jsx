@@ -5,6 +5,7 @@ import { usePluginStatusItems } from '../hooks/usePluginStatusItems.js';
 import StatusBarContextMenu from './StatusBarContextMenu.jsx';
 import { host } from '../core/plugin-v3/index.js';
 import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
+import { isMobile } from '../platform/index.js';
 
 /**
  * Pluginable Status Bar Component
@@ -14,6 +15,7 @@ import { commandRegistry } from '../plugins/registry/CommandRegistry.js';
 export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], editor, readingSpeed = 200 }) {
   const { leftItems, rightItems } = useStatusBar();
   const pluginStatusItems = usePluginStatusItems();
+  const mobile = isMobile();
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState({
@@ -118,7 +120,9 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     return (
       <div
         key={id}
-        className={`obsidian - status - bar - item ${command ? 'clickable' : ''} ${className || ''} `}
+        className={`obsidian-status-bar-item ${command ? 'clickable' : ''} ${
+          command && mobile ? 'min-w-[44px] min-h-[44px]' : ''
+        } ${className || ''}`}
         title={tooltip}
         onClick={command ? () => handleCommand(command) : undefined}
         onContextMenu={(e) => pluginId && handleContextMenu(e, pluginId)}
@@ -146,7 +150,9 @@ export default function StatusBar({ activeFile, unsavedChanges, openTabs = [], e
     return (
       <div
         key={item.id}
-        className={`obsidian-status-bar-item ${item.command ? 'clickable' : ''}`}
+        className={`obsidian-status-bar-item ${item.command ? 'clickable' : ''} ${
+          item.command && mobile ? 'min-w-[44px] min-h-[44px]' : ''
+        }`}
         title={item.tooltip}
         style={{
           color: item.color,
