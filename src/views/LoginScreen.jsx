@@ -67,7 +67,6 @@ export default function LoginScreen() {
 
     try {
       await signInWithGoogle();
-      // The OAuth flow will redirect, so we don't need to do anything here
     } catch (err) {
       setError(err.message || 'Failed to sign in with Google');
       setLoading(false);
@@ -81,7 +80,6 @@ export default function LoginScreen() {
 
     try {
       await signInWithApple();
-      // The OAuth flow will redirect, so we don't need to do anything here
     } catch (err) {
       setError(err.message || 'Failed to sign in with Apple');
       setLoading(false);
@@ -315,22 +313,25 @@ export default function LoginScreen() {
         </div>
 
         {/* Continue as Guest */}
-        <div className="mt-8">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="flex-1 h-px bg-app-border"></div>
-            <span className="text-app-muted text-sm">or</span>
-            <div className="flex-1 h-px bg-app-border"></div>
+        {mode !== 'reset' && (
+          <div className="mt-8">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="flex-1 h-px bg-app-border"></div>
+              <span className="text-app-muted text-sm">or</span>
+              <div className="flex-1 h-px bg-app-border"></div>
+            </div>
+            <button
+              type="button"
+              onClick={continueAsGuest}
+              className="w-full px-4 py-2.5 rounded-lg border border-app-border text-app-text hover:bg-app-panel transition-colors"
+            >
+              Continue as Guest
+            </button>
+            <p className="text-center text-xs text-app-muted mt-2">
+              Your notes stay on this device
+            </p>
           </div>
-          <button
-            onClick={continueAsGuest}
-            className="w-full px-4 py-2.5 rounded-lg border border-app-border text-app-text hover:bg-app-panel transition-colors"
-          >
-            Continue as Guest
-          </button>
-          <p className="text-center text-xs text-app-muted mt-2">
-            Your notes stay on this device
-          </p>
-        </div>
+        )}
       </div>
     </div>
   );
