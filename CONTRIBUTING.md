@@ -4,14 +4,14 @@ Thank you for your interest in contributing to Lokus! We welcome contributions f
 
 ## 📋 Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Contributing Workflow](#contributing-workflow)
-- [Coding Standards](#coding-standards)
-- [Testing](#testing)
-- [Pull Request Process](#pull-request-process)
-- [Release Process](#release-process)
+- [Code of Conduct](#-code-of-conduct)
+- [Getting Started](#-getting-started)
+- [Development Setup](#-development-setup)
+- [Contributing Workflow](#-contributing-workflow)
+- [Coding Standards](#-coding-standards)
+- [Testing](#-testing)
+- [Pull Request Process](#-pull-request-process)
+- [Release Process](#-release-process)
 
 ## 📜 Code of Conduct
 
@@ -780,7 +780,7 @@ lokus/
    ```
 
 4. **Make your changes**
-   - Write code following our [coding standards](#coding-standards)
+   - Write code following our [coding standards](#-coding-standards)
    - Add tests for new functionality
    - Update documentation if needed
 
