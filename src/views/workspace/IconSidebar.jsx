@@ -1,4 +1,4 @@
-import { FolderOpen, LayoutGrid, Puzzle, Database, Network, Calendar, CalendarDays, ListTodo, Users } from 'lucide-react';
+import { FolderOpen, LayoutGrid, Puzzle, Database, Network, Calendar, CalendarDays, ListTodo, Users, Bookmark } from 'lucide-react';
 import LokusLogo from '../../components/LokusLogo.jsx';
 import { useLayoutStore } from '../../stores/layout';
 import { useViewStore } from '../../stores/views';
@@ -29,6 +29,7 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   const showKanban = currentView === 'kanban';
   const showPlugins = currentView === 'marketplace';
   const showTeams = currentView === 'teams';
+  const showBookmarks = currentView === 'bookmarks';
 
   // Bases and Graph are tabs, not view switches — check the active tab
   const activeTab = useEditorGroupStore((s) => {
@@ -49,11 +50,12 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
   const showBases = activeTab === '__bases__';
   const showGraphView = activeTab === '__graph__';
 
-  const isExplorer = !showKanban && !showPlugins && !showTeams && !showBases && !showGraphView && showLeft;
+  const isExplorer = !showBookmarks && !showKanban && !showPlugins && !showTeams && !showBases && !showGraphView && showLeft;
   const isKanbanActive = showKanban && !showPlugins && !showBases && !showGraphView;
   const isPluginsActive = showPlugins && !showKanban && !showBases && !showGraphView;
   const isBasesActive = showBases && !showKanban && !showPlugins && !showGraphView;
   const isTeamsActive = showTeams && !showKanban && !showPlugins && !showBases && !showGraphView;
+  const isBookmarksActive = showBookmarks && !showKanban && !showPlugins && !showBases && !showGraphView;
 
   const handleExplorerClick = () => {
     useViewStore.getState().switchView('editor');
@@ -72,6 +74,11 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
 
   const handleTeamsClick = () => {
     useViewStore.getState().switchView('teams');
+    useLayoutStore.setState({ showLeft: true });
+  };
+
+  const handleBookmarksClick = () => {
+    useViewStore.getState().switchView('bookmarks');
     useLayoutStore.setState({ showLeft: true });
   };
 
@@ -149,6 +156,15 @@ export default function IconSidebar({ onOpenBasesTab, onOpenGraphView }) {
             <Users className={iconCls} strokeWidth={1.5} />
           </button>
         )}
+
+        {/* Bookmarks */}
+        <button
+          onClick={handleBookmarksClick}
+          title="Bookmarks"
+          className={`ribbon-button ${isBookmarksActive ? 'active' : ''}`}
+        >
+          <Bookmark className={iconCls} strokeWidth={1.5} />
+        </button>
 
         {/* Task Board (Kanban) */}
         {featureFlags.enable_kanban && uiVisibility.sidebar_kanban && (

@@ -15,6 +15,7 @@ import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
 import { NewItemInput } from "./NewItemInput.jsx";
 import { FileEntryComponent } from "./FileEntryComponent.jsx";
 import { isSupportedNotePath, noteMutationClient } from "../../core/notes/NoteMutationClient.js";
+import bookmarksManager from "../../core/bookmarks/manager.js";
 
 // Props that rows used to receive and thread down (expandedFolders, keymap,
 // renamingPath, hoveredFolder, …) are gone: each row now reads its own slice
@@ -92,6 +93,9 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
       : null),
     [contextTarget],
   );
+  const contextFileIsBookmarked = contextFile
+    ? bookmarksManager.isBookmarked(workspacePath, contextFile.path)
+    : false;
 
   //Add dropable for workspace root
   const { setNodeRef: workspaceRootDroppableRef } = useDroppable({
@@ -235,6 +239,15 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
     if (!file) return;
 
     switch (action) {
+      case 'toggleBookmark':
+        if (file.type === 'file') {
+          const bookmarked = bookmarksManager.toggle(workspacePath, {
+            path: file.path,
+            name: file.name,
+          });
+          toast?.success(bookmarked ? `Added to bookmarks: ${file.name}` : `Removed from bookmarks: ${file.name}`);
+        }
+        break;
       case 'open':
         onFileClick(file);
         break;
@@ -649,6 +662,7 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
           onAction={handleFileContextAction}
           selectedPaths={selectedPaths}
           isSelected={contextTarget ? selectedPaths.has(contextTarget.path) : false}
+          isBookmarked={contextFileIsBookmarked}
         >
           <ul className="space-y-1">
             {creatingItem && creatingItem.targetPath === workspacePath && (

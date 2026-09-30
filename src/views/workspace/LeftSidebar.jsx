@@ -9,6 +9,7 @@ import { FileTreeView } from '../../features/file-tree';
 import PluginSettings from '../PluginSettings.jsx';
 import KanbanList from '../../components/KanbanList.jsx';
 import TeamsWorkspacePanel from '../../components/team/TeamsWorkspacePanel.jsx';
+import BookmarksPanel from './BookmarksPanel.jsx';
 import { toast } from '../../components/ui/enhanced-toast';
 import { formatAccelerator } from '../../core/shortcuts/registry.js';
 import { isDesktop } from '../../platform/index.js';
@@ -86,6 +87,7 @@ export default function LeftSidebar({
   const showKanban = currentView === 'kanban';
   const showPlugins = currentView === 'marketplace';
   const showTeams = currentView === 'teams';
+  const showBookmarks = currentView === 'bookmarks';
 
   // Active file from the focused editor group
   const activeFile = useEditorGroupStore((s) => {
@@ -147,6 +149,15 @@ export default function LeftSidebar({
           />
         </div>
       </aside>
+    );
+  }
+
+  if (showBookmarks) {
+    return (
+      <BookmarksPanel
+        workspacePath={workspacePath}
+        onFileOpen={onFileOpen}
+      />
     );
   }
 

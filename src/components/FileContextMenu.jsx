@@ -43,6 +43,8 @@ import {
   ArrowRight,
   Clock,
   Users,
+  Bookmark,
+  BookmarkCheck,
 } from 'lucide-react';
 import platformService from '../services/platform/PlatformService';
 import { isDesktop } from '../services/platform/PlatformService';
@@ -58,6 +60,7 @@ export default function FileContextMenu({
   canCopy = false,
   canPaste = false,
   isFavorite = false,
+  isBookmarked = false,
   selectedPaths = new Set(),
   isSelected = false,
 }) {
@@ -467,6 +470,26 @@ export default function FileContextMenu({
                   </ContextMenuSubContent>
                 </ContextMenuSub>
 
+                <ContextMenuSeparator />
+              </>
+            )}
+
+            {/* Bookmarks */}
+            {isFile && (
+              <>
+                <ContextMenuItem onClick={() => handleAction('toggleBookmark')}>
+                  {isBookmarked ? (
+                    <>
+                      <BookmarkCheck className="mr-2 h-4 w-4" />
+                      Remove from Bookmarks
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="mr-2 h-4 w-4" />
+                      Add to Bookmarks
+                    </>
+                  )}
+                </ContextMenuItem>
                 <ContextMenuSeparator />
               </>
             )}
