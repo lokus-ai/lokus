@@ -65,29 +65,22 @@ fn walk_directory(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
             None
         };
 
-        // Real size + mtime for files. These used to be hardcoded to 0/None
-        // "for performance", which cost far more than the stat it saved: the
-        // sync cache compares the mtime+size it stored against these, so it
-        // never registered a hit and re-read + re-hashed the whole vault every
-        // five minutes. The MAX_FILE_SIZE guard downstream was dead for the
-        // same reason (`0 > limit` is never true).
-        //
-        // Directories are skipped — nothing reads a directory's size, and it
-        // is one stat per folder that buys nothing.
-        let (size, created, modified) = if is_directory {
-            (0, None, None)
-        } else {
-            match entry.metadata() {
-                Ok(meta) => {
-                    let to_secs = |t: std::io::Result<std::time::SystemTime>| {
-                        t.ok()
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                    };
-                    (meta.len(), to_secs(meta.created()), to_secs(meta.modified()))
-                }
-                Err(_) => (0, None, None),
+        // File sizes and timestamps feed the sync cache and Explorer sorting.
+        // Folders need timestamps too, but their size is not a file size.
+        let (size, created, modified) = match entry.metadata() {
+            Ok(meta) => {
+                let to_secs = |t: std::io::Result<std::time::SystemTime>| {
+                    t.ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                };
+                (
+                    if is_directory { 0 } else { meta.len() },
+                    to_secs(meta.created()),
+                    to_secs(meta.modified()),
+                )
             }
+            Err(_) => (0, None, None),
         };
 
         entries.push(FileEntry {
@@ -103,6 +96,34 @@ fn walk_directory(path: &Path, depth: usize) -> Result<Vec<FileEntry>, String> {
 
     entries.sort_by(|a, b| b.is_directory.cmp(&a.is_directory).then_with(|| a.name.cmp(&b.name)));
     Ok(entries)
+}
+
+#[cfg(test)]
+mod explorer_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn directory_walk_includes_file_and_folder_timestamps() {
+        let workspace = tempfile::tempdir().unwrap();
+        let folder = workspace.path().join("folder");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("note.md"), "hello").unwrap();
+
+        let entries = walk_directory(workspace.path(), 0).unwrap();
+        let folder_entry = &entries[0];
+        assert!(folder_entry.is_directory);
+        assert_eq!(folder_entry.size, 0);
+        assert!(folder_entry.modified.is_some());
+        // Creation time is unavailable on some filesystems.
+        assert_eq!(
+            folder_entry.created.is_some(),
+            fs::metadata(&folder).unwrap().created().is_ok(),
+        );
+
+        let note = &folder_entry.children.as_ref().unwrap()[0];
+        assert_eq!(note.size, 5);
+        assert!(note.modified.is_some());
+    }
 }
 
 // --- Tauri Commands ---

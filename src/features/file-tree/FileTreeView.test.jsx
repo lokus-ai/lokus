@@ -4,6 +4,8 @@ import React from 'react';
 
 import { FileTreeView } from './FileTreeView.jsx';
 import { useFileTreeStore } from '../../stores/fileTree';
+import { useExplorerSortStore } from '../../stores/explorerSort';
+import { DEFAULT_SORT_PREFERENCES } from './sorting';
 
 // dnd-kit needs layout APIs jsdom doesn't provide; the drag behaviour is not
 // what these tests are about.
@@ -86,6 +88,7 @@ const resetStore = () =>
   });
 
 beforeEach(resetStore);
+beforeEach(() => useExplorerSortStore.setState({ sortPreferences: DEFAULT_SORT_PREFERENCES }));
 afterEach(cleanup);
 
 describe('FileTreeView', () => {
@@ -165,5 +168,50 @@ describe('FileTreeView', () => {
     expect(fileRows.length).toBeGreaterThan(0);
     const withIcon = fileRows.filter((row) => row.querySelector('svg'));
     expect(withIcon.length).toBe(fileRows.length);
+  });
+
+  it('reorders nested rows while retaining expansion, active path, and selection', () => {
+    const { container } = setup();
+    fireEvent.click(screen.getByText('projects'));
+    fireEvent.click(screen.getByText('atlas'));
+    act(() => {
+      useFileTreeStore.getState().setActivePath('/w/projects/atlas.md');
+      useExplorerSortStore.getState().setSortPreferences({ direction: 'desc' });
+    });
+    expect(Array.from(container.querySelectorAll('li[data-path]')).map((row) => row.dataset.path)).toEqual([
+      '/w/projects', '/w/projects/beta.md', '/w/projects/atlas.md', '/w/todo.md', '/w/notes.md',
+    ]);
+    const atlas = container.querySelector('li[data-path="/w/projects/atlas.md"] button');
+    expect(atlas).toHaveClass('active', 'selected');
+    expect(useFileTreeStore.getState().expandedFolders.has('/w/projects')).toBe(true);
+  });
+
+  it('uses the displayed order for Shift selection after sorting', () => {
+    const entries = ['b.md', 'd.md', 'a.md', 'c.md'].map((name) => ({ name, path: `/w/${name}`, is_directory: false }));
+    const { container } = setup({ entries });
+    act(() => useExplorerSortStore.getState().setSortPreferences({ direction: 'desc' }));
+    fireEvent.click(screen.getByText('d'));
+    fireEvent.click(screen.getByText('b'), { shiftKey: true });
+    expect(Array.from(container.querySelectorAll('button.selected')).map((button) => button.closest('li').dataset.path)).toEqual([
+      '/w/d.md', '/w/c.md', '/w/b.md',
+    ]);
+  });
+
+  it('keeps an in-progress rename on the same row when sorting changes', async () => {
+    invoke.mockClear();
+    const onRefresh = vi.fn();
+    const entries = ['z.txt', 'a.txt'].map((name) => ({ name, path: `/w/${name}`, is_directory: false }));
+    const { container } = setup({ entries, onRefresh });
+    act(() => useFileTreeStore.getState().startRename('/w/z.txt'));
+    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'renamed' } });
+    act(() => useExplorerSortStore.getState().setSortPreferences({ direction: 'desc' }));
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveValue('renamed');
+    expect(input.closest('li').dataset.path).toBe('/w/z.txt');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await act(async () => {});
+    expect(invoke).toHaveBeenCalledWith('rename_file', { path: '/w/z.txt', newName: 'renamed.txt' });
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(container.querySelector('input')).toBeNull();
   });
 });

@@ -6,6 +6,7 @@ import { useFileTreeStore } from '../../stores/fileTree';
 import { useLayoutStore } from '../../stores/layout';
 import { useFeatureFlags } from '../../contexts/RemoteConfigContext';
 import { FileTreeView } from '../../features/file-tree';
+import { ExplorerSortMenu } from '../../features/file-tree/ExplorerSortMenu';
 import PluginSettings from '../PluginSettings.jsx';
 import KanbanList from '../../components/KanbanList.jsx';
 import TeamsWorkspacePanel from '../../components/team/TeamsWorkspacePanel.jsx';
@@ -165,6 +166,7 @@ export default function LeftSidebar({
       {/* Explorer Header — icon actions only; the titlebar's bottom
           border is the separator line above this row */}
       <div className="h-[34px] px-2 flex items-center justify-end gap-0.5 flex-none">
+        <ExplorerSortMenu />
         <button
           onClick={onCreateFile}
           className="obsidian-button icon-only small"
