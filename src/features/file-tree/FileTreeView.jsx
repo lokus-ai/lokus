@@ -15,12 +15,16 @@ import { copyFiles, cutFiles, getRelativePath } from "../../utils/clipboard.js";
 import { NewItemInput } from "./NewItemInput.jsx";
 import { FileEntryComponent } from "./FileEntryComponent.jsx";
 import { isSupportedNotePath, noteMutationClient } from "../../core/notes/NoteMutationClient.js";
+import { sortFileTree } from './sorting';
+import { useExplorerSortStore } from '../../stores/explorerSort';
 
 // Props that rows used to receive and thread down (expandedFolders, keymap,
 // renamingPath, hoveredFolder, …) are gone: each row now reads its own slice
 // from the file-tree store, so changing one of them no longer re-renders the
 // entire tree.
 export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, toggleFolder, creatingItem, onCreateConfirm, setRenamingPath, onViewHistory, setTagModalFile, setUseSplitView, setRightPaneFile, setRightPaneTitle, setRightPaneContent, isExternalDragActive, toast, onCheckReferences, workspacePath, onUpdateTabPath }) {
+  const sortPreferences = useExplorerSortStore((s) => s.sortPreferences);
+  const sortedEntries = useMemo(() => sortFileTree(entries, sortPreferences), [entries, sortPreferences]);
   const [activeEntry, setActiveEntry] = useState(null);
   const [draggedPaths, setDraggedPaths] = useState(new Set()); // Track paths being dragged (for multi-select)
   const fileTreeRef = useRef(null);
@@ -52,9 +56,9 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
         if (n.children?.length) walk(n.children);
       });
     };
-    walk(entries || []);
+    walk(sortedEntries);
     return list;
-  }, [entries]);
+  }, [sortedEntries]);
 
   const indexByPath = useMemo(() => {
     const map = new Map();
@@ -658,7 +662,7 @@ export function FileTreeView({ entries, onFileClick, activeFile, onRefresh, togg
                 onConfirm={onCreateConfirm}
               />
             )}
-            {entries.map(entry => (
+            {sortedEntries.map(entry => (
               <FileEntryComponent
                 key={entry.path}
                 entry={entry}

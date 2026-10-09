@@ -60,6 +60,7 @@ Most note-taking apps fall into two categories: **powerful but cloud-dependent**
 - Daily notes
 - Full-text search
 - Tags & folders
+- Explorer sorting by name, date, size, or type, with saved preferences
 
 </td>
 </tr>
