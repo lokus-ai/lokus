@@ -143,6 +143,9 @@ objc2-user-notifications = { version = "0.3", features = [
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.57", features = ["Win32_Security_Credentials"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk-sys = "2.0.2"
+
 # Linux uses keyring crate (already in main deps) which handles secret-service internally
 
 # Dependencies are compiled once and then cached, so paying for opt-level 2 on
