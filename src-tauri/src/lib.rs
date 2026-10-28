@@ -514,6 +514,44 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn apply_webkitgtk_wayland_dmabuf_workaround() -> Option<(u32, u32, u32)> {
+  if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some()
+    || std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_some()
+  {
+    return None;
+  }
+
+  let native_wayland = match std::env::var("GDK_BACKEND") {
+    Ok(backends) => backends
+      .split(',')
+      .next()
+      .is_some_and(|backend| backend.trim() == "wayland"),
+    Err(_) => {
+      std::env::var_os("WAYLAND_DISPLAY").is_some()
+        || std::env::var("XDG_SESSION_TYPE").is_ok_and(|session| session == "wayland")
+    }
+  };
+  if !native_wayland {
+    return None;
+  }
+
+  let version = unsafe {
+    (
+      webkit2gtk_sys::webkit_get_major_version(),
+      webkit2gtk_sys::webkit_get_minor_version(),
+      webkit2gtk_sys::webkit_get_micro_version(),
+    )
+  };
+  // WebKit bug 324551 is fixed on the 2.54 branch in WebKitGTK 2.54.2.
+  if version.0 != 2 || version.1 != 54 || version.2 >= 2 {
+    return None;
+  }
+
+  std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+  Some(version)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   // Load environment variables from .env file if it exists
@@ -525,6 +563,9 @@ pub fn run() {
       }
     }
   }
+
+  #[cfg(target_os = "linux")]
+  let webkitgtk_dmabuf_workaround = apply_webkitgtk_wayland_dmabuf_workaround();
 
   // Initialize logging infrastructure first
   let log_config = logging::LoggingConfig {
@@ -543,6 +584,14 @@ pub fn run() {
   let _ = logging::init_logging(log_config);
 
   tracing::info!("Lokus starting...");
+
+  #[cfg(target_os = "linux")]
+  if let Some((major, minor, micro)) = webkitgtk_dmabuf_workaround {
+    tracing::warn!(
+      webkitgtk_version = %format!("{major}.{minor}.{micro}"),
+      "disabled the WebKitGTK DMA-BUF renderer to avoid the Wayland explicit-sync startup crash"
+    );
+  }
 
   // Initialize Sentry for crash reporting (desktop only)
   #[cfg(desktop)]
