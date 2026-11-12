@@ -1,0 +1,16 @@
+[package]
+name = "lokus-core"
+description = "Vault, notes and commands for Lokus. No UI, no Tauri, no networking."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+blake3 = "1"
+notify = "8"
+
+[dev-dependencies]
+tempfile = "3"

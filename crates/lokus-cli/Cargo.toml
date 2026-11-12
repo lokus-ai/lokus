@@ -1,0 +1,14 @@
+[package]
+name = "lokus-cli"
+description = "Run any Lokus command from a terminal, against a vault or the running app."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "lokus"
+path = "src/main.rs"
+
+[dependencies]
+lokus-core = { path = "../lokus-core" }
+serde_json.workspace = true
