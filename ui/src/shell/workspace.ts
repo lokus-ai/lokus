@@ -32,6 +32,9 @@ export interface AppState {
   conflict: string | null;
   palette: "commands" | "notes" | null;
   sidebar: boolean;
+  sidebarWidth: number;
+  /** The window is too narrow to keep the sidebar beside the note. */
+  narrow: boolean;
   account: Account | null;
   accountDialog: boolean;
   notice: string | null;
@@ -48,6 +51,8 @@ export const app = createStore<AppState>({
   conflict: null,
   palette: null,
   sidebar: true,
+  sidebarWidth: Number(localStorage.getItem("lokus.sidebarWidth")) || 248,
+  narrow: false,
   account: null,
   accountDialog: false,
   notice: null,
@@ -145,7 +150,26 @@ export async function saveAll(): Promise<void> {
   await Promise.all([...sessions.keys()].map((p) => save(p)));
 }
 
+export const SIDEBAR_MIN = 200;
+export const SIDEBAR_MAX = 420;
+const NARROW = "(max-width: 760px)";
+
+export function setSidebarWidth(width: number): void {
+  const clamped = Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width)));
+  localStorage.setItem("lokus.sidebarWidth", String(clamped));
+  app.set({ sidebarWidth: clamped });
+}
+
+/** On a narrow window the sidebar closes and opens as an overlay instead. */
+function watchWidth(): void {
+  const query = window.matchMedia(NARROW);
+  const apply = () => app.set({ narrow: query.matches, sidebar: !query.matches });
+  query.addEventListener("change", apply);
+  apply();
+}
+
 export async function boot(): Promise<void> {
+  watchWidth();
   onVaultChanged((paths) => void onDiskChange(paths));
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);

@@ -18,6 +18,7 @@ startAnalytics();
 registerAllCommands();
 installShortcuts();
 serveDevCommands(runCommand);
+if (import.meta.env.DEV) void import("./shell/devCommands").then((m) => m.registerDevCommands());
 window.addEventListener("blur", () => void saveAll());
 
 createRoot(document.getElementById("root")!).render(<App />);

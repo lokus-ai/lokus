@@ -75,10 +75,35 @@ fn dispatch(app: &AppHandle, name: &str, args: Value) -> Result<Value, Value> {
         let path = args["path"].as_str().unwrap_or_default();
         return open_vault(app, path);
     }
+    if name == "window.resize" || name == "window.size" {
+        return window_size(app, name == "window.resize", &args);
+    }
     if COMMANDS.iter().any(|c| c.name == name) {
         return run_core(&app.state::<Shell>(), name, args);
     }
     ask_ui(app, name, args)
+}
+
+/// Resize the real window (logical pixels) or just report its size.
+fn window_size(app: &AppHandle, resize: bool, args: &Value) -> Result<Value, Value> {
+    let fail = |m: String| json!({ "code": "window", "message": m });
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| fail("no main window".into()))?;
+    if resize {
+        let width = args["width"].as_f64().unwrap_or(1280.0);
+        let height = args["height"].as_f64().unwrap_or(820.0);
+        window
+            .set_size(tauri::LogicalSize::new(width, height))
+            .map_err(|e| fail(e.to_string()))?;
+        std::thread::sleep(Duration::from_millis(350));
+    }
+    let scale = window.scale_factor().map_err(|e| fail(e.to_string()))?;
+    let size = window
+        .inner_size()
+        .map_err(|e| fail(e.to_string()))?
+        .to_logical::<f64>(scale);
+    Ok(json!({ "width": size.width, "height": size.height, "scale": scale }))
 }
 
 fn ask_ui(app: &AppHandle, name: &str, args: Value) -> Result<Value, Value> {
