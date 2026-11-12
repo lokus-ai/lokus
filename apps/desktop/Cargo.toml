@@ -1,0 +1,16 @@
+[package]
+name = "lokus-desktop"
+description = "Lokus desktop shell: a window around lokus-core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+lokus-core = { path = "../../crates/lokus-core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"

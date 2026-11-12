@@ -1,0 +1,27 @@
+/* What live preview looks like. Colours and sizes come from tokens.css. */
+.cm-editor .cm-heading { font-weight: 650; letter-spacing: -0.01em; }
+.cm-editor .cm-h1 { font-size: var(--text-h1); line-height: 1.3; padding-top: 18px; letter-spacing: -0.02em; }
+.cm-editor .cm-h2 { font-size: var(--text-h2); line-height: 1.35; padding-top: 14px; }
+.cm-editor .cm-h3 { font-size: var(--text-h3); line-height: 1.4; padding-top: 10px; }
+.cm-editor .cm-h4, .cm-editor .cm-h5, .cm-editor .cm-h6 { padding-top: 6px; }
+.cm-editor .cm-quote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--fg-2); }
+.cm-editor .cm-inline-code {
+  font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg);
+  border-radius: var(--radius-xs); padding: 0.12em 0.3em;
+}
+.cm-editor .cm-code-line { font-family: var(--font-mono); font-size: 0.88em; background: var(--code-bg); padding: 0 14px; }
+.cm-editor .cm-code-first { border-radius: var(--radius-md) var(--radius-md) 0 0; padding-top: 6px; color: var(--fg-3); }
+.cm-editor .cm-code-last { border-radius: 0 0 var(--radius-md) var(--radius-md); padding-bottom: 6px; color: var(--fg-3); }
+.cm-editor .cm-link, .cm-editor .cm-wikilink { color: var(--accent); text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 3px; }
+.cm-editor .cm-wikilink { cursor: pointer; }
+.cm-editor .cm-highlight { background: var(--highlight); border-radius: 2px; }
+.cm-editor .cm-list-mark, .cm-editor .cm-bullet { color: var(--fg-3); }
+.cm-editor .cm-task-box { margin: 0 6px 0 0; width: 15px; height: 15px; vertical-align: -2px; accent-color: var(--accent); cursor: pointer; }
+.cm-editor .cm-task-done { color: var(--fg-3); text-decoration: line-through; }
+.cm-editor .cm-rule { display: inline-block; width: 100%; height: 1px; background: var(--border); vertical-align: middle; }
+.cm-editor .cm-frontmatter { font-family: var(--font-mono); font-size: 0.82em; color: var(--fg-2); }
+.cm-editor .cm-properties {
+  display: inline-block; margin-bottom: 10px; padding: 2px 8px; border-radius: var(--radius-sm);
+  font-size: var(--text-caption); color: var(--fg-3); cursor: pointer;
+}
+.cm-editor .cm-properties:hover { background: var(--bg-hover); color: var(--fg-2); }

@@ -1,0 +1,114 @@
+/** @part-of ui.editor */
+import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
+import { yamlFrontmatter } from "@codemirror/lang-yaml";
+import { indentUnit } from "@codemirror/language";
+import { EditorState, Prec, type TransactionSpec } from "@codemirror/state";
+import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
+
+import { livePreview } from "./livePreview";
+import { insertLink, readFrontmatter, setFrontmatterKey, setHeading, toggleMark } from "./markdownCommands";
+import { markdownPairs, typeText } from "./pairs";
+import { editorTheme } from "./theme";
+
+export interface EditorHooks {
+  onChange(text: string): void;
+  onOpenLink(target: string): void;
+}
+
+/** One editing surface. Each open note keeps its own state (and undo history). */
+export class Editor {
+  readonly view: EditorView;
+  private hooks: EditorHooks;
+
+  constructor(parent: HTMLElement, hooks: EditorHooks) {
+    this.hooks = hooks;
+    this.view = new EditorView({ parent, state: this.createState("") });
+  }
+
+  createState(text: string): EditorState {
+    const apply = (spec: (state: EditorState) => TransactionSpec) => (view: EditorView) => {
+      view.dispatch(spec(view.state));
+      return true;
+    };
+    return EditorState.create({
+      doc: text,
+      extensions: [
+        history(),
+        drawSelection(),
+        EditorView.lineWrapping,
+        indentUnit.of("    "),
+        EditorState.tabSize.of(4),
+        markdownPairs,
+        closeBrackets(),
+        yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
+        livePreview((target) => this.hooks.onOpenLink(target)),
+        editorTheme,
+        placeholder("Write something, or press / for commands…"),
+        Prec.high(
+          keymap.of([
+            { key: "Mod-b", run: apply((s) => toggleMark(s, "**")) },
+            { key: "Mod-i", run: apply((s) => toggleMark(s, "*")) },
+            { key: "Mod-e", run: apply((s) => toggleMark(s, "`")) },
+            { key: "Mod-Shift-x", run: apply((s) => toggleMark(s, "~~")) },
+            { key: "Mod-Shift-h", run: apply((s) => toggleMark(s, "==")) },
+            { key: "Mod-k", run: apply(insertLink) },
+          ]),
+        ),
+        keymap.of([...markdownKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        EditorView.updateListener.of((u) => {
+          if (u.docChanged) this.hooks.onChange(u.state.doc.toString());
+        }),
+      ],
+    });
+  }
+
+  get text(): string {
+    return this.view.state.doc.toString();
+  }
+
+  /** Swap in another note's state; returns the state being replaced. */
+  swap(next: EditorState): EditorState {
+    const previous = this.view.state;
+    this.view.setState(next);
+    return previous;
+  }
+
+  /** Replace the text after an outside change, keeping the cursor near where it was. */
+  replaceText(text: string): void {
+    const head = Math.min(this.view.state.selection.main.head, text.length);
+    this.view.dispatch({
+      changes: { from: 0, to: this.view.state.doc.length, insert: text },
+      selection: { anchor: head },
+    });
+  }
+
+  mark(mark: string): void {
+    this.view.dispatch(toggleMark(this.view.state, mark));
+  }
+  heading(level: number): void {
+    this.view.dispatch(setHeading(this.view.state, level));
+  }
+  link(): void {
+    this.view.dispatch(insertLink(this.view.state));
+  }
+  setProperty(key: string, value: string | null): void {
+    this.view.dispatch(setFrontmatterKey(this.view.state, key, value));
+  }
+  properties(): Record<string, string> {
+    return readFrontmatter(this.view.state.sliceDoc(0, 20_000)).values;
+  }
+  type(text: string): void {
+    typeText(this.view, text);
+  }
+  select(anchor: number, head = anchor): void {
+    const max = this.view.state.doc.length;
+    this.view.dispatch({ selection: { anchor: Math.min(anchor, max), head: Math.min(head, max) } });
+  }
+
+  /** What is actually on screen, line by line, with hidden syntax left out. */
+  rendered(): string[] {
+    return [...this.view.contentDOM.querySelectorAll<HTMLElement>(".cm-line")].map((l) => l.innerText);
+  }
+}

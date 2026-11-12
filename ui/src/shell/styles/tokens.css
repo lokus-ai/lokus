@@ -1,0 +1,72 @@
+/* Design tokens. Every colour, size and duration in the app comes from here. */
+:root {
+  --font-ui: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-editor: var(--font-ui);
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --text-caption: 12px;
+  --text-small: 13px;
+  --text-ui: 14px;
+  --text-body: 16px;
+  --text-h3: 20px;
+  --text-h2: 24px;
+  --text-h1: 30px;
+  --text-title: 40px;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  --sidebar-width: 248px;
+  --column-width: 720px;
+  --row-height: 28px;
+  --bar-height: 40px;
+
+  --fast: 80ms;
+  --menu: 140ms;
+  --dialog: 220ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+
+  --bg: #ffffff;
+  --bg-sidebar: #fafaf9;
+  --bg-hover: #f1f1ee;
+  --bg-active: #e9e9e5;
+  --border: rgba(43, 42, 39, 0.09);
+  --fg: #2b2a27;
+  --fg-2: #6f6e69;
+  --fg-3: #a3a29d;
+  --accent: #2f6fed;
+  --accent-fg: #ffffff;
+  --selection: rgba(47, 111, 237, 0.2);
+  --highlight: rgba(255, 212, 0, 0.38);
+  --code-bg: #f5f5f2;
+  --syntax-keyword: #a626a4;
+  --syntax-string: #2e7d32;
+  --syntax-number: #b5651d;
+  --shadow-pop: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0, 0, 0, 0.08), 0 12px 28px rgba(0, 0, 0, 0.14);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171717;
+    --bg-sidebar: #1c1c1c;
+    --bg-hover: #252525;
+    --bg-active: #2d2d2d;
+    --border: rgba(255, 255, 255, 0.09);
+    --fg: #e6e6e3;
+    --fg-2: #a0a09c;
+    --fg-3: #6e6e6a;
+    --accent: #6b9bff;
+    --accent-fg: #10131a;
+    --selection: rgba(107, 155, 255, 0.28);
+    --highlight: rgba(255, 212, 0, 0.26);
+    --code-bg: #212121;
+    --syntax-keyword: #c792ea;
+    --syntax-string: #a5d6a7;
+    --syntax-number: #f0b27a;
+    --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
