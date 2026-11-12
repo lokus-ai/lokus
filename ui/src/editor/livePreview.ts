@@ -66,11 +66,33 @@ class Rule extends WidgetType {
 }
 const rule = Decoration.replace({ widget: new Rule() });
 
+class Picture extends WidgetType {
+  constructor(
+    readonly url: string,
+    readonly alt: string,
+  ) {
+    super();
+  }
+  eq(other: Picture) {
+    return other.url === this.url && other.alt === this.alt;
+  }
+  toDOM() {
+    const img = document.createElement("img");
+    img.className = "cm-image";
+    img.src = this.url;
+    img.alt = this.alt;
+    img.draggable = false;
+    return img;
+  }
+}
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
+
 const INLINE_PARENTS = new Set(["StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode", "Link", "Image"]);
 const WIKI = /(!?)\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]/g;
 const HIGHLIGHT = /==(?=\S)([^=\n]+?)==/g;
 
-function build(view: EditorView): DecorationSet {
+function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
   const { state } = view;
   const out: Range<Decoration>[] = [];
   const tree = syntaxTree(state);
@@ -155,6 +177,14 @@ function build(view: EditorView): DecorationSet {
           }
           return;
         }
+        if (name === "Image") {
+          const m = /^!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)$/.exec(state.sliceDoc(node.from, node.to));
+          const url = m ? hooks.resolveImage(m[2]) : null;
+          if (m && url && !touches(state, node.from, node.to)) {
+            out.push(Decoration.replace({ widget: new Picture(url, m[1]) }).range(node.from, node.to));
+          }
+          return false;
+        }
         if (name === "Link") {
           out.push(Decoration.mark({ class: "cm-link" }).range(node.from, node.to));
           if (!touches(state, node.from, node.to)) {
@@ -184,6 +214,13 @@ function build(view: EditorView): DecorationSet {
       const end = start + m[0].length;
       if (inCode(start)) continue;
       const target = m[2].trim();
+      if (m[1] && IMAGE_FILE.test(target)) {
+        const url = hooks.resolveImage(target);
+        if (url && !touches(state, start, end)) {
+          out.push(Decoration.replace({ widget: new Picture(url, m[3] ?? target) }).range(start, end));
+        }
+        continue;
+      }
       out.push(Decoration.mark({ class: "cm-wikilink", attributes: { "data-target": target } }).range(start, end));
       if (!touches(state, start, end)) {
         const open = m[1].length + 2;
@@ -206,20 +243,86 @@ function build(view: EditorView): DecorationSet {
   return Decoration.set(out, true);
 }
 
-const inline = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet;
-    constructor(view: EditorView) {
-      this.decorations = build(view);
-    }
-    update(u: ViewUpdate) {
-      if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state)) {
-        this.decorations = build(u.view);
+const inline = (hooks: PreviewHooks) =>
+  ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(view: EditorView) {
+        this.decorations = build(view, hooks);
       }
-    }
-  },
-  { decorations: (plugin) => plugin.decorations },
-);
+      update(u: ViewUpdate) {
+        if (u.docChanged || u.viewportChanged || u.selectionSet || syntaxTree(u.startState) !== syntaxTree(u.state)) {
+          this.decorations = build(u.view, hooks);
+        }
+      }
+    },
+    { decorations: (plugin) => plugin.decorations },
+  );
+
+/** Inline marks inside a table cell: bold, italic, code, strikethrough. */
+function cellContent(cell: HTMLElement, text: string): void {
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\*[^*]+\*)/);
+  for (const part of parts) {
+    const wrap = (tag: string, inner: string) => {
+      const el = document.createElement(tag);
+      el.textContent = inner;
+      cell.append(el);
+    };
+    if (/^`.+`$/.test(part)) wrap("code", part.slice(1, -1));
+    else if (/^\*\*.+\*\*$/.test(part)) wrap("strong", part.slice(2, -2));
+    else if (/^~~.+~~$/.test(part)) wrap("s", part.slice(2, -2));
+    else if (/^\*.+\*$/.test(part)) wrap("em", part.slice(1, -1));
+    else cell.append(part);
+  }
+}
+
+const cells = (row: string) =>
+  row
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim().replace(/\\\|/g, "|"));
+
+class Table extends WidgetType {
+  constructor(
+    readonly source: string,
+    readonly from: number,
+  ) {
+    super();
+  }
+  eq(other: Table) {
+    return other.source === this.source && other.from === this.from;
+  }
+  toDOM(view: EditorView) {
+    const lines = this.source.split("\n").filter((l) => l.trim());
+    const align = cells(lines[1] ?? "").map((c) =>
+      c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "",
+    );
+    const wrap = document.createElement("div");
+    wrap.className = "cm-table";
+    const table = wrap.appendChild(document.createElement("table"));
+    lines.forEach((line, i) => {
+      if (i === 1) return;
+      const tr = table.appendChild(document.createElement("tr"));
+      cells(line).forEach((text, col) => {
+        const cell = tr.appendChild(document.createElement(i === 0 ? "th" : "td"));
+        if (align[col]) cell.style.textAlign = align[col];
+        cellContent(cell, text);
+      });
+    });
+    // Clicking the table puts the cursor in its markdown, which reveals it.
+    wrap.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      view.dispatch({ selection: { anchor: this.from + 2 } });
+      view.focus();
+    });
+    return wrap;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
 
 class Properties extends WidgetType {
   constructor(readonly count: number) {
@@ -246,27 +349,44 @@ class Properties extends WidgetType {
 }
 
 /** Frontmatter collapses to one quiet line until the cursor goes into it. */
-const frontmatter = StateField.define<DecorationSet>({
-  create: (state) => foldFrontmatter(state),
+/** Multi-line replacements have to come from a state field, not a view plugin. */
+const blocks = StateField.define<DecorationSet>({
+  create: (state) => buildBlocks(state),
   update(value, tr) {
-    return tr.docChanged || tr.selection ? foldFrontmatter(tr.state) : value;
+    const reparsed = syntaxTree(tr.startState) !== syntaxTree(tr.state);
+    return tr.docChanged || tr.selection || reparsed ? buildBlocks(tr.state) : value;
   },
   provide: (field) => EditorView.decorations.from(field),
 });
 
-function foldFrontmatter(state: EditorState): DecorationSet {
+function buildBlocks(state: EditorState): DecorationSet {
+  const out: Range<Decoration>[] = [...foldFrontmatter(state)];
+  syntaxTree(state).iterate({
+    enter(node) {
+      if (node.name !== "Table") return;
+      if (!touches(state, node.from, node.to)) {
+        const widget = new Table(state.sliceDoc(node.from, node.to), node.from);
+        out.push(Decoration.replace({ widget, block: true }).range(node.from, node.to));
+      }
+      return false;
+    },
+  });
+  return Decoration.set(out, true);
+}
+
+function foldFrontmatter(state: EditorState): Range<Decoration>[] {
   const fm = readFrontmatter(state.sliceDoc(0, 20_000));
-  if (fm.end === 0) return Decoration.none;
+  if (fm.end === 0) return [];
   const to = state.sliceDoc(fm.end - 1, fm.end) === "\n" ? fm.end - 1 : fm.end;
   if (touches(state, 0, to)) {
     const lines: Range<Decoration>[] = [];
     for (let n = 1; n <= state.doc.lineAt(to).number; n++) {
       lines.push(Decoration.line({ class: "cm-frontmatter" }).range(state.doc.line(n).from));
     }
-    return Decoration.set(lines);
+    return lines;
   }
   const widget = new Properties(Object.keys(fm.values).length);
-  return Decoration.set([Decoration.replace({ widget, block: true }).range(0, to)]);
+  return [Decoration.replace({ widget, block: true }).range(0, to)];
 }
 
 /** Cmd/Ctrl-click a wiki link to open it. */
@@ -284,6 +404,11 @@ function linkClicks(open: (target: string) => void) {
   });
 }
 
-export function livePreview(openLink: (target: string) => void) {
-  return [frontmatter, inline, linkClicks(openLink)];
+export interface PreviewHooks {
+  openLink(target: string): void;
+  resolveImage(src: string): string | null;
+}
+
+export function livePreview(hooks: PreviewHooks) {
+  return [blocks, inline(hooks), linkClicks(hooks.openLink)];
 }

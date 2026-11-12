@@ -10,11 +10,14 @@ import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view
 import { livePreview } from "./livePreview";
 import { insertLink, readFrontmatter, setFrontmatterKey, setHeading, toggleMark } from "./markdownCommands";
 import { markdownPairs, typeText } from "./pairs";
+import { slashMenu } from "./slash";
 import { editorTheme } from "./theme";
 
 export interface EditorHooks {
   onChange(text: string): void;
   onOpenLink(target: string): void;
+  /** Turn an image path from a note into something the window can load. */
+  resolveImage(src: string): string | null;
 }
 
 /** One editing surface. Each open note keeps its own state (and undo history). */
@@ -42,8 +45,12 @@ export class Editor {
         EditorState.tabSize.of(4),
         markdownPairs,
         closeBrackets(),
+        slashMenu,
         yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
-        livePreview((target) => this.hooks.onOpenLink(target)),
+        livePreview({
+          openLink: (target) => this.hooks.onOpenLink(target),
+          resolveImage: (src) => this.hooks.resolveImage(src),
+        }),
         editorTheme,
         placeholder("Write something, or press / for commands…"),
         Prec.high(

@@ -12,8 +12,8 @@ function find(args: Record<string, unknown>): HTMLElement {
   } else if (typeof args.text === "string") {
     const want = args.text;
     el =
-      [...document.querySelectorAll("button, a, [role=button], .tab, .tree-row, .palette-row")].find(
-        (e) => (e as HTMLElement).innerText.trim() === want,
+      [...document.querySelectorAll("button, a, [role=button], .tab, .tree-row, .palette-row, .cm-tooltip-autocomplete li")].find(
+        (e) => (e as HTMLElement).innerText.split("\n").some((line) => line.trim() === want),
       ) ?? null;
   }
   if (!(el instanceof HTMLElement)) {
@@ -49,6 +49,44 @@ const commands: Command[] = [
       const { x, y } = centre(el);
       for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) fire(el, type, x, y);
       return rect(el);
+    },
+  },
+  {
+    id: "ui.rightClick",
+    title: "Right-click an element",
+    hidden: true,
+    run(args) {
+      const el = find(args);
+      const { x, y } = centre(el);
+      el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }));
+      return rect(el);
+    },
+  },
+  {
+    id: "ui.key",
+    title: "Press a key in whatever has focus",
+    hidden: true,
+    run(args) {
+      const key = String(args.key ?? "");
+      const focused = document.activeElement;
+      const target = focused && focused !== document.body ? focused : (document.querySelector(".cm-content") ?? document.body);
+      const init = { key, bubbles: true, cancelable: true, metaKey: Boolean(args.meta), shiftKey: Boolean(args.shift) };
+      target.dispatchEvent(new KeyboardEvent("keydown", init));
+      target.dispatchEvent(new KeyboardEvent("keyup", init));
+      return { key, target: target.tagName.toLowerCase() };
+    },
+  },
+  {
+    id: "ui.fill",
+    title: "Type into the focused text box",
+    hidden: true,
+    run(args) {
+      const el = document.activeElement;
+      if (!(el instanceof HTMLInputElement)) throw Object.assign(new Error("no text box has focus"), { code: "not_found" });
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(el, String(args.text ?? ""));
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+      return { value: el.value };
     },
   },
   {

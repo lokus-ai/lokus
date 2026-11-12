@@ -9,7 +9,7 @@ import {
   chooseVault,
   closeTab,
   createNote,
-  deleteNote,
+  deleteEntry,
   getEditor,
   notify,
   openNote,
@@ -80,7 +80,7 @@ export function registerAllCommands(): void {
       title: "Move note to trash",
       run: () => {
         const { active } = app.get();
-        return active ? deleteNote(active) : undefined;
+        return active ? deleteEntry(active) : undefined;
       },
     },
     mark("editor.toggleBold", "Bold", "Mod-b", "**"),

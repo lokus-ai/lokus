@@ -175,3 +175,18 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 30; padding: 8px 14px;
   border-radius: var(--radius-md); background: var(--fg); color: var(--bg); font-size: var(--text-small); animation: fade var(--menu);
 }
+
+/* File tree extras */
+.tree { min-height: 100%; }
+.tree-input {
+  display: block; width: calc(100% - 30px); height: var(--row-height); padding: 0 6px; border-radius: var(--radius-sm);
+  border: 1px solid var(--accent); outline: 0; background: var(--bg); font-size: var(--text-small); box-shadow: 0 0 0 3px var(--selection);
+}
+.menu {
+  position: fixed; z-index: 40; min-width: 180px; padding: 5px; display: flex; flex-direction: column;
+  background: var(--bg); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); animation: rise var(--menu) var(--ease-out);
+}
+.menu button { height: var(--row-height); padding: 0 10px; border-radius: var(--radius-sm); text-align: left; font-size: var(--text-small); }
+.menu button:hover { background: var(--bg-hover); }
+.menu .danger { color: #d1453b; }
+.menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }

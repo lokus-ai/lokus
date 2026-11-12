@@ -25,3 +25,23 @@
   font-size: var(--text-caption); color: var(--fg-3); cursor: pointer;
 }
 .cm-editor .cm-properties:hover { background: var(--bg-hover); color: var(--fg-2); }
+.cm-editor .cm-image { display: block; max-width: 100%; max-height: 520px; border-radius: var(--radius-md); margin: 6px 0; }
+.cm-editor .cm-table { padding: 6px 0; overflow-x: auto; cursor: text; }
+.cm-editor .cm-table table { border-collapse: collapse; font-size: 0.94em; }
+.cm-editor .cm-table th, .cm-editor .cm-table td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; vertical-align: top; min-width: 80px; }
+.cm-editor .cm-table th { background: var(--bg-sidebar); font-weight: 600; }
+.cm-editor .cm-table code { font-family: var(--font-mono); font-size: 0.9em; background: var(--code-bg); border-radius: var(--radius-xs); padding: 0.1em 0.3em; }
+
+/* Slash menu */
+.cm-editor .cm-tooltip.cm-tooltip-autocomplete {
+  border: 0; border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--shadow-pop);
+  padding: 6px; font-family: var(--font-ui); animation: rise var(--menu) var(--ease-out);
+}
+.cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul { max-height: 300px; min-width: 260px; font-family: var(--font-ui); }
+.cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  display: flex; justify-content: space-between; align-items: center; gap: 24px; height: 30px; padding: 0 10px;
+  border-radius: var(--radius-sm); font-size: var(--text-ui); color: var(--fg);
+}
+.cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--bg-hover); color: var(--fg); }
+.cm-editor .cm-tooltip-autocomplete .cm-completionDetail { font-family: var(--font-mono); font-size: var(--text-caption); font-style: normal; color: var(--fg-3); margin: 0; }
+.cm-editor .cm-tooltip-autocomplete .cm-completionMatchedText { text-decoration: none; font-weight: 600; }

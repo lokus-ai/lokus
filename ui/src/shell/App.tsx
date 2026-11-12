@@ -14,10 +14,13 @@ import {
   attachEditor,
   chooseVault,
   closeTab,
+  createFolder,
+  createNoteIn,
+  deleteEntry,
   getEditor,
   openNote,
   reloadFromDisk,
-  renameNote,
+  renameEntry,
   save,
   setSidebarWidth,
 } from "./workspace";
@@ -68,7 +71,15 @@ function Sidebar() {
         </button>
       </div>
       <div className="sidebar-scroll">
-        <FileTree entries={tree} active={active} onOpen={pick} />
+        <FileTree
+          entries={tree}
+          active={active}
+          onOpen={pick}
+          onNewNote={(folder) => void createNoteIn(folder)}
+          onNewFolder={(path) => void createFolder(path)}
+          onRename={(from, to) => void renameEntry(from, to)}
+          onDelete={(path) => void deleteEntry(path)}
+        />
       </div>
       {accountsAvailable && (
         <button
@@ -144,7 +155,7 @@ function Page() {
           properties={properties}
           onRename={(name) => {
             const folder = active.includes("/") ? `${active.slice(0, active.lastIndexOf("/"))}/` : "";
-            void renameNote(active, `${folder}${name}.md`);
+            void renameEntry(active, `${folder}${name}.md`);
           }}
           onProperty={(key, value) => getEditor()?.setProperty(key, value)}
           onEnter={() => getEditor()?.view.focus()}

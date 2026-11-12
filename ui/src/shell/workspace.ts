@@ -4,15 +4,18 @@ import type { EditorState } from "@codemirror/state";
 import { identify, track } from "../bridge/analytics";
 import { type Account, currentAccount } from "../bridge/auth";
 import {
+  closeWindow,
   CoreError,
   currentVault,
   type Entry,
   type Eol,
   type Note,
+  onCloseTab,
   onVaultChanged,
   openVault,
   pickFolder,
   runCore,
+  vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
 import { Editor } from "../editor/editor";
@@ -77,6 +80,36 @@ export function getEditor(): Editor | null {
 
 const toEditor = (text: string) => text.replace(/\r\n?/g, "\n");
 
+function allFiles(entries: Entry[] = app.get().tree, out: string[] = []): string[] {
+  for (const e of entries) {
+    if (e.kind === "folder") allFiles(e.children ?? [], out);
+    else out.push(e.path);
+  }
+  return out;
+}
+
+/** Web images load as they are; vault images are looked up beside the note, then anywhere. */
+function resolveImage(src: string): string | null {
+  if (/^(https?:|data:)/i.test(src)) return src;
+  const { vault, active } = app.get();
+  if (!vault || /^[a-z]+:/i.test(src)) return null;
+  let wanted = src;
+  try {
+    wanted = decodeURI(src);
+  } catch {
+    // keep the raw text
+  }
+  wanted = wanted.replace(/^\.\//, "");
+  const folder = active?.includes("/") ? active.slice(0, active.lastIndexOf("/") + 1) : "";
+  const files = allFiles();
+  const lower = wanted.toLowerCase();
+  const found =
+    files.find((f) => f === folder + wanted) ??
+    files.find((f) => f === wanted) ??
+    files.find((f) => f.toLowerCase().endsWith(`/${lower}`) || f.toLowerCase() === lower);
+  return found ? vaultFileUrl(vault.root, found) : null;
+}
+
 export function notify(message: string): void {
   app.set({ notice: message });
   window.setTimeout(() => app.get().notice === message && app.set({ notice: null }), 4000);
@@ -98,6 +131,7 @@ export function attachEditor(parent: HTMLElement): void {
       if (text !== session.saved) scheduleSave(path);
     },
     onOpenLink: (target) => void openLink(target),
+    resolveImage,
   });
 }
 
@@ -171,6 +205,11 @@ function watchWidth(): void {
 export async function boot(): Promise<void> {
   watchWidth();
   onVaultChanged((paths) => void onDiskChange(paths));
+  onCloseTab(() => {
+    const { active } = app.get();
+    if (active) void closeTab(active);
+    else closeWindow();
+  });
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);
   app.set({ vault, account, ready: true });
@@ -271,19 +310,24 @@ export async function createNote(name?: string): Promise<void> {
   }
 }
 
-export async function renameNote(from: string, to: string): Promise<void> {
+const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
+
+/** Rename or move a note or a folder; open tabs follow it. */
+export async function renameEntry(from: string, to: string): Promise<void> {
   if (from === to) return;
   try {
-    await save(from);
+    await saveAll();
     await runCore("note.rename", { from, to });
-    const session = sessions.get(from);
-    if (session) {
-      sessions.delete(from);
-      sessions.set(to, session);
+    const moved = (p: string) => (under(p, from) ? to + p.slice(from.length) : p);
+    for (const [path, session] of [...sessions]) {
+      if (!under(path, from)) continue;
+      sessions.delete(path);
+      sessions.set(moved(path), session);
     }
     app.set((s) => ({
-      tabs: s.tabs.map((t) => (t === from ? to : t)),
-      active: s.active === from ? to : s.active,
+      tabs: s.tabs.map(moved),
+      active: s.active ? moved(s.active) : null,
+      dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
     }));
     await refreshTree();
   } catch (e) {
@@ -291,17 +335,42 @@ export async function renameNote(from: string, to: string): Promise<void> {
   }
 }
 
-export async function deleteNote(path: string): Promise<void> {
+/** Move a note or a folder to the vault trash; its tabs close. */
+export async function deleteEntry(path: string): Promise<void> {
   try {
-    window.clearTimeout(saveTimers.get(path));
-    sessions.delete(path);
+    for (const open of [...sessions.keys()].filter((p) => under(p, path))) {
+      window.clearTimeout(saveTimers.get(open));
+      sessions.delete(open);
+    }
     const { tabs, active } = app.get();
-    const rest = tabs.filter((t) => t !== path);
+    const rest = tabs.filter((t) => !under(t, path));
+    const lostActive = Boolean(active && under(active, path));
     await runCore("note.delete", { path });
-    app.set({ tabs: rest, ...(active === path ? { active: null, properties: {} } : {}) });
-    if (active === path && rest.length) show(rest[rest.length - 1]);
+    app.set({ tabs: rest, ...(lostActive ? { active: null, properties: {} } : {}) });
+    if (lostActive && rest.length) show(rest[rest.length - 1]);
     await refreshTree();
     notify("Moved to the vault trash");
+  } catch (e) {
+    report(e);
+  }
+}
+
+export async function createFolder(path: string): Promise<void> {
+  try {
+    await runCore("folder.create", { path });
+    await refreshTree();
+  } catch (e) {
+    report(e);
+  }
+}
+
+export async function createNoteIn(folder: string): Promise<void> {
+  const path = uniquePath(folder, "Untitled");
+  try {
+    await runCore("note.create", { path, text: "" });
+    track("note_created");
+    await refreshTree();
+    await openNote(path);
   } catch (e) {
     report(e);
   }

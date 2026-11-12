@@ -187,7 +187,7 @@ is needed.
 
 | # | Slice | Done when | Status |
 |---|---|---|---|
-| M0 | Skeleton, rules, checks, CI | The empty app builds and the checks pass | built (CI not yet run on GitHub) |
+| M0 | Skeleton, rules, checks, CI | The empty app builds and the checks pass | built |
 | M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | building |
 | M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | planned |
 | M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | planned |

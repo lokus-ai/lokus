@@ -6,6 +6,8 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | CI runs only for pull requests and manual runs, on a Linux runner. Work is verified locally and pushed once per batch of related changes | CI minutes are limited; a macOS runner on every push burned them at 10x | Pratham | CI on every push to `next` on macOS |
+| 2026-11-12 | The in-app picture of the real window (`ui.snapshot`) was dropped; layout is checked by measuring the real window, looks by headless screenshots | The Mac webview refuses the DOM-to-image technique | Claude (default) | - |
 | 2026-11-12 | Testing is command-driven: every feature is a named command that the `lokus` CLI or the in-app dev channel can run on real files. A few scripted flows, not piles of generated tests | Generated test suites pass while the feature still fails in production | Pratham | v1's Vitest, Playwright and QA-harness suites |
 | 2026-11-12 | Decisions are tracked in this file; the design is one living doc (`docs/design.md`) | Know what was done, why, and who called it, without a chain of PRDs and amendments | Pratham (the log); Claude (the single-doc shape) | v1's scattered PRDs and reports |
 | 2026-11-12 | Strip, then replace: swapping an approach removes every trace of the old one first. Half-built work is continued or deleted | Two systems half-layered on each other is how v1 got cluttered | Pratham | — |

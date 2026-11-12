@@ -54,6 +54,10 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
     })
     .map_err(|e| error_value(&e))?;
     let info = json!({ "name": vault.name(), "root": vault.root() });
+    // Images in notes load through the asset protocol, limited to this vault.
+    let _ = app
+        .asset_protocol_scope()
+        .allow_directory(vault.root(), true);
 
     if let Some(file) = last_vault_file(app) {
         if let Some(dir) = file.parent() {
@@ -99,10 +103,56 @@ fn vault_current(app: AppHandle, shell: State<'_, Shell>) -> Option<Value> {
     open_vault(&app, last.trim()).ok()
 }
 
+/// The app menu. Cmd+W closes a tab, not the window, so it is our own item.
+fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
+    let close_tab = MenuItemBuilder::with_id("close-tab", "Close Tab")
+        .accelerator("CmdOrCtrl+W")
+        .build(app)?;
+    let app_menu = SubmenuBuilder::new(app, "Lokus")
+        .about(None)
+        .separator()
+        .services()
+        .separator()
+        .hide()
+        .hide_others()
+        .show_all()
+        .separator()
+        .quit()
+        .build()?;
+    let file = SubmenuBuilder::new(app, "File")
+        .item(&close_tab)
+        .close_window()
+        .build()?;
+    let edit = SubmenuBuilder::new(app, "Edit")
+        .undo()
+        .redo()
+        .separator()
+        .cut()
+        .copy()
+        .paste()
+        .select_all()
+        .build()?;
+    let window = SubmenuBuilder::new(app, "Window")
+        .minimize()
+        .maximize()
+        .fullscreen()
+        .build()?;
+    MenuBuilder::new(app)
+        .items(&[&app_menu, &file, &edit, &window])
+        .build()
+}
+
 fn main() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(Shell::default());
+        .manage(Shell::default())
+        .menu(menu)
+        .on_menu_event(|app, event| {
+            if event.id().as_ref() == "close-tab" {
+                let _ = app.emit("menu:close-tab", ());
+            }
+        });
 
     #[cfg(all(debug_assertions, unix))]
     let builder = builder

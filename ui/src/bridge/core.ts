@@ -1,6 +1,7 @@
 /** @part-of ui.bridge */
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
 
 /** An error from the Rust core. Switch on `code`, show `message`. */
@@ -75,4 +76,19 @@ export interface Note {
   text: string;
   eol: Eol;
   hash: string;
+}
+
+/** A URL the window can load for a file inside the open vault. */
+export function vaultFileUrl(root: string, relative: string): string {
+  return convertFileSrc(`${root}/${relative}`);
+}
+
+/** Cmd+W from the app menu. */
+export function onCloseTab(handler: () => void): () => void {
+  const stop = listen("menu:close-tab", handler);
+  return () => void stop.then((off) => off());
+}
+
+export function closeWindow(): void {
+  void getCurrentWindow().close();
 }

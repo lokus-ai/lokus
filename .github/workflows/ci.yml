@@ -1,10 +1,11 @@
 name: CI
 
+# Minutes are limited: this runs for pull requests and on demand, not on
+# every push. Run the same steps locally first (see CONTRIBUTING.md).
 on:
-  push:
-    branches: [next, main]
   pull_request:
     branches: [next, main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -12,9 +13,13 @@ concurrency:
 
 jobs:
   check:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Tauri system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
