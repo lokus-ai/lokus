@@ -81,6 +81,13 @@ fn dispatch(app: &AppHandle, name: &str, args: Value) -> Result<Value, Value> {
     if name == "window.resize" || name == "window.size" {
         return window_size(app, name == "window.resize", &args);
     }
+    #[cfg(target_os = "macos")]
+    if name == "window.snapshot" {
+        return snapshot(
+            app,
+            args["path"].as_str().unwrap_or("/tmp/lokus-window.png"),
+        );
+    }
     if COMMANDS.iter().any(|c| c.name == name) {
         return run_core(&app.state::<Shell>(), name, args);
     }
@@ -140,5 +147,50 @@ pub fn dev_reply(pending: State<'_, Pending>, id: u64, reply: Value) {
         if let Some(tx) = waiting.remove(&id) {
             let _ = tx.send(reply);
         }
+    }
+}
+
+/// Save a picture of what the real web view is showing, as a PNG. The view
+/// renders itself, so this needs no screen-recording permission.
+#[cfg(target_os = "macos")]
+fn snapshot(app: &AppHandle, path: &str) -> Result<Value, Value> {
+    use objc2::runtime::AnyObject;
+    use objc2::{class, msg_send};
+    use objc2_foundation::NSString;
+
+    let fail = |m: &str| json!({ "code": "window", "message": m });
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| fail("no main window"))?;
+    let (tx, rx) = mpsc::channel::<bool>();
+    let target = path.to_string();
+    window
+        .with_webview(move |webview| unsafe {
+            let view: *mut AnyObject = webview.inner().cast();
+            let done =
+                block2::RcBlock::new(move |image: *mut AnyObject, _error: *mut AnyObject| {
+                    if image.is_null() {
+                        let _ = tx.send(false);
+                        return;
+                    }
+                    let tiff: *mut AnyObject = msg_send![image, TIFFRepresentation];
+                    let bitmap: *mut AnyObject =
+                        msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
+                    let none: *mut AnyObject = msg_send![class!(NSDictionary), dictionary];
+                    // 4 is the PNG file type.
+                    let png: *mut AnyObject =
+                        msg_send![bitmap, representationUsingType: 4usize, properties: none];
+                    let file = NSString::from_str(&target);
+                    let written: bool = msg_send![png, writeToFile: &*file, atomically: true];
+                    let _ = tx.send(written);
+                });
+            let config: *mut AnyObject = std::ptr::null_mut();
+            let _: () =
+                msg_send![view, takeSnapshotWithConfiguration: config, completionHandler: &*done];
+        })
+        .map_err(|e| fail(&e.to_string()))?;
+    match rx.recv_timeout(Duration::from_secs(8)) {
+        Ok(true) => Ok(json!({ "path": path })),
+        _ => Err(fail("the window could not be pictured")),
     }
 }

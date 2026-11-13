@@ -6,6 +6,7 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | Dev builds on macOS can save a picture of the real window (`lokus app window.snapshot path=...`): the web view renders itself, so no screen-recording permission is needed | Looks had only been checked in headless Chrome; the first real pictures exposed two bugs those missed | Claude (default) | "The in-app picture of the real window was dropped" |
 | 2026-11-12 | Sign in with ChatGPT is built as a third provider, using OpenAI's flow for open-source, locally run apps | The owner asked for it after bring-your-own-key; OpenAI's developer pages say open-source local apps may use it without approval. Built from those pages and checked against a stand-in only | Pratham (wants it); Claude (built now, from the published flow) | "Sign in with ChatGPT follows if its terms fit" |
 | 2026-11-12 | Analytics sends only the named events: click, performance and heatmap capture are switched off | PostHog was loading those extras from its remote settings | Claude (default) | - |
 | 2026-11-12 | Mobile (M4) is skipped for now | Owner's call when asked how to proceed without Xcode or the Android SDK on the build machine | Pratham | M4 in the first roadmap |

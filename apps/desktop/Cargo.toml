@@ -24,3 +24,9 @@ serde_json.workspace = true
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tokio.workspace = true
+
+# Dev builds use these to ask the web view for a picture of itself.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString"] }

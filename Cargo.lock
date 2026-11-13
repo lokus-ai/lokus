@@ -2760,9 +2760,12 @@ name = "lokus-desktop"
 version = "2.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
+ "block2",
  "lokus-ai",
  "lokus-core",
  "lokus-sync",
+ "objc2",
+ "objc2-foundation",
  "open",
  "percent-encoding",
  "serde",

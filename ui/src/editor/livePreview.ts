@@ -91,7 +91,7 @@ class Picture extends WidgetType {
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
 
 const INLINE_PARENTS = new Set(["StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode", "Link", "Image"]);
-const WIKI = /(!?)\[\[([^\]\n|]+)(?:\|([^\]\n]+))?\]\]/g;
+const WIKI = /(!?)\[\[([^[\]\n|]+)(?:\|([^\]\n]+))?\]\]/g;
 const HIGHLIGHT = /==(?=\S)([^=\n]+?)==/g;
 
 function build(view: EditorView, hooks: PreviewHooks): DecorationSet {

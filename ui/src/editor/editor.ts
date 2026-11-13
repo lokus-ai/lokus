@@ -56,8 +56,11 @@ export class Editor {
       view.dispatch(spec(view.state));
       return true;
     };
+    // The cursor starts in the body, so the properties block opens folded away.
+    const start = Math.min(readFrontmatter(text.slice(0, 20_000)).end, text.length);
     return EditorState.create({
       doc: text,
+      selection: { anchor: start },
       extensions: [
         editing,
         drawSelection(),
