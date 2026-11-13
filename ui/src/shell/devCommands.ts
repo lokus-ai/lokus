@@ -78,11 +78,12 @@ const commands: Command[] = [
   },
   {
     id: "ui.fill",
-    title: "Type into the focused text box",
+    title: "Type into a text box (the focused one, or `selector`)",
     hidden: true,
     run(args) {
-      const el = document.activeElement;
-      if (!(el instanceof HTMLInputElement)) throw Object.assign(new Error("no text box has focus"), { code: "not_found" });
+      const el = typeof args.selector === "string" ? document.querySelector(args.selector) : document.activeElement;
+      if (!(el instanceof HTMLInputElement)) throw Object.assign(new Error("no text box there"), { code: "not_found" });
+      el.focus();
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
       set.call(el, String(args.text ?? ""));
       el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -130,7 +131,7 @@ const commands: Command[] = [
       };
       for (const s of selectors.map((x) => x.trim()).filter(Boolean)) {
         const el = document.querySelector(s);
-        out[s] = el ? rect(el) : null;
+        out[s] = el ? { ...rect(el), text: (el as HTMLElement).innerText?.slice(0, 300) } : null;
       }
       return out;
     },

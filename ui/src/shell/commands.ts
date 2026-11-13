@@ -23,6 +23,10 @@ export function registerCommands(commands: Command[]): void {
   for (const c of commands) registry.set(c.id, c);
 }
 
+export function unregisterCommands(ids: string[]): void {
+  for (const id of ids) registry.delete(id);
+}
+
 export function listCommands(): Command[] {
   return [...registry.values()];
 }

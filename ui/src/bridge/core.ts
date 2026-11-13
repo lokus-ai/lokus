@@ -14,7 +14,7 @@ export class CoreError extends Error {
   }
 }
 
-function toCoreError(raw: unknown): CoreError {
+export function toCoreError(raw: unknown): CoreError {
   const e = raw as { code?: string; message?: string } | string;
   if (typeof e === "string") return new CoreError("unknown", e);
   return new CoreError(e?.code ?? "unknown", e?.message ?? "Something went wrong");
@@ -116,4 +116,34 @@ export interface Mention {
 export interface GraphData {
   nodes: { path: string; title: string; degree: number }[];
   edges: [number, number][];
+}
+
+export interface PluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  description: string;
+  permissions: string[];
+  activation: string[];
+  contributes: {
+    commands: { id: string; title: string; keys?: string }[];
+    views: { id: string; title: string; page: string }[];
+    settings: { key: string; title: string; type: "text" | "number" | "toggle" | "select"; default: unknown; options?: string[] }[];
+    snippets: { label: string; detail: string; insert: string }[];
+    mcpServers: { name: string; url: string }[];
+  };
+}
+
+export interface InstalledPlugin {
+  id: string;
+  enabled: boolean;
+  manifest?: PluginManifest;
+  error?: string;
+}
+
+const pluginOrigin = /Windows|Android/i.test(navigator.userAgent) ? "http://lokus-plugin.localhost" : "lokus-plugin://localhost";
+
+/** The address of a plugin's page; no page means its background page. */
+export function pluginUrl(id: string, page = ""): string {
+  return `${pluginOrigin}/${id}/${page}`;
 }

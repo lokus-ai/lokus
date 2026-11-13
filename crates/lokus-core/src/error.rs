@@ -25,6 +25,8 @@ pub enum CoreError {
     Watch(String),
     #[error("index: {0}")]
     Index(String),
+    #[error("plugin: {0}")]
+    Plugin(String),
 }
 
 impl CoreError {
@@ -41,6 +43,7 @@ impl CoreError {
             Self::Io(_) => "io",
             Self::Watch(_) => "watch",
             Self::Index(_) => "index",
+            Self::Plugin(_) => "plugin",
         }
     }
 }

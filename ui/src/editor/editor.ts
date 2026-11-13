@@ -25,6 +25,8 @@ export interface EditorHooks {
   loadNote(target: string): Promise<string | null>;
   /** Paths of every note, for `[[` suggestions. */
   notePaths(): string[];
+  /** Extra slash-menu entries, from plugins. */
+  snippets(): { label: string; detail: string; insert: string }[];
 }
 
 /** One editing surface. Each open note keeps its own state (and undo history). */
@@ -62,7 +64,7 @@ export class Editor {
         EditorState.tabSize.of(4),
         markdownPairs,
         closeBrackets(),
-        completions(() => this.hooks.notePaths()),
+        completions(() => this.hooks.notePaths(), () => this.hooks.snippets()),
         yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
         livePreview({
           openLink: (target) => this.hooks.onOpenLink(target),
@@ -109,6 +111,18 @@ export class Editor {
         ],
       }),
     });
+  }
+
+  /** Show some markdown read-only, rendered like a note. Returns how to remove it. */
+  preview(parent: HTMLElement, text: string): () => void {
+    const view = this.mountEmbed(parent, text);
+    return () => view.destroy();
+  }
+
+  /** Put text where the cursor is, replacing any selection. */
+  insert(text: string): void {
+    this.view.dispatch(this.view.state.replaceSelection(text));
+    this.view.focus();
   }
 
   get text(): string {

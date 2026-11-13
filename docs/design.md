@@ -129,39 +129,63 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
 
-## 7. Plugins (planned, after M3)
+## 7. Plugins (built)
 
-The app's own features use the same command and contribution system, so the API is exercised
-from M1.
+A plugin is a folder in the vault, `.lokus/plugins/<id>/`, with a `manifest.json` and its files.
+`docs/plugins.md` is the guide for writing one; `examples/plugins/word-count` uses every part of
+the API.
 
-- **Isolation:** each plugin runs in a sandboxed, null-origin iframe and talks to the app through
-  a small typed message API. The host checks the manifest's permissions on every call. No direct
-  access to the main window, Tauri or the filesystem.
-- **Five contribution types:** commands; editor behaviour (decorations, completions, shortcuts,
-  described as data, never raw CodeMirror); views (a sidebar or panel is the plugin's own frame);
-  settings (a schema the app renders); AI tools (MCP servers).
+- **Isolation:** each plugin runs in a sandboxed frame with its own null origin. Its files are
+  served by the app over `lokus-plugin://`, with a content-security policy built from the
+  manifest, so a plugin can load only its own files and reach only the network hosts it declared.
+  It has no access to the main window, Tauri, the filesystem or the app's storage.
+- **One API:** the frame gets a `lokus` object that sends messages to the app. Every request is
+  checked against the manifest's permissions: `vault:read`, `vault:write`, `editor`, `net:<host>`.
+  Each core command is marked read, write or private (`core.commands`); private ones (plugins,
+  index, anything about the app itself) are never reachable from a plugin.
+- **Contributions,** all declared in the manifest so the app can show them without running the
+  plugin: commands, views (the plugin's own page in the side panel), settings (a schema the app
+  renders), slash-menu snippets, and tool servers for the assistant.
 - **Manifest:**
 
   ```json
-  { "id": "", "version": "", "apiVersion": 1, "main": "main.js",
-    "permissions": ["vault:read", "vault:write", "net:api.example.com"],
-    "contributes": { "commands": [], "views": [], "settings": {}, "editor": {}, "mcpServers": [] },
-    "activation": ["onCommand:x", "onView:y"] }
+  { "id": "", "name": "", "version": "", "apiVersion": 1, "main": "main.js",
+    "permissions": ["vault:read", "net:api.example.com"],
+    "contributes": { "commands": [], "views": [], "settings": [], "snippets": [], "mcpServers": [] },
+    "activation": ["onStartup"] }
   ```
 
+- A plugin loads when one of its commands or views is first used, unless it asks for `onStartup`.
+- Plugins are installed from a folder, start switched off, and show their permissions in plain
+  words in Settings before they are switched on.
 - One API and one integer `apiVersion`. No second "trusted" tier.
-- Not in the first version: raw editor or DOM access, a plugin CLI, a marketplace (install from a
-  URL or folder), plugin-to-plugin calls.
+- Not built: editor decorations from plugins, install from a URL, a marketplace, plugin-to-plugin
+  calls.
 
-## 8. AI and MCP (planned)
+Checked by `checks/flows/plugins.sh`, which installs a hostile fixture plugin in the real app and
+confirms that everything it must not be able to do is refused.
 
-- **Bring your own key first.** Keys live in the OS keychain; every provider call is made from
-  Rust, so the UI and plugins never see a key.
-- **MCP:** the core owns the client (official Rust SDK), the logins and the tokens, built against
-  the 2026-07-28 spec only. Plugins declare which servers they want. Notion's hosted server needs
-  no app registration; Slack's requires a published Slack app.
-- **Sign in with ChatGPT** exists for open-source, locally run apps. Check the terms before
-  promising it; it follows bring-your-own-key.
+## 8. AI and MCP (built; untried against a real provider)
+
+`lokus-ai` holds all of it; the UI is a chat panel and a settings section.
+
+- **Bring your own key.** The key lives in the OS keychain. Every provider call is made from
+  Rust, so the UI and plugins never see a key. `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are read
+  as a fallback, which is how the command line and the scripted flow supply one.
+- **Two wire formats:** Anthropic's Messages API for Claude (default model Claude Opus 5.5), and
+  the OpenAI chat-completions format for OpenAI and any compatible service. Conversations are
+  kept in one shape and translated on the way out.
+- **Tools:** the assistant searches, reads, creates and edits notes through the same core
+  commands as everything else. A change to a note, and any tool-server action not marked
+  read-only, waits for the person to allow it unless they switch that off.
+- **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
+  Settings or contributed by a plugin. A server's token is kept in the keychain. Not built:
+  the OAuth login that hosted servers such as Notion's need, and local (stdio) servers.
+- `lokus ai --vault DIR q=...` asks one question from a terminal.
+- **Sign in with ChatGPT** is not built; it follows once its terms are checked.
+
+Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
+(`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key.
 
 ## 9. UI and design tokens (building)
 
@@ -200,7 +224,8 @@ is needed.
 | M4 | iOS and Android | Builds in TestFlight and the Play internal track | planned |
 | M5 | Databases and kanban | Query engine with new UI | built: table and board views over a folder's note properties |
 
-Then plugins, AI and MCP.
+| M6 | Plugins | A sandboxed plugin adds a command, a view and a setting, and cannot do what it was not granted | built |
+| M7 | Assistant: bring your own key, vault tools, MCP tool servers | A question about the vault is answered from the notes, and an edit waits for a yes | built; checked against a stand-in provider only, never a real one |
 
 ## 12. Risks
 

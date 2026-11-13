@@ -1,6 +1,8 @@
 /** @part-of ui.shell */
+import { aiSettings, saveAiConfig } from "../bridge/ai";
 import { identify } from "../bridge/analytics";
 import { accountsAvailable, signOut } from "../bridge/auth";
+import { answer, ask, chat, newChat } from "../features/ai/chat";
 import { analyticsCommands } from "../features/analytics/commands";
 import { COVERS, ICONS } from "../features/page-header/PageHeader";
 import { type Command, registerCommands } from "./commands";
@@ -64,6 +66,19 @@ export function registerAllCommands(): void {
       keys: "Mod-g",
       run: () => app.set((s) => ({ view: s.view === "graph" ? "note" : "graph" })),
     },
+    {
+      id: "settings.open",
+      title: "Settings",
+      keys: "Mod-,",
+      run: () => app.set((s) => ({ view: s.view === "settings" ? "note" : "settings" })),
+    },
+    {
+      id: "ai.open",
+      title: "Assistant: show or hide",
+      keys: "Mod-j",
+      run: () => app.set((s) => ({ panel: s.panel?.kind === "ai" ? null : { kind: "ai" } })),
+    },
+    { id: "ai.new", title: "Assistant: new chat", run: newChat },
     { id: "teams.open", title: "Team sync…", run: () => app.set({ teamsDialog: true }) },
     { id: "vault.choose", title: "Open another vault…", run: chooseVault },
     { id: "sidebar.toggle", title: "Show or hide the sidebar", keys: "Mod-\\", run: () => app.set((s) => ({ sidebar: !s.sidebar })) },
@@ -142,6 +157,23 @@ export function registerAllCommands(): void {
       : []),
 
     // For scripts and `lokus app <id>`: drive the live app like a user would.
+    { id: "ai.ask", title: "Ask the assistant", hidden: true, run: async (a) => {
+        app.set({ panel: { kind: "ai" } });
+        await ask(String(a.text ?? ""));
+        return chat.get().items;
+      } },
+    { id: "ai.answer", title: "Allow or decline a change", hidden: true, run: (a) => {
+        const waiting = chat.get().items.find((i) => i.kind === "tool" && i.status === "asking");
+        if (waiting?.kind === "tool") answer(waiting.id, a.allow !== false);
+        return Boolean(waiting);
+      } },
+    { id: "ai.configure", title: "Change assistant settings", hidden: true, run: async (a) => {
+        const { config } = await aiSettings();
+        await saveAiConfig({ ...config, ...a });
+        return (await aiSettings()).config;
+      } },
+    { id: "ai.settings", title: "Assistant settings", hidden: true, run: () => aiSettings() },
+    { id: "ai.state", title: "Assistant conversation", hidden: true, run: () => chat.get() },
     { id: "sync.connect", title: "Connect sync", hidden: true, run: (a) => connectSync(String(a.server), String(a.workspace), a.token ? String(a.token) : null) },
     { id: "sync.disconnect", title: "Disconnect sync", hidden: true, run: () => disconnectSync() },
     { id: "note.open", title: "Open note", hidden: true, run: async (a) => {

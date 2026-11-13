@@ -10,6 +10,7 @@ name = "lokus"
 path = "src/main.rs"
 
 [dependencies]
+lokus-ai = { path = "../lokus-ai" }
 lokus-core = { path = "../lokus-core" }
 lokus-sync = { path = "../lokus-sync" }
 tokio.workspace = true

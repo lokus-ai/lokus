@@ -41,8 +41,9 @@ function apply(block: Block) {
     // Mid-line, a block starts on a fresh line.
     const lead = block.block && view.state.sliceDoc(line.from, slash).trim() ? "\n" : "";
     const text = lead + block.insert;
-    const cursor = text.indexOf("§");
-    const insert = text.slice(0, cursor) + text.slice(cursor + 1);
+    const marker = text.indexOf("§");
+    const cursor = marker < 0 ? text.length : marker;
+    const insert = marker < 0 ? text : text.slice(0, marker) + text.slice(marker + 1);
     view.dispatch({
       changes: { from: slash, to, insert },
       selection: EditorSelection.cursor(slash + cursor),
@@ -51,7 +52,9 @@ function apply(block: Block) {
   };
 }
 
-function source(context: CompletionContext) {
+type Snippets = () => { label: string; detail: string; insert: string }[];
+
+const source = (snippets: Snippets) => (context: CompletionContext) => {
   const match = context.matchBefore(/\/[\w ]*/);
   if (!match) return null;
   const before = context.state.sliceDoc(Math.max(0, match.from - 1), match.from);
@@ -59,14 +62,14 @@ function source(context: CompletionContext) {
   return {
     from: match.from + 1,
     validFor: /^[\w ]*$/,
-    options: BLOCKS.map((block, i) => ({
+    options: [...BLOCKS, ...snippets().map((s) => ({ label: s.label, hint: s.detail, insert: s.insert }))].map((block, i) => ({
       label: block.label,
       detail: block.hint,
       boost: -i,
       apply: apply(block),
     })),
   };
-}
+};
 
 /** After `[[`, offer the vault's notes. */
 function noteLinks(notePaths: () => string[]) {
@@ -98,9 +101,9 @@ function noteLinks(notePaths: () => string[]) {
 }
 
 /** The slash menu and `[[` note suggestions share one popup. */
-export function completions(notePaths: () => string[]) {
+export function completions(notePaths: () => string[], snippets: Snippets) {
   return [
-    autocompletion({ override: [source, noteLinks(notePaths)], icons: false, activateOnTyping: true, defaultKeymap: false }),
+    autocompletion({ override: [source(snippets), noteLinks(notePaths)], icons: false, activateOnTyping: true, defaultKeymap: false }),
     keymap.of(completionKeymap),
   ];
 }

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/lokus-core", "crates/lokus-cli", "crates/lokus-sync", "crates/lokus-server", "apps/desktop"]
+members = ["crates/lokus-core", "crates/lokus-cli", "crates/lokus-sync", "crates/lokus-server", "crates/lokus-ai", "apps/desktop"]
 
 [workspace.package]
 version = "2.0.0-alpha.0"

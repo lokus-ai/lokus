@@ -9,9 +9,25 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+use std::path::Path;
+
 use crate::error::{CoreError, Result};
+use crate::plugins;
 use crate::vault::Eol;
 use crate::Core;
+
+/// Who may call a command besides the app itself. Plugins and AI tools are
+/// held to this; the app, the CLI and the dev channel are not.
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Access {
+    /// Reads notes or the index.
+    Read,
+    /// Changes files in the vault.
+    Write,
+    /// Only the app itself.
+    Private,
+}
 
 #[derive(Debug, Serialize, Clone, Copy)]
 pub struct CommandSpec {
@@ -19,105 +35,142 @@ pub struct CommandSpec {
     pub summary: &'static str,
     /// Human-readable argument shape, shown by `lokus commands.list`.
     pub args: &'static str,
+    pub access: Access,
 }
 
+const fn spec(
+    name: &'static str,
+    summary: &'static str,
+    args: &'static str,
+    access: Access,
+) -> CommandSpec {
+    CommandSpec {
+        name,
+        summary,
+        args,
+        access,
+    }
+}
+
+use Access::{Private, Read, Write};
+
 pub const COMMANDS: &[CommandSpec] = &[
-    CommandSpec {
-        name: "commands.list",
-        summary: "List every core command",
-        args: "",
-    },
-    CommandSpec {
-        name: "vault.info",
-        summary: "Name and root of the open vault",
-        args: "",
-    },
-    CommandSpec {
-        name: "vault.tree",
-        summary: "Folders and files as a tree",
-        args: "",
-    },
-    CommandSpec {
-        name: "vault.notes",
-        summary: "Flat list of note paths",
-        args: "",
-    },
-    CommandSpec {
-        name: "vault.fidelity",
-        summary: "Check that an unchanged save is byte-identical for every note",
-        args: "",
-    },
-    CommandSpec {
-        name: "note.read",
-        summary: "Read a note",
-        args: "path",
-    },
-    CommandSpec {
-        name: "note.write",
-        summary: "Save a note atomically",
-        args: "path, text, eol?=lf|crlf|mixed, expected_hash?",
-    },
-    CommandSpec {
-        name: "note.create",
-        summary: "Create a note; fails if it exists",
-        args: "path, text?",
-    },
-    CommandSpec {
-        name: "note.rename",
-        summary: "Rename or move a note or folder",
-        args: "from, to",
-    },
-    CommandSpec {
-        name: "note.delete",
-        summary: "Move a note or folder to the vault trash",
-        args: "path",
-    },
-    CommandSpec {
-        name: "index.refresh",
-        summary: "Bring the search and link index in line with the files",
-        args: "",
-    },
-    CommandSpec {
-        name: "search.query",
-        summary: "Full-text search; every word must match",
-        args: "q, limit?=30",
-    },
-    CommandSpec {
-        name: "links.backlinks",
-        summary: "Notes that link to this note, with the linking line",
-        args: "path",
-    },
-    CommandSpec {
-        name: "links.outgoing",
-        summary: "Existing notes this note links to",
-        args: "path",
-    },
-    CommandSpec {
-        name: "graph.data",
-        summary: "Every note and the links between them",
-        args: "",
-    },
-    CommandSpec {
-        name: "props.rows",
-        summary: "Notes in a folder with their properties, as database rows",
-        args: "folder?",
-    },
-    CommandSpec {
-        name: "props.set",
-        summary: "Set one property of a note; null removes it",
-        args: "path, key, value",
-    },
-    CommandSpec {
-        name: "tags.list",
-        summary: "Tags and how many notes use each",
-        args: "",
-    },
-    CommandSpec {
-        name: "folder.create",
-        summary: "Create a folder",
-        args: "path",
-    },
+    spec("commands.list", "List every core command", "", Private),
+    spec("vault.info", "Name and root of the open vault", "", Read),
+    spec("vault.tree", "Folders and files as a tree", "", Read),
+    spec("vault.notes", "Flat list of note paths", "", Read),
+    spec(
+        "vault.fidelity",
+        "Check that an unchanged save is byte-identical for every note",
+        "",
+        Private,
+    ),
+    spec("note.read", "Read a note", "path", Read),
+    spec(
+        "note.write",
+        "Save a note atomically",
+        "path, text, eol?=lf|crlf|mixed, expected_hash?",
+        Write,
+    ),
+    spec(
+        "note.create",
+        "Create a note; fails if it exists",
+        "path, text?",
+        Write,
+    ),
+    spec(
+        "note.rename",
+        "Rename or move a note or folder",
+        "from, to",
+        Write,
+    ),
+    spec(
+        "note.delete",
+        "Move a note or folder to the vault trash",
+        "path",
+        Write,
+    ),
+    spec(
+        "index.refresh",
+        "Bring the search and link index in line with the files",
+        "",
+        Private,
+    ),
+    spec(
+        "search.query",
+        "Full-text search; every word must match",
+        "q, limit?=30",
+        Read,
+    ),
+    spec(
+        "links.backlinks",
+        "Notes that link to this note, with the linking line",
+        "path",
+        Read,
+    ),
+    spec(
+        "links.outgoing",
+        "Existing notes this note links to",
+        "path",
+        Read,
+    ),
+    spec(
+        "graph.data",
+        "Every note and the links between them",
+        "",
+        Read,
+    ),
+    spec(
+        "props.rows",
+        "Notes in a folder with their properties, as database rows",
+        "folder?",
+        Read,
+    ),
+    spec(
+        "props.set",
+        "Set one property of a note; null removes it",
+        "path, key, value",
+        Write,
+    ),
+    spec("tags.list", "Tags and how many notes use each", "", Read),
+    spec("folder.create", "Create a folder", "path", Write),
+    spec(
+        "plugins.list",
+        "Installed plugins with their manifests",
+        "",
+        Private,
+    ),
+    spec(
+        "plugins.install",
+        "Copy a plugin folder into the vault; it starts disabled",
+        "from",
+        Private,
+    ),
+    spec(
+        "plugins.remove",
+        "Delete an installed plugin and its data",
+        "id",
+        Private,
+    ),
+    spec(
+        "plugins.enable",
+        "Turn a plugin on or off",
+        "id, enabled",
+        Private,
+    ),
+    spec("plugins.data.get", "A plugin's stored data", "id", Private),
+    spec(
+        "plugins.data.set",
+        "Replace a plugin's stored data",
+        "id, value",
+        Private,
+    ),
 ];
+
+/// The spec of a core command, if there is one by that name.
+pub fn find(name: &str) -> Option<&'static CommandSpec> {
+    COMMANDS.iter().find(|c| c.name == name)
+}
 
 #[derive(Deserialize)]
 struct PathArgs {
@@ -152,7 +205,6 @@ struct SearchArgs {
     limit: Option<usize>,
 }
 
-/// Commands that change files; the index is brought up to date after them.
 #[derive(Deserialize)]
 struct RowsArgs {
     #[serde(default)]
@@ -167,18 +219,10 @@ struct SetArgs {
     value: Value,
 }
 
-const WRITES: &[&str] = &[
-    "props.set",
-    "note.write",
-    "note.create",
-    "note.rename",
-    "note.delete",
-    "folder.create",
-];
-
 pub fn run(core: &Core, name: &str, args: Value) -> Result<Value> {
     let result = dispatch(core, name, args);
-    if result.is_ok() && WRITES.contains(&name) {
+    // The index follows every change to the files.
+    if result.is_ok() && find(name).is_some_and(|c| c.access == Write) {
         core.index()?.refresh()?;
     }
     result
@@ -252,8 +296,60 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             vault.create_folder(&a.path)?;
             Ok(json!({ "path": a.path }))
         }
+        "plugins.list" => out(plugins::list(vault)?),
+        "plugins.install" => {
+            let a: InstallArgs = parse(name, args)?;
+            out(plugins::install(vault, Path::new(&a.from))?)
+        }
+        "plugins.remove" => {
+            let a: IdArgs = parse(name, args)?;
+            plugins::remove(vault, &a.id)?;
+            Ok(json!({ "id": a.id }))
+        }
+        "plugins.enable" => {
+            let a: EnableArgs = parse(name, args)?;
+            plugins::set_enabled(vault, &a.id, a.enabled)?;
+            Ok(json!({ "id": a.id, "enabled": a.enabled }))
+        }
+        "plugins.data.get" => {
+            let a: IdArgs = parse(name, args)?;
+            plugins::data(vault, &a.id)
+        }
+        "plugins.data.set" => {
+            let a: DataArgs = parse(name, args)?;
+            plugins::set_data(vault, &a.id, &a.value)?;
+            Ok(Value::Null)
+        }
         other => Err(CoreError::UnknownCommand(other.to_string())),
     }
+}
+
+#[derive(Deserialize)]
+struct IdArgs {
+    id: String,
+}
+
+#[derive(Deserialize)]
+struct InstallArgs {
+    from: String,
+}
+
+#[derive(Deserialize)]
+struct EnableArgs {
+    id: String,
+    #[serde(default = "yes")]
+    enabled: bool,
+}
+
+fn yes() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+struct DataArgs {
+    id: String,
+    #[serde(default)]
+    value: Value,
 }
 
 fn parse<T: DeserializeOwned>(command: &str, args: Value) -> Result<T> {

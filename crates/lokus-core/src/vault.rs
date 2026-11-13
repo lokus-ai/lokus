@@ -393,7 +393,7 @@ fn read_existing(abs: &Path, rel: &str) -> Result<Vec<u8>> {
 
 /// Write to a sibling temp file, flush it to disk, then rename over the
 /// target, so a crash never leaves a half-written note.
-fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
     let dir = target
         .parent()
         .ok_or_else(|| CoreError::InvalidPath(target.display().to_string()))?;

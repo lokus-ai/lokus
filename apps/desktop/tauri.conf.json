@@ -23,7 +23,7 @@
     ],
     "security": {
       "assetProtocol": { "enable": true, "scope": [] },
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset: http://asset.localhost; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co https://*.posthog.com"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset: http://asset.localhost; font-src 'self' data:; frame-src lokus-plugin: http://lokus-plugin.localhost; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co https://*.posthog.com"
     }
   },
   "bundle": {

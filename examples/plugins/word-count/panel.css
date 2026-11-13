@@ -1,0 +1,4 @@
+:root { color-scheme: light dark; font-family: -apple-system, "Segoe UI", sans-serif; }
+main { padding: 24px 16px; text-align: center; }
+#count { font-size: 44px; font-weight: 650; margin: 0; font-variant-numeric: tabular-nums; }
+#unit { margin: 4px 0 0; opacity: 0.6; font-size: 13px; }

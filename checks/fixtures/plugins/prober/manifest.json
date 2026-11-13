@@ -1,0 +1,9 @@
+{
+  "id": "prober",
+  "name": "Prober",
+  "version": "1.0.0",
+  "description": "Test fixture: tries everything a plugin must not be able to do and reports what happened.",
+  "apiVersion": 1,
+  "permissions": ["vault:read"],
+  "contributes": { "commands": [{ "id": "prober.probe", "title": "Prober: probe the sandbox" }] }
+}

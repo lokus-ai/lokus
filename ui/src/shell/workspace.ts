@@ -8,6 +8,7 @@ import {
   CoreError,
   currentVault,
   type Entry,
+  type InstalledPlugin,
   type Eol,
   type Note,
   onCloseTab,
@@ -46,7 +47,10 @@ export interface AppState {
   conflict: string | null;
   palette: "commands" | "notes" | "search" | null;
   /** What the main area shows. */
-  view: "note" | "graph";
+  view: "note" | "graph" | "settings";
+  /** What the panel on the right shows, if it is open. */
+  panel: { kind: "ai" } | { kind: "plugin"; plugin: string; view: string; title: string; page: string } | null;
+  plugins: InstalledPlugin[];
   /** Goes up whenever files or the index change; panels refetch on it. */
   version: number;
   sidebar: boolean;
@@ -73,6 +77,8 @@ export const app = createStore<AppState>({
   conflict: null,
   palette: null,
   view: "note",
+  panel: null,
+  plugins: [],
   version: 0,
   sidebar: true,
   sidebarWidth: Number(localStorage.getItem("lokus.sidebarWidth")) || 248,
@@ -165,6 +171,7 @@ export function attachEditor(parent: HTMLElement): void {
     resolveImage,
     loadNote,
     notePaths: () => allNotes(),
+    snippets: () => app.get().plugins.flatMap((p) => (p.enabled ? (p.manifest?.contributes.snippets ?? []) : [])),
   });
 }
 
@@ -296,7 +303,10 @@ function watchSync(): void {
   startCollab(syncPeers);
   onSyncEvent((event) => {
     const { sync } = app.get();
-    if (event.event === "online") app.set({ sync: { ...sync, status: "online", role: event.role, reason: undefined } });
+    if (event.event === "online") {
+      if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
+      app.set({ sync: { ...sync, status: "online", role: event.role, reason: undefined } });
+    }
     else if (event.event === "offline" && sync.status !== "off") app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
     else if (event.event === "refused") {
       void unshareAll();

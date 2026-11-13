@@ -1,0 +1,23 @@
+{
+  "id": "word-count",
+  "name": "Word Count",
+  "version": "1.0.0",
+  "description": "Counts the words in the open note. A small example of every part of the plugin API.",
+  "apiVersion": 1,
+  "main": "main.js",
+  "permissions": ["vault:read", "editor"],
+  "contributes": {
+    "commands": [
+      { "id": "word-count.count", "title": "Word Count: count this note" }
+    ],
+    "views": [
+      { "id": "stats", "title": "Word Count", "page": "panel.html" }
+    ],
+    "settings": [
+      { "key": "unit", "title": "Count", "type": "select", "options": ["words", "characters"], "default": "words" }
+    ],
+    "snippets": [
+      { "label": "Callout", "detail": "> [!note]", "insert": "> [!note] §" }
+    ]
+  }
+}

@@ -3,6 +3,7 @@
 //! everything else to `lokus-core`. No feature logic belongs here.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai;
 #[cfg(all(debug_assertions, unix))]
 mod dev_channel;
 mod sync;
@@ -122,6 +123,43 @@ fn vault_current(app: AppHandle, shell: State<'_, Shell>) -> Option<Value> {
     open_vault(&app, last.trim()).ok()
 }
 
+/// How plugin frames address their files; the form differs by platform.
+const PLUGIN_ORIGIN: &str = if cfg!(any(windows, target_os = "android")) {
+    "http://lokus-plugin.localhost"
+} else {
+    "lokus-plugin:"
+};
+
+/// Serve `lokus-plugin://localhost/<id>/<file>` from the open vault's plugins.
+/// The frame that asks is sandboxed; the policy header limits what it loads.
+fn plugin_file(app: &AppHandle, uri_path: &str) -> tauri::http::Response<Vec<u8>> {
+    use tauri::http::{header, Response, StatusCode};
+    let path = percent_encoding::percent_decode_str(uri_path).decode_utf8_lossy();
+    let path = path.trim_start_matches('/');
+    let (id, file) = path.split_once('/').unwrap_or((path, ""));
+    let served = app
+        .state::<Shell>()
+        .core()
+        .ok_or_else(|| "no vault is open".to_string())
+        .and_then(|core| {
+            lokus_core::plugins::serve(&core.vault, id, file, PLUGIN_ORIGIN)
+                .map_err(|e| e.to_string())
+        });
+    let response = match served {
+        Ok(file) => Response::builder()
+            .header(header::CONTENT_TYPE, file.mime)
+            .header(header::CONTENT_SECURITY_POLICY, file.csp)
+            .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
+            .header(header::CACHE_CONTROL, "no-store")
+            .body(file.bytes),
+        Err(message) => Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(message.into_bytes()),
+    };
+    response.unwrap_or_default()
+}
+
 /// The app menu. Cmd+W closes a tab, not the window, so it is our own item.
 fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
@@ -167,6 +205,10 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Shell::default())
         .manage(sync::Sync::default())
+        .manage(ai::Ai::default())
+        .register_uri_scheme_protocol("lokus-plugin", |ctx, request| {
+            plugin_file(ctx.app_handle(), request.uri().path())
+        })
         .menu(menu)
         .on_menu_event(|app, event| {
             if event.id().as_ref() == "close-tab" {
@@ -188,6 +230,14 @@ fn main() {
             sync::sync_local,
             sync::sync_awareness,
             sync::relay_call,
+            ai::ai_settings,
+            ai::ai_settings_save,
+            ai::ai_secret_set,
+            ai::ai_models,
+            ai::ai_mcp_check,
+            ai::ai_send,
+            ai::ai_stop,
+            ai::ai_approve,
             dev_channel::dev_reply
         ])
         .setup(|app| {
@@ -206,7 +256,15 @@ fn main() {
         sync::sync_doc,
         sync::sync_local,
         sync::sync_awareness,
-        sync::relay_call
+        sync::relay_call,
+        ai::ai_settings,
+        ai::ai_settings_save,
+        ai::ai_secret_set,
+        ai::ai_models,
+        ai::ai_mcp_check,
+        ai::ai_send,
+        ai::ai_stop,
+        ai::ai_approve
     ]);
 
     builder

@@ -3,9 +3,11 @@ import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, use
 
 import { identify } from "../bridge/analytics";
 import { accessToken, accountsAvailable } from "../bridge/auth";
+import { AiPanel } from "../features/ai/AiPanel";
 import { AccountDialog } from "../features/auth/AccountDialog";
 import { Backlinks } from "../features/backlinks/Backlinks";
 import { FileTree } from "../features/file-tree/FileTree";
+import { PluginView } from "../features/plugins/PluginView";
 import { PageHeader } from "../features/page-header/PageHeader";
 import { SearchPalette } from "../features/search/SearchPalette";
 import { TeamsDialog } from "../features/teams/TeamsDialog";
@@ -33,6 +35,7 @@ import {
 
 // The graph is only loaded when someone opens it.
 const GraphView = lazy(() => import("../features/graph/GraphView"));
+const SettingsView = lazy(() => import("../features/settings/SettingsView"));
 const DatabaseView = lazy(() => import("../features/database/DatabaseView"));
 
 const tabName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
@@ -84,6 +87,10 @@ function Sidebar() {
           <span>Graph</span>
           <kbd>{formatKeys("Mod-g")}</kbd>
         </button>
+        <button onClick={() => void runCommand("ai.open")}>
+          <span>Assistant</span>
+          <kbd>{formatKeys("Mod-j")}</kbd>
+        </button>
         <button onClick={() => void runCommand("note.new")}>
           <span>New note</span>
           <kbd>{formatKeys("Mod-n")}</kbd>
@@ -103,6 +110,9 @@ function Sidebar() {
       <button className="sidebar-account" onClick={() => void runCommand("teams.open")}>
         <span className={`sync-dot ${sync.status}`} />
         {sync.status === "off" ? "Sync with a team" : sync.status === "online" ? "Syncing" : sync.status === "connecting" ? "Connecting…" : sync.status === "offline" ? "Offline" : "Sync stopped"}
+      </button>
+      <button className="sidebar-account" onClick={() => void runCommand("settings.open")}>
+        Settings
       </button>
       {accountsAvailable && (
         <button
@@ -240,6 +250,23 @@ function Page() {
   );
 }
 
+/** The panel on the right: the assistant or a plugin's view. */
+function Panel() {
+  const panel = useStore(app, (s) => s.panel);
+  if (!panel) return null;
+  return (
+    <aside className="panel">
+      <div className="panel-head" data-tauri-drag-region>
+        <span className="tree-name">{panel.kind === "plugin" ? panel.title : "Assistant"}</span>
+        <button className="panel-close" title="Close" onClick={() => app.set({ panel: null })}>
+          ×
+        </button>
+      </div>
+      {panel.kind === "plugin" ? <PluginView plugin={panel.plugin} page={panel.page} /> : <AiPanel />}
+    </aside>
+  );
+}
+
 function Welcome() {
   return (
     <div className="welcome" data-tauri-drag-region>
@@ -281,6 +308,11 @@ export function App() {
             <GraphView active={active} version={version} onOpen={open} />
           </Suspense>
         )}
+        {view === "settings" && (
+          <Suspense fallback={null}>
+            <SettingsView />
+          </Suspense>
+        )}
         {!active && view === "note" && (
           <div className="empty">
             <p>No note open</p>
@@ -296,6 +328,7 @@ export function App() {
           </div>
         )}
       </main>
+      <Panel />
       {palette === "search" && <SearchPalette onOpen={open} onClose={() => app.set({ palette: null })} />}
       {palette && palette !== "search" && <Palette key={palette} mode={palette} />}
       {accountDialog && (

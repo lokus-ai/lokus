@@ -17,6 +17,9 @@ const USAGE: &str = "usage:
   lokus commands.list                     (every core command)
   lokus sync --vault DIR server=URL workspace=ID token=TOKEN
                                           (keep a folder in sync with a relay; prints what it does)
+  lokus ai --vault DIR q=QUESTION [provider=anthropic|openai] [model=ID] [base_url=URL]
+           [approve=true] [mcp=URL]       (ask the assistant; the key comes from the keychain,
+                                          or ANTHROPIC_API_KEY / OPENAI_API_KEY)
 
 The vault defaults to $LOKUS_VAULT, then the current directory.
 Values are parsed as JSON when possible, otherwise taken as text.";
@@ -38,6 +41,9 @@ fn main() -> ExitCode {
 
     if !in_app && parsed.command == "sync" {
         return sync(&parsed);
+    }
+    if !in_app && parsed.command == "ai" {
+        return ai(&parsed);
     }
     let result = if in_app {
         run_in_app(&parsed)
@@ -188,6 +194,71 @@ fn sync(p: &Parsed) -> ExitCode {
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(json!({ "code": "sync", "message": e.to_string() })),
+    }
+}
+
+/// Ask the assistant one question. Events are JSON lines on stdout; the last
+/// line is the outcome. Changes to notes are refused unless `approve=true`.
+fn ai(p: &Parsed) -> ExitCode {
+    let arg = |name: &str| p.args[name].as_str().map(str::to_string);
+    let Some(question) = arg("q") else {
+        return fail(json!({ "code": "usage", "message": "ai needs q=\"your question\"" }));
+    };
+    let root = p
+        .vault
+        .clone()
+        .or_else(|| std::env::var("LOKUS_VAULT").ok())
+        .unwrap_or_else(|| ".".to_string());
+    let core = match Core::open(&root) {
+        Ok(core) => core,
+        Err(e) => return fail(error_json(&e)),
+    };
+    if let Err(e) = core.index().and_then(|mut i| i.refresh()) {
+        return fail(error_json(&e));
+    }
+    let provider = match arg("provider").as_deref() {
+        Some("openai") => lokus_ai::Provider::OpenAi,
+        _ => lokus_ai::Provider::Anthropic,
+    };
+    let config = lokus_ai::Config {
+        provider,
+        model: arg("model").unwrap_or_default(),
+        base_url: arg("base_url").unwrap_or_default(),
+        auto_approve: p.args["approve"] == true,
+        mcp: arg("mcp")
+            .map(|url| lokus_ai::McpServer {
+                name: "cli".into(),
+                url,
+                enabled: true,
+            })
+            .into_iter()
+            .collect(),
+    };
+    let request = lokus_ai::Request {
+        config,
+        messages: vec![json!({ "role": "user", "content": question })],
+        core: Some(std::sync::Arc::new(core)),
+        extra_servers: Vec::new(),
+    };
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(e) => return fail(json!({ "code": "io", "message": e.to_string() })),
+    };
+    // Nobody is there to ask, so anything that needs a yes gets a no.
+    let refuse: lokus_ai::Approver = std::sync::Arc::new(|_| {
+        let (answer, wait) = tokio::sync::oneshot::channel();
+        let _ = answer.send(false);
+        wait
+    });
+    let print = |event: lokus_ai::Event| {
+        println!("{}", serde_json::to_string(&event).unwrap_or_default());
+    };
+    match runtime.block_on(lokus_ai::send(request, print, refuse)) {
+        Ok(outcome) => {
+            println!("{}", serde_json::to_string(&outcome).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        Err(e) => fail(e.body()),
     }
 }
 
