@@ -247,7 +247,7 @@ is needed.
 | M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | built (login and analytics not yet tried against the real services) |
 | M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | built |
 | M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | built and checked locally; not deployed, and real logins are untested |
-| M4 | iOS and Android | Builds in TestFlight and the Play internal track | prepared, not built: the app has a phone entry point, the layout works at phone width with touch-size targets, and nothing has been compiled for a phone (needs Xcode and the Android SDK) |
+| M4 | iOS and Android | Builds in TestFlight and the Play internal track | skipped for now by the owner. Already in place for later: a phone entry point, a layout that works at phone width, touch-size targets |
 | M5 | Databases and kanban | Query engine with new UI | built: table and board views over a folder's note properties |
 
 | M6 | Plugins | A sandboxed plugin adds a command, a view and a setting, and cannot do what it was not granted | built |
