@@ -1,6 +1,8 @@
 //! @part-of server
-//! Who is calling. Production checks Supabase login tokens against the
-//! project's public keys; development uses fixed tokens from the environment.
+//! Who is calling. Production checks Supabase login tokens: against the
+//! project's public keys, or, for a project that still signs with a shared
+//! secret, against `SUPABASE_JWT_SECRET`. Development uses fixed tokens from
+//! the environment.
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -24,6 +26,8 @@ pub enum Auth {
     Supabase {
         jwks_url: String,
         keys: Mutex<Option<(Instant, JwkSet)>>,
+        /// For projects whose tokens are signed with a shared secret (HS256).
+        secret: Option<String>,
     },
 }
 
@@ -38,19 +42,50 @@ const KEY_LIFETIME: Duration = Duration::from_secs(600);
 impl Auth {
     pub fn from_env() -> std::result::Result<Self, String> {
         if let Ok(url) = std::env::var("SUPABASE_URL") {
-            let jwks_url = format!(
-                "{}/auth/v1/.well-known/jwks.json",
-                url.trim_end_matches('/')
-            );
-            return Ok(Self::Supabase {
-                jwks_url,
-                keys: Mutex::new(None),
-            });
+            let secret = std::env::var("SUPABASE_JWT_SECRET")
+                .ok()
+                .filter(|s| !s.is_empty());
+            return Ok(Self::supabase(&url, secret));
         }
         let raw = std::env::var("LOKUS_DEV_TOKENS").map_err(|_| {
             "set SUPABASE_URL, or LOKUS_DEV_TOKENS=token:user:email for local use".to_string()
         })?;
         Ok(Self::dev(&raw))
+    }
+
+    pub fn supabase(url: &str, secret: Option<String>) -> Self {
+        Self::Supabase {
+            jwks_url: format!(
+                "{}/auth/v1/.well-known/jwks.json",
+                url.trim_end_matches('/')
+            ),
+            keys: Mutex::new(None),
+            secret,
+        }
+    }
+
+    /// Say at start-up if real logins cannot work with this configuration.
+    pub async fn warn_if_unusable(&self) {
+        let Self::Supabase {
+            jwks_url, secret, ..
+        } = self
+        else {
+            return;
+        };
+        let published = match reqwest::get(jwks_url).await {
+            Ok(response) => response.json::<JwkSet>().await.map(|set| set.keys.len()),
+            Err(e) => {
+                eprintln!("warning: could not reach {jwks_url}: {e}");
+                return;
+            }
+        };
+        if matches!(published, Ok(0) | Err(_)) && secret.is_none() {
+            eprintln!(
+                "warning: this Supabase project publishes no signing keys, so it signs logins \
+                 with a shared secret. Set SUPABASE_JWT_SECRET (Project Settings, API, JWT \
+                 secret) or every login will be refused."
+            );
+        }
     }
 
     pub fn dev(raw: &str) -> Self {
@@ -74,8 +109,25 @@ impl Auth {
     pub async fn identify(&self, token: &str) -> Result<Identity> {
         match self {
             Self::Dev(map) => map.get(token).cloned().ok_or(Error::Unauthorized),
-            Self::Supabase { jwks_url, keys } => {
+            Self::Supabase {
+                jwks_url,
+                keys,
+                secret,
+            } => {
                 let header = decode_header(token).map_err(|_| Error::Unauthorized)?;
+                if header.alg == Algorithm::HS256 {
+                    let secret = secret.as_deref().ok_or(Error::Unauthorized)?;
+                    let mut rules = Validation::new(Algorithm::HS256);
+                    rules.set_audience(&["authenticated"]);
+                    let key = DecodingKey::from_secret(secret.as_bytes());
+                    let claims = decode::<Claims>(token, &key, &rules)
+                        .map_err(|_| Error::Unauthorized)?
+                        .claims;
+                    return Ok(Identity {
+                        user: claims.sub,
+                        email: claims.email,
+                    });
+                }
                 let kid = header.kid.ok_or(Error::Unauthorized)?;
                 let mut set = cached(keys);
                 // Unknown key id: the project may have rotated keys, so look again.
@@ -117,4 +169,43 @@ fn cached(keys: &Mutex<Option<(Instant, JwkSet)>>) -> Option<JwkSet> {
     let slot = keys.lock().ok()?;
     let (at, set) = slot.as_ref()?;
     (at.elapsed() < KEY_LIFETIME).then(|| set.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use jsonwebtoken::{encode, EncodingKey, Header};
+    use serde_json::json;
+
+    fn token(secret: &str, audience: &str) -> String {
+        let far = 4_000_000_000u64;
+        let claims = json!({ "sub": "user-1", "email": "a@x.io", "aud": audience, "exp": far });
+        encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(secret.as_bytes()),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn shared_secret_logins_are_checked_against_the_secret() {
+        let auth = Auth::supabase("http://127.0.0.1:1", Some("right".into()));
+        let me = auth
+            .identify(&token("right", "authenticated"))
+            .await
+            .unwrap();
+        assert_eq!(me.user, "user-1");
+        assert!(auth
+            .identify(&token("wrong", "authenticated"))
+            .await
+            .is_err());
+        assert!(auth.identify(&token("right", "anon")).await.is_err());
+        // Without the secret configured, such a token is never accepted.
+        let none = Auth::supabase("http://127.0.0.1:1", None);
+        assert!(none
+            .identify(&token("right", "authenticated"))
+            .await
+            .is_err());
+    }
 }

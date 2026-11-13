@@ -20,6 +20,7 @@ async fn main() {
             std::process::exit(2);
         }
     };
+    auth.warn_if_unusable().await;
     if matches!(auth, Auth::Dev(_)) {
         eprintln!("warning: using development tokens; do not expose this to the internet");
     }

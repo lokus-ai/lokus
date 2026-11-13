@@ -51,6 +51,9 @@ docker build -f crates/lokus-server/Dockerfile -t lokus-relay .
 docker run -p 8787:8787 -v lokus-data:/data -e SUPABASE_URL=https://YOUR-PROJECT.supabase.co lokus-relay
 ```
 
+A Supabase project that signs logins with a shared secret (older projects do) also needs
+`-e SUPABASE_JWT_SECRET=...`; the relay says so at start-up if that is the case.
+
 ## Find your way
 
 - [`MAP.md`](./MAP.md): where each kind of change goes.

@@ -6,6 +6,7 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | The relay accepts Supabase logins signed either way: with the project's published keys, or with a shared secret given as `SUPABASE_JWT_SECRET`; it warns at start-up when neither can work | The existing Supabase project publishes no keys, so the relay as first written would have refused every real login | Claude (default) | Key-only verification |
 | 2026-11-12 | A render error in one view (settings, graph, a database, the side panel) shows a message in that view's space instead of blanking the window | Found when a missing field took the whole app down; the notes must stay reachable | Claude (default) | - |
 | 2026-11-12 | Tool-server sign-in uses the MCP SDK's OAuth support with a redirect to a local port; no Lokus-run redirect service | Nothing to host, and it is the flow the MCP spec describes for desktop apps | Claude (default) | - |
 | 2026-11-12 | Version history is local copies of a note's earlier text, kept on overwrite, not a replay of the sync log | Works with or without sync, survives the relay compacting its log, and is a few dozen lines | Claude (default) | "Version history is periodic markdown snapshots" on the server |
