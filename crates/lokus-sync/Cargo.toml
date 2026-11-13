@@ -1,0 +1,23 @@
+[package]
+name = "lokus-sync"
+description = "Keeps a vault's files and their CRDT documents in step, and talks to the relay."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+lokus-core = { path = "../lokus-core" }
+base64.workspace = true
+futures-util.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+similar = "2"
+thiserror.workspace = true
+tokio.workspace = true
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+uuid.workspace = true
+yrs.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

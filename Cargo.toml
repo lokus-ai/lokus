@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/lokus-core", "crates/lokus-cli", "apps/desktop"]
+members = ["crates/lokus-core", "crates/lokus-cli", "crates/lokus-sync", "crates/lokus-server", "apps/desktop"]
 
 [workspace.package]
 version = "2.0.0-alpha.0"
@@ -11,6 +11,12 @@ rust-version = "1.85"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
+yrs = "0.28"
+base64 = "0.22"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net", "signal"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }
+futures-util = "0.3"
 
 [profile.release]
 lto = "thin"
