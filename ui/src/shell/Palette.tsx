@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatKeys, listCommands, runCommand } from "./commands";
-import { allNotes, app, createNote, openNote } from "./workspace";
+import { allNotes, app, createFromTemplate, createNote, getEditor, openNote, restoreFromTrash, templates, type TrashedFile, trashed } from "./workspace";
 
 interface Item {
   key: string;
@@ -29,7 +29,36 @@ function score(query: string, text: string): number {
   return Math.max(1, 500 - gaps);
 }
 
-export function Palette({ mode }: { mode: "commands" | "notes" }) {
+type Mode = "commands" | "notes" | "headings" | "templates" | "trash";
+
+const PLACEHOLDER: Record<Mode, string> = {
+  commands: "Run a command…",
+  notes: "Find or create a note…",
+  headings: "Go to a heading…",
+  templates: "New note from a template…",
+  trash: "Restore from the trash…",
+};
+const EMPTY: Record<Mode, string> = {
+  commands: "Nothing matches.",
+  notes: "Nothing matches.",
+  headings: "This note has no headings.",
+  templates: "No templates yet. Notes in a folder called Templates show up here.",
+  trash: "The trash is empty.",
+};
+
+const noteName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
+const folderOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : undefined);
+
+function when(ms: number): string {
+  const days = Math.floor((Date.now() - ms) / 86_400_000);
+  return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+export function Palette({ mode }: { mode: Mode }) {
+  const [trash, setTrash] = useState<TrashedFile[]>([]);
+  useEffect(() => {
+    if (mode === "trash") void trashed().then(setTrash, () => setTrash([]));
+  }, [mode]);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
   const list = useRef<HTMLDivElement>(null);
@@ -46,12 +75,24 @@ export function Palette({ mode }: { mode: "commands" | "notes" }) {
               hint: c.keys ? formatKeys(c.keys) : undefined,
               run: () => void runCommand(c.id),
             }))
-        : allNotes().map((path) => ({
-            key: path,
-            label: path.split("/").pop()!.replace(/\.md$/i, ""),
-            hint: path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : undefined,
-            run: () => void openNote(path),
-          }));
+        : mode === "headings"
+          ? (getEditor()?.headings() ?? []).map((h, i) => ({
+              key: `${i}`,
+              label: `${"  ".repeat(h.level - 1)}${h.text}`,
+              run: () => getEditor()?.goTo(h.pos),
+            }))
+          : mode === "templates"
+            ? templates().map((path) => ({ key: path, label: noteName(path), run: () => void createFromTemplate(path) }))
+            : mode === "trash"
+              ? trash.map((t) => ({
+                  key: t.id,
+                  label: noteName(t.path),
+                  hint: [folderOf(t.path), when(t.deleted_at)].filter(Boolean).join(" · "),
+                  run: () => void restoreFromTrash(t.id),
+                }))
+              : allNotes().map((path) => ({ key: path, label: noteName(path), hint: folderOf(path), run: () => void openNote(path) }));
+    // A note's headings stay in reading order; everything else is ranked by the match.
+    if (mode === "headings" && !query.trim()) return source;
     const ranked = source
       .map((item) => ({ item, s: score(query.trim(), item.label) }))
       .filter((r) => r.s > 0)
@@ -63,7 +104,7 @@ export function Palette({ mode }: { mode: "commands" | "notes" }) {
       ranked.push({ key: "+new", label: `Create “${name}”`, run: () => void createNote(name) });
     }
     return ranked;
-  }, [mode, query]);
+  }, [mode, query, trash]);
 
   useEffect(() => setIndex(0), [query]);
   useEffect(() => {
@@ -82,7 +123,7 @@ export function Palette({ mode }: { mode: "commands" | "notes" }) {
         <input
           autoFocus
           value={query}
-          placeholder={mode === "commands" ? "Run a command…" : "Find or create a note…"}
+          placeholder={PLACEHOLDER[mode]}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Escape") close();
@@ -108,7 +149,7 @@ export function Palette({ mode }: { mode: "commands" | "notes" }) {
               {item.hint && <span className="palette-hint">{item.hint}</span>}
             </button>
           ))}
-          {items.length === 0 && <p className="palette-empty">Nothing matches.</p>}
+          {items.length === 0 && <p className="palette-empty">{query.trim() ? "Nothing matches." : EMPTY[mode]}</p>}
         </div>
       </div>
     </div>

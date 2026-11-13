@@ -25,6 +25,8 @@ export interface EditorHooks {
   loadNote(target: string): Promise<string | null>;
   /** Paths of every note, for `[[` suggestions. */
   notePaths(): string[];
+  /** Keep a pasted or dropped file in the vault; resolves to the link target to insert, or null. */
+  saveFile(file: File): Promise<string | null>;
   /** Extra slash-menu entries, from plugins. */
   snippets(): { label: string; detail: string; insert: string }[];
 }
@@ -85,6 +87,10 @@ export class Editor {
           ]),
         ),
         keymap.of([...markdownKeymap, ...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
+        EditorView.domEventHandlers({
+          paste: (e, view) => this.takeFiles(view, e.clipboardData?.files, null, e),
+          drop: (e, view) => this.takeFiles(view, e.dataTransfer?.files, view.posAtCoords({ x: e.clientX, y: e.clientY }), e),
+        }),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) this.hooks.onChange(u.state.doc.toString());
         }),
@@ -117,6 +123,63 @@ export class Editor {
   preview(parent: HTMLElement, text: string): () => void {
     const view = this.mountEmbed(parent, text);
     return () => view.destroy();
+  }
+
+  /** Pasted or dropped files are saved into the vault and linked where they landed. */
+  private takeFiles(view: EditorView, files: FileList | undefined, at: number | null, event: Event): boolean {
+    if (!files?.length || view.state.readOnly) return false;
+    event.preventDefault();
+    void (async () => {
+      for (const file of [...files]) {
+        const target = await this.hooks.saveFile(file);
+        if (!target) continue;
+        const link = `${file.type.startsWith("image/") ? "!" : ""}[${file.type.startsWith("image/") ? "" : file.name}](${target})`;
+        const pos = Math.min(at ?? view.state.selection.main.head, view.state.doc.length);
+        const line = view.state.doc.lineAt(pos);
+        // An image gets a line of its own.
+        const insert = file.type.startsWith("image/") ? `${view.state.sliceDoc(line.from, pos).trim() ? "\n" : ""}${link}\n` : link;
+        const end = at === null ? view.state.selection.main.to : pos;
+        view.dispatch({ changes: { from: pos, to: end, insert }, selection: { anchor: pos + insert.length }, userEvent: "input.paste" });
+        at = at === null ? null : pos + insert.length;
+      }
+    })();
+    return true;
+  }
+
+  /** Every heading in the note, in order. */
+  headings(): { level: number; text: string; pos: number }[] {
+    const out: { level: number; text: string; pos: number }[] = [];
+    const doc = this.view.state.doc;
+    let fenced = false;
+    for (let n = 1; n <= doc.lines; n++) {
+      const line = doc.line(n);
+      if (/^(```|~~~)/.test(line.text)) fenced = !fenced;
+      const m = fenced ? null : /^(#{1,6})\s+(.*?)\s*#*$/.exec(line.text);
+      if (m) out.push({ level: m[1].length, text: m[2], pos: line.from });
+    }
+    return out;
+  }
+
+  /** Move to a place in the note and bring it into view near the top. */
+  goTo(pos: number): void {
+    const at = Math.min(pos, this.view.state.doc.length);
+    const end = this.view.state.doc.lineAt(at).to;
+    this.view.dispatch({ selection: { anchor: end }, effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 96 }) });
+    this.view.focus();
+  }
+
+  /** Go to what a link points at inside this note: `#Heading` or `^block`. */
+  reveal(ref: string): boolean {
+    if (ref.startsWith("^")) {
+      const at = this.text.indexOf(ref);
+      if (at < 0) return false;
+      this.goTo(at);
+      return true;
+    }
+    const want = ref.replace(/^#/, "").trim().toLowerCase();
+    const found = this.headings().find((h) => h.text.toLowerCase() === want);
+    if (found) this.goTo(found.pos);
+    return Boolean(found);
   }
 
   /** Put text where the cursor is, replacing any selection. */

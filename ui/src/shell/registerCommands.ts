@@ -16,6 +16,8 @@ import {
   disconnectSync,
   getEditor,
   notify,
+  openDailyNote,
+  openLink,
   openNote,
   save,
   setVault,
@@ -83,6 +85,10 @@ export function registerAllCommands(): void {
     { id: "vault.choose", title: "Open another vault…", run: chooseVault },
     { id: "sidebar.toggle", title: "Show or hide the sidebar", keys: "Mod-\\", run: () => app.set((s) => ({ sidebar: !s.sidebar })) },
     { id: "note.new", title: "New note", keys: "Mod-n", run: () => createNote() },
+    { id: "note.daily", title: "Open today's note", keys: "Mod-Shift-d", run: openDailyNote },
+    { id: "note.fromTemplate", title: "New note from a template…", run: () => app.set({ palette: "templates" }) },
+    { id: "note.headings", title: "Go to a heading…", keys: "Mod-Shift-o", run: () => app.set({ palette: "headings" }) },
+    { id: "trash.open", title: "Restore from the trash…", run: () => app.set({ palette: "trash" }) },
     {
       id: "note.save",
       title: "Save now",
@@ -180,6 +186,19 @@ export function registerAllCommands(): void {
         await openNote(String(a.path));
         return { active: app.get().active };
       } },
+    { id: "note.follow", title: "Follow a link", hidden: true, run: async (a) => {
+        await openLink(String(a.target));
+        return { active: app.get().active, ...editorState() };
+      } },
+    { id: "editor.pasteFile", title: "Paste a file into the note", hidden: true, run: async (a) => {
+        const bytes = Uint8Array.from(atob(String(a.base64 ?? "")), (c) => c.charCodeAt(0));
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([bytes], String(a.name ?? "image.png"), { type: String(a.type ?? "image/png") }));
+        editor().view.contentDOM.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+        await new Promise((r) => window.setTimeout(r, 600));
+        return editorState();
+      } },
+    { id: "editor.headings", title: "Headings of the open note", hidden: true, run: () => editor().headings() },
     { id: "vault.use", title: "Open vault by path", hidden: true, run: (a) => setVault(String(a.path)) },
     { id: "editor.type", title: "Type text", hidden: true, run(a) {
         editor().type(String(a.text ?? ""));

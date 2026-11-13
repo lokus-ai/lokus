@@ -84,6 +84,17 @@ scripted flows. We do not write piles of generated unit tests. The one always-on
 fidelity: `vault.fidelity` reads and rewrites every note in a deliberately nasty fixture vault
 and fails unless every file is byte-identical.
 
+## 5b. Everyday features (built)
+
+Small things that make it a daily driver, all plain commands over plain files:
+
+- **Links inside a note:** `[[Note#Heading]]` and `[[Note^block]]` open the note at that place;
+  `![[Note#Heading]]` embeds just that part. "Go to a heading" lists the open note's headings.
+- **Daily note:** `Daily/YYYY-MM-DD.md`, created on first use from `Templates/Daily.md` if present.
+- **Templates:** any note in `Templates/`; `{{date}}`, `{{time}}` and `{{title}}` are filled in.
+- **Trash:** deleting moves a file to `.lokus/trash/`; "Restore from the trash" puts it back.
+- **Settings:** theme, note font, assistant, plugins, privacy.
+
 ## 6. Sync and the server (built, M3)
 
 As built: the relay stores its log in one SQLite file (not Postgres), so it runs as a single
@@ -115,6 +126,15 @@ Client-server; no peer-to-peer.
 - Roles: owner, editor, viewer per workspace. Per-folder permissions come later.
 - A personal vault is local-only by default. Turning sync on makes it a one-person workspace on
   the same pipeline.
+
+### Attachments (built)
+
+Files that are not notes (images, PDFs) are not merged. The manifest records each path's content
+hash; the bytes are stored on the relay under that hash (`PUT`/`GET
+/v1/workspaces/{id}/blobs/{hash}`, 25 MB limit, in the same SQLite file); each device fetches what
+it lacks. A local file is never overwritten by a different one: it is kept beside it as
+"name (local copy)". Pasting or dropping a file into a note saves it in an `attachments` folder
+beside the note and links it.
 
 ### Keeping `.md` files and the CRDT in step
 

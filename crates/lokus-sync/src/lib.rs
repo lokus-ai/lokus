@@ -7,6 +7,7 @@ pub mod api;
 pub mod client;
 pub mod engine;
 pub mod error;
+pub mod files;
 
 pub use engine::{Engine, Event};
 pub use error::{Error, Result};

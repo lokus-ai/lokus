@@ -45,7 +45,7 @@ export interface AppState {
   properties: Record<string, string>;
   /** A note that changed on disk while it had unsaved edits here. */
   conflict: string | null;
-  palette: "commands" | "notes" | "search" | null;
+  palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | null;
   /** What the main area shows. */
   view: "note" | "graph" | "settings";
   /** What the panel on the right shows, if it is open. */
@@ -142,6 +142,44 @@ function resolveImage(src: string): string | null {
   return found ? vaultFileUrl(vault.root, found) : null;
 }
 
+const MAX_ATTACHMENT = 25 * 1024 * 1024;
+
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/** Save a pasted or dropped file in an `attachments` folder beside the open note. */
+async function saveFile(file: File): Promise<string | null> {
+  const { active } = app.get();
+  if (!active) return null;
+  if (file.size > MAX_ATTACHMENT) {
+    notify(`${file.name || "That file"} is larger than 25 MB`);
+    return null;
+  }
+  const folder = active.includes("/") ? active.slice(0, active.lastIndexOf("/") + 1) : "";
+  const now = new Date();
+  const stamp = `${today().replace(/-/g, "")}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const extension = /\.[a-z0-9]+$/i.exec(file.name)?.[0] ?? `.${file.type.split("/")[1] ?? "bin"}`;
+  // A pasted screenshot arrives as "image.png"; give it a name that says when.
+  const base = !file.name || /^image\.[a-z]+$/i.test(file.name) ? `Pasted image ${stamp}` : file.name.slice(0, file.name.length - extension.length).replace(/[\\/:*?"<>|#^[\]]/g, "-");
+  const taken = new Set(allFiles());
+  let name = `${base}${extension}`;
+  for (let n = 2; taken.has(`${folder}attachments/${name}`); n++) name = `${base} ${n}${extension}`;
+  try {
+    await runCore("file.write", { path: `${folder}attachments/${name}`, base64: await toBase64(file) });
+    await refreshTree();
+    return encodeURI(`attachments/${name}`);
+  } catch (e) {
+    report(e);
+    return null;
+  }
+}
+
 export function notify(message: string): void {
   app.set({ notice: message });
   window.setTimeout(() => app.get().notice === message && app.set({ notice: null }), 4000);
@@ -171,6 +209,7 @@ export function attachEditor(parent: HTMLElement): void {
     resolveImage,
     loadNote,
     notePaths: () => allNotes(),
+    saveFile,
     snippets: () => app.get().plugins.flatMap((p) => (p.enabled ? (p.manifest?.contributes.snippets ?? []) : [])),
   });
 }
@@ -546,8 +585,85 @@ function resolveNote(target: string): string | null {
 /** Follow a `[[wiki link]]`; a link to a note that does not exist creates it. */
 export async function openLink(target: string): Promise<void> {
   const match = resolveNote(target);
-  if (match) await openNote(match);
-  else await createNote(target.replace(/[#^].*$/, "").trim());
+  const ref = /[#^].*$/.exec(target)?.[0];
+  if (!match) return createNote(target.replace(/[#^].*$/, "").trim());
+  await openNote(match);
+  if (ref && app.get().active === match) editor?.reveal(ref);
+}
+
+const pad = (n: number) => String(n).padStart(2, "0");
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** Where daily notes and templates live. */
+export const DAILY_FOLDER = "Daily";
+export const TEMPLATE_FOLDER = "Templates";
+
+/** Fill in the few placeholders a template may use. */
+function fillTemplate(text: string, title: string): string {
+  const now = new Date();
+  const values: Record<string, string> = { date: today(), time: `${pad(now.getHours())}:${pad(now.getMinutes())}`, title };
+  return text.replace(/\{\{\s*(date|time|title)\s*\}\}/g, (_, key: string) => values[key]);
+}
+
+async function templateText(path: string | null, title: string): Promise<string> {
+  if (!path) return "";
+  const note = await runCore<Note>("note.read", { path }).catch(() => null);
+  return note ? fillTemplate(note.text, title) : "";
+}
+
+/** Open today's note, creating it (from `Templates/Daily.md` if there is one) on first use. */
+export async function openDailyNote(): Promise<void> {
+  const path = `${DAILY_FOLDER}/${today()}.md`;
+  try {
+    if (!allNotes().includes(path)) {
+      const template = allNotes().find((p) => p.toLowerCase() === `${TEMPLATE_FOLDER}/daily.md`.toLowerCase()) ?? null;
+      await runCore("note.create", { path, text: await templateText(template, today()) });
+      track("note_created");
+      await refreshTree();
+    }
+    await openNote(path);
+  } catch (e) {
+    report(e);
+  }
+}
+
+export const templates = () => allNotes().filter((p) => p.startsWith(`${TEMPLATE_FOLDER}/`));
+
+/** Start a new note with a template's text, beside the note that is open. */
+export async function createFromTemplate(template: string): Promise<void> {
+  const active = app.get().active;
+  const folder = active?.includes("/") && !active.startsWith(`${TEMPLATE_FOLDER}/`) ? active.slice(0, active.lastIndexOf("/")) : "";
+  const path = uniquePath(folder, "Untitled");
+  try {
+    await runCore("note.create", { path, text: await templateText(template, "Untitled") });
+    track("note_created");
+    await refreshTree();
+    await openNote(path);
+  } catch (e) {
+    report(e);
+  }
+}
+
+export interface TrashedFile {
+  id: string;
+  path: string;
+  deleted_at: number;
+}
+
+export const trashed = () => runCore<TrashedFile[]>("trash.list");
+
+export async function restoreFromTrash(id: string): Promise<void> {
+  try {
+    const { path } = await runCore<{ path: string }>("trash.restore", { id });
+    await refreshTree();
+    if (/\.md$/i.test(path)) await openNote(path);
+    else notify(`Restored ${path}`);
+  } catch (e) {
+    report(e);
+  }
 }
 
 async function loadNote(target: string): Promise<string | null> {

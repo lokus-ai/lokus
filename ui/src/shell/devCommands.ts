@@ -131,7 +131,7 @@ const commands: Command[] = [
       };
       for (const s of selectors.map((x) => x.trim()).filter(Boolean)) {
         const el = document.querySelector(s);
-        out[s] = el ? { ...rect(el), text: (el as HTMLElement).innerText?.slice(0, 300) } : null;
+        out[s] = el ? { ...rect(el), text: (el as HTMLElement).innerText?.slice(0, 300), src: el.getAttribute("src") ?? undefined, natural: el instanceof HTMLImageElement ? el.naturalWidth : undefined } : null;
       }
       return out;
     },

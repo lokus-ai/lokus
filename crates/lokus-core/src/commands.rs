@@ -135,6 +135,19 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec("tags.list", "Tags and how many notes use each", "", Read),
     spec("folder.create", "Create a folder", "path", Write),
     spec(
+        "file.write",
+        "Save a file that is not a note (an image, a PDF); fails if it exists",
+        "path, base64",
+        Write,
+    ),
+    spec("trash.list", "Files in the trash, newest first", "", Read),
+    spec(
+        "trash.restore",
+        "Put a trashed file back; returns where it went",
+        "id",
+        Write,
+    ),
+    spec(
         "plugins.list",
         "Installed plugins with their manifests",
         "",
@@ -296,6 +309,33 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             vault.create_folder(&a.path)?;
             Ok(json!({ "path": a.path }))
         }
+        "file.write" => {
+            use base64::Engine as _;
+            let a: FileArgs = parse(name, args)?;
+            let bad = |message: &str| CoreError::BadArgs {
+                command: name.to_string(),
+                message: message.to_string(),
+            };
+            if a.base64.len() > MAX_FILE_BASE64 {
+                return Err(bad("files are limited to 25 MB"));
+            }
+            if crate::vault::is_note(Path::new(&a.path)) {
+                return Err(bad("use note.create for notes"));
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(a.base64.as_bytes())
+                .map_err(|_| bad("base64 is not valid"))?;
+            if vault.resolve(&a.path)?.exists() {
+                return Err(CoreError::AlreadyExists(a.path));
+            }
+            vault.write_file(&a.path, &bytes)?;
+            Ok(json!({ "path": a.path, "size": bytes.len() }))
+        }
+        "trash.list" => out(vault.trash()?),
+        "trash.restore" => {
+            let a: IdArgs = parse(name, args)?;
+            Ok(json!({ "path": vault.restore(&a.id)? }))
+        }
         "plugins.list" => out(plugins::list(vault)?),
         "plugins.install" => {
             let a: InstallArgs = parse(name, args)?;
@@ -322,6 +362,15 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
         }
         other => Err(CoreError::UnknownCommand(other.to_string())),
     }
+}
+
+/// 25 MB of bytes, as base64 text.
+const MAX_FILE_BASE64: usize = 25 * 1024 * 1024 / 3 * 4 + 4;
+
+#[derive(Deserialize)]
+struct FileArgs {
+    path: String,
+    base64: String,
 }
 
 #[derive(Deserialize)]

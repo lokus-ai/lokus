@@ -11,7 +11,8 @@ mod ws;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use axum::extract::{Path, State};
+use axum::body::Bytes;
+use axum::extract::{DefaultBodyLimit, Path, State};
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use axum::{Json, Router};
@@ -22,6 +23,9 @@ use tokio::sync::broadcast;
 use auth::{Auth, Identity};
 use error::{Error, Result};
 use store::{Role, Store};
+
+/// The largest attachment the relay stores.
+pub const MAX_BLOB: usize = 25 * 1024 * 1024;
 
 /// A message for everyone in a workspace except the connection it came from.
 #[derive(Clone)]
@@ -84,6 +88,12 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/v1/workspaces/{id}/members", get(list_members))
         .route("/v1/workspaces/{id}/invites", post(create_invite))
         .route("/v1/invites/{code}/accept", post(accept_invite))
+        .route(
+            "/v1/workspaces/{id}/blobs/{hash}",
+            get(get_blob)
+                .put(put_blob)
+                .layer(DefaultBodyLimit::max(MAX_BLOB + 1024)),
+        )
         .route("/v1/ws", get(ws::upgrade))
         .with_state(app)
 }
@@ -165,4 +175,39 @@ async fn accept_invite(
         .store
         .accept_invite(&code, &me.user, me.email.as_deref())?;
     Ok(Json(json!({ "workspace": workspace })))
+}
+
+/// Store an attachment (an image, a PDF) under the hash of its bytes.
+async fn put_blob(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path((id, hash)): Path<(String, String)>,
+    body: Bytes,
+) -> Result<Json<Value>> {
+    let me = app.caller(&headers).await?;
+    if !app.require(&id, &me.user)?.can_edit() {
+        return Err(Error::Forbidden);
+    }
+    if body.len() > MAX_BLOB {
+        return Err(Error::BadRequest("attachments are limited to 25 MB".into()));
+    }
+    if blake3::hash(&body).to_hex().as_str() != hash {
+        return Err(Error::BadRequest(
+            "the bytes do not match their hash".into(),
+        ));
+    }
+    app.store.put_blob(&id, &hash, &body)?;
+    Ok(Json(json!({ "hash": hash, "size": body.len() })))
+}
+
+async fn get_blob(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path((id, hash)): Path<(String, String)>,
+) -> Result<Vec<u8>> {
+    let me = app.caller(&headers).await?;
+    app.require(&id, &me.user)?;
+    app.store
+        .blob(&id, &hash)?
+        .ok_or(Error::NotFound("attachment"))
 }

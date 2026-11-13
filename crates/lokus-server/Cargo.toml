@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 axum = { version = "0.8", features = ["ws"] }
 base64.workspace = true
+blake3 = "1"
 futures-util.workspace = true
 jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }

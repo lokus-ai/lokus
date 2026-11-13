@@ -87,7 +87,9 @@ impl Store {
              CREATE TABLE IF NOT EXISTS updates (seq INTEGER PRIMARY KEY AUTOINCREMENT,
                  workspace TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
                  doc TEXT NOT NULL, data BLOB NOT NULL);
-             CREATE INDEX IF NOT EXISTS updates_by_doc ON updates (workspace, doc, seq);",
+             CREATE INDEX IF NOT EXISTS updates_by_doc ON updates (workspace, doc, seq);
+             CREATE TABLE IF NOT EXISTS blobs (workspace TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+                 hash TEXT NOT NULL, data BLOB NOT NULL, PRIMARY KEY (workspace, hash));",
         )?;
         Ok(Self { db: Mutex::new(db) })
     }
@@ -233,6 +235,27 @@ impl Store {
         }
         tx.commit()?;
         Ok(seq)
+    }
+
+    /// Keep an attachment's bytes under their hash. Storing the same bytes twice is a no-op.
+    pub fn put_blob(&self, workspace: &str, hash: &str, data: &[u8]) -> Result<()> {
+        self.db()?.execute(
+            "INSERT OR IGNORE INTO blobs (workspace, hash, data) VALUES (?1, ?2, ?3)",
+            params![workspace, hash, data],
+        )?;
+        Ok(())
+    }
+
+    pub fn blob(&self, workspace: &str, hash: &str) -> Result<Option<Vec<u8>>> {
+        use rusqlite::OptionalExtension;
+        Ok(self
+            .db()?
+            .query_row(
+                "SELECT data FROM blobs WHERE workspace = ?1 AND hash = ?2",
+                params![workspace, hash],
+                |r| r.get(0),
+            )
+            .optional()?)
     }
 
     /// Every edit after `since`, oldest first, and the newest position.

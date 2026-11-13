@@ -68,8 +68,8 @@ pub struct Outgoing {
 }
 
 pub struct Engine {
-    vault: Vault,
-    db: Connection,
+    pub(crate) vault: Vault,
+    pub(crate) db: Connection,
     client_id: u64,
     pub events: Vec<Event>,
 }
@@ -97,6 +97,7 @@ impl Engine {
             client_id: 0,
             events: Vec::new(),
         };
+        engine.create_file_tables()?;
         engine.client_id = match engine.meta("client_id")? {
             Some(id) => id.parse().unwrap_or(1),
             None => {
@@ -193,7 +194,7 @@ impl Engine {
             .optional()?)
     }
 
-    fn load(&self, id: &str) -> Result<Doc> {
+    pub(crate) fn load(&self, id: &str) -> Result<Doc> {
         let doc = self.new_doc();
         if let Some(row) = self.row(id)? {
             apply(&doc, &row.state)?;
@@ -201,7 +202,13 @@ impl Engine {
         Ok(doc)
     }
 
-    fn save(&self, id: &str, doc: &Doc, synced: Option<&str>, path: Option<&str>) -> Result<()> {
+    pub(crate) fn save(
+        &self,
+        id: &str,
+        doc: &Doc,
+        synced: Option<&str>,
+        path: Option<&str>,
+    ) -> Result<()> {
         let state = doc
             .transact()
             .encode_state_as_update_v1(&StateVector::default());
@@ -213,7 +220,7 @@ impl Engine {
         Ok(())
     }
 
-    fn queue(&self, doc: &str, data: Vec<u8>) -> Result<()> {
+    pub(crate) fn queue(&self, doc: &str, data: Vec<u8>) -> Result<()> {
         self.db.execute(
             "INSERT INTO outbox (doc, data) VALUES (?1, ?2)",
             params![doc, data],
@@ -365,6 +372,9 @@ impl Engine {
             let synced = self.row(&id)?.and_then(|r| r.synced);
             self.save(&id, &doc, synced.as_deref(), None)?;
         }
+        if self.pulled()? {
+            self.scan_files(&manifest)?;
+        }
         Ok(())
     }
 
@@ -431,7 +441,8 @@ impl Engine {
             let manifest = self.load(MANIFEST)?;
             apply(&manifest, update)?;
             self.save(MANIFEST, &manifest, None, None)?;
-            return self.materialize(&manifest);
+            self.materialize(&manifest)?;
+            return self.materialize_files(&manifest);
         }
         let row = self.row(id)?;
         let doc = self.new_doc();

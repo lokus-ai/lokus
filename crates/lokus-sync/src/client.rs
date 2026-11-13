@@ -10,7 +10,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tokio_tungstenite::tungstenite::Message;
 
 use lokus_core::watch::watch;
@@ -79,16 +79,88 @@ pub async fn serve(
     report: impl Fn(Value) + Send + Sync + 'static,
 ) -> Result<()> {
     let engine = link.engine.clone();
-
-    loop {
-        match session(&engine, &config, &mut changes, &report).await {
-            Err(Error::Refused(reason)) => return Err(Error::Refused(reason)),
-            Err(e) => report(json!({ "event": "offline", "reason": e.to_string() })),
-            Ok(()) => report(json!({ "event": "offline", "reason": "connection closed" })),
+    let moved = Notify::new();
+    let connection = async {
+        loop {
+            match session(&engine, &config, &mut changes, &report, &moved).await {
+                Err(Error::Refused(reason)) => return Err(Error::Refused(reason)),
+                Err(e) => report(json!({ "event": "offline", "reason": e.to_string() })),
+                Ok(()) => report(json!({ "event": "offline", "reason": "connection closed" })),
+            }
+            // Keep folding local edits into the outbox while offline.
+            let _ = with(&engine, |e| e.scan());
+            tokio::time::sleep(RETRY).await;
         }
-        // Keep folding local edits into the outbox while offline.
-        let _ = with(&engine, |e| e.scan());
-        tokio::time::sleep(RETRY).await;
+    };
+    tokio::select! {
+        outcome = connection => outcome,
+        () = attachments(&engine, &config, &moved) => Ok(()),
+    }
+}
+
+/// Move attachment bytes to and from the relay, beside the live connection.
+/// It wakes when the engine may have queued something, and looks again after
+/// a while for files another device has announced but not finished sending.
+async fn attachments(engine: &Arc<Mutex<Engine>>, config: &Config, moved: &Notify) {
+    let http = reqwest::Client::new();
+    let base = format!(
+        "{}/v1/workspaces/{}/blobs",
+        config.server.trim_end_matches('/'),
+        config.workspace
+    );
+    let mut misses = 0u32;
+    loop {
+        let pending = with(engine, |e| match e.meta("pulled")? {
+            Some(_) => e.transfers(),
+            None => Ok(Vec::new()),
+        })
+        .unwrap_or_default();
+        let mut left = 0;
+        for transfer in pending {
+            let url = format!("{base}/{}", transfer.hash);
+            let settled = if transfer.up {
+                match with(engine, |e| e.read_upload(&transfer)) {
+                    Ok(Some(bytes)) => {
+                        let sent = http
+                            .put(&url)
+                            .bearer_auth(&config.token)
+                            .body(bytes)
+                            .send()
+                            .await;
+                        // A viewer's or an oversized file is not retried; it simply stays local.
+                        sent.is_ok_and(|r| r.status().is_success() || r.status().is_client_error())
+                    }
+                    Ok(None) => true,
+                    Err(_) => false,
+                }
+            } else {
+                match http.get(&url).bearer_auth(&config.token).send().await {
+                    Ok(response) if response.status().is_success() => {
+                        match response.bytes().await {
+                            Ok(bytes) => {
+                                with(engine, |e| e.store_download(&transfer, &bytes)).is_ok()
+                            }
+                            Err(_) => false,
+                        }
+                    }
+                    _ => false,
+                }
+            };
+            if settled {
+                let _ = with(engine, |e| e.transfer_done(&transfer));
+            } else {
+                left += 1;
+            }
+        }
+        if left == 0 {
+            misses = 0;
+            moved.notified().await;
+        } else {
+            // Usually the other device is still sending: look again soon, then less often.
+            let wait = Duration::from_millis(400) * 2u32.pow(misses.min(6));
+            misses += 1;
+            let _ = tokio::time::timeout(wait, moved.notified()).await;
+        }
     }
 }
 
@@ -116,6 +188,7 @@ async fn session(
     config: &Config,
     changes: &mut mpsc::UnboundedReceiver<Nudge>,
     report: &(impl Fn(Value) + Send + Sync),
+    moved: &Notify,
 ) -> Result<()> {
     let (socket, _) = tokio_tungstenite::connect_async(socket_url(config))
         .await
@@ -148,6 +221,8 @@ async fn session(
         for event in pending.1 {
             report(serde_json::to_value(event).unwrap_or(Value::Null));
         }
+        // Whatever just happened may have queued attachment bytes to move.
+        moved.notify_one();
         // Publish only after the first pull of this connection has been applied.
         if in_flight.is_empty() || !pending.0.is_empty() {
             for item in pending.0.into_iter().filter(|_| can_edit).filter(|i| {

@@ -64,6 +64,17 @@ pub struct Entry {
     pub children: Vec<Entry>,
 }
 
+/// A file in the vault's trash.
+#[derive(Debug, Serialize)]
+pub struct Trashed {
+    /// What to pass to `trash.restore`.
+    pub id: String,
+    /// Where the file was.
+    pub path: String,
+    /// Milliseconds since 1970.
+    pub deleted_at: u64,
+}
+
 #[derive(Debug, Serialize, Default)]
 pub struct FidelityReport {
     pub checked: usize,
@@ -293,6 +304,78 @@ impl Vault {
         Ok(self.relative(&dst).unwrap_or_default())
     }
 
+    /// Everything in the trash, newest first.
+    pub fn trash(&self) -> Result<Vec<Trashed>> {
+        fn walk(dir: &Path, base: &Path, stamp: u64, out: &mut Vec<Trashed>) {
+            for item in fs::read_dir(dir).into_iter().flatten().flatten() {
+                let path = item.path();
+                if path.is_dir() {
+                    walk(&path, base, stamp, out);
+                } else if let Ok(rel) = path.strip_prefix(base) {
+                    let rel: Vec<_> = rel
+                        .components()
+                        .map(|c| c.as_os_str().to_string_lossy())
+                        .collect();
+                    let rel = rel.join("/");
+                    out.push(Trashed {
+                        id: format!("{stamp}/{rel}"),
+                        path: rel,
+                        deleted_at: stamp,
+                    });
+                }
+            }
+        }
+        let mut out = Vec::new();
+        let root = self.root.join(META_DIR).join("trash");
+        for item in fs::read_dir(root).into_iter().flatten().flatten() {
+            if let Ok(stamp) = item.file_name().to_string_lossy().parse::<u64>() {
+                walk(&item.path(), &item.path(), stamp, &mut out);
+            }
+        }
+        out.sort_by(|a, b| {
+            b.deleted_at
+                .cmp(&a.deleted_at)
+                .then_with(|| a.path.cmp(&b.path))
+        });
+        Ok(out)
+    }
+
+    /// Put a trashed file back where it was. If something else is there now,
+    /// it comes back beside it. Returns the path it was restored to.
+    pub fn restore(&self, id: &str) -> Result<String> {
+        let bad = || CoreError::InvalidPath(id.to_string());
+        let (stamp, rel) = id.split_once('/').ok_or_else(bad)?;
+        if stamp.parse::<u64>().is_err() {
+            return Err(bad());
+        }
+        // `resolve` rejects anything that could leave the vault.
+        self.resolve(rel)?;
+        let src = self.root.join(META_DIR).join("trash").join(stamp).join(rel);
+        if !src.is_file() {
+            return Err(CoreError::NotFound(id.to_string()));
+        }
+        let (stem, ext) = match rel.rsplit_once('.') {
+            Some((stem, ext)) if !ext.contains('/') => (stem.to_string(), format!(".{ext}")),
+            _ => (rel.to_string(), String::new()),
+        };
+        let mut target = rel.to_string();
+        let mut n = 1;
+        while self.resolve(&target)?.exists() {
+            target = if n == 1 {
+                format!("{stem} (restored){ext}")
+            } else {
+                format!("{stem} (restored {n}){ext}")
+            };
+            n += 1;
+        }
+        let dst = self.resolve(&target)?;
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::rename(src, dst)?;
+        Ok(target)
+    }
+
     /// Flat list of every note path, for the quick switcher.
     pub fn notes(&self) -> Result<Vec<String>> {
         fn walk(entries: &[Entry], out: &mut Vec<String>) {
@@ -307,6 +390,31 @@ impl Vault {
         let mut out = Vec::new();
         walk(&self.tree()?, &mut out);
         Ok(out)
+    }
+
+    /// Flat list of every file that is not a note: images, PDFs and the like.
+    pub fn attachments(&self) -> Result<Vec<String>> {
+        fn walk(entries: &[Entry], out: &mut Vec<String>) {
+            for e in entries {
+                match e.kind {
+                    EntryKind::Folder => walk(&e.children, out),
+                    EntryKind::File => out.push(e.path.clone()),
+                    EntryKind::Note => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&self.tree()?, &mut out);
+        Ok(out)
+    }
+
+    /// Write a file that is not a note, atomically, creating its folder.
+    pub fn write_file(&self, rel: &str, bytes: &[u8]) -> Result<()> {
+        let abs = self.resolve(rel)?;
+        if let Some(dir) = abs.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        write_atomic(&abs, bytes)
     }
 
     /// Prove that opening a note and saving it unchanged is byte-identical,
