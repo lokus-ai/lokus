@@ -6,6 +6,8 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | Sign in with ChatGPT is built as a third provider, using OpenAI's flow for open-source, locally run apps | The owner asked for it after bring-your-own-key; OpenAI's developer pages say open-source local apps may use it without approval. Built from those pages and checked against a stand-in only | Pratham (wants it); Claude (built now, from the published flow) | "Sign in with ChatGPT follows if its terms fit" |
+| 2026-11-12 | Analytics sends only the named events: click, performance and heatmap capture are switched off | PostHog was loading those extras from its remote settings | Claude (default) | - |
 | 2026-11-12 | Mobile (M4) is skipped for now | Owner's call when asked how to proceed without Xcode or the Android SDK on the build machine | Pratham | M4 in the first roadmap |
 | 2026-11-12 | The relay accepts Supabase logins signed either way: with the project's published keys, or with a shared secret given as `SUPABASE_JWT_SECRET`; it warns at start-up when neither can work | The existing Supabase project publishes no keys, so the relay as first written would have refused every real login | Claude (default) | Key-only verification |
 | 2026-11-12 | A render error in one view (settings, graph, a database, the side panel) shows a message in that view's space instead of blanking the window | Found when a missing field took the whole app down; the notes must stay reachable | Claude (default) | - |

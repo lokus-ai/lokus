@@ -15,7 +15,7 @@ commands below, but it has no signed release yet. The previous app is at tag `v1
 | Pages | Icon, cover and properties in frontmatter; table and board views over a folder's notes |
 | Finding things | Full-text search, backlinks, graph, go to note or heading |
 | Teams | Workspaces, owner / editor / viewer roles, invites, live co-editing with presence, offline edits that merge, attachments |
-| Assistant | Bring your own key (Claude, or anything OpenAI-compatible); it reads and edits notes with your approval; MCP tool servers |
+| Assistant | Bring your own key (Claude, or anything OpenAI-compatible) or sign in with ChatGPT; it reads and edits notes with your approval; MCP tool servers |
 | Plugins | Sandboxed, permission-checked; see [`docs/plugins.md`](./docs/plugins.md) |
 | Everyday | Daily note, templates, trash and version history, light and dark themes |
 

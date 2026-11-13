@@ -4,7 +4,6 @@
 //!
 //! Output is JSON on stdout; errors are JSON on stderr with exit code 1.
 
-use std::io::{BufRead, BufReader, Write};
 use std::process::ExitCode;
 
 use lokus_core::error::ErrorBody;
@@ -17,7 +16,7 @@ const USAGE: &str = "usage:
   lokus commands.list                     (every core command)
   lokus sync --vault DIR server=URL workspace=ID token=TOKEN
                                           (keep a folder in sync with a relay; prints what it does)
-  lokus ai --vault DIR q=QUESTION [provider=anthropic|openai] [model=ID] [base_url=URL]
+  lokus ai --vault DIR q=QUESTION [provider=anthropic|openai|chatgpt] [model=ID] [base_url=URL]
            [approve=true] [mcp=URL] [login=true]       (ask the assistant; the key comes from the keychain,
                                           or ANTHROPIC_API_KEY / OPENAI_API_KEY)
 
@@ -133,6 +132,7 @@ fn run_on_vault(p: &Parsed) -> Result<Value, Value> {
 /// command, core or UI, inside the live app.
 #[cfg(unix)]
 fn run_in_app(p: &Parsed) -> Result<Value, Value> {
+    use std::io::{BufRead, BufReader, Write};
     use std::os::unix::net::UnixStream;
     let path = std::env::var("LOKUS_DEV_SOCK")
         .map(std::path::PathBuf::from)
@@ -218,6 +218,7 @@ fn ai(p: &Parsed) -> ExitCode {
     }
     let provider = match arg("provider").as_deref() {
         Some("openai") => lokus_ai::Provider::OpenAi,
+        Some("chatgpt") => lokus_ai::Provider::ChatGpt,
         _ => lokus_ai::Provider::Anthropic,
     };
     let config = lokus_ai::Config {
@@ -245,6 +246,12 @@ fn ai(p: &Parsed) -> ExitCode {
         Err(e) => return fail(json!({ "code": "io", "message": e.to_string() })),
     };
     // `login=true`: sign in to the tool server first. The address to open is printed.
+    if p.args["login"] == true && provider == lokus_ai::Provider::ChatGpt {
+        let show = |url: &str| println!("{}", json!({ "type": "sign_in", "url": url }));
+        if let Err(e) = runtime.block_on(lokus_ai::chatgpt::login(show)) {
+            return fail(e.body());
+        }
+    }
     if p.args["login"] == true {
         for server in &request.config.mcp {
             let show = |url: &str| println!("{}", json!({ "type": "sign_in", "url": url }));

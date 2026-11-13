@@ -65,7 +65,7 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
         .collect();
     Ok(json!({
         "config": config,
-        "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi) },
+        "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi), "chatgpt": has_key(Provider::ChatGpt) },
         "tokens": tokens,
         "signed_in": config.mcp.iter().filter(|s| lokus_ai::mcp_login::signed_in(&s.name)).map(|s| s.name.as_str()).collect::<Vec<_>>(),
         "plugin_servers": plugin_servers(&app),
@@ -92,7 +92,9 @@ pub fn ai_secret_set(kind: String, name: String, value: String) -> Result<(), Va
 #[tauri::command]
 pub async fn ai_models(app: AppHandle) -> Result<Vec<String>, Value> {
     let config = load(&app)?;
-    let key = lokus_ai::config::api_key(config.provider).map_err(|e| e.body())?;
+    let key = lokus_ai::chat::credential(config.provider)
+        .await
+        .map_err(|e| e.body())?;
     lokus_ai::provider::models(&reqwest_client(), &config, &key)
         .await
         .map_err(|e| e.body())
@@ -192,4 +194,18 @@ pub async fn ai_mcp_login(server: McpServer) -> Result<(), Value> {
 #[tauri::command(async)]
 pub fn ai_mcp_logout(name: String) {
     lokus_ai::mcp_login::sign_out(&name);
+}
+
+/// Sign in with ChatGPT in the person's browser.
+#[tauri::command]
+pub async fn ai_chatgpt_login() -> Result<(), Value> {
+    let show = |url: &str| {
+        let _ = open::that(url);
+    };
+    lokus_ai::chatgpt::login(show).await.map_err(|e| e.body())
+}
+
+#[tauri::command(async)]
+pub fn ai_chatgpt_logout() {
+    lokus_ai::chatgpt::sign_out();
 }

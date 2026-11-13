@@ -196,8 +196,9 @@ confirms that everything it must not be able to do is refused.
 - **Bring your own key.** The key lives in the OS keychain. Every provider call is made from
   Rust, so the UI and plugins never see a key. `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are read
   as a fallback, which is how the command line and the scripted flow supply one.
-- **Two wire formats:** Anthropic's Messages API for Claude (default model Claude Opus 5.5), and
-  the OpenAI chat-completions format for OpenAI and any compatible service. Conversations are
+- **Three wire formats:** Anthropic's Messages API for Claude (default model Claude Opus 5.5), the
+  OpenAI chat-completions format for OpenAI and any compatible service, and the OpenAI Responses
+  API for a ChatGPT plan. Conversations are
   kept in one shape and translated on the way out.
 - **Tools:** the assistant searches, reads, creates and edits notes through the same core
   commands as everything else. A change to a note, and any tool-server action not marked
@@ -208,7 +209,12 @@ confirms that everything it must not be able to do is refused.
   Tokens live in the keychain (in memory until the app quits if the keychain is unavailable).
   Not built: local (stdio) servers.
 - `lokus ai --vault DIR q=...` asks one question from a terminal.
-- **Sign in with ChatGPT** is not built; it follows once its terms are checked.
+- **Sign in with ChatGPT** (built; never run against OpenAI). A third provider choice that uses
+  the person's own ChatGPT Plus or Pro plan with no key. OpenAI's developer pages (read
+  2026-11-12) say plan usage is open to open-source apps that run on the person's machine, which
+  is what Lokus is; registration is automatic on first sign-in. The flow is OAuth with PKCE and a
+  redirect to `127.0.0.1`; requests go to the Responses API with `store: false`. If Lokus ever
+  ships a hosted or paid build, that build needs OpenAI's separate approval.
 
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
 (`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key.

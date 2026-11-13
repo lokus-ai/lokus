@@ -21,6 +21,8 @@ pub enum AiError {
     Keychain(String),
     #[error("tool server {server}: {message}")]
     Mcp { server: String, message: String },
+    #[error("{0}")]
+    SignIn(String),
     #[error("settings: {0}")]
     Config(String),
 }
@@ -36,6 +38,7 @@ impl AiError {
             Self::Network(_) => "network",
             Self::Keychain(_) => "keychain",
             Self::Mcp { .. } => "mcp",
+            Self::SignIn(_) => "no_key",
             Self::Config(_) => "config",
         }
     }

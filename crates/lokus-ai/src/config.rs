@@ -20,6 +20,8 @@ pub enum Provider {
     Anthropic,
     /// Any service that speaks the OpenAI chat-completions format.
     OpenAi,
+    /// The person's own ChatGPT plan, through Sign in with ChatGPT. No key.
+    ChatGpt,
 }
 
 impl Provider {
@@ -27,6 +29,7 @@ impl Provider {
         match self {
             Self::Anthropic => "anthropic",
             Self::OpenAi => "openai",
+            Self::ChatGpt => "chatgpt",
         }
     }
 
@@ -34,13 +37,14 @@ impl Provider {
         match self {
             Self::Anthropic => "Anthropic",
             Self::OpenAi => "OpenAI",
+            Self::ChatGpt => "ChatGPT",
         }
     }
 
     pub fn default_url(self) -> &'static str {
         match self {
             Self::Anthropic => "https://api.anthropic.com",
-            Self::OpenAi => "https://api.openai.com/v1",
+            Self::OpenAi | Self::ChatGpt => "https://api.openai.com/v1",
         }
     }
 
@@ -48,6 +52,8 @@ impl Provider {
         match self {
             Self::Anthropic => "ANTHROPIC_API_KEY",
             Self::OpenAi => "OPENAI_API_KEY",
+            // Never read: this provider signs in instead.
+            Self::ChatGpt => "",
         }
     }
 }
@@ -111,7 +117,7 @@ impl Config {
     pub fn model(&self) -> Result<&str> {
         match (self.model.trim(), self.provider) {
             ("", Provider::Anthropic) => Ok("claude-opus-5-5"),
-            ("", Provider::OpenAi) => Err(AiError::NoModel),
+            ("", Provider::OpenAi | Provider::ChatGpt) => Err(AiError::NoModel),
             (model, _) => Ok(model),
         }
     }
@@ -164,5 +170,32 @@ pub fn api_key(provider: Provider) -> Result<String> {
 }
 
 pub fn has_key(provider: Provider) -> bool {
-    api_key(provider).is_ok()
+    match provider {
+        Provider::ChatGpt => crate::chatgpt::signed_in(),
+        _ => api_key(provider).is_ok(),
+    }
+}
+
+/// Where sign-ins live when the keychain cannot be used: until the app quits.
+static MEMORY: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, String>>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// Keep a sign-in: in the keychain, or in memory if the keychain refuses.
+pub fn keep(account: &str, value: &str) {
+    if set_secret(account, value).is_err() {
+        if let Ok(mut memory) = MEMORY.lock() {
+            memory.insert(account.to_string(), value.to_string());
+        }
+    }
+}
+
+pub fn kept(account: &str) -> Option<String> {
+    secret(account).or_else(|| MEMORY.lock().ok()?.get(account).cloned())
+}
+
+pub fn forget(account: &str) {
+    let _ = set_secret(account, "");
+    if let Ok(mut memory) = MEMORY.lock() {
+        memory.remove(account);
+    }
 }

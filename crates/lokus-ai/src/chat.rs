@@ -9,7 +9,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use tokio::sync::oneshot;
 
-use crate::config::{api_key, Config, McpServer};
+use crate::chatgpt;
+use crate::config::{api_key, Config, McpServer, Provider};
 use crate::error::Result;
 use crate::mcp::{self, Connection};
 use crate::provider;
@@ -91,6 +92,14 @@ fn preview(text: &str) -> String {
     format!("{cut}…")
 }
 
+/// What to authenticate with: the person's key, or their ChatGPT sign-in.
+pub async fn credential(provider: Provider) -> Result<String> {
+    match provider {
+        Provider::ChatGpt => chatgpt::access_token().await,
+        other => api_key(other),
+    }
+}
+
 pub async fn send(
     request: Request,
     emit: impl Fn(Event) + Send + Sync,
@@ -102,7 +111,7 @@ pub async fn send(
         core,
         extra_servers,
     } = request;
-    let key = api_key(config.provider)?;
+    let key = credential(config.provider).await?;
     config.model()?;
     let http = reqwest::Client::new();
 

@@ -239,6 +239,8 @@ pub fn run() {
             ai::ai_mcp_check,
             ai::ai_mcp_login,
             ai::ai_mcp_logout,
+            ai::ai_chatgpt_login,
+            ai::ai_chatgpt_logout,
             ai::ai_send,
             ai::ai_stop,
             ai::ai_approve,
@@ -268,6 +270,8 @@ pub fn run() {
         ai::ai_mcp_check,
         ai::ai_mcp_login,
         ai::ai_mcp_logout,
+        ai::ai_chatgpt_login,
+        ai::ai_chatgpt_logout,
         ai::ai_send,
         ai::ai_stop,
         ai::ai_approve

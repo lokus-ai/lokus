@@ -1,7 +1,7 @@
 /** @part-of ui.settings */
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { type AiConfig, aiModels, type AiSettings, aiSettings, checkMcp, type McpServer, mcpLogin, mcpLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
+import { type AiConfig, aiModels, type AiSettings, aiSettings, chatgptLogin, chatgptLogout, checkMcp, type McpServer, mcpLogin, mcpLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
 import { analyticsEnabled, setAnalyticsEnabled } from "../../bridge/analytics";
 import { type InstalledPlugin, pickFolder, type PluginManifest, runCore } from "../../bridge/core";
 import { type Preferences, preferences, setPreference } from "../../shell/preferences";
@@ -9,7 +9,7 @@ import { useStore } from "../../shell/store";
 import { app } from "../../shell/workspace";
 import { loadPlugins, pluginSettings, setPluginSetting } from "../plugins/host";
 
-const PROVIDERS = { anthropic: "Anthropic (Claude)", openai: "OpenAI or compatible" } as const;
+const PROVIDERS = { anthropic: "Claude", openai: "OpenAI-compatible", chatgpt: "ChatGPT plan" } as const;
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
@@ -56,6 +56,7 @@ function Assistant() {
   const [key, setKey] = useState("");
   const [models, setModels] = useState<string[]>([]);
   const [note, setNote] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const [server, setServer] = useState({ name: "", url: "", token: "" });
   const [checked, setChecked] = useState<Record<string, string>>({});
 
@@ -77,6 +78,13 @@ function Assistant() {
       () => setKey(""),
       (e) => setNote(message(e)),
     );
+    await reload();
+  };
+  const signInChatGpt = async () => {
+    setNote(null);
+    setSigningIn(true);
+    await chatgptLogin().catch((e) => setNote(message(e)));
+    setSigningIn(false);
     await reload();
   };
   const loadModels = () => aiModels().then(setModels, (e) => setNote(message(e)));
@@ -119,18 +127,32 @@ function Assistant() {
       <Row label="Provider">
         <Choice value={config.provider} options={PROVIDERS} onChange={(provider) => void save({ provider, model: "" }).then(() => setModels([]))} />
       </Row>
+      {config.provider === "chatgpt" ? (
+        <Row label="ChatGPT account" hint={hasKey ? "Signed in. Requests use your ChatGPT plan." : "Uses your own ChatGPT Plus or Pro plan. No API key."}>
+          {hasKey ? (
+            <button className="settings-button" onClick={() => void chatgptLogout().then(reload)}>
+              Sign out
+            </button>
+          ) : (
+            <button className="settings-button" disabled={signingIn} onClick={() => void signInChatGpt()}>
+              {signingIn ? "Finish in your browser…" : "Sign in with ChatGPT"}
+            </button>
+          )}
+        </Row>
+      ) : (
       <Row label="API key" hint={hasKey ? "A key is saved. Paste a new one to replace it." : "No key yet."}>
-        <input type="password" value={key} placeholder={hasKey ? "••••••••••••" : "Paste your key"} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
-        <button className="settings-button" disabled={!key.trim()} onClick={() => void saveKey(key)}>
-          Save
-        </button>
-        {hasKey && (
-          <button className="link danger" onClick={() => void saveKey("")}>
-            Remove
+          <input type="password" value={key} placeholder={hasKey ? "••••••••••••" : "Paste your key"} onChange={(e) => setKey(e.target.value)} autoComplete="off" />
+          <button className="settings-button" disabled={!key.trim()} onClick={() => void saveKey(key)}>
+            Save
           </button>
-        )}
-      </Row>
-      <Row label="Model" hint={config.provider === "anthropic" ? "Leave empty for Claude Opus 5.5." : "Pick or type a model name."}>
+          {hasKey && (
+            <button className="link danger" onClick={() => void saveKey("")}>
+              Remove
+            </button>
+          )}
+        </Row>
+      )}
+      <Row label="Model" hint={config.provider === "anthropic" ? "Leave empty for Claude Opus 5.5." : "Click the box to list the models you can use, or type a name."}>
         <input list="ai-models" value={config.model} placeholder={config.provider === "anthropic" ? "claude-opus-5-5" : "model name"} onChange={(e) => void save({ model: e.target.value })} onFocus={() => models.length === 0 && hasKey && void loadModels()} />
         <datalist id="ai-models">
           {models.map((m) => (

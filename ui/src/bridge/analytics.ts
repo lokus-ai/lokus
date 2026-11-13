@@ -30,6 +30,10 @@ export async function startAnalytics(): Promise<void> {
     capture_pageleave: false,
     disable_session_recording: true,
     disable_surveys: true,
+    // Nothing beyond the named events: no click, performance or heatmap capture.
+    capture_dead_clicks: false,
+    capture_performance: false,
+    capture_heatmaps: false,
     persistence: "localStorage",
   });
   posthog = client;

@@ -45,8 +45,12 @@ fn network(config: &Config) -> impl Fn(reqwest::Error) -> AiError + '_ {
 async fn refusal(response: Response) -> AiError {
     let status = response.status();
     let body: Value = response.json().await.unwrap_or_default();
+    if let Some(friendly) = body["error"]["code"].as_str().and_then(plan_error) {
+        return AiError::Provider(friendly.to_string());
+    }
     let message = body["error"]["message"]
         .as_str()
+        .or_else(|| body["detail"].as_str())
         .map(str::to_string)
         .unwrap_or_else(|| format!("the provider answered {status}"));
     match status {
@@ -413,6 +417,152 @@ async fn openai(
     })
 }
 
+/// What to tell the person when their ChatGPT plan cannot serve a request.
+fn plan_error(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "subscription_sharing_user_not_eligible" => {
+            "This ChatGPT account cannot use its plan in other apps (it needs Plus or Pro)."
+        }
+        "subscription_sharing_usage_limit_exceeded" => {
+            "Your ChatGPT plan's limit for this app is used up. See https://chatgpt.com/settings/usage"
+        }
+        "subscription_sharing_usage_unavailable" => {
+            "ChatGPT plan usage is unavailable right now; try again in a moment."
+        }
+        "subscription_sharing_unsupported_capability" | "subscription_sharing_route_not_supported" => {
+            "This model or feature is not available through a ChatGPT plan."
+        }
+        "subscription_sharing_invalid_user" => "Sign in with ChatGPT again in Settings.",
+        _ => return None,
+    })
+}
+
+/// Our message list as input items for the Responses API.
+fn to_responses(messages: &[Value]) -> Vec<Value> {
+    let mut out = Vec::new();
+    for message in messages {
+        let role = message["role"].as_str().unwrap_or("user");
+        let blocks: Vec<Value> = match &message["content"] {
+            Value::String(text) => vec![json!({ "type": "text", "text": text })],
+            Value::Array(blocks) => blocks.clone(),
+            _ => Vec::new(),
+        };
+        for block in &blocks {
+            match block["type"].as_str().unwrap_or_default() {
+                "text" => out.push(json!({ "role": role, "content": block["text"] })),
+                "tool_use" => out.push(json!({
+                    "type": "function_call",
+                    "call_id": block["id"],
+                    "name": block["name"],
+                    "arguments": block["input"].to_string(),
+                })),
+                "tool_result" => {
+                    let output = match &block["content"] {
+                        Value::String(text) => text.clone(),
+                        other => other.to_string(),
+                    };
+                    out.push(json!({ "type": "function_call_output", "call_id": block["tool_use_id"], "output": output }));
+                }
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// The OpenAI Responses API, which is what a ChatGPT plan is served through.
+async fn responses(
+    http: &Client,
+    config: &Config,
+    key: &str,
+    system: &str,
+    tools: &[Tool],
+    messages: &[Value],
+    on_text: &mut (dyn FnMut(&str) + Send),
+) -> Result<Turn> {
+    let mut body = json!({
+        "model": config.model()?,
+        "instructions": system,
+        "input": to_responses(messages),
+        "stream": true,
+        "store": false,
+    });
+    if !tools.is_empty() {
+        body["tools"] = tools
+            .iter()
+            .map(|t| json!({ "type": "function", "name": t.name, "description": t.description, "parameters": t.schema }))
+            .collect();
+    }
+    let response = send(config, || {
+        http.post(format!("{}/responses", config.url()))
+            .bearer_auth(key)
+            .json(&body)
+    })
+    .await?;
+
+    let mut content: Vec<Value> = Vec::new();
+    let mut text = String::new();
+    let mut invalid = Vec::new();
+    let mut stop = String::new();
+    events(response, config, |data| {
+        let Ok(event) = serde_json::from_str::<Value>(data) else {
+            return Ok(());
+        };
+        match event["type"].as_str().unwrap_or_default() {
+            "response.output_text.delta" => {
+                let piece = event["delta"].as_str().unwrap_or_default();
+                text.push_str(piece);
+                on_text(piece);
+            }
+            "response.output_item.done" if event["item"]["type"] == "function_call" => {
+                let item = &event["item"];
+                let id = item["call_id"].as_str().unwrap_or_default().to_string();
+                let input = arguments(item["arguments"].as_str().unwrap_or_default())
+                    .unwrap_or_else(|| {
+                        invalid.push(id.clone());
+                        json!({})
+                    });
+                content.push(
+                    json!({ "type": "tool_use", "id": id, "name": item["name"], "input": input }),
+                );
+            }
+            "response.completed" => stop = "end_turn".into(),
+            "response.incomplete" => stop = "max_tokens".into(),
+            "response.failed" | "error" => {
+                let error = if event["response"]["error"].is_object() {
+                    &event["response"]["error"]
+                } else {
+                    &event["error"]
+                };
+                let message = error["code"]
+                    .as_str()
+                    .and_then(plan_error)
+                    .or_else(|| error["message"].as_str())
+                    .unwrap_or("the request failed");
+                return Err(AiError::Provider(message.to_string()));
+            }
+            _ => {}
+        }
+        Ok(())
+    })
+    .await?;
+    if stop.is_empty() {
+        // The stream ended without saying it was complete.
+        return Err(AiError::Network(config.url().to_string()));
+    }
+    if !text.is_empty() {
+        content.insert(0, json!({ "type": "text", "text": text }));
+    }
+    if stop == "end_turn" && content.iter().any(|b| b["type"] == "tool_use") {
+        stop = "tool_use".into();
+    }
+    Ok(Turn {
+        content,
+        stop,
+        invalid,
+    })
+}
+
 /// Ask the model for its next turn, streaming text to `on_text` as it comes.
 pub async fn turn(
     http: &Client,
@@ -426,6 +576,7 @@ pub async fn turn(
     match config.provider {
         Provider::Anthropic => anthropic(http, config, key, system, tools, messages, on_text).await,
         Provider::OpenAi => openai(http, config, key, system, tools, messages, on_text).await,
+        Provider::ChatGpt => responses(http, config, key, system, tools, messages, on_text).await,
     }
 }
 
@@ -436,7 +587,7 @@ pub async fn models(http: &Client, config: &Config, key: &str) -> Result<Vec<Str
             .get(format!("{}/v1/models?limit=100", config.url()))
             .header("x-api-key", key)
             .header("anthropic-version", ANTHROPIC_VERSION),
-        Provider::OpenAi => http
+        Provider::OpenAi | Provider::ChatGpt => http
             .get(format!("{}/models", config.url()))
             .bearer_auth(key),
     })
@@ -446,9 +597,10 @@ pub async fn models(http: &Client, config: &Config, key: &str) -> Result<Vec<Str
         .as_array()
         .into_iter()
         .flatten()
+        .filter(|m| m["visibility"].is_null() || m["visibility"] == "list")
         .filter_map(|m| m["id"].as_str().map(str::to_string))
         .collect();
-    if config.provider == Provider::OpenAi {
+    if config.provider != Provider::Anthropic {
         ids.sort();
     }
     Ok(ids)

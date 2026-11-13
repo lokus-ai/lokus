@@ -85,6 +85,18 @@ def openai_events(step):
     ]
 
 
+def responses_events(step):
+    """The OpenAI Responses stream, as a ChatGPT plan is served."""
+    def ev(kind, data):
+        return f"event: {kind}\ndata: {json.dumps({'type': kind, **data})}\n\n"
+
+    if step is None:
+        return [ev("response.output_text.delta", {"delta": "The launch is "}), ev("response.output_text.delta", {"delta": "on 1 March, see [[Plan]]."}), ev("response.completed", {"response": {"status": "completed"}})]
+    name, args = step
+    item = {"type": "function_call", "call_id": f"call_{name}", "name": name, "arguments": json.dumps(args)}
+    return [ev("response.output_item.done", {"item": item}), ev("response.completed", {"response": {"status": "completed"}})]
+
+
 def mcp_reply(message):
     method = message.get("method")
     if method == "initialize":
@@ -113,6 +125,14 @@ def oauth_get(handler, base):
             "grant_types_supported": ["authorization_code", "refresh_token"], "code_challenge_methods_supported": ["S256"],
             "token_endpoint_auth_methods_supported": ["none"],
         })
+    if url.path == "/api/accounts/authorize":
+        q = parse_qs(url.query)
+        SEEN.append({"path": url.path, "key": None, "body": {k: v[0] for k, v in q.items()}})
+        # First sign-in registers the app: hand back a client id of its own.
+        handler.send_response(302)
+        handler.send_header("location", f"{q['redirect_uri'][0]}?code=plan-code&state={q['state'][0]}&client_id=oaiapp_test")
+        handler.end_headers()
+        return True
     if url.path == "/authorize":
         q = parse_qs(url.query)
         # A real server shows a consent page here; the stand-in says yes at once.
@@ -137,7 +157,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         base = f"http://{self.headers.get('host')}"
-        if self.path.startswith("/.well-known/") or self.path.startswith("/authorize"):
+        if self.path.startswith("/.well-known/") or self.path.startswith("/authorize") or self.path.startswith("/api/accounts/authorize"):
             if oauth_get(self, base) is not False:
                 return
         if self.path == "/seen":
@@ -151,6 +171,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         raw = self.rfile.read(int(self.headers.get("content-length", 0)))
+        if self.path == "/api/accounts/oauth/token":
+            form = dict(pair.split("=", 1) for pair in raw.decode().split("&"))
+            SEEN.append({"path": self.path, "key": None, "body": {k: form.get(k) for k in ("grant_type", "client_id")}})
+            return self.json(200, {"access_token": "plan-token", "refresh_token": "plan-refresh", "expires_in": 3600, "scope": "openid offline_access resource.invoke chatgpt.tokens.use.direct"})
         if self.path == "/token":
             return self.json(200, {"access_token": "signed-in-token", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "r1"})
         body = json.loads(raw or b"{}")
@@ -172,9 +196,15 @@ class Handler(BaseHTTPRequestHandler):
         SEEN.append({"path": self.path, "key": self.headers.get("x-api-key") or self.headers.get("authorization"), "body": body})
         if self.headers.get("x-api-key") == "wrong":
             return self.json(401, {"error": {"type": "authentication_error", "message": "invalid x-api-key"}})
-        step = script(body["messages"])
+        step = script(body["messages"]) if "messages" in body else None
         if self.path == "/v1/messages":
             return sse(self, anthropic_events(step))
+        if self.path == "/responses":
+            if self.headers.get("authorization") != "Bearer plan-token":
+                return self.json(401, {"detail": "not signed in"})
+            done = sum(1 for item in body["input"] if item.get("type") == "function_call_output")
+            steps = [("search_notes", {"query": "launch"}), ("edit_note", {"path": "Plan.md", "old_text": "Launch: TBD", "new_text": "Launch: 1 March"})]
+            return sse(self, responses_events(steps[done] if done < len(steps) else None))
         if self.path == "/chat/completions":
             return sse(self, openai_events(step))
         self.json(404, {})

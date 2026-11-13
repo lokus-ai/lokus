@@ -4,8 +4,6 @@
 //! it, catches the redirect on a local port, and keeps the result in the OS
 //! keychain so the next request needs no sign-in.
 
-use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use rmcp::transport::auth::{
@@ -15,16 +13,13 @@ use rmcp::transport::auth::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::config::{secret, set_secret, McpServer};
+use crate::config::{forget, keep, kept, McpServer};
 use crate::error::{AiError, Result};
 
 const WAIT: Duration = Duration::from_secs(300);
 const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>Lokus</title>\
 <body style=\"font:16px -apple-system,sans-serif;text-align:center;padding-top:20vh\">\
 <h2>Signed in</h2><p>You can close this tab and go back to Lokus.</p>";
-
-/// Where sign-ins live when the keychain cannot be used: until the app quits.
-static MEMORY: LazyLock<Mutex<HashMap<String, String>>> = LazyLock::new(Default::default);
 
 fn account(server: &str) -> String {
     format!("mcp-oauth:{server}")
@@ -34,45 +29,31 @@ struct Store {
     account: String,
 }
 
-fn stored(account: &str) -> Option<String> {
-    secret(account).or_else(|| MEMORY.lock().ok()?.get(account).cloned())
-}
-
 #[async_trait::async_trait]
 impl CredentialStore for Store {
     async fn load(&self) -> std::result::Result<Option<StoredCredentials>, AuthError> {
-        Ok(stored(&self.account).and_then(|json| serde_json::from_str(&json).ok()))
+        Ok(kept(&self.account).and_then(|json| serde_json::from_str(&json).ok()))
     }
 
     async fn save(&self, credentials: StoredCredentials) -> std::result::Result<(), AuthError> {
         let json = serde_json::to_string(&credentials)
             .map_err(|e| AuthError::InternalError(e.to_string()))?;
-        if set_secret(&self.account, &json).is_err() {
-            if let Ok(mut memory) = MEMORY.lock() {
-                memory.insert(self.account.clone(), json);
-            }
-        }
+        keep(&self.account, &json);
         Ok(())
     }
 
     async fn clear(&self) -> std::result::Result<(), AuthError> {
-        let _ = set_secret(&self.account, "");
-        if let Ok(mut memory) = MEMORY.lock() {
-            memory.remove(&self.account);
-        }
+        forget(&self.account);
         Ok(())
     }
 }
 
 pub fn signed_in(server: &str) -> bool {
-    stored(&account(server)).is_some()
+    kept(&account(server)).is_some()
 }
 
 pub fn sign_out(server: &str) {
-    let _ = set_secret(&account(server), "");
-    if let Ok(mut memory) = MEMORY.lock() {
-        memory.remove(&account(server));
-    }
+    forget(&account(server));
 }
 
 fn failed(server: &McpServer) -> impl Fn(AuthError) -> AiError + '_ {

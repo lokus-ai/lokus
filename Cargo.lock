@@ -2714,6 +2714,7 @@ name = "lokus-ai"
 version = "2.0.0-alpha.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "futures-util",
  "keyring",
  "lokus-core",
@@ -2721,9 +2722,11 @@ dependencies = [
  "rmcp",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4047,6 +4050,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",

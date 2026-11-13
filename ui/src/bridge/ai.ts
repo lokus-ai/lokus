@@ -11,7 +11,7 @@ export interface McpServer {
 }
 
 export interface AiConfig {
-  provider: "anthropic" | "openai";
+  provider: "anthropic" | "openai" | "chatgpt";
   /** Empty means the provider's default. */
   model: string;
   base_url: string;
@@ -22,7 +22,7 @@ export interface AiConfig {
 /** Settings as the window sees them. Keys stay in the keychain; only whether one exists is known here. */
 export interface AiSettings {
   config: AiConfig;
-  keys: { anthropic: boolean; openai: boolean };
+  keys: { anthropic: boolean; openai: boolean; chatgpt: boolean };
   /** Names of tool servers that have a token stored. */
   tokens: string[];
   /** Names of tool servers the person has signed in to. */
@@ -59,6 +59,9 @@ export const checkMcp = (server: McpServer) => call<{ name: string; description:
 /** Sign in to a tool server in the browser; resolves when the browser has come back. */
 export const mcpLogin = (server: McpServer) => call<void>("ai_mcp_login", { server });
 export const mcpLogout = (name: string) => call<void>("ai_mcp_logout", { name });
+/** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
+export const chatgptLogin = () => call<void>("ai_chatgpt_login");
+export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
 export const aiSend = (chat: string, messages: unknown[]) => call<AiOutcome>("ai_send", { chat, messages });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });
 export const aiApprove = (id: string, allow: boolean) => call<void>("ai_approve", { id, allow });

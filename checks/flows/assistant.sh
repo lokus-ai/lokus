@@ -19,3 +19,8 @@ echo "6. a tool server that demands sign-in, without signing in: $(ANTHROPIC_API
 reset; OUT=$(mktemp); (ANTHROPIC_API_KEY=k target/debug/lokus ai --vault $V q=hi approve=true base_url=$U mcp=$U/mcp-auth login=true > $OUT 2>&1 &); for i in 1 2 3 4 5 6 7 8 9 10; do grep -q sign_in $OUT && break; sleep 0.5; done
 LINK=$(jq -r 'select(.type=="sign_in") | .url' $OUT | head -1); echo "   sign-in link goes to: ${LINK%%\?*}   browser comes back with: $(curl -sL "$LINK" | grep -o 'Signed in' | head -1)"; sleep 4
 echo "   then the same server's tool runs: $(jq -c 'select(.type=="tool_done" and (.id|test("mcp"))) | [.id, .ok, .result]' $OUT)"
+echo "7. Sign in with ChatGPT, before signing in: $(target/debug/lokus ai --vault $V q=hi provider=chatgpt model=m base_url=$U 2>&1 | jq -c .message)"
+reset; OUT=$(mktemp); (LOKUS_CHATGPT_AUTH_URL=$U target/debug/lokus ai --vault $V q="when is launch?" provider=chatgpt model=mock-model approve=true base_url=$U login=true > $OUT 2>&1 &); for i in 1 2 3 4 5 6 7 8 9 10; do grep -q sign_in $OUT && break; sleep 0.5; done
+LINK=$(jq -r 'select(.type=="sign_in") | .url' $OUT | head -1); echo "   browser comes back with: $(curl -sL "$LINK" | grep -o 'Signed in' | head -1)"; sleep 4
+echo "   answer through the plan: $(jq -rs '[.[] | select(.type=="text") | .delta] | join("")' $OUT)   note: $(grep -a Launch $V/Plan.md | tr -d '\r')"
+echo "   what the sign-in asked for: $(curl -s $U/seen | jq -c '[.[] | select(.path|test("accounts"))] | map(.body | {client_id, scope, grant_type, code_challenge_method, agent_name_hint} | with_entries(select(.value != null)))')"

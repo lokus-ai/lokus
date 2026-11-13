@@ -4,6 +4,7 @@
 //! and plugins never hold a key.
 
 pub mod chat;
+pub mod chatgpt;
 pub mod config;
 pub mod error;
 pub mod mcp;
