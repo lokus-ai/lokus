@@ -39,16 +39,25 @@ pub struct App {
 
 impl App {
     pub fn new(store: Store, auth: Auth) -> Arc<Self> {
-        Arc::new(Self { store, auth, rooms: Mutex::new(HashMap::new()), next_conn: 1.into() })
+        Arc::new(Self {
+            store,
+            auth,
+            rooms: Mutex::new(HashMap::new()),
+            next_conn: 1.into(),
+        })
     }
 
     pub(crate) fn room(&self, workspace: &str) -> broadcast::Sender<Fanout> {
         let mut rooms = self.rooms.lock().unwrap_or_else(|e| e.into_inner());
-        rooms.entry(workspace.to_string()).or_insert_with(|| broadcast::channel(1024).0).clone()
+        rooms
+            .entry(workspace.to_string())
+            .or_insert_with(|| broadcast::channel(1024).0)
+            .clone()
     }
 
     pub(crate) fn conn_id(&self) -> u64 {
-        self.next_conn.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.next_conn
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
     async fn caller(&self, headers: &HeaderMap) -> Result<Identity> {
@@ -68,7 +77,10 @@ impl App {
 pub fn router(app: Arc<App>) -> Router {
     Router::new()
         .route("/health", get(|| async { "ok" }))
-        .route("/v1/workspaces", get(list_workspaces).post(create_workspace))
+        .route(
+            "/v1/workspaces",
+            get(list_workspaces).post(create_workspace),
+        )
         .route("/v1/workspaces/{id}/members", get(list_members))
         .route("/v1/workspaces/{id}/invites", post(create_invite))
         .route("/v1/invites/{code}/accept", post(accept_invite))
@@ -81,14 +93,21 @@ struct NewWorkspace {
     name: String,
 }
 
-async fn create_workspace(State(app): State<Arc<App>>, headers: HeaderMap, Json(body): Json<NewWorkspace>) -> Result<Json<Value>> {
+async fn create_workspace(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Json(body): Json<NewWorkspace>,
+) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
     let name = body.name.trim();
     if name.is_empty() || name.len() > 120 {
-        return Err(Error::BadRequest("a workspace needs a name of up to 120 characters".into()));
+        return Err(Error::BadRequest(
+            "a workspace needs a name of up to 120 characters".into(),
+        ));
     }
     let id = uuid::Uuid::new_v4().to_string();
-    app.store.create_workspace(&id, name, &me.user, me.email.as_deref())?;
+    app.store
+        .create_workspace(&id, name, &me.user, me.email.as_deref())?;
     Ok(Json(json!({ "id": id, "name": name, "role": "owner" })))
 }
 
@@ -97,7 +116,11 @@ async fn list_workspaces(State(app): State<Arc<App>>, headers: HeaderMap) -> Res
     Ok(Json(json!(app.store.workspaces_of(&me.user)?)))
 }
 
-async fn list_members(State(app): State<Arc<App>>, headers: HeaderMap, Path(id): Path<String>) -> Result<Json<Value>> {
+async fn list_members(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
     app.require(&id, &me.user)?;
     Ok(Json(json!(app.store.members(&id)?)))
@@ -121,15 +144,25 @@ async fn create_invite(
     let role = match Role::parse(&body.role) {
         Some(Role::Editor) => Role::Editor,
         Some(Role::Viewer) => Role::Viewer,
-        _ => return Err(Error::BadRequest("an invite is for an editor or a viewer".into())),
+        _ => {
+            return Err(Error::BadRequest(
+                "an invite is for an editor or a viewer".into(),
+            ))
+        }
     };
     let code = uuid::Uuid::new_v4().simple().to_string();
     app.store.create_invite(&code, &id, role, &me.user)?;
     Ok(Json(json!({ "code": code, "role": role.name() })))
 }
 
-async fn accept_invite(State(app): State<Arc<App>>, headers: HeaderMap, Path(code): Path<String>) -> Result<Json<Value>> {
+async fn accept_invite(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(code): Path<String>,
+) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
-    let workspace = app.store.accept_invite(&code, &me.user, me.email.as_deref())?;
+    let workspace = app
+        .store
+        .accept_invite(&code, &me.user, me.email.as_deref())?;
     Ok(Json(json!({ "workspace": workspace })))
 }

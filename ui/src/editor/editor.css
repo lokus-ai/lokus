@@ -52,3 +52,7 @@
 .cm-editor .cm-embed-head button:hover { background: var(--bg-hover); color: var(--fg-2); }
 .cm-editor .cm-embed-body .cm-content { padding: 0; min-height: 0 !important; }
 .cm-editor .cm-embed-missing { color: var(--fg-3); font-size: var(--text-small); }
+
+/* Other people's cursors and selections */
+.cm-editor .cm-ySelectionInfo { font-family: var(--font-ui); font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: 4px 4px 4px 0; top: -1.5em; opacity: 1; }
+.cm-editor .cm-ySelectionCaret { margin-left: -1px; margin-right: -1px; }

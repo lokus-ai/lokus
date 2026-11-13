@@ -8,8 +8,10 @@ import {
   app,
   chooseVault,
   closeTab,
+  connectSync,
   createNote,
   deleteEntry,
+  disconnectSync,
   getEditor,
   notify,
   openNote,
@@ -62,6 +64,7 @@ export function registerAllCommands(): void {
       keys: "Mod-g",
       run: () => app.set((s) => ({ view: s.view === "graph" ? "note" : "graph" })),
     },
+    { id: "teams.open", title: "Team sync…", run: () => app.set({ teamsDialog: true }) },
     { id: "vault.choose", title: "Open another vault…", run: chooseVault },
     { id: "sidebar.toggle", title: "Show or hide the sidebar", keys: "Mod-\\", run: () => app.set((s) => ({ sidebar: !s.sidebar })) },
     { id: "note.new", title: "New note", keys: "Mod-n", run: () => createNote() },
@@ -128,6 +131,8 @@ export function registerAllCommands(): void {
       : []),
 
     // For scripts and `lokus app <id>`: drive the live app like a user would.
+    { id: "sync.connect", title: "Connect sync", hidden: true, run: (a) => connectSync(String(a.server), String(a.workspace), a.token ? String(a.token) : null) },
+    { id: "sync.disconnect", title: "Disconnect sync", hidden: true, run: () => disconnectSync() },
     { id: "note.open", title: "Open note", hidden: true, run: async (a) => {
         await openNote(String(a.path));
         return { active: app.get().active };

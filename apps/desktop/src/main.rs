@@ -5,6 +5,7 @@
 
 #[cfg(all(debug_assertions, unix))]
 mod dev_channel;
+mod sync;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -48,6 +49,8 @@ pub fn run_core(shell: &Shell, name: &str, args: Value) -> Result<Value, Value> 
 
 /// Open a folder as the vault, start watching it and remember it.
 pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
+    // Sync belongs to a vault; switching vaults ends it.
+    sync::stop_for(app);
     let core = Arc::new(Core::open(path).map_err(|e| error_value(&e))?);
     let vault = &core.vault;
     let emitter = app.clone();
@@ -57,6 +60,7 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
         if let Ok(mut index) = indexer.index() {
             let _ = index.update(&paths);
         }
+        emitter.state::<sync::Sync>().changed();
         let _ = emitter.emit("vault:changed", paths);
     })
     .map_err(|e| error_value(&e))?;
@@ -162,6 +166,7 @@ fn main() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(Shell::default())
+        .manage(sync::Sync::default())
         .menu(menu)
         .on_menu_event(|app, event| {
             if event.id().as_ref() == "close-tab" {
@@ -176,6 +181,13 @@ fn main() {
             core_run,
             vault_open,
             vault_current,
+            sync::sync_connect,
+            sync::sync_disconnect,
+            sync::sync_status,
+            sync::sync_doc,
+            sync::sync_local,
+            sync::sync_awareness,
+            sync::relay_call,
             dev_channel::dev_reply
         ])
         .setup(|app| {
@@ -187,7 +199,14 @@ fn main() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         core_run,
         vault_open,
-        vault_current
+        vault_current,
+        sync::sync_connect,
+        sync::sync_disconnect,
+        sync::sync_status,
+        sync::sync_doc,
+        sync::sync_local,
+        sync::sync_awareness,
+        sync::relay_call
     ]);
 
     builder

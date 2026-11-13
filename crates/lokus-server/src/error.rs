@@ -50,6 +50,10 @@ impl IntoResponse for Error {
         } else {
             self.to_string()
         };
-        (status, Json(json!({ "code": self.code(), "message": message }))).into_response()
+        (
+            status,
+            Json(json!({ "code": self.code(), "message": message })),
+        )
+            .into_response()
     }
 }

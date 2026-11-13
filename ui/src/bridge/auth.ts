@@ -47,3 +47,10 @@ export async function signUp(email: string, password: string): Promise<Account |
 export async function signOut(): Promise<void> {
   await (await supabase()).auth.signOut();
 }
+
+/** The signed-in account's token, for the relay. */
+export async function accessToken(): Promise<string | null> {
+  if (!accountsAvailable || !localStorage.getItem(SESSION_KEY)) return null;
+  const { data } = await (await supabase()).auth.getSession();
+  return data.session?.access_token ?? null;
+}

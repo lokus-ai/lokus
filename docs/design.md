@@ -84,7 +84,13 @@ scripted flows. We do not write piles of generated unit tests. The one always-on
 fidelity: `vault.fidelity` reads and rewrites every note in a deliberately nasty fixture vault
 and fails unless every file is byte-identical.
 
-## 6. Sync and the server (planned, M3)
+## 6. Sync and the server (built, M3)
+
+As built: the relay stores its log in one SQLite file (not Postgres), so it runs as a single
+binary or container with a volume. `lokus-sync` holds the engine and the connection; the app's
+editor binds to a Yjs document and passes updates to the engine, which writes the file. Two
+scripted flows exercise it: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`.
+The paragraphs below are the original plan and still describe the intent.
 
 Client-server; no peer-to-peer.
 
@@ -190,7 +196,7 @@ is needed.
 | M0 | Skeleton, rules, checks, CI | The empty app builds and the checks pass | built |
 | M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | built (login and analytics not yet tried against the real services) |
 | M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | built |
-| M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | planned |
+| M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | built and checked locally; not deployed, and real logins are untested |
 | M4 | iOS and Android | Builds in TestFlight and the Play internal track | planned |
 | M5 | Databases and kanban | Query engine with new UI | planned |
 

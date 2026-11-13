@@ -9,7 +9,9 @@ rust-version.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+base64.workspace = true
 lokus-core = { path = "../../crates/lokus-core" }
+lokus-sync = { path = "../../crates/lokus-sync" }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = ["protocol-asset"] }

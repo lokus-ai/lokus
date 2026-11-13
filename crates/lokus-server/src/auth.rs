@@ -21,7 +21,10 @@ pub struct Identity {
 pub enum Auth {
     /// `token -> identity`, from `LOKUS_DEV_TOKENS=token:user:email,...`.
     Dev(HashMap<String, Identity>),
-    Supabase { jwks_url: String, keys: Mutex<Option<(Instant, JwkSet)>> },
+    Supabase {
+        jwks_url: String,
+        keys: Mutex<Option<(Instant, JwkSet)>>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -35,11 +38,18 @@ const KEY_LIFETIME: Duration = Duration::from_secs(600);
 impl Auth {
     pub fn from_env() -> std::result::Result<Self, String> {
         if let Ok(url) = std::env::var("SUPABASE_URL") {
-            let jwks_url = format!("{}/auth/v1/.well-known/jwks.json", url.trim_end_matches('/'));
-            return Ok(Self::Supabase { jwks_url, keys: Mutex::new(None) });
+            let jwks_url = format!(
+                "{}/auth/v1/.well-known/jwks.json",
+                url.trim_end_matches('/')
+            );
+            return Ok(Self::Supabase {
+                jwks_url,
+                keys: Mutex::new(None),
+            });
         }
-        let raw = std::env::var("LOKUS_DEV_TOKENS")
-            .map_err(|_| "set SUPABASE_URL, or LOKUS_DEV_TOKENS=token:user:email for local use".to_string())?;
+        let raw = std::env::var("LOKUS_DEV_TOKENS").map_err(|_| {
+            "set SUPABASE_URL, or LOKUS_DEV_TOKENS=token:user:email for local use".to_string()
+        })?;
         Ok(Self::dev(&raw))
     }
 
@@ -49,7 +59,13 @@ impl Auth {
             let mut parts = entry.trim().splitn(3, ':');
             if let (Some(token), Some(user)) = (parts.next(), parts.next()) {
                 let email = parts.next().map(str::to_string);
-                map.insert(token.to_string(), Identity { user: user.to_string(), email });
+                map.insert(
+                    token.to_string(),
+                    Identity {
+                        user: user.to_string(),
+                        email,
+                    },
+                );
             }
         }
         Self::Dev(map)
@@ -75,15 +91,23 @@ impl Auth {
                     }
                     set = Some(fresh);
                 }
-                let jwk = set.as_ref().and_then(|s| s.find(&kid)).ok_or(Error::Unauthorized)?;
+                let jwk = set
+                    .as_ref()
+                    .and_then(|s| s.find(&kid))
+                    .ok_or(Error::Unauthorized)?;
                 let key = DecodingKey::from_jwk(jwk).map_err(|_| Error::Unauthorized)?;
                 let mut rules = Validation::new(match header.alg {
                     Algorithm::RS256 => Algorithm::RS256,
                     _ => Algorithm::ES256,
                 });
                 rules.set_audience(&["authenticated"]);
-                let claims = decode::<Claims>(token, &key, &rules).map_err(|_| Error::Unauthorized)?.claims;
-                Ok(Identity { user: claims.sub, email: claims.email })
+                let claims = decode::<Claims>(token, &key, &rules)
+                    .map_err(|_| Error::Unauthorized)?
+                    .claims;
+                Ok(Identity {
+                    user: claims.sub,
+                    email: claims.email,
+                })
             }
         }
     }

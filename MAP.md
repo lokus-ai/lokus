@@ -10,6 +10,8 @@
 | The command registry: every core feature is a named command with JSON in and out. | `crates/lokus-core/src/commands` | `core.commands` |
 | Disposable SQLite index: full-text search, links, backlinks, graph, tags. | `crates/lokus-core/src/index` | `core.index` |
 | File watcher: report changes made outside the app. | `crates/lokus-core/src/watch` | `core.watch` |
+| Sync engine: keeps a vault's files and their CRDT documents in step and talks to the relay. | `crates/lokus-sync/` | `sync` |
+| The relay: accounts' workspaces, roles, invites, the update log and live fan-out. | `crates/lokus-server/` | `server` |
 | The `lokus` binary: run any core command against a real vault. | `crates/lokus-cli/` | `cli` |
 | Tauri shell. Thin: forwards commands to the core, owns windows and the dev channel. | `apps/desktop/` | `desktop` |
 | App frame: layout, tabs, command palette, quick switcher, design tokens, UI command registry. | `ui/src/shell/`, `ui/src/main` | `ui.shell` |
@@ -20,6 +22,7 @@
 | Full-text search palette. | `ui/src/features/search/` | `ui.search` |
 | Linked mentions under a note. | `ui/src/features/backlinks/` | `ui.backlinks` |
 | Graph of notes and links. Loaded only when opened. | `ui/src/features/graph/` | `ui.graph` |
+| Team workspaces: connect, create, join, members, invites. | `ui/src/features/teams/` | `ui.teams` |
 | Login screen and session state. | `ui/src/features/auth/` | `ui.auth` |
 | Product analytics events and the opt-out. Never sends note content. | `ui/src/features/analytics/` | `ui.analytics` |
 | Scripts that enforce the hard rules. | `checks/` | `checks` |

@@ -26,7 +26,10 @@
     "@tauri-apps/plugin-dialog": "^2.2.0",
     "posthog-js": "^1.250.0",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "y-codemirror.next": "^0.3.6",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
   },
   "devDependencies": {
     "@types/react": "^19.1.0",

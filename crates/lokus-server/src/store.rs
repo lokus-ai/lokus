@@ -93,13 +93,24 @@ impl Store {
     }
 
     fn db(&self) -> Result<std::sync::MutexGuard<'_, Connection>> {
-        self.db.lock().map_err(|_| Error::Internal("store lock".into()))
+        self.db
+            .lock()
+            .map_err(|_| Error::Internal("store lock".into()))
     }
 
-    pub fn create_workspace(&self, id: &str, name: &str, user: &str, email: Option<&str>) -> Result<()> {
+    pub fn create_workspace(
+        &self,
+        id: &str,
+        name: &str,
+        user: &str,
+        email: Option<&str>,
+    ) -> Result<()> {
         let mut db = self.db()?;
         let tx = db.transaction()?;
-        tx.execute("INSERT INTO workspaces (id, name, created_by) VALUES (?1, ?2, ?3)", params![id, name, user])?;
+        tx.execute(
+            "INSERT INTO workspaces (id, name, created_by) VALUES (?1, ?2, ?3)",
+            params![id, name, user],
+        )?;
         tx.execute(
             "INSERT INTO members (workspace, user, email, role) VALUES (?1, ?2, ?3, 'owner')",
             params![id, user, email],
@@ -113,22 +124,40 @@ impl Store {
             "SELECT w.id, w.name, m.role FROM workspaces w JOIN members m ON m.workspace = w.id
              WHERE m.user = ?1 ORDER BY w.name",
         )?;
-        let rows = q.query_map([user], |r| Ok(Workspace { id: r.get(0)?, name: r.get(1)?, role: role_of(r.get(2)?) }))?;
+        let rows = q.query_map([user], |r| {
+            Ok(Workspace {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                role: role_of(r.get(2)?),
+            })
+        })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     pub fn role(&self, workspace: &str, user: &str) -> Result<Option<Role>> {
         let db = self.db()?;
         let role: Option<String> = db
-            .query_row("SELECT role FROM members WHERE workspace = ?1 AND user = ?2", params![workspace, user], |r| r.get(0))
+            .query_row(
+                "SELECT role FROM members WHERE workspace = ?1 AND user = ?2",
+                params![workspace, user],
+                |r| r.get(0),
+            )
             .optional()?;
         Ok(role.map(role_of))
     }
 
     pub fn members(&self, workspace: &str) -> Result<Vec<Member>> {
         let db = self.db()?;
-        let mut q = db.prepare("SELECT user, email, role FROM members WHERE workspace = ?1 ORDER BY role, email")?;
-        let rows = q.query_map([workspace], |r| Ok(Member { user: r.get(0)?, email: r.get(1)?, role: role_of(r.get(2)?) }))?;
+        let mut q = db.prepare(
+            "SELECT user, email, role FROM members WHERE workspace = ?1 ORDER BY role, email",
+        )?;
+        let rows = q.query_map([workspace], |r| {
+            Ok(Member {
+                user: r.get(0)?,
+                email: r.get(1)?,
+                role: role_of(r.get(2)?),
+            })
+        })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -145,9 +174,11 @@ impl Store {
         let mut db = self.db()?;
         let tx = db.transaction()?;
         let found: Option<(String, String)> = tx
-            .query_row("SELECT workspace, role FROM invites WHERE code = ?1 AND used_by IS NULL", [code], |r| {
-                Ok((r.get(0)?, r.get(1)?))
-            })
+            .query_row(
+                "SELECT workspace, role FROM invites WHERE code = ?1 AND used_by IS NULL",
+                [code],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
             .optional()?;
         let (workspace, role) = found.ok_or(Error::NotFound("invite"))?;
         tx.execute(
@@ -155,7 +186,10 @@ impl Store {
              ON CONFLICT (workspace, user) DO NOTHING",
             params![workspace, user, email, role],
         )?;
-        tx.execute("UPDATE invites SET used_by = ?2 WHERE code = ?1", params![code, user])?;
+        tx.execute(
+            "UPDATE invites SET used_by = ?2 WHERE code = ?1",
+            params![code, user],
+        )?;
         tx.commit()?;
         Ok(workspace)
     }
@@ -164,22 +198,33 @@ impl Store {
     pub fn append(&self, workspace: &str, doc: &str, data: &[u8]) -> Result<i64> {
         let mut db = self.db()?;
         let tx = db.transaction()?;
-        tx.execute("INSERT INTO updates (workspace, doc, data) VALUES (?1, ?2, ?3)", params![workspace, doc, data])?;
+        tx.execute(
+            "INSERT INTO updates (workspace, doc, data) VALUES (?1, ?2, ?3)",
+            params![workspace, doc, data],
+        )?;
         let seq = tx.last_insert_rowid();
-        let count: i64 =
-            tx.query_row("SELECT COUNT(*) FROM updates WHERE workspace = ?1 AND doc = ?2", params![workspace, doc], |r| r.get(0))?;
+        let count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM updates WHERE workspace = ?1 AND doc = ?2",
+            params![workspace, doc],
+            |r| r.get(0),
+        )?;
         if count > COMPACT_AFTER {
             // Fold everything before this edit into one row. It takes the
             // highest old position, so nobody who is behind can miss it.
             let old: Vec<(i64, Vec<u8>)> = {
                 let mut q = tx.prepare("SELECT seq, data FROM updates WHERE workspace = ?1 AND doc = ?2 AND seq < ?3 ORDER BY seq")?;
-                let rows = q.query_map(params![workspace, doc, seq], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                let rows =
+                    q.query_map(params![workspace, doc, seq], |r| Ok((r.get(0)?, r.get(1)?)))?;
                 rows.collect::<rusqlite::Result<_>>()?
             };
             if let Some(&(last, _)) = old.last() {
                 let parts: Vec<&[u8]> = old.iter().map(|(_, d)| d.as_slice()).collect();
-                let merged = yrs::merge_updates_v1(&parts).map_err(|e| Error::Internal(e.to_string()))?;
-                tx.execute("DELETE FROM updates WHERE workspace = ?1 AND doc = ?2 AND seq < ?3", params![workspace, doc, seq])?;
+                let merged =
+                    yrs::merge_updates_v1(&parts).map_err(|e| Error::Internal(e.to_string()))?;
+                tx.execute(
+                    "DELETE FROM updates WHERE workspace = ?1 AND doc = ?2 AND seq < ?3",
+                    params![workspace, doc, seq],
+                )?;
                 tx.execute(
                     "INSERT INTO updates (seq, workspace, doc, data) VALUES (?1, ?2, ?3, ?4)",
                     params![last, workspace, doc, merged],
@@ -194,10 +239,16 @@ impl Store {
     pub fn since(&self, workspace: &str, since: i64) -> Result<(Vec<Stored>, i64)> {
         use base64::Engine;
         let db = self.db()?;
-        let mut q = db.prepare("SELECT doc, seq, data FROM updates WHERE workspace = ?1 AND seq > ?2 ORDER BY seq")?;
+        let mut q = db.prepare(
+            "SELECT doc, seq, data FROM updates WHERE workspace = ?1 AND seq > ?2 ORDER BY seq",
+        )?;
         let rows = q.query_map(params![workspace, since], |r| {
             let data: Vec<u8> = r.get(2)?;
-            Ok(Stored { doc: r.get(0)?, seq: r.get(1)?, data: base64::engine::general_purpose::STANDARD.encode(data) })
+            Ok(Stored {
+                doc: r.get(0)?,
+                seq: r.get(1)?,
+                data: base64::engine::general_purpose::STANDARD.encode(data),
+            })
         })?;
         let items: Vec<Stored> = rows.collect::<rusqlite::Result<_>>()?;
         let head = items.last().map(|i| i.seq).unwrap_or(since);

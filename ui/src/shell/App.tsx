@@ -1,13 +1,14 @@
 /** @part-of ui.shell */
-import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useRef } from "react";
+import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { identify } from "../bridge/analytics";
-import { accountsAvailable } from "../bridge/auth";
+import { accessToken, accountsAvailable } from "../bridge/auth";
 import { AccountDialog } from "../features/auth/AccountDialog";
 import { Backlinks } from "../features/backlinks/Backlinks";
 import { FileTree } from "../features/file-tree/FileTree";
 import { PageHeader } from "../features/page-header/PageHeader";
 import { SearchPalette } from "../features/search/SearchPalette";
+import { TeamsDialog } from "../features/teams/TeamsDialog";
 import { formatKeys, runCommand } from "./commands";
 import { Palette } from "./Palette";
 import { useStore } from "./store";
@@ -16,9 +17,11 @@ import {
   attachEditor,
   chooseVault,
   closeTab,
+  connectSync,
   createFolder,
   createNoteIn,
   deleteEntry,
+  disconnectSync,
   getEditor,
   openNote,
   reloadFromDisk,
@@ -39,6 +42,7 @@ function Sidebar() {
   const account = useStore(app, (s) => s.account);
   const open = useStore(app, (s) => s.sidebar);
   const narrow = useStore(app, (s) => s.narrow);
+  const sync = useStore(app, (s) => s.sync);
 
   const startResize = (e: PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -94,6 +98,10 @@ function Sidebar() {
           onDelete={(path) => void deleteEntry(path)}
         />
       </div>
+      <button className="sidebar-account" onClick={() => void runCommand("teams.open")}>
+        <span className={`sync-dot ${sync.status}`} />
+        {sync.status === "off" ? "Sync with a team" : sync.status === "online" ? "Syncing" : sync.status === "connecting" ? "Connecting…" : sync.status === "offline" ? "Offline" : "Sync stopped"}
+      </button>
       {accountsAvailable && (
         <button
           className="sidebar-account"
@@ -119,6 +127,7 @@ function Tabs() {
   const dirty = useStore(app, (s) => s.dirty);
   const sidebar = useStore(app, (s) => s.sidebar);
   const narrow = useStore(app, (s) => s.narrow);
+  const peers = useStore(app, (s) => s.peers);
   return (
     <div className={`tabs${sidebar && !narrow ? "" : " inset"}`} data-tauri-drag-region>
       <button className="tab-toggle" title="Show or hide the sidebar" onClick={() => void runCommand("sidebar.toggle")}>
@@ -140,7 +149,36 @@ function Tabs() {
           </button>
         </div>
       ))}
+      {peers.length > 0 && (
+        <div className="peers" title={peers.map((p) => p.name).join(", ")}>
+          {peers.slice(0, 5).map((p, i) => (
+            <span key={i} className="peer" style={{ background: p.color }}>
+              {p.name.slice(0, 1).toUpperCase()}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+function Teams() {
+  const sync = useStore(app, (s) => s.sync);
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    void accessToken()
+      .then(setToken)
+      .catch(() => setToken(null));
+  }, []);
+  return (
+    <TeamsDialog
+      current={sync}
+      accountToken={token}
+      defaultServer={(import.meta.env.VITE_LOKUS_RELAY as string | undefined) ?? ""}
+      onConnect={(server, workspace, typed) => void connectSync(server, workspace, typed)}
+      onDisconnect={() => void disconnectSync()}
+      onClose={() => app.set({ teamsDialog: false })}
+    />
   );
 }
 
@@ -208,6 +246,7 @@ export function App() {
   const version = useStore(app, (s) => s.version);
   const open = useCallback((path: string) => void openNote(path), []);
   const accountDialog = useStore(app, (s) => s.accountDialog);
+  const teamsDialog = useStore(app, (s) => s.teamsDialog);
   const notice = useStore(app, (s) => s.notice);
 
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
@@ -250,6 +289,7 @@ export function App() {
           }}
         />
       )}
+      {teamsDialog && <Teams />}
       {notice && <div className="toast">{notice}</div>}
     </div>
   );

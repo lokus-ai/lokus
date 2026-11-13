@@ -36,12 +36,29 @@ struct Entry {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
-    Wrote { path: String },
-    Renamed { from: String, to: String },
-    Trashed { path: String },
-    Published { path: String },
+    Wrote {
+        path: String,
+    },
+    Renamed {
+        from: String,
+        to: String,
+    },
+    Trashed {
+        path: String,
+    },
+    Published {
+        path: String,
+    },
+    /// An edit made outside the app was folded into a document; an open editor applies it too.
+    Ingested {
+        doc: String,
+        data: String,
+    },
     /// Two different notes wanted the same path; the local file was moved aside.
-    KeptBoth { path: String, moved_to: String },
+    KeptBoth {
+        path: String,
+        moved_to: String,
+    },
 }
 
 pub struct Outgoing {
@@ -74,7 +91,12 @@ impl Engine {
              CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY, state BLOB NOT NULL, synced TEXT, path TEXT);
              CREATE TABLE IF NOT EXISTS outbox (n INTEGER PRIMARY KEY AUTOINCREMENT, doc TEXT NOT NULL, data BLOB NOT NULL);",
         )?;
-        let mut engine = Self { vault: vault.clone(), db, client_id: 0, events: Vec::new() };
+        let mut engine = Self {
+            vault: vault.clone(),
+            db,
+            client_id: 0,
+            events: Vec::new(),
+        };
         engine.client_id = match engine.meta("client_id")? {
             Some(id) => id.parse().unwrap_or(1),
             None => {
@@ -88,7 +110,10 @@ impl Engine {
     }
 
     pub fn meta(&self, key: &str) -> Result<Option<String>> {
-        Ok(self.db.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional()?)
+        Ok(self
+            .db
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+            .optional()?)
     }
 
     pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
@@ -101,7 +126,10 @@ impl Engine {
 
     /// Position in the relay's log this device has seen.
     pub fn cursor(&self) -> Result<i64> {
-        Ok(self.meta("cursor")?.and_then(|c| c.parse().ok()).unwrap_or(0))
+        Ok(self
+            .meta("cursor")?
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(0))
     }
 
     pub fn set_cursor(&self, seq: i64) -> Result<()> {
@@ -121,8 +149,16 @@ impl Engine {
     }
 
     pub fn outbox(&self) -> Result<Vec<Outgoing>> {
-        let mut q = self.db.prepare("SELECT n, doc, data FROM outbox ORDER BY n")?;
-        let rows = q.query_map([], |r| Ok(Outgoing { n: r.get(0)?, doc: r.get(1)?, data: r.get(2)? }))?;
+        let mut q = self
+            .db
+            .prepare("SELECT n, doc, data FROM outbox ORDER BY n")?;
+        let rows = q.query_map([], |r| {
+            Ok(Outgoing {
+                n: r.get(0)?,
+                doc: r.get(1)?,
+                data: r.get(2)?,
+            })
+        })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
@@ -143,9 +179,17 @@ impl Engine {
     fn row(&self, id: &str) -> Result<Option<Row>> {
         Ok(self
             .db
-            .query_row("SELECT state, synced, path FROM docs WHERE id = ?1", [id], |r| {
-                Ok(Row { state: r.get(0)?, synced: r.get(1)?, path: r.get(2)? })
-            })
+            .query_row(
+                "SELECT state, synced, path FROM docs WHERE id = ?1",
+                [id],
+                |r| {
+                    Ok(Row {
+                        state: r.get(0)?,
+                        synced: r.get(1)?,
+                        path: r.get(2)?,
+                    })
+                },
+            )
             .optional()?)
     }
 
@@ -158,7 +202,9 @@ impl Engine {
     }
 
     fn save(&self, id: &str, doc: &Doc, synced: Option<&str>, path: Option<&str>) -> Result<()> {
-        let state = doc.transact().encode_state_as_update_v1(&StateVector::default());
+        let state = doc
+            .transact()
+            .encode_state_as_update_v1(&StateVector::default());
         self.db.execute(
             "INSERT INTO docs (id, state, synced, path) VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT (id) DO UPDATE SET state = ?2, synced = ?3, path = ?4",
@@ -168,7 +214,10 @@ impl Engine {
     }
 
     fn queue(&self, doc: &str, data: Vec<u8>) -> Result<()> {
-        self.db.execute("INSERT INTO outbox (doc, data) VALUES (?1, ?2)", params![doc, data])?;
+        self.db.execute(
+            "INSERT INTO outbox (doc, data) VALUES (?1, ?2)",
+            params![doc, data],
+        )?;
         Ok(())
     }
 
@@ -189,7 +238,11 @@ impl Engine {
         {
             let map = manifest.get_or_insert_map("notes");
             let mut txn = manifest.transact_mut();
-            map.insert(&mut txn, id, serde_json::to_string(entry).unwrap_or_default());
+            map.insert(
+                &mut txn,
+                id,
+                serde_json::to_string(entry).unwrap_or_default(),
+            );
         }
         let update = manifest.transact().encode_diff_v1(&before);
         self.save(MANIFEST, manifest, None, None)?;
@@ -217,8 +270,11 @@ impl Engine {
     pub fn scan(&mut self) -> Result<()> {
         let manifest = self.load(MANIFEST)?;
         let entries = self.entries(&manifest);
-        let by_path: HashMap<&str, &str> =
-            entries.iter().filter(|(_, e)| !e.deleted).map(|(id, e)| (e.path.as_str(), id.as_str())).collect();
+        let by_path: HashMap<&str, &str> = entries
+            .iter()
+            .filter(|(_, e)| !e.deleted)
+            .map(|(id, e)| (e.path.as_str(), id.as_str()))
+            .collect();
         let on_disk: HashSet<String> = self.vault.notes()?.into_iter().collect();
 
         // Notes we wrote before that are no longer on disk: deleted, or renamed.
@@ -229,7 +285,11 @@ impl Engine {
             }
             if let Some(row) = self.row(id)? {
                 if row.path.as_deref() == Some(entry.path.as_str()) {
-                    missing.push((id.clone(), entry.path.clone(), row.synced.unwrap_or_default()));
+                    missing.push((
+                        id.clone(),
+                        entry.path.clone(),
+                        row.synced.unwrap_or_default(),
+                    ));
                 }
             }
         }
@@ -237,7 +297,9 @@ impl Engine {
         let mut paths: Vec<&String> = on_disk.iter().collect();
         paths.sort();
         for path in paths {
-            let Some((text, _)) = self.read_disk(path) else { continue };
+            let Some((text, _)) = self.read_disk(path) else {
+                continue;
+            };
             if let Some(&id) = by_path.get(path.as_str()) {
                 self.ingest(id, path, &text)?;
                 continue;
@@ -246,13 +308,25 @@ impl Engine {
                 continue;
             }
             // A new path with the exact text of a note that just vanished is a rename.
-            let renamed = missing.iter().position(|(_, _, synced)| !synced.is_empty() && *synced == text);
+            let renamed = missing
+                .iter()
+                .position(|(_, _, synced)| !synced.is_empty() && *synced == text);
             if let Some(at) = renamed {
                 let (id, old, _) = missing.remove(at);
-                self.set_entry(&manifest, &id, &Entry { path: path.clone(), deleted: false })?;
+                self.set_entry(
+                    &manifest,
+                    &id,
+                    &Entry {
+                        path: path.clone(),
+                        deleted: false,
+                    },
+                )?;
                 let doc = self.load(&id)?;
                 self.save(&id, &doc, Some(&text), Some(path))?;
-                self.events.push(Event::Renamed { from: old, to: path.clone() });
+                self.events.push(Event::Renamed {
+                    from: old,
+                    to: path.clone(),
+                });
                 continue;
             }
             let id = uuid::Uuid::new_v4().to_string();
@@ -262,15 +336,31 @@ impl Engine {
                 let mut txn = doc.transact_mut();
                 content.insert(&mut txn, 0, &text);
             }
-            let update = doc.transact().encode_state_as_update_v1(&StateVector::default());
+            let update = doc
+                .transact()
+                .encode_state_as_update_v1(&StateVector::default());
             self.save(&id, &doc, Some(&text), Some(path))?;
             self.queue(&id, update)?;
-            self.set_entry(&manifest, &id, &Entry { path: path.clone(), deleted: false })?;
+            self.set_entry(
+                &manifest,
+                &id,
+                &Entry {
+                    path: path.clone(),
+                    deleted: false,
+                },
+            )?;
             self.events.push(Event::Published { path: path.clone() });
         }
 
         for (id, path, _) in missing {
-            self.set_entry(&manifest, &id, &Entry { path: path.clone(), deleted: true })?;
+            self.set_entry(
+                &manifest,
+                &id,
+                &Entry {
+                    path: path.clone(),
+                    deleted: true,
+                },
+            )?;
             let doc = self.load(&id)?;
             let synced = self.row(&id)?.and_then(|r| r.synced);
             self.save(&id, &doc, synced.as_deref(), None)?;
@@ -281,7 +371,9 @@ impl Engine {
     /// If the file differs from the last reconciled text, apply just that
     /// difference to the document.
     fn ingest(&mut self, id: &str, path: &str, disk: &str) -> Result<()> {
-        let Some(row) = self.row(id)? else { return Ok(()) };
+        let Some(row) = self.row(id)? else {
+            return Ok(());
+        };
         let doc = self.new_doc();
         apply(&doc, &row.state)?;
         let content = doc.get_or_insert_text("content");
@@ -300,10 +392,16 @@ impl Engine {
         if merged != disk {
             // The document had moved on (a remote edit not yet on disk).
             self.write_disk(path, &merged)?;
-            self.events.push(Event::Wrote { path: path.to_string() });
+            self.events.push(Event::Wrote {
+                path: path.to_string(),
+            });
         }
         self.save(id, &doc, Some(&merged), Some(path))?;
         if base != disk {
+            self.events.push(Event::Ingested {
+                doc: id.to_string(),
+                data: encode(&update),
+            });
             self.queue(id, update)?;
         }
         Ok(())
@@ -311,11 +409,15 @@ impl Engine {
 
     /// Take an edit made on this device by the editor, already a CRDT update.
     pub fn local_update(&mut self, id: &str, update: &[u8]) -> Result<()> {
-        let Some(row) = self.row(id)? else { return Err(Error::UnknownDoc(id.to_string())) };
+        let Some(row) = self.row(id)? else {
+            return Err(Error::UnknownDoc(id.to_string()));
+        };
         let doc = self.new_doc();
         apply(&doc, &row.state)?;
         apply(&doc, update)?;
-        let text = doc.get_or_insert_text("content").get_string(&doc.transact());
+        let text = doc
+            .get_or_insert_text("content")
+            .get_string(&doc.transact());
         if let Some(path) = row.path.as_deref() {
             self.write_disk(path, &text)?;
         }
@@ -371,8 +473,17 @@ impl Engine {
                 self.events.push(Event::Wrote { path: p.clone() });
             }
         }
-        self.save(id, &doc, path.as_ref().map(|_| text.as_str()), path.as_deref())?;
+        self.save(
+            id,
+            &doc,
+            path.as_ref().map(|_| text.as_str()),
+            path.as_deref(),
+        )?;
         if let Some(update) = local {
+            self.events.push(Event::Ingested {
+                doc: id.to_string(),
+                data: encode(&update),
+            });
             self.queue(id, update)?;
         }
         Ok(())
@@ -383,24 +494,38 @@ impl Engine {
     fn claim_path(&mut self, id: &str, path: &str) -> Result<String> {
         let taken_by_other: Option<String> = self
             .db
-            .query_row("SELECT id FROM docs WHERE path = ?1 AND id != ?2", params![path, id], |r| r.get(0))
+            .query_row(
+                "SELECT id FROM docs WHERE path = ?1 AND id != ?2",
+                params![path, id],
+                |r| r.get(0),
+            )
             .optional()?;
         let exists = self.vault.resolve(path)?.exists();
         if exists && taken_by_other.is_none() {
-            let ours: Option<String> =
-                self.db.query_row("SELECT path FROM docs WHERE id = ?1", [id], |r| r.get(0)).optional()?.flatten();
+            let ours: Option<String> = self
+                .db
+                .query_row("SELECT path FROM docs WHERE id = ?1", [id], |r| r.get(0))
+                .optional()?
+                .flatten();
             if ours.as_deref() != Some(path) {
                 let stem = path.strip_suffix(".md").unwrap_or(path);
                 let mut n = 1;
                 let aside = loop {
-                    let candidate = if n == 1 { format!("{stem} (local copy).md") } else { format!("{stem} (local copy {n}).md") };
+                    let candidate = if n == 1 {
+                        format!("{stem} (local copy).md")
+                    } else {
+                        format!("{stem} (local copy {n}).md")
+                    };
                     if !self.vault.resolve(&candidate)?.exists() {
                         break candidate;
                     }
                     n += 1;
                 };
                 self.vault.rename(path, &aside)?;
-                self.events.push(Event::KeptBoth { path: path.to_string(), moved_to: aside });
+                self.events.push(Event::KeptBoth {
+                    path: path.to_string(),
+                    moved_to: aside,
+                });
             }
         }
         Ok(path.to_string())
@@ -414,11 +539,16 @@ impl Engine {
             let Some(row) = self.row(&id)? else { continue };
             let doc = self.new_doc();
             apply(&doc, &row.state)?;
-            let text = doc.get_or_insert_text("content").get_string(&doc.transact());
+            let text = doc
+                .get_or_insert_text("content")
+                .get_string(&doc.transact());
             match (&row.path, entry.deleted) {
                 (Some(old), true) => {
                     // Only trash what we know; a file edited since stays and is published again by the next scan.
-                    let unchanged = self.read_disk(old).map(|(disk, _)| Some(disk) == row.synced).unwrap_or(false);
+                    let unchanged = self
+                        .read_disk(old)
+                        .map(|(disk, _)| Some(disk) == row.synced)
+                        .unwrap_or(false);
                     if unchanged {
                         self.vault.delete(old)?;
                         self.events.push(Event::Trashed { path: old.clone() });
@@ -429,17 +559,29 @@ impl Engine {
                     let target = self.claim_path(&id, &entry.path)?;
                     if self.vault.resolve(old)?.exists() {
                         self.vault.rename(old, &target)?;
-                        self.events.push(Event::Renamed { from: old.clone(), to: target.clone() });
+                        self.events.push(Event::Renamed {
+                            from: old.clone(),
+                            to: target.clone(),
+                        });
                     } else {
                         self.write_disk(&target, &text)?;
-                        self.events.push(Event::Wrote { path: target.clone() });
+                        self.events.push(Event::Wrote {
+                            path: target.clone(),
+                        });
                     }
-                    self.save(&id, &doc, row.synced.as_deref().or(Some(&text)), Some(&target))?;
+                    self.save(
+                        &id,
+                        &doc,
+                        row.synced.as_deref().or(Some(&text)),
+                        Some(&target),
+                    )?;
                 }
                 (None, false) => {
                     let target = self.claim_path(&id, &entry.path)?;
                     self.write_disk(&target, &text)?;
-                    self.events.push(Event::Wrote { path: target.clone() });
+                    self.events.push(Event::Wrote {
+                        path: target.clone(),
+                    });
                     self.save(&id, &doc, Some(&text), Some(&target))?;
                 }
                 _ => {}
@@ -450,7 +592,10 @@ impl Engine {
 
     /// The document id of the note at `path`, if it is synced.
     pub fn doc_id(&self, path: &str) -> Result<Option<String>> {
-        Ok(self.db.query_row("SELECT id FROM docs WHERE path = ?1", [path], |r| r.get(0)).optional()?)
+        Ok(self
+            .db
+            .query_row("SELECT id FROM docs WHERE path = ?1", [path], |r| r.get(0))
+            .optional()?)
     }
 
     /// Full state of a document, for an editor that is opening it.
@@ -459,9 +604,16 @@ impl Engine {
     }
 }
 
+fn encode(bytes: &[u8]) -> String {
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
 fn apply(doc: &Doc, update: &[u8]) -> Result<()> {
     let update = Update::decode_v1(update).map_err(|e| Error::Crdt(e.to_string()))?;
-    doc.transact_mut().apply_update(update).map_err(|e| Error::Crdt(e.to_string()))
+    doc.transact_mut()
+        .apply_update(update)
+        .map_err(|e| Error::Crdt(e.to_string()))
 }
 
 fn utf16(text: &str) -> u32 {
@@ -473,29 +625,34 @@ fn utf16(text: &str) -> u32 {
 fn apply_diff(content: &yrs::TextRef, txn: &mut yrs::TransactionMut, old: &str, new: &str) {
     use similar::{ChangeTag, TextDiff};
     // Diff by line first, then by character inside changed runs: precise and fast on long notes.
-    let diff = TextDiff::configure().timeout(std::time::Duration::from_millis(500)).diff_lines(old, new);
+    let diff = TextDiff::configure()
+        .timeout(std::time::Duration::from_millis(500))
+        .diff_lines(old, new);
     let mut at: u32 = 0;
     let mut removed = String::new();
     let mut added = String::new();
-    let flush = |at: &mut u32, removed: &mut String, added: &mut String, txn: &mut yrs::TransactionMut| {
-        if removed.is_empty() && added.is_empty() {
-            return;
-        }
-        let inner = TextDiff::configure().timeout(std::time::Duration::from_millis(200)).diff_chars(removed.as_str(), added.as_str());
-        for change in inner.iter_all_changes() {
-            let piece = change.value();
-            match change.tag() {
-                ChangeTag::Equal => *at += utf16(piece),
-                ChangeTag::Delete => content.remove_range(txn, *at, utf16(piece)),
-                ChangeTag::Insert => {
-                    content.insert(txn, *at, piece);
-                    *at += utf16(piece);
+    let flush =
+        |at: &mut u32, removed: &mut String, added: &mut String, txn: &mut yrs::TransactionMut| {
+            if removed.is_empty() && added.is_empty() {
+                return;
+            }
+            let inner = TextDiff::configure()
+                .timeout(std::time::Duration::from_millis(200))
+                .diff_chars(removed.as_str(), added.as_str());
+            for change in inner.iter_all_changes() {
+                let piece = change.value();
+                match change.tag() {
+                    ChangeTag::Equal => *at += utf16(piece),
+                    ChangeTag::Delete => content.remove_range(txn, *at, utf16(piece)),
+                    ChangeTag::Insert => {
+                        content.insert(txn, *at, piece);
+                        *at += utf16(piece);
+                    }
                 }
             }
-        }
-        removed.clear();
-        added.clear();
-    };
+            removed.clear();
+            added.clear();
+        };
     for change in diff.iter_all_changes() {
         match change.tag() {
             ChangeTag::Equal => {
@@ -524,7 +681,11 @@ mod tests {
         let vault = Vault::open(dir.path()).unwrap();
         let engine = Engine::open(&vault).unwrap();
         engine.mark_pulled().unwrap();
-        Device { _dir: dir, vault, engine }
+        Device {
+            _dir: dir,
+            vault,
+            engine,
+        }
     }
 
     impl Device {
@@ -569,7 +730,10 @@ mod tests {
         exchange(&mut a, &mut b);
         // Both edit while "offline", in different places.
         a.write("Note.md", "FIRST line\nmiddle\nlast line\n");
-        b.write("Note.md", "first line\nmiddle\nlast line, extended 日本語\n");
+        b.write(
+            "Note.md",
+            "first line\nmiddle\nlast line, extended 日本語\n",
+        );
         exchange(&mut a, &mut b);
         let merged = "FIRST line\nmiddle\nlast line, extended 日本語\n";
         assert_eq!(a.read("Note.md").as_deref(), Some(merged));
@@ -587,7 +751,11 @@ mod tests {
         exchange(&mut a, &mut b);
         assert_eq!(b.read("New.md").as_deref(), Some("some text\n"));
         assert_eq!(b.read("Old.md"), None);
-        assert_eq!(b.read("Gone.md"), None, "the delete reached the other device");
+        assert_eq!(
+            b.read("Gone.md"),
+            None,
+            "the delete reached the other device"
+        );
         // And it stays deleted: nothing resurrects it on later rounds.
         exchange(&mut a, &mut b);
         assert_eq!(a.read("Gone.md"), None);
@@ -614,6 +782,9 @@ mod tests {
             b.engine.apply_remote(&out.doc, &out.data).unwrap();
         }
         assert_eq!(b.read("Same.md").as_deref(), Some("from device a\n"));
-        assert_eq!(b.read("Same (local copy).md").as_deref(), Some("from device b\n"));
+        assert_eq!(
+            b.read("Same (local copy).md").as_deref(),
+            Some("from device b\n")
+        );
     }
 }

@@ -6,6 +6,9 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | The relay keeps its data in one SQLite file | Runs locally and self-hosts as a single binary with no outside service; the owner had not yet chosen a Supabase project or a host | Claude (default) | Postgres edit log on Supabase |
+| 2026-11-12 | Notes are identified by an id in a shared manifest, not by path | Renames and deletes merge like any other edit, and a stale device cannot bring a deleted note back | Claude (default) | - |
+| 2026-11-12 | The relay checks the role once per connection; viewers receive and never send | Edits are high volume; a per-edit permission check and audit row is the over-engineering the owner warned about | Pratham (rule), Claude (shape) | v1's per-revision RPC checks |
 | 2026-11-12 | Search, links and the graph come from a disposable SQLite index at `.lokus/index.sqlite` (FTS5), rebuilt from the files whenever it is missing or stale | Fast search on large vaults without holding notes in memory; deleting it loses nothing | Claude (default) | v1's live grep and JS link index |
 | 2026-11-12 | The graph is our own small canvas renderer, loaded only when opened | v1 shipped seven graph packages; a few hundred lines cover what the app needs | Claude (default) | sigma, graphology, react-force-graph, three |
 | 2026-11-12 | CI runs only for pull requests and manual runs, on a Linux runner. Work is verified locally and pushed once per batch of related changes | CI minutes are limited; a macOS runner on every push burned them at 10x | Pratham | CI on every push to `next` on macOS |

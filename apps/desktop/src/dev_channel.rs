@@ -29,7 +29,10 @@ pub struct Pending {
 }
 
 pub fn start(app: AppHandle) {
-    let path = std::env::temp_dir().join("lokus-dev.sock");
+    // A second instance (for two-device tests) gets its own socket.
+    let path = std::env::var("LOKUS_DEV_SOCK")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("lokus-dev.sock"));
     let _ = std::fs::remove_file(&path);
     let listener = match UnixListener::bind(&path) {
         Ok(listener) => listener,

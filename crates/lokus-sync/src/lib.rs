@@ -3,6 +3,7 @@
 //! to the relay. The engine works without a network; the client only moves
 //! what the engine has queued.
 
+pub mod api;
 pub mod client;
 pub mod engine;
 pub mod error;

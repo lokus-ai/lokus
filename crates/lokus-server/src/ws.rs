@@ -25,7 +25,11 @@ pub struct Params {
     token: String,
 }
 
-pub async fn upgrade(State(app): State<Arc<App>>, Query(params): Query<Params>, socket: WebSocketUpgrade) -> Result<Response> {
+pub async fn upgrade(
+    State(app): State<Arc<App>>,
+    Query(params): Query<Params>,
+    socket: WebSocketUpgrade,
+) -> Result<Response> {
     let me = app.auth.identify(&params.token).await?;
     let role = app.require(&params.workspace, &me.user)?;
     Ok(socket
@@ -44,13 +48,24 @@ enum Incoming {
     Aw { doc: String, data: Value },
 }
 
-async fn serve(app: Arc<App>, socket: WebSocket, workspace: String, user: String, email: Option<String>, role: Role) {
+async fn serve(
+    app: Arc<App>,
+    socket: WebSocket,
+    workspace: String,
+    user: String,
+    email: Option<String>,
+    role: Role,
+) {
     let conn = app.conn_id();
     let room = app.room(&workspace);
     let mut feed = room.subscribe();
     let (mut out, mut inbox) = socket.split();
     let hello = json!({ "t": "hello", "conn": conn, "user": user, "role": role.name() });
-    if out.send(Message::Text(hello.to_string().into())).await.is_err() {
+    if out
+        .send(Message::Text(hello.to_string().into()))
+        .await
+        .is_err()
+    {
         return;
     }
 
@@ -84,7 +99,10 @@ async fn serve(app: Arc<App>, socket: WebSocket, workspace: String, user: String
             }
         }
     }
-    let _ = room.send(Fanout { from: conn, json: json!({ "t": "bye", "conn": conn }).to_string().into() });
+    let _ = room.send(Fanout {
+        from: conn,
+        json: json!({ "t": "bye", "conn": conn }).to_string().into(),
+    });
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -101,7 +119,9 @@ fn handle(
     match incoming {
         Incoming::Pull { since } => {
             let (items, head) = app.store.since(workspace, since)?;
-            Ok(Some(json!({ "t": "updates", "items": items, "head": head })))
+            Ok(Some(
+                json!({ "t": "updates", "items": items, "head": head }),
+            ))
         }
         Incoming::Up { id, doc, data } => {
             if !role.can_edit() {
@@ -114,15 +134,22 @@ fn handle(
                 .decode(&data)
                 .map_err(|_| Error::BadRequest("update is not base64".into()))?;
             // Refuse anything that is not a well-formed update before it reaches the log.
-            yrs::Update::decode_v1(&bytes).map_err(|_| Error::BadRequest("update is malformed".into()))?;
+            yrs::Update::decode_v1(&bytes)
+                .map_err(|_| Error::BadRequest("update is malformed".into()))?;
             let seq = app.store.append(workspace, &doc, &bytes)?;
             let fan = json!({ "t": "up", "doc": doc, "seq": seq, "data": data, "user": user });
-            let _ = room.send(Fanout { from: conn, json: fan.to_string().into() });
+            let _ = room.send(Fanout {
+                from: conn,
+                json: fan.to_string().into(),
+            });
             Ok(Some(json!({ "t": "ack", "id": id, "seq": seq })))
         }
         Incoming::Aw { doc, data } => {
             let fan = json!({ "t": "aw", "doc": doc, "conn": conn, "user": user, "email": email, "data": data });
-            let _ = room.send(Fanout { from: conn, json: fan.to_string().into() });
+            let _ = room.send(Fanout {
+                from: conn,
+                json: fan.to_string().into(),
+            });
             Ok(None)
         }
     }

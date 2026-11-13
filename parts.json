@@ -17,6 +17,7 @@
     { "id": "ui.search", "description": "Full-text search palette.", "paths": ["ui/src/features/search/"] },
     { "id": "ui.backlinks", "description": "Linked mentions under a note.", "paths": ["ui/src/features/backlinks/"] },
     { "id": "ui.graph", "description": "Graph of notes and links. Loaded only when opened.", "paths": ["ui/src/features/graph/"] },
+    { "id": "ui.teams", "description": "Team workspaces: connect, create, join, members, invites.", "paths": ["ui/src/features/teams/"] },
     { "id": "ui.auth", "description": "Login screen and session state.", "paths": ["ui/src/features/auth/"] },
     { "id": "ui.analytics", "description": "Product analytics events and the opt-out. Never sends note content.", "paths": ["ui/src/features/analytics/"] },
     { "id": "checks", "description": "Scripts that enforce the hard rules.", "paths": ["checks/"] }

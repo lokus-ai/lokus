@@ -30,14 +30,55 @@ pub struct Config {
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 const RETRY: Duration = Duration::from_secs(3);
 
+/// What the app can ask a running connection to do.
+pub enum Nudge {
+    /// Something was queued or a file changed: scan and send.
+    Changed,
+    /// Cursor and presence for one note; passed on, never stored.
+    Awareness { doc: String, data: Value },
+}
+
+/// A way to reach a running sync from the rest of the app.
+#[derive(Clone)]
+pub struct Link {
+    pub engine: Arc<Mutex<Engine>>,
+    nudge: mpsc::UnboundedSender<Nudge>,
+}
+
+impl Link {
+    pub fn nudge(&self, nudge: Nudge) {
+        let _ = self.nudge.send(nudge);
+    }
+}
+
+/// Open the engine for a vault and the channel a connection will listen on.
+pub fn link(vault: &Vault) -> Result<(Link, mpsc::UnboundedReceiver<Nudge>)> {
+    let engine = Arc::new(Mutex::new(Engine::open(vault)?));
+    let (nudge, nudges) = mpsc::unbounded_channel();
+    Ok((Link { engine, nudge }, nudges))
+}
+
 /// Run sync for a vault until the relay refuses us (bad token, no access).
 /// `report` receives one JSON object per thing worth telling a person.
-pub async fn run(vault: Vault, config: Config, report: impl Fn(Value) + Send + Sync + 'static) -> Result<()> {
-    let engine = Arc::new(Mutex::new(Engine::open(&vault)?));
-    let (changed, mut changes) = mpsc::unbounded_channel::<()>();
-    let _watching = watch(&vault, move |_| {
-        let _ = changed.send(());
-    })?;
+pub async fn run(
+    vault: Vault,
+    config: Config,
+    report: impl Fn(Value) + Send + Sync + 'static,
+) -> Result<()> {
+    let (link, nudges) = link(&vault)?;
+    let changed = link.clone();
+    let _watching = watch(&vault, move |_| changed.nudge(Nudge::Changed))?;
+    serve(link, nudges, config, report).await
+}
+
+/// Like [`run`], for a caller that already owns the link (and the file watcher).
+pub async fn serve(
+    link: Link,
+    mut changes: mpsc::UnboundedReceiver<Nudge>,
+    config: Config,
+    report: impl Fn(Value) + Send + Sync + 'static,
+) -> Result<()> {
+    let engine = link.engine.clone();
 
     loop {
         match session(&engine, &config, &mut changes, &report).await {
@@ -52,40 +93,56 @@ pub async fn run(vault: Vault, config: Config, report: impl Fn(Value) + Send + S
 }
 
 fn with<T>(engine: &Arc<Mutex<Engine>>, f: impl FnOnce(&mut Engine) -> Result<T>) -> Result<T> {
-    let mut guard = engine.lock().map_err(|_| Error::Net("sync engine stopped after an earlier failure".into()))?;
+    let mut guard = engine
+        .lock()
+        .map_err(|_| Error::Net("sync engine stopped after an earlier failure".into()))?;
     f(&mut guard)
 }
 
 fn socket_url(config: &Config) -> String {
     let base = config.server.trim_end_matches('/');
-    let base = base.strip_prefix("http").map(|rest| format!("ws{rest}")).unwrap_or_else(|| base.to_string());
-    format!("{base}/v1/ws?workspace={}&token={}", config.workspace, config.token)
+    let base = base
+        .strip_prefix("http")
+        .map(|rest| format!("ws{rest}"))
+        .unwrap_or_else(|| base.to_string());
+    format!(
+        "{base}/v1/ws?workspace={}&token={}",
+        config.workspace, config.token
+    )
 }
 
 async fn session(
     engine: &Arc<Mutex<Engine>>,
     config: &Config,
-    changes: &mut mpsc::UnboundedReceiver<()>,
+    changes: &mut mpsc::UnboundedReceiver<Nudge>,
     report: &(impl Fn(Value) + Send + Sync),
 ) -> Result<()> {
-    let (socket, _) = tokio_tungstenite::connect_async(socket_url(config)).await.map_err(|e| match &e {
-        tokio_tungstenite::tungstenite::Error::Http(response) if matches!(response.status().as_u16(), 401 | 403) => {
-            Error::Refused(format!("the relay answered {}", response.status()))
-        }
-        _ => Error::Net(e.to_string()),
-    })?;
+    let (socket, _) = tokio_tungstenite::connect_async(socket_url(config))
+        .await
+        .map_err(|e| match &e {
+            tokio_tungstenite::tungstenite::Error::Http(response)
+                if matches!(response.status().as_u16(), 401 | 403) =>
+            {
+                Error::Refused(format!("the relay answered {}", response.status()))
+            }
+            _ => Error::Net(e.to_string()),
+        })?;
     let (mut out, mut inbox) = socket.split();
     let mut in_flight: HashSet<i64> = HashSet::new();
+    // Viewers receive everything and send nothing.
+    let mut can_edit = true;
     // Where to pull from again if the relay says we fell behind its live feed.
     let mut safe = with(engine, |e| e.cursor())?;
-    out.send(Message::Text(json!({ "t": "pull", "since": safe }).to_string().into()))
-        .await
-        .map_err(|e| Error::Net(e.to_string()))?;
+    out.send(Message::Text(
+        json!({ "t": "pull", "since": safe }).to_string().into(),
+    ))
+    .await
+    .map_err(|e| Error::Net(e.to_string()))?;
 
     loop {
         // Everything queued goes out; acks remove it from the outbox.
         let pending = with(engine, |e| {
-            let events: Vec<_> = e.events.drain(..).collect();
+            let events = std::mem::take(&mut e.events);
             Ok((e.outbox()?, events))
         })?;
         for event in pending.1 {
@@ -93,9 +150,13 @@ async fn session(
         }
         // Publish only after the first pull of this connection has been applied.
         if in_flight.is_empty() || !pending.0.is_empty() {
-            for item in pending.0.into_iter().filter(|i| with(engine, |e| e.meta("pulled")).ok().flatten().is_some() && in_flight.insert(i.n)) {
+            for item in pending.0.into_iter().filter(|_| can_edit).filter(|i| {
+                with(engine, |e| e.meta("pulled")).ok().flatten().is_some() && in_flight.insert(i.n)
+            }) {
                 let message = json!({ "t": "up", "id": item.n, "doc": item.doc, "data": B64.encode(&item.data) });
-                out.send(Message::Text(message.to_string().into())).await.map_err(|e| Error::Net(e.to_string()))?;
+                out.send(Message::Text(message.to_string().into()))
+                    .await
+                    .map_err(|e| Error::Net(e.to_string()))?;
             }
         }
 
@@ -109,7 +170,10 @@ async fn session(
                 };
                 let value: Value = serde_json::from_str(&message).map_err(|e| Error::Net(e.to_string()))?;
                 match value["t"].as_str().unwrap_or_default() {
-                    "hello" => report(json!({ "event": "online", "role": value["role"], "user": value["user"] })),
+                    "hello" => {
+                        can_edit = value["role"] != "viewer";
+                        report(json!({ "event": "online", "role": value["role"], "user": value["user"], "conn": value["conn"] }));
+                    }
                     "updates" => {
                         let items = value["items"].as_array().cloned().unwrap_or_default();
                         let head = value["head"].as_i64().unwrap_or(0);
@@ -123,6 +187,10 @@ async fn session(
                             e.scan()
                         })?;
                         safe = safe.max(head);
+                        // An open editor needs what was missed while offline, not just the files.
+                        for item in &items {
+                            report(json!({ "event": "remote", "doc": item["doc"], "data": item["data"] }));
+                        }
                         report(json!({ "event": "pulled", "edits": items.len() }));
                     }
                     "up" => {
@@ -131,7 +199,10 @@ async fn session(
                             e.apply_remote(value["doc"].as_str().unwrap_or_default(), &data)?;
                             e.set_cursor(value["seq"].as_i64().unwrap_or(0))
                         })?;
+                        // An editor that has this note open applies the same edit to its own copy.
+                        report(json!({ "event": "remote", "doc": value["doc"], "data": value["data"] }));
                     }
+                    "aw" | "bye" => report(json!({ "event": "presence", "message": value })),
                     "ack" => {
                         let n = value["id"].as_i64().unwrap_or(0);
                         in_flight.remove(&n);
@@ -155,11 +226,16 @@ async fn session(
                     _ => {}
                 }
             }
-            Some(()) = changes.recv() => {
-                // A burst of file events is one scan.
-                tokio::time::sleep(Duration::from_millis(120)).await;
-                while changes.try_recv().is_ok() {}
-                with(engine, |e| e.scan())?;
+            Some(nudge) = changes.recv() => match nudge {
+                Nudge::Awareness { doc, data } => {
+                    let message = json!({ "t": "aw", "doc": doc, "data": data });
+                    out.send(Message::Text(message.to_string().into())).await.map_err(|e| Error::Net(e.to_string()))?;
+                }
+                Nudge::Changed => {
+                    // A burst of file events is one scan.
+                    tokio::time::sleep(Duration::from_millis(60)).await;
+                    with(engine, |e| e.scan())?;
+                }
             }
         }
     }

@@ -4,8 +4,11 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirro
 import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-markdown";
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { indentUnit } from "@codemirror/language";
-import { EditorState, Prec, type TransactionSpec } from "@codemirror/state";
+import { EditorState, type Extension, Prec, type TransactionSpec } from "@codemirror/state";
 import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
+import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
+import type { Awareness } from "y-protocols/awareness";
+import { type Text as YText, UndoManager } from "yjs";
 
 import { livePreview } from "./livePreview";
 import { insertLink, readFrontmatter, setFrontmatterKey, setHeading, toggleMark } from "./markdownCommands";
@@ -35,6 +38,16 @@ export class Editor {
   }
 
   createState(text: string): EditorState {
+    return this.build(text, [history(), keymap.of(historyKeymap)]);
+  }
+
+  /** A state bound to a shared document: edits, undo and cursors go through it. */
+  createSharedState(text: YText, awareness: Awareness): EditorState {
+    const undoManager = new UndoManager(text);
+    return this.build(text.toString(), [yCollab(text, awareness, { undoManager }), keymap.of(yUndoManagerKeymap)]);
+  }
+
+  private build(text: string, editing: Extension[]): EditorState {
     const apply = (spec: (state: EditorState) => TransactionSpec) => (view: EditorView) => {
       view.dispatch(spec(view.state));
       return true;
@@ -42,7 +55,7 @@ export class Editor {
     return EditorState.create({
       doc: text,
       extensions: [
-        history(),
+        editing,
         drawSelection(),
         EditorView.lineWrapping,
         indentUnit.of("    "),
@@ -69,7 +82,7 @@ export class Editor {
             { key: "Mod-k", run: apply(insertLink) },
           ]),
         ),
-        keymap.of([...markdownKeymap, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        keymap.of([...markdownKeymap, ...closeBracketsKeymap, ...defaultKeymap, indentWithTab]),
         EditorView.updateListener.of((u) => {
           if (u.docChanged) this.hooks.onChange(u.state.doc.toString());
         }),

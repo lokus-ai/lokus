@@ -2,7 +2,7 @@
 import type { EditorState } from "@codemirror/state";
 
 import { identify, track } from "../bridge/analytics";
-import { type Account, currentAccount } from "../bridge/auth";
+import { accessToken, type Account, currentAccount } from "../bridge/auth";
 import {
   closeWindow,
   CoreError,
@@ -19,8 +19,18 @@ import {
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
+import { onSyncEvent, syncConnect, syncDisconnect } from "../bridge/sync";
 import { Editor } from "../editor/editor";
+import { closeShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
+
+export interface SyncState {
+  status: "off" | "connecting" | "online" | "offline" | "refused";
+  server?: string;
+  workspace?: string;
+  role?: "owner" | "editor" | "viewer";
+  reason?: string;
+}
 
 /** Everything the screens render from. Notes themselves live in the editor. */
 export interface AppState {
@@ -45,6 +55,10 @@ export interface AppState {
   narrow: boolean;
   account: Account | null;
   accountDialog: boolean;
+  teamsDialog: boolean;
+  sync: SyncState;
+  /** Other people with the active note open. */
+  peers: Peer[];
   notice: string | null;
 }
 
@@ -65,6 +79,9 @@ export const app = createStore<AppState>({
   narrow: false,
   account: null,
   accountDialog: false,
+  teamsDialog: false,
+  sync: { status: "off" },
+  peers: [],
   notice: null,
 });
 
@@ -74,6 +91,8 @@ interface Session {
   saved: string;
   eol: Eol;
   hash: string;
+  /** Set while the note is edited through its shared document. */
+  shared?: Shared;
 }
 
 const SAVE_DELAY = 600;
@@ -133,6 +152,11 @@ export function attachEditor(parent: HTMLElement): void {
       const path = app.get().active;
       const session = path ? sessions.get(path) : undefined;
       if (!path || !session) return;
+      if (session.shared) {
+        // The sync engine writes the file; nothing to save from here.
+        syncProperties();
+        return;
+      }
       setDirty(path, text !== session.saved);
       syncProperties();
       if (text !== session.saved) scheduleSave(path);
@@ -171,7 +195,7 @@ export async function save(path: string, force = false): Promise<void> {
   window.clearTimeout(saveTimers.get(path));
   const session = sessions.get(path);
   const text = textOf(path);
-  if (!session || text === null || (text === session.saved && !force)) return;
+  if (!session || session.shared || text === null || (text === session.saved && !force)) return;
   try {
     const written = await runCore<{ hash: string }>("note.write", {
       path,
@@ -211,8 +235,90 @@ function watchWidth(): void {
   apply();
 }
 
+/** Move an open note onto its shared document once the note is synced. */
+async function share(path: string): Promise<void> {
+  const session = sessions.get(path);
+  if (!session || session.shared || !editor) return;
+  await save(path);
+  const shared = await openShared(path);
+  if (!shared || sessions.get(path) !== session) return;
+  session.shared = shared;
+  session.state = editor.createSharedState(shared.text, shared.awareness);
+  session.saved = shared.text.toString();
+  if (app.get().active === path) {
+    editor.swap(session.state);
+    syncProperties();
+    syncPeers();
+  }
+  setDirty(path, false);
+}
+
+/** Back to plain files, when sync stops. */
+async function unshareAll(): Promise<void> {
+  for (const [path, session] of sessions) {
+    if (!session.shared || !editor) continue;
+    const text = session.shared.text.toString();
+    closeShared(session.shared);
+    session.shared = undefined;
+    session.state = editor.createState(text);
+    session.saved = text;
+    const note = await runCore<Note>("note.read", { path }).catch(() => null);
+    if (note) Object.assign(session, { eol: note.eol, hash: note.hash });
+    if (app.get().active === path) editor.swap(session.state);
+  }
+  app.set({ peers: [] });
+}
+
+const syncKey = () => `lokus.sync:${app.get().vault?.root ?? ""}`;
+
+/** Start syncing this vault with a team workspace. */
+export async function connectSync(server: string, workspace: string, token: string | null): Promise<void> {
+  const useToken = token ?? (await accessToken());
+  if (!useToken) {
+    app.set({ sync: { status: "refused", reason: "Sign in first" } });
+    return;
+  }
+  await saveAll();
+  // An account token is fetched fresh each time; only a token typed by hand is remembered.
+  localStorage.setItem(syncKey(), JSON.stringify({ server, workspace, token }));
+  app.set({ sync: { status: "connecting", server, workspace } });
+  await syncConnect(server, workspace, useToken).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
+}
+
+export async function disconnectSync(): Promise<void> {
+  localStorage.removeItem(syncKey());
+  await syncDisconnect();
+  await unshareAll();
+  app.set({ sync: { status: "off" } });
+}
+
+function watchSync(): void {
+  startCollab(syncPeers);
+  onSyncEvent((event) => {
+    const { sync } = app.get();
+    if (event.event === "online") app.set({ sync: { ...sync, status: "online", role: event.role, reason: undefined } });
+    else if (event.event === "offline" && sync.status !== "off") app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
+    else if (event.event === "refused") {
+      void unshareAll();
+      app.set({ sync: { status: "refused", reason: event.reason } });
+    } else if (event.event === "pulled") for (const path of sessions.keys()) void share(path);
+    else if (event.event === "published" || event.event === "wrote") void share(event.path);
+    else if (event.event === "kept_both") notify(`Kept your copy as “${event.moved_to}”`);
+  });
+}
+
+async function resumeSync(): Promise<void> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(syncKey()) ?? "null") as { server: string; workspace: string; token: string | null } | null;
+    if (saved) await connectSync(saved.server, saved.workspace, saved.token);
+  } catch {
+    // a broken saved entry just means sync stays off
+  }
+}
+
 export async function boot(): Promise<void> {
   watchWidth();
+  watchSync();
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
   onCloseTab(() => {
@@ -222,18 +328,24 @@ export async function boot(): Promise<void> {
   });
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);
+  setIdentity(account?.email ?? "You");
   app.set({ vault, account, ready: true });
   track("app_opened");
-  if (vault) await refreshTree();
+  if (vault) {
+    await refreshTree();
+    await resumeSync();
+  }
 }
 
 export async function setVault(path: string): Promise<void> {
   await saveAll();
   const vault = await openVault(path);
+  for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
   sessions.clear();
-  app.set({ vault, tabs: [], active: null, dirty: {}, properties: {}, conflict: null });
+  app.set({ vault, tabs: [], active: null, dirty: {}, properties: {}, conflict: null, sync: { status: "off" }, peers: [] });
   track("vault_opened");
   await refreshTree();
+  await resumeSync();
 }
 
 export async function chooseVault(): Promise<void> {
@@ -262,7 +374,14 @@ function show(path: string): void {
   if (old && previous !== path) old.state = leaving;
   app.set((s) => ({ active: path, view: "note", tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
   syncProperties();
+  syncPeers();
   editor.view.focus();
+}
+
+function syncPeers(): void {
+  const { active } = app.get();
+  const next = peersOf(active ? sessions.get(active)?.shared : undefined);
+  if (JSON.stringify(next) !== JSON.stringify(app.get().peers)) app.set({ peers: next });
 }
 
 export async function openNote(path: string): Promise<void> {
@@ -273,7 +392,9 @@ export async function openNote(path: string): Promise<void> {
     if (!sessions.has(path)) {
       const note = await runCore<Note>("note.read", { path });
       const text = toEditor(note.text);
-      sessions.set(path, { state: editor.createState(text), saved: text, eol: note.eol, hash: note.hash });
+      const shared = app.get().sync.status === "off" ? null : await openShared(path);
+      const state = shared ? editor.createSharedState(shared.text, shared.awareness) : editor.createState(text);
+      sessions.set(path, { state, saved: text, eol: note.eol, hash: note.hash, shared: shared ?? undefined });
       track("note_opened");
     }
     show(path);
@@ -287,6 +408,8 @@ export async function closeTab(path: string): Promise<void> {
   const { tabs, active } = app.get();
   const index = tabs.indexOf(path);
   const rest = tabs.filter((t) => t !== path);
+  const closing = sessions.get(path)?.shared;
+  if (closing) closeShared(closing);
   sessions.delete(path);
   if (active !== path) {
     app.set({ tabs: rest });
@@ -418,7 +541,7 @@ async function onDiskChange(paths: string[]): Promise<void> {
   app.set((s) => ({ version: s.version + 1 }));
   for (const path of paths) {
     const session = sessions.get(path);
-    if (!session) continue;
+    if (!session || session.shared) continue; // a shared note gets outside edits through its document
     let note: Note;
     try {
       note = await runCore<Note>("note.read", { path });

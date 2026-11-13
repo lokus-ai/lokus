@@ -128,7 +128,9 @@ fn run_on_vault(p: &Parsed) -> Result<Value, Value> {
 #[cfg(unix)]
 fn run_in_app(p: &Parsed) -> Result<Value, Value> {
     use std::os::unix::net::UnixStream;
-    let path = std::env::temp_dir().join("lokus-dev.sock");
+    let path = std::env::var("LOKUS_DEV_SOCK")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir().join("lokus-dev.sock"));
     let io = |e: std::io::Error| json!({ "code": "app_unreachable", "message": format!("{} ({e}); is `pnpm dev` running?", path.display()) });
     let mut stream = UnixStream::connect(&path).map_err(io)?;
     stream
@@ -155,10 +157,18 @@ fn run_in_app(_p: &Parsed) -> Result<Value, Value> {
 /// Keep a vault in sync until interrupted. One JSON object per line on stdout.
 fn sync(p: &Parsed) -> ExitCode {
     let arg = |name: &str| p.args[name].as_str().map(str::to_string);
-    let (Some(server), Some(workspace), Some(token)) = (arg("server"), arg("workspace"), arg("token")) else {
-        return fail(json!({ "code": "usage", "message": "sync needs server=, workspace= and token=" }));
+    let (Some(server), Some(workspace), Some(token)) =
+        (arg("server"), arg("workspace"), arg("token"))
+    else {
+        return fail(
+            json!({ "code": "usage", "message": "sync needs server=, workspace= and token=" }),
+        );
     };
-    let root = p.vault.clone().or_else(|| std::env::var("LOKUS_VAULT").ok()).unwrap_or_else(|| ".".to_string());
+    let root = p
+        .vault
+        .clone()
+        .or_else(|| std::env::var("LOKUS_VAULT").ok())
+        .unwrap_or_else(|| ".".to_string());
     let vault = match lokus_core::Vault::open(&root) {
         Ok(vault) => vault,
         Err(e) => return fail(error_json(&e)),
@@ -167,8 +177,14 @@ fn sync(p: &Parsed) -> ExitCode {
         Ok(runtime) => runtime,
         Err(e) => return fail(json!({ "code": "io", "message": e.to_string() })),
     };
-    let config = lokus_sync::client::Config { server, workspace, token };
-    let outcome = runtime.block_on(lokus_sync::client::run(vault, config, |event| println!("{event}")));
+    let config = lokus_sync::client::Config {
+        server,
+        workspace,
+        token,
+    };
+    let outcome = runtime.block_on(lokus_sync::client::run(vault, config, |event| {
+        println!("{event}")
+    }));
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => fail(json!({ "code": "sync", "message": e.to_string() })),
