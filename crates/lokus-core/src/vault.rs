@@ -230,6 +230,12 @@ impl Vault {
             }
         }
         let bytes = from_editor(text, eol).into_bytes();
+        // Keep what is about to be replaced; failing to must not block the save.
+        if let Ok(old) = fs::read(&abs) {
+            if old != bytes {
+                let _ = crate::history::keep(self, rel, &old, false);
+            }
+        }
         write_atomic(&abs, &bytes)?;
         Ok(Written {
             path: rel.to_string(),

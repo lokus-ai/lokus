@@ -293,6 +293,7 @@ export function App() {
   const accountDialog = useStore(app, (s) => s.accountDialog);
   const teamsDialog = useStore(app, (s) => s.teamsDialog);
   const notice = useStore(app, (s) => s.notice);
+  const hasNotes = useStore(app, (s) => s.tree.length > 0);
 
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
   if (!vault) return <Welcome />;
@@ -316,6 +317,11 @@ export function App() {
         {!active && view === "note" && (
           <div className="empty">
             <p>No note open</p>
+            {!hasNotes && (
+              <button className="primary" onClick={() => void runCommand("vault.examples")}>
+                Add a few example notes
+              </button>
+            )}
             <span>
               <kbd>{formatKeys("Mod-o")}</kbd> go to a note
             </span>

@@ -93,6 +93,10 @@ Small things that make it a daily driver, all plain commands over plain files:
 - **Daily note:** `Daily/YYYY-MM-DD.md`, created on first use from `Templates/Daily.md` if present.
 - **Templates:** any note in `Templates/`; `{{date}}`, `{{time}}` and `{{title}}` are filled in.
 - **Trash:** deleting moves a file to `.lokus/trash/`; "Restore from the trash" puts it back.
+- **Version history:** when a note is overwritten (by you, a teammate's edit or the assistant) its
+  old text is kept in `.lokus/history/`, at most one copy every five minutes and fifty per note.
+  "Version history" restores one; what it replaces is kept too. History is per device and does
+  not follow a rename.
 - **Settings:** theme, note font, assistant, plugins, privacy.
 
 ## 6. Sync and the server (built, M3)

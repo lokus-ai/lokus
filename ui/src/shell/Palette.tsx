@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatKeys, listCommands, runCommand } from "./commands";
-import { allNotes, app, createFromTemplate, createNote, getEditor, openNote, restoreFromTrash, templates, type TrashedFile, trashed } from "./workspace";
+import { allNotes, app, createFromTemplate, createNote, getEditor, openNote, type NoteVersion, restoreFromTrash, restoreVersion, templates, type TrashedFile, trashed, versions } from "./workspace";
 
 interface Item {
   key: string;
@@ -29,7 +29,7 @@ function score(query: string, text: string): number {
   return Math.max(1, 500 - gaps);
 }
 
-type Mode = "commands" | "notes" | "headings" | "templates" | "trash";
+type Mode = "commands" | "notes" | "headings" | "templates" | "trash" | "history";
 
 const PLACEHOLDER: Record<Mode, string> = {
   commands: "Run a command…",
@@ -37,6 +37,7 @@ const PLACEHOLDER: Record<Mode, string> = {
   headings: "Go to a heading…",
   templates: "New note from a template…",
   trash: "Restore from the trash…",
+  history: "Restore an earlier version of this note…",
 };
 const EMPTY: Record<Mode, string> = {
   commands: "Nothing matches.",
@@ -44,6 +45,7 @@ const EMPTY: Record<Mode, string> = {
   headings: "This note has no headings.",
   templates: "No templates yet. Notes in a folder called Templates show up here.",
   trash: "The trash is empty.",
+  history: "No earlier versions yet. One is kept when a note changes, at most every few minutes.",
 };
 
 const noteName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
@@ -56,8 +58,10 @@ function when(ms: number): string {
 
 export function Palette({ mode }: { mode: Mode }) {
   const [trash, setTrash] = useState<TrashedFile[]>([]);
+  const [history, setHistory] = useState<NoteVersion[]>([]);
   useEffect(() => {
     if (mode === "trash") void trashed().then(setTrash, () => setTrash([]));
+    if (mode === "history") void versions().then(setHistory, () => setHistory([]));
   }, [mode]);
   const [query, setQuery] = useState("");
   const [index, setIndex] = useState(0);
@@ -83,6 +87,13 @@ export function Palette({ mode }: { mode: Mode }) {
             }))
           : mode === "templates"
             ? templates().map((path) => ({ key: path, label: noteName(path), run: () => void createFromTemplate(path) }))
+            : mode === "history"
+              ? history.map((v) => ({
+                  key: String(v.at),
+                  label: new Date(v.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }),
+                  hint: `${when(v.at)} · ${v.size.toLocaleString()} bytes`,
+                  run: () => void restoreVersion(v.at),
+                }))
             : mode === "trash"
               ? trash.map((t) => ({
                   key: t.id,
@@ -92,7 +103,7 @@ export function Palette({ mode }: { mode: Mode }) {
                 }))
               : allNotes().map((path) => ({ key: path, label: noteName(path), hint: folderOf(path), run: () => void openNote(path) }));
     // A note's headings stay in reading order; everything else is ranked by the match.
-    if (mode === "headings" && !query.trim()) return source;
+    if ((mode === "headings" || mode === "history") && !query.trim()) return source;
     const ranked = source
       .map((item) => ({ item, s: score(query.trim(), item.label) }))
       .filter((r) => r.s > 0)
@@ -104,7 +115,7 @@ export function Palette({ mode }: { mode: Mode }) {
       ranked.push({ key: "+new", label: `Create “${name}”`, run: () => void createNote(name) });
     }
     return ranked;
-  }, [mode, query, trash]);
+  }, [mode, query, trash, history]);
 
   useEffect(() => setIndex(0), [query]);
   useEffect(() => {

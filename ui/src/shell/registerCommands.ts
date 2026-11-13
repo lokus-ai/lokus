@@ -1,6 +1,7 @@
 /** @part-of ui.shell */
 import { aiSettings, saveAiConfig } from "../bridge/ai";
 import { identify } from "../bridge/analytics";
+import { runCore } from "../bridge/core";
 import { accountsAvailable, signOut } from "../bridge/auth";
 import { answer, ask, chat, newChat } from "../features/ai/chat";
 import { analyticsCommands } from "../features/analytics/commands";
@@ -19,6 +20,7 @@ import {
   openDailyNote,
   openLink,
   openNote,
+  refreshTree,
   save,
   setVault,
 } from "./workspace";
@@ -82,12 +84,22 @@ export function registerAllCommands(): void {
     },
     { id: "ai.new", title: "Assistant: new chat", run: newChat },
     { id: "teams.open", title: "Team sync…", run: () => app.set({ teamsDialog: true }) },
+    {
+      id: "vault.examples",
+      title: "Add example notes to this vault",
+      run: async () => {
+        await runCore("vault.seed");
+        await refreshTree();
+        await openNote("Welcome.md");
+      },
+    },
     { id: "vault.choose", title: "Open another vault…", run: chooseVault },
     { id: "sidebar.toggle", title: "Show or hide the sidebar", keys: "Mod-\\", run: () => app.set((s) => ({ sidebar: !s.sidebar })) },
     { id: "note.new", title: "New note", keys: "Mod-n", run: () => createNote() },
     { id: "note.daily", title: "Open today's note", keys: "Mod-Shift-d", run: openDailyNote },
     { id: "note.fromTemplate", title: "New note from a template…", run: () => app.set({ palette: "templates" }) },
     { id: "note.headings", title: "Go to a heading…", keys: "Mod-Shift-o", run: () => app.set({ palette: "headings" }) },
+    { id: "note.history", title: "Version history: restore an earlier version…", run: () => app.set({ palette: "history" }) },
     { id: "trash.open", title: "Restore from the trash…", run: () => app.set({ palette: "trash" }) },
     {
       id: "note.save",

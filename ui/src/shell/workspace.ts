@@ -45,7 +45,7 @@ export interface AppState {
   properties: Record<string, string>;
   /** A note that changed on disk while it had unsaved edits here. */
   conflict: string | null;
-  palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | null;
+  palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | "history" | null;
   /** What the main area shows. */
   view: "note" | "graph" | "settings";
   /** What the panel on the right shows, if it is open. */
@@ -642,6 +642,30 @@ export async function createFromTemplate(template: string): Promise<void> {
     track("note_created");
     await refreshTree();
     await openNote(path);
+  } catch (e) {
+    report(e);
+  }
+}
+
+export interface NoteVersion {
+  at: number;
+  size: number;
+}
+
+/** Earlier versions of the open note, newest first. */
+export async function versions(): Promise<NoteVersion[]> {
+  const { active } = app.get();
+  return active ? runCore<NoteVersion[]>("history.list", { path: active }) : [];
+}
+
+/** Bring back an earlier version of the open note. What it replaces becomes a version too. */
+export async function restoreVersion(at: number): Promise<void> {
+  const { active } = app.get();
+  if (!active) return;
+  try {
+    await save(active);
+    await runCore("history.restore", { path: active, at });
+    notify("Restored. The text it replaced is in the history too.");
   } catch (e) {
     report(e);
   }

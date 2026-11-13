@@ -11,6 +11,8 @@
 | Disposable SQLite index: full-text search, links, backlinks, graph, tags. | `crates/lokus-core/src/index` | `core.index` |
 | Read and change a note's properties without touching the rest of the file. | `crates/lokus-core/src/frontmatter` | `core.frontmatter` |
 | Plugins installed in a vault: manifests, install, enable, stored data, and the files served to plugin frames. | `crates/lokus-core/src/plugins` | `core.plugins` |
+| Earlier versions of notes, kept when a note is overwritten. | `crates/lokus-core/src/history` | `core.history` |
+| Example notes for an empty vault. | `crates/lokus-core/src/starter` | `core.starter` |
 | File watcher: report changes made outside the app. | `crates/lokus-core/src/watch` | `core.watch` |
 | Sync engine: keeps a vault's files and their CRDT documents in step and talks to the relay. | `crates/lokus-sync/` | `sync` |
 | The relay: accounts' workspaces, roles, invites, the update log and live fan-out. | `crates/lokus-server/` | `server` |

@@ -7,8 +7,10 @@
 pub mod commands;
 pub mod error;
 pub mod frontmatter;
+pub mod history;
 pub mod index;
 pub mod plugins;
+pub mod starter;
 pub mod vault;
 pub mod watch;
 

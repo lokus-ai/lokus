@@ -6,6 +6,8 @@
     { "id": "core.index", "description": "Disposable SQLite index: full-text search, links, backlinks, graph, tags.", "paths": ["crates/lokus-core/src/index"] },
     { "id": "core.frontmatter", "description": "Read and change a note's properties without touching the rest of the file.", "paths": ["crates/lokus-core/src/frontmatter"] },
     { "id": "core.plugins", "description": "Plugins installed in a vault: manifests, install, enable, stored data, and the files served to plugin frames.", "paths": ["crates/lokus-core/src/plugins"] },
+    { "id": "core.history", "description": "Earlier versions of notes, kept when a note is overwritten.", "paths": ["crates/lokus-core/src/history"] },
+    { "id": "core.starter", "description": "Example notes for an empty vault.", "paths": ["crates/lokus-core/src/starter"] },
     { "id": "core.watch", "description": "File watcher: report changes made outside the app.", "paths": ["crates/lokus-core/src/watch"] },
     { "id": "sync", "description": "Sync engine: keeps a vault's files and their CRDT documents in step and talks to the relay.", "paths": ["crates/lokus-sync/"] },
     { "id": "server", "description": "The relay: accounts' workspaces, roles, invites, the update log and live fan-out.", "paths": ["crates/lokus-server/"] },

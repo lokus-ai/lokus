@@ -12,6 +12,7 @@ use serde_json::{json, Value};
 use std::path::Path;
 
 use crate::error::{CoreError, Result};
+use crate::history;
 use crate::plugins;
 use crate::vault::Eol;
 use crate::Core;
@@ -138,6 +139,30 @@ pub const COMMANDS: &[CommandSpec] = &[
         "file.write",
         "Save a file that is not a note (an image, a PDF); fails if it exists",
         "path, base64",
+        Write,
+    ),
+    spec(
+        "history.list",
+        "Earlier versions of a note, newest first",
+        "path",
+        Read,
+    ),
+    spec(
+        "history.read",
+        "The text of one earlier version",
+        "path, at",
+        Read,
+    ),
+    spec(
+        "history.restore",
+        "Make an earlier version the note's text again",
+        "path, at",
+        Write,
+    ),
+    spec(
+        "vault.seed",
+        "Add a few example notes; existing notes are left alone",
+        "",
         Write,
     ),
     spec("trash.list", "Files in the trash, newest first", "", Read),
@@ -331,6 +356,21 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             vault.write_file(&a.path, &bytes)?;
             Ok(json!({ "path": a.path, "size": bytes.len() }))
         }
+        "history.list" => {
+            let a: PathArgs = parse(name, args)?;
+            out(history::list(vault, &a.path)?)
+        }
+        "history.read" => {
+            let a: VersionArgs = parse(name, args)?;
+            let bytes = history::read(vault, &a.path, a.at)?;
+            Ok(json!({ "path": a.path, "at": a.at, "text": String::from_utf8_lossy(&bytes) }))
+        }
+        "history.restore" => {
+            let a: VersionArgs = parse(name, args)?;
+            history::restore(vault, &a.path, a.at)?;
+            Ok(json!({ "path": a.path }))
+        }
+        "vault.seed" => out(crate::starter::seed(vault)?),
         "trash.list" => out(vault.trash()?),
         "trash.restore" => {
             let a: IdArgs = parse(name, args)?;
@@ -371,6 +411,12 @@ const MAX_FILE_BASE64: usize = 25 * 1024 * 1024 / 3 * 4 + 4;
 struct FileArgs {
     path: String,
     base64: String,
+}
+
+#[derive(Deserialize)]
+struct VersionArgs {
+    path: String,
+    at: u64,
 }
 
 #[derive(Deserialize)]
