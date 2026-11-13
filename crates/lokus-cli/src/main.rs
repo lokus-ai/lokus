@@ -18,7 +18,7 @@ const USAGE: &str = "usage:
   lokus sync --vault DIR server=URL workspace=ID token=TOKEN
                                           (keep a folder in sync with a relay; prints what it does)
   lokus ai --vault DIR q=QUESTION [provider=anthropic|openai] [model=ID] [base_url=URL]
-           [approve=true] [mcp=URL]       (ask the assistant; the key comes from the keychain,
+           [approve=true] [mcp=URL] [login=true]       (ask the assistant; the key comes from the keychain,
                                           or ANTHROPIC_API_KEY / OPENAI_API_KEY)
 
 The vault defaults to $LOKUS_VAULT, then the current directory.
@@ -244,6 +244,15 @@ fn ai(p: &Parsed) -> ExitCode {
         Ok(runtime) => runtime,
         Err(e) => return fail(json!({ "code": "io", "message": e.to_string() })),
     };
+    // `login=true`: sign in to the tool server first. The address to open is printed.
+    if p.args["login"] == true {
+        for server in &request.config.mcp {
+            let show = |url: &str| println!("{}", json!({ "type": "sign_in", "url": url }));
+            if let Err(e) = runtime.block_on(lokus_ai::mcp_login::login(server, show)) {
+                return fail(e.body());
+            }
+        }
+    }
     // Nobody is there to ask, so anything that needs a yes gets a no.
     let refuse: lokus_ai::Approver = std::sync::Arc::new(|_| {
         let (answer, wait) = tokio::sync::oneshot::channel();

@@ -7,14 +7,15 @@ rust-version.workspace = true
 
 [dependencies]
 lokus-core = { path = "../lokus-core" }
+async-trait = "0.1"
 futures-util.workspace = true
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
-rmcp = { version = "3", default-features = false, features = ["client", "reqwest", "transport-streamable-http-client-reqwest"] }
+rmcp = { version = "3", default-features = false, features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
 
 [dev-dependencies]
 tempfile = "3"

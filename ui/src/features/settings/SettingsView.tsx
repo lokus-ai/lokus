@@ -1,7 +1,7 @@
 /** @part-of ui.settings */
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
-import { type AiConfig, aiModels, type AiSettings, aiSettings, checkMcp, type McpServer, saveAiConfig, setAiSecret } from "../../bridge/ai";
+import { type AiConfig, aiModels, type AiSettings, aiSettings, checkMcp, type McpServer, mcpLogin, mcpLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
 import { analyticsEnabled, setAnalyticsEnabled } from "../../bridge/analytics";
 import { type InstalledPlugin, pickFolder, type PluginManifest, runCore } from "../../bridge/core";
 import { type Preferences, preferences, setPreference } from "../../shell/preferences";
@@ -96,6 +96,15 @@ function Assistant() {
     await setAiSecret("mcp", target.name, "").catch(() => {});
     await save({ mcp: config.mcp.filter((s) => s.name !== target.name) });
   };
+  const signIn = async (target: McpServer) => {
+    setChecked((c) => ({ ...c, [target.name]: "Finish signing in in your browser…" }));
+    const result = await mcpLogin(target).then(
+      () => "Signed in",
+      (e) => message(e),
+    );
+    setChecked((c) => ({ ...c, [target.name]: result }));
+    await reload();
+  };
   const check = async (target: McpServer) => {
     setChecked((c) => ({ ...c, [target.name]: "Checking…" }));
     const result = await checkMcp(target).then(
@@ -150,6 +159,16 @@ function Assistant() {
           <button className="link" onClick={() => void check(s)}>
             Check
           </button>
+          {!("plugin" in s) &&
+            (settings.signed_in.includes(s.name) ? (
+              <button className="link" onClick={() => void mcpLogout(s.name).then(reload)}>
+                Sign out
+              </button>
+            ) : (
+              <button className="link" onClick={() => void signIn(s)}>
+                Sign in
+              </button>
+            ))}
           {!("plugin" in s) && (
             <>
               <button className="link danger" onClick={() => void removeServer(s)}>

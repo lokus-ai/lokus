@@ -7,6 +7,7 @@ pub mod chat;
 pub mod config;
 pub mod error;
 pub mod mcp;
+pub mod mcp_login;
 pub mod provider;
 pub mod tools;
 

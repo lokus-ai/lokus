@@ -67,6 +67,7 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
         "config": config,
         "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi) },
         "tokens": tokens,
+        "signed_in": config.mcp.iter().filter(|s| lokus_ai::mcp_login::signed_in(&s.name)).map(|s| s.name.as_str()).collect::<Vec<_>>(),
         "plugin_servers": plugin_servers(&app),
     }))
 }
@@ -175,4 +176,20 @@ pub fn ai_approve(app: AppHandle, id: String, allow: bool) {
             let _ = answer.send(allow);
         }
     }
+}
+
+/// Sign in to a tool server in the person's browser.
+#[tauri::command]
+pub async fn ai_mcp_login(server: McpServer) -> Result<(), Value> {
+    let show = |url: &str| {
+        let _ = open::that(url);
+    };
+    lokus_ai::mcp_login::login(&server, show)
+        .await
+        .map_err(|e| e.body())
+}
+
+#[tauri::command(async)]
+pub fn ai_mcp_logout(name: String) {
+    lokus_ai::mcp_login::sign_out(&name);
 }

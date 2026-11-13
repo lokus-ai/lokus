@@ -6,6 +6,8 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | A render error in one view (settings, graph, a database, the side panel) shows a message in that view's space instead of blanking the window | Found when a missing field took the whole app down; the notes must stay reachable | Claude (default) | - |
+| 2026-11-12 | Tool-server sign-in uses the MCP SDK's OAuth support with a redirect to a local port; no Lokus-run redirect service | Nothing to host, and it is the flow the MCP spec describes for desktop apps | Claude (default) | - |
 | 2026-11-12 | Version history is local copies of a note's earlier text, kept on overwrite, not a replay of the sync log | Works with or without sync, survives the relay compacting its log, and is a few dozen lines | Claude (default) | "Version history is periodic markdown snapshots" on the server |
 | 2026-11-12 | Attachments sync by content hash and are stored in the relay's own SQLite file; two different files under one name are both kept | Images must reach teammates or shared notes are broken; no separate storage service to set up; binary files cannot be merged, so nothing is ever overwritten | Claude (default) | Attachments on Supabase Storage |
 | 2026-11-12 | Daily notes live in `Daily/`, templates in `Templates/`, pasted files in `attachments/` beside the note; none of this is configurable yet | Sensible fixed places beat a settings screen nobody asked for | Claude (default) | - |

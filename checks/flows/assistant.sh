@@ -15,3 +15,7 @@ print -r -- "   note edited, line endings kept: $(od -c $V/Plan.md | sed -n 2p)"
 reset; echo "3. OpenAI format, approved: $(OPENAI_API_KEY=k ask approve=true provider=openai model=mock-model | jq -rs '[.[] | select(.type=="text") | .delta] | join("")')   note: $(grep -a Launch $V/Plan.md | tr -d '\r')"
 echo "4. a refused key: $(ANTHROPIC_API_KEY=wrong ask 2>&1 | jq -c .code)   no key: $(env -u ANTHROPIC_API_KEY target/debug/lokus ai --vault $V q=hi base_url=$U 2>&1 | jq -c .code)"
 echo "5. what was sent: $(curl -s $U/seen | jq -c '.[1] | {path, has_key: (.key != null), fields: (.body | keys), tools: (.body.tools | length)}')"
+echo "6. a tool server that demands sign-in, without signing in: $(ANTHROPIC_API_KEY=k target/debug/lokus ai --vault $V q=hi approve=true base_url=$U mcp=$U/mcp-auth | jq -c 'select(.type=="notice") | .message')"
+reset; OUT=$(mktemp); (ANTHROPIC_API_KEY=k target/debug/lokus ai --vault $V q=hi approve=true base_url=$U mcp=$U/mcp-auth login=true > $OUT 2>&1 &); for i in 1 2 3 4 5 6 7 8 9 10; do grep -q sign_in $OUT && break; sleep 0.5; done
+LINK=$(jq -r 'select(.type=="sign_in") | .url' $OUT | head -1); echo "   sign-in link goes to: ${LINK%%\?*}   browser comes back with: $(curl -sL "$LINK" | grep -o 'Signed in' | head -1)"; sleep 4
+echo "   then the same server's tool runs: $(jq -c 'select(.type=="tool_done" and (.id|test("mcp"))) | [.id, .ok, .result]' $OUT)"

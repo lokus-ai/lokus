@@ -5,6 +5,10 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[lib]
+name = "lokus_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -13,6 +17,7 @@ base64.workspace = true
 lokus-ai = { path = "../../crates/lokus-ai" }
 lokus-core = { path = "../../crates/lokus-core" }
 lokus-sync = { path = "../../crates/lokus-sync" }
+open = "5"
 percent-encoding = "2"
 serde.workspace = true
 serde_json.workspace = true

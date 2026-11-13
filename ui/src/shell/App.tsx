@@ -11,6 +11,7 @@ import { PluginView } from "../features/plugins/PluginView";
 import { PageHeader } from "../features/page-header/PageHeader";
 import { SearchPalette } from "../features/search/SearchPalette";
 import { TeamsDialog } from "../features/teams/TeamsDialog";
+import { Boundary } from "./Boundary";
 import { formatKeys, runCommand } from "./commands";
 import { Palette } from "./Palette";
 import { useStore } from "./store";
@@ -61,6 +62,11 @@ function Sidebar() {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
   };
+  // On a narrow window the sidebar is an overlay, so choosing something puts it away.
+  const act = (id: string) => {
+    if (narrow) app.set({ sidebar: false });
+    void runCommand(id);
+  };
   const pick = (path: string) => {
     if (narrow) app.set({ sidebar: false });
     void openNote(path);
@@ -70,28 +76,28 @@ function Sidebar() {
     <aside className={`sidebar${open ? "" : " closed"}`} aria-hidden={!open}>
      <div className="sidebar-inner">
       <div className="sidebar-top" data-tauri-drag-region />
-      <button className="vault-name" title="Open another vault" onClick={() => void runCommand("vault.choose")}>
+      <button className="vault-name" title="Open another vault" onClick={() => act("vault.choose")}>
         <span className="vault-badge">{vault?.name.slice(0, 1).toUpperCase()}</span>
         <span className="tree-name">{vault?.name}</span>
       </button>
       <div className="sidebar-actions">
-        <button onClick={() => void runCommand("palette.notes")}>
+        <button onClick={() => act("palette.notes")}>
           <span>Go to note</span>
           <kbd>{formatKeys("Mod-o")}</kbd>
         </button>
-        <button onClick={() => void runCommand("search.open")}>
+        <button onClick={() => act("search.open")}>
           <span>Search in notes</span>
           <kbd>{formatKeys("Mod-Shift-f")}</kbd>
         </button>
-        <button onClick={() => void runCommand("graph.toggle")}>
+        <button onClick={() => act("graph.toggle")}>
           <span>Graph</span>
           <kbd>{formatKeys("Mod-g")}</kbd>
         </button>
-        <button onClick={() => void runCommand("ai.open")}>
+        <button onClick={() => act("ai.open")}>
           <span>Assistant</span>
           <kbd>{formatKeys("Mod-j")}</kbd>
         </button>
-        <button onClick={() => void runCommand("note.new")}>
+        <button onClick={() => act("note.new")}>
           <span>New note</span>
           <kbd>{formatKeys("Mod-n")}</kbd>
         </button>
@@ -107,17 +113,17 @@ function Sidebar() {
           onDelete={(path) => void deleteEntry(path)}
         />
       </div>
-      <button className="sidebar-account" onClick={() => void runCommand("teams.open")}>
+      <button className="sidebar-account" onClick={() => act("teams.open")}>
         <span className={`sync-dot ${sync.status}`} />
         {sync.status === "off" ? "Sync with a team" : sync.status === "online" ? "Syncing" : sync.status === "connecting" ? "Connecting…" : sync.status === "offline" ? "Offline" : "Sync stopped"}
       </button>
-      <button className="sidebar-account" onClick={() => void runCommand("settings.open")}>
+      <button className="sidebar-account" onClick={() => act("settings.open")}>
         Settings
       </button>
       {accountsAvailable && (
         <button
           className="sidebar-account"
-          onClick={() => void runCommand(account ? "palette.commands" : "account.signIn")}
+          onClick={() => act(account ? "palette.commands" : "account.signIn")}
         >
           {account ? account.email : "Sign in for sync and teams"}
         </button>
@@ -228,18 +234,20 @@ function Page() {
       )}
       {active && (properties.view === "table" || properties.view === "board") && (
         <div className={properties.view === "board" ? "page-wide" : "page-column"}>
-          <Suspense fallback={null}>
-            <DatabaseView
-              self={active}
-              mode={properties.view}
-              folder={(properties.source ?? (active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "")).replace(/^\/|\/$/g, "")}
-              group={properties.group || "status"}
-              order={(properties.order ?? "").replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean)}
-              version={version}
-              onOpen={(p) => void openNote(p)}
-              onNew={createRow}
-            />
-          </Suspense>
+          <Boundary name="This view">
+            <Suspense fallback={null}>
+              <DatabaseView
+                self={active}
+                mode={properties.view}
+                folder={(properties.source ?? (active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "")).replace(/^\/|\/$/g, "")}
+                group={properties.group || "status"}
+                order={(properties.order ?? "").replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean)}
+                version={version}
+                onOpen={(p) => void openNote(p)}
+                onNew={createRow}
+              />
+            </Suspense>
+          </Boundary>
         </div>
       )}
       <div className="page-column">
@@ -262,7 +270,9 @@ function Panel() {
           ×
         </button>
       </div>
-      {panel.kind === "plugin" ? <PluginView plugin={panel.plugin} page={panel.page} /> : <AiPanel />}
+      <Boundary name={panel.kind === "plugin" ? panel.title : "The assistant"}>
+        {panel.kind === "plugin" ? <PluginView plugin={panel.plugin} page={panel.page} /> : <AiPanel />}
+      </Boundary>
     </aside>
   );
 }
@@ -305,14 +315,18 @@ export function App() {
         <Tabs />
         <Page />
         {view === "graph" && (
-          <Suspense fallback={null}>
-            <GraphView active={active} version={version} onOpen={open} />
-          </Suspense>
+          <Boundary name="The graph">
+            <Suspense fallback={null}>
+              <GraphView active={active} version={version} onOpen={open} />
+            </Suspense>
+          </Boundary>
         )}
         {view === "settings" && (
-          <Suspense fallback={null}>
-            <SettingsView />
-          </Suspense>
+          <Boundary name="Settings">
+            <Suspense fallback={null}>
+              <SettingsView />
+            </Suspense>
+          </Boundary>
         )}
         {!active && view === "note" && (
           <div className="empty">

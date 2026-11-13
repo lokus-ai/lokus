@@ -99,6 +99,30 @@ def mcp_reply(message):
     return {}
 
 
+def oauth_get(handler, base):
+    """The sign-in side of a tool server that demands OAuth (at /mcp-auth)."""
+    from urllib.parse import parse_qs, urlparse
+
+    url = urlparse(handler.path)
+    if url.path.startswith("/.well-known/oauth-protected-resource"):
+        return handler.json(200, {"resource": f"{base}/mcp-auth", "authorization_servers": [base]})
+    if url.path.startswith("/.well-known/oauth-authorization-server") or url.path.startswith("/.well-known/openid-configuration"):
+        return handler.json(200, {
+            "issuer": base, "authorization_endpoint": f"{base}/authorize", "token_endpoint": f"{base}/token",
+            "registration_endpoint": f"{base}/register", "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code", "refresh_token"], "code_challenge_methods_supported": ["S256"],
+            "token_endpoint_auth_methods_supported": ["none"],
+        })
+    if url.path == "/authorize":
+        q = parse_qs(url.query)
+        # A real server shows a consent page here; the stand-in says yes at once.
+        handler.send_response(302)
+        handler.send_header("location", f"{q['redirect_uri'][0]}?code=the-code&state={q['state'][0]}")
+        handler.end_headers()
+        return True
+    return False
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
@@ -112,6 +136,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def do_GET(self):
+        base = f"http://{self.headers.get('host')}"
+        if self.path.startswith("/.well-known/") or self.path.startswith("/authorize"):
+            if oauth_get(self, base) is not False:
+                return
         if self.path == "/seen":
             return self.json(200, SEEN)
         if self.path.startswith("/v1/models") or self.path == "/models":
@@ -122,8 +150,20 @@ class Handler(BaseHTTPRequestHandler):
         self.json(200, {})
 
     def do_POST(self):
-        body = json.loads(self.rfile.read(int(self.headers.get("content-length", 0))) or b"{}")
-        if self.path == "/mcp":
+        raw = self.rfile.read(int(self.headers.get("content-length", 0)))
+        if self.path == "/token":
+            return self.json(200, {"access_token": "signed-in-token", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "r1"})
+        body = json.loads(raw or b"{}")
+        base = f"http://{self.headers.get('host')}"
+        if self.path == "/register":
+            return self.json(201, {"client_id": "lokus-test", "redirect_uris": body.get("redirect_uris", []), "token_endpoint_auth_method": "none"})
+        if self.path == "/mcp-auth" and self.headers.get("authorization") != "Bearer signed-in-token":
+            self.send_response(401)
+            self.send_header("www-authenticate", f'Bearer resource_metadata="{base}/.well-known/oauth-protected-resource/mcp-auth"')
+            self.send_header("content-length", "0")
+            self.end_headers()
+            return
+        if self.path in ("/mcp", "/mcp-auth"):
             if "id" not in body:
                 self.send_response(202)
                 self.end_headers()

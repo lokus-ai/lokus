@@ -262,7 +262,7 @@ button.team-row:hover { background: var(--bg-hover); }
 
 /* Right panel: the assistant or a plugin view */
 .panel { width: 340px; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--bg-sidebar); animation: fade var(--menu) var(--ease-out); }
-.app.narrow .panel { position: absolute; inset: 0 0 0 auto; z-index: 10; width: min(340px, 100%); box-shadow: var(--shadow-pop); }
+.app.narrow .panel { position: absolute; inset: 0; z-index: 10; width: 100%; border-left: 0; }
 .panel-head { height: var(--bar-height); flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 8px 0 14px; font-size: var(--text-small); font-weight: 600; color: var(--fg-2); }
 .panel-close { width: 24px; height: 24px; border-radius: var(--radius-sm); color: var(--fg-3); font-size: var(--text-body); line-height: 1; transition: background var(--fast), color var(--fast); }
 .panel-close:hover { background: var(--bg-hover); color: var(--fg); }
@@ -345,3 +345,23 @@ button.team-row:hover { background: var(--bg-hover); }
 .switch.on { background: var(--accent); }
 .switch.on::after { transform: translateX(14px); }
 .empty .primary { margin-bottom: 12px; }
+
+/* Fingers need bigger targets than a pointer does. */
+@media (pointer: coarse) {
+  :root { --row-height: 40px; --bar-height: 48px; }
+  .sidebar-actions button, .sidebar-account, .palette-row, .menu button { min-height: 40px; }
+  .tab-toggle, .panel-close { width: 40px; height: 40px; }
+  .ai-actions, .page-ghosts, .cover-actions { opacity: 1; }
+}
+.boundary { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; color: var(--fg-3); font-size: var(--text-small); }
+.boundary p { margin: 0; color: var(--fg-2); font-size: var(--text-ui); font-weight: 550; }
+
+/* Settings on a narrow window: each control sits under its label. */
+.app.narrow .settings-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+.app.narrow .settings-row:has(> .settings-control > .switch:only-child) { flex-direction: row; align-items: center; }
+.app.narrow .settings-control { flex-wrap: wrap; max-width: 100%; align-self: stretch; }
+.app.narrow .settings-control input:not([type=checkbox]) { flex: 1; width: auto; min-width: 140px; }
+.app.narrow .settings-add, .app.narrow .settings-item { flex-wrap: wrap; }
+.app.narrow .settings-add input:not([type=checkbox]) { flex: 1 1 40%; width: auto; }
+.app.narrow .settings-item-main { flex-basis: 100%; }
+.app.narrow .segmented { max-width: 100%; overflow-x: auto; }

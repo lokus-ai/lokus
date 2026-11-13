@@ -5,6 +5,7 @@
 
 use rmcp::model::CallToolRequestParams;
 use rmcp::service::RunningService;
+use rmcp::transport::auth::AuthClient;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::{RoleClient, ServiceExt};
@@ -45,8 +46,29 @@ pub async fn connect(server: &McpServer) -> Result<Connection> {
     if let Some(token) = secret(&mcp_account(&server.name)) {
         config = config.auth_header(token);
     }
-    let transport = StreamableHttpClientTransport::with_client(reqwest::Client::default(), config);
-    let service = ().serve(transport).await.map_err(|e| failed(e.to_string()))?;
+    // A server the person signed in to is reached with those credentials,
+    // which the SDK keeps fresh; otherwise with a pasted token, or nothing.
+    let started = match crate::mcp_login::authorized(server).await? {
+        Some(manager) => {
+            let client = AuthClient::new(reqwest::Client::default(), manager);
+            ().serve(StreamableHttpClientTransport::with_client(client, config))
+                .await
+        }
+        None => {
+            let client = reqwest::Client::default();
+            ().serve(StreamableHttpClientTransport::with_client(client, config))
+                .await
+        }
+    };
+    let service = started.map_err(|e| {
+        let text = e.to_string();
+        let needs_login = text.contains("401") || text.to_lowercase().contains("auth");
+        failed(if needs_login {
+            "it needs you to sign in (Settings, Tool servers, Sign in)".to_string()
+        } else {
+            text
+        })
+    })?;
     let listed = service
         .list_all_tools()
         .await

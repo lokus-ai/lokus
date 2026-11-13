@@ -25,6 +25,8 @@ export interface AiSettings {
   keys: { anthropic: boolean; openai: boolean };
   /** Names of tool servers that have a token stored. */
   tokens: string[];
+  /** Names of tool servers the person has signed in to. */
+  signed_in: string[];
   plugin_servers: McpServer[];
 }
 
@@ -54,6 +56,9 @@ export const saveAiConfig = (config: AiConfig) => call<void>("ai_settings_save",
 export const setAiSecret = (kind: "provider" | "mcp", name: string, value: string) => call<void>("ai_secret_set", { kind, name, value });
 export const aiModels = () => call<string[]>("ai_models");
 export const checkMcp = (server: McpServer) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server });
+/** Sign in to a tool server in the browser; resolves when the browser has come back. */
+export const mcpLogin = (server: McpServer) => call<void>("ai_mcp_login", { server });
+export const mcpLogout = (name: string) => call<void>("ai_mcp_logout", { name });
 export const aiSend = (chat: string, messages: unknown[]) => call<AiOutcome>("ai_send", { chat, messages });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });
 export const aiApprove = (id: string, allow: boolean) => call<void>("ai_approve", { id, allow });

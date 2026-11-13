@@ -203,8 +203,10 @@ confirms that everything it must not be able to do is refused.
   commands as everything else. A change to a note, and any tool-server action not marked
   read-only, waits for the person to allow it unless they switch that off.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
-  Settings or contributed by a plugin. A server's token is kept in the keychain. Not built:
-  the OAuth login that hosted servers such as Notion's need, and local (stdio) servers.
+  Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
+  the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
+  Tokens live in the keychain (in memory until the app quits if the keychain is unavailable).
+  Not built: local (stdio) servers.
 - `lokus ai --vault DIR q=...` asks one question from a terminal.
 - **Sign in with ChatGPT** is not built; it follows once its terms are checked.
 
@@ -245,7 +247,7 @@ is needed.
 | M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | built (login and analytics not yet tried against the real services) |
 | M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | built |
 | M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | built and checked locally; not deployed, and real logins are untested |
-| M4 | iOS and Android | Builds in TestFlight and the Play internal track | planned |
+| M4 | iOS and Android | Builds in TestFlight and the Play internal track | prepared, not built: the app has a phone entry point, the layout works at phone width with touch-size targets, and nothing has been compiled for a phone (needs Xcode and the Android SDK) |
 | M5 | Databases and kanban | Query engine with new UI | built: table and board views over a folder's note properties |
 
 | M6 | Plugins | A sandboxed plugin adds a command, a view and a setting, and cannot do what it was not granted | built |
