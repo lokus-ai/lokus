@@ -3,6 +3,7 @@
     { "id": "core", "description": "Pure-Rust engine. No Tauri, no networking.", "paths": ["crates/lokus-core/"] },
     { "id": "core.vault", "description": "Open a vault, list the tree, read and write notes atomically, fidelity check.", "paths": ["crates/lokus-core/src/vault"] },
     { "id": "core.commands", "description": "The command registry: every core feature is a named command with JSON in and out.", "paths": ["crates/lokus-core/src/commands"] },
+    { "id": "core.index", "description": "Disposable SQLite index: full-text search, links, backlinks, graph, tags.", "paths": ["crates/lokus-core/src/index"] },
     { "id": "core.watch", "description": "File watcher: report changes made outside the app.", "paths": ["crates/lokus-core/src/watch"] },
     { "id": "cli", "description": "The `lokus` binary: run any core command against a real vault.", "paths": ["crates/lokus-cli/"] },
     { "id": "desktop", "description": "Tauri shell. Thin: forwards commands to the core, owns windows and the dev channel.", "paths": ["apps/desktop/"] },
@@ -11,6 +12,9 @@
     { "id": "ui.editor", "description": "CodeMirror 6 editor: live preview, auto-pairing, markdown commands.", "paths": ["ui/src/editor/"] },
     { "id": "ui.file-tree", "description": "Sidebar file tree.", "paths": ["ui/src/features/file-tree/"] },
     { "id": "ui.page-header", "description": "Page header: cover, icon, title, properties (stored in frontmatter).", "paths": ["ui/src/features/page-header/"] },
+    { "id": "ui.search", "description": "Full-text search palette.", "paths": ["ui/src/features/search/"] },
+    { "id": "ui.backlinks", "description": "Linked mentions under a note.", "paths": ["ui/src/features/backlinks/"] },
+    { "id": "ui.graph", "description": "Graph of notes and links. Loaded only when opened.", "paths": ["ui/src/features/graph/"] },
     { "id": "ui.auth", "description": "Login screen and session state.", "paths": ["ui/src/features/auth/"] },
     { "id": "ui.analytics", "description": "Product analytics events and the opt-out. Never sends note content.", "paths": ["ui/src/features/analytics/"] },
     { "id": "checks", "description": "Scripts that enforce the hard rules.", "paths": ["checks/"] }

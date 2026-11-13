@@ -11,6 +11,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 blake3 = "1"
 notify = "8"
+regex = "1"
+rusqlite = { version = "0.37", features = ["bundled"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -1,11 +1,13 @@
 /** @part-of ui.shell */
-import { type CSSProperties, type PointerEvent, useEffect, useRef } from "react";
+import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useRef } from "react";
 
 import { identify } from "../bridge/analytics";
 import { accountsAvailable } from "../bridge/auth";
 import { AccountDialog } from "../features/auth/AccountDialog";
+import { Backlinks } from "../features/backlinks/Backlinks";
 import { FileTree } from "../features/file-tree/FileTree";
 import { PageHeader } from "../features/page-header/PageHeader";
+import { SearchPalette } from "../features/search/SearchPalette";
 import { formatKeys, runCommand } from "./commands";
 import { Palette } from "./Palette";
 import { useStore } from "./store";
@@ -24,6 +26,9 @@ import {
   save,
   setSidebarWidth,
 } from "./workspace";
+
+// The graph is only loaded when someone opens it.
+const GraphView = lazy(() => import("../features/graph/GraphView"));
 
 const tabName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
@@ -62,8 +67,16 @@ function Sidebar() {
       </button>
       <div className="sidebar-actions">
         <button onClick={() => void runCommand("palette.notes")}>
-          <span>Search</span>
+          <span>Go to note</span>
           <kbd>{formatKeys("Mod-o")}</kbd>
+        </button>
+        <button onClick={() => void runCommand("search.open")}>
+          <span>Search in notes</span>
+          <kbd>{formatKeys("Mod-Shift-f")}</kbd>
+        </button>
+        <button onClick={() => void runCommand("graph.toggle")}>
+          <span>Graph</span>
+          <kbd>{formatKeys("Mod-g")}</kbd>
         </button>
         <button onClick={() => void runCommand("note.new")}>
           <span>New note</span>
@@ -135,13 +148,15 @@ function Page() {
   const active = useStore(app, (s) => s.active);
   const properties = useStore(app, (s) => s.properties);
   const conflict = useStore(app, (s) => s.conflict);
+  const view = useStore(app, (s) => s.view);
+  const version = useStore(app, (s) => s.version);
   const mount = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (mount.current) attachEditor(mount.current);
   }, []);
 
   return (
-    <div className="page" hidden={!active}>
+    <div className="page" hidden={!active || view !== "note"}>
       {active && conflict === active && (
         <div className="banner">
           <span>This note changed on disk while you were editing it.</span>
@@ -163,6 +178,7 @@ function Page() {
       )}
       <div className="page-column">
         <div ref={mount} className="editor-mount" />
+        {active && <Backlinks path={active} version={version} onOpen={(p) => void openNote(p)} />}
       </div>
     </div>
   );
@@ -188,6 +204,9 @@ export function App() {
   const sidebar = useStore(app, (s) => s.sidebar);
   const sidebarWidth = useStore(app, (s) => s.sidebarWidth);
   const palette = useStore(app, (s) => s.palette);
+  const view = useStore(app, (s) => s.view);
+  const version = useStore(app, (s) => s.version);
+  const open = useCallback((path: string) => void openNote(path), []);
   const accountDialog = useStore(app, (s) => s.accountDialog);
   const notice = useStore(app, (s) => s.notice);
 
@@ -200,7 +219,12 @@ export function App() {
       <main className="main">
         <Tabs />
         <Page />
-        {!active && (
+        {view === "graph" && (
+          <Suspense fallback={null}>
+            <GraphView active={active} version={version} onOpen={open} />
+          </Suspense>
+        )}
+        {!active && view === "note" && (
           <div className="empty">
             <p>No note open</p>
             <span>
@@ -215,7 +239,8 @@ export function App() {
           </div>
         )}
       </main>
-      {palette && <Palette key={palette} mode={palette} />}
+      {palette === "search" && <SearchPalette onOpen={open} onClose={() => app.set({ palette: null })} />}
+      {palette && palette !== "search" && <Palette key={palette} mode={palette} />}
       {accountDialog && (
         <AccountDialog
           onClose={() => app.set({ accountDialog: false })}

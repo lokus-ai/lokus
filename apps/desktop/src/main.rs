@@ -11,8 +11,9 @@ use std::sync::Mutex;
 
 use lokus_core::error::ErrorBody;
 use lokus_core::watch::{watch, WatchHandle};
-use lokus_core::{commands, CoreError, Vault};
+use lokus_core::{commands, Core, CoreError};
 use serde_json::{json, Value};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Default)]
@@ -21,13 +22,13 @@ pub struct Shell {
 }
 
 struct OpenVault {
-    vault: Vault,
+    core: Arc<Core>,
     _watch: WatchHandle,
 }
 
 impl Shell {
-    pub fn vault(&self) -> Option<Vault> {
-        self.open.lock().ok()?.as_ref().map(|o| o.vault.clone())
+    pub fn core(&self) -> Option<Arc<Core>> {
+        self.open.lock().ok()?.as_ref().map(|o| o.core.clone())
     }
 }
 
@@ -41,19 +42,33 @@ fn no_vault() -> Value {
 
 /// Run a core command against the open vault.
 pub fn run_core(shell: &Shell, name: &str, args: Value) -> Result<Value, Value> {
-    let vault = shell.vault().ok_or_else(no_vault)?;
-    commands::run(&vault, name, args).map_err(|e| error_value(&e))
+    let core = shell.core().ok_or_else(no_vault)?;
+    commands::run(&core, name, args).map_err(|e| error_value(&e))
 }
 
 /// Open a folder as the vault, start watching it and remember it.
 pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
-    let vault = Vault::open(path).map_err(|e| error_value(&e))?;
+    let core = Arc::new(Core::open(path).map_err(|e| error_value(&e))?);
+    let vault = &core.vault;
     let emitter = app.clone();
-    let handle = watch(&vault, move |paths| {
+    let indexer = core.clone();
+    let handle = watch(vault, move |paths| {
+        // Index first, so the UI finds fresh links and search results when it reacts.
+        if let Ok(mut index) = indexer.index() {
+            let _ = index.update(&paths);
+        }
         let _ = emitter.emit("vault:changed", paths);
     })
     .map_err(|e| error_value(&e))?;
     let info = json!({ "name": vault.name(), "root": vault.root() });
+    // Catch up with whatever changed while the app was closed, off the main path.
+    let (catch_up, ready) = (core.clone(), app.clone());
+    std::thread::spawn(move || {
+        if let Ok(mut index) = catch_up.index() {
+            let _ = index.refresh();
+        }
+        let _ = ready.emit("index:ready", ());
+    });
     // Images in notes load through the asset protocol, limited to this vault.
     let _ = app
         .asset_protocol_scope()
@@ -68,7 +83,7 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
     let shell = app.state::<Shell>();
     if let Ok(mut open) = shell.open.lock() {
         *open = Some(OpenVault {
-            vault,
+            core: core.clone(),
             _watch: handle,
         });
     }
@@ -96,8 +111,8 @@ fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
 /// The vault that is open, reopening the last one on first call.
 #[tauri::command(async)]
 fn vault_current(app: AppHandle, shell: State<'_, Shell>) -> Option<Value> {
-    if let Some(vault) = shell.vault() {
-        return Some(json!({ "name": vault.name(), "root": vault.root() }));
+    if let Some(core) = shell.core() {
+        return Some(json!({ "name": core.vault.name(), "root": core.vault.root() }));
     }
     let last = std::fs::read_to_string(last_vault_file(&app)?).ok()?;
     open_vault(&app, last.trim()).ok()

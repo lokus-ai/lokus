@@ -11,6 +11,7 @@ import {
   type Eol,
   type Note,
   onCloseTab,
+  onIndexReady,
   onVaultChanged,
   openVault,
   pickFolder,
@@ -33,7 +34,11 @@ export interface AppState {
   properties: Record<string, string>;
   /** A note that changed on disk while it had unsaved edits here. */
   conflict: string | null;
-  palette: "commands" | "notes" | null;
+  palette: "commands" | "notes" | "search" | null;
+  /** What the main area shows. */
+  view: "note" | "graph";
+  /** Goes up whenever files or the index change; panels refetch on it. */
+  version: number;
   sidebar: boolean;
   sidebarWidth: number;
   /** The window is too narrow to keep the sidebar beside the note. */
@@ -53,6 +58,8 @@ export const app = createStore<AppState>({
   properties: {},
   conflict: null,
   palette: null,
+  view: "note",
+  version: 0,
   sidebar: true,
   sidebarWidth: Number(localStorage.getItem("lokus.sidebarWidth")) || 248,
   narrow: false,
@@ -132,6 +139,8 @@ export function attachEditor(parent: HTMLElement): void {
     },
     onOpenLink: (target) => void openLink(target),
     resolveImage,
+    loadNote,
+    notePaths: () => allNotes(),
   });
 }
 
@@ -205,6 +214,7 @@ function watchWidth(): void {
 export async function boot(): Promise<void> {
   watchWidth();
   onVaultChanged((paths) => void onDiskChange(paths));
+  onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
   onCloseTab(() => {
     const { active } = app.get();
     if (active) void closeTab(active);
@@ -250,7 +260,7 @@ function show(path: string): void {
   const leaving = editor.swap(next.state);
   const old = previous ? sessions.get(previous) : undefined;
   if (old && previous !== path) old.state = leaving;
-  app.set((s) => ({ active: path, tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
+  app.set((s) => ({ active: path, view: "note", tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
   syncProperties();
   editor.view.focus();
 }
@@ -376,19 +386,36 @@ export async function createNoteIn(folder: string): Promise<void> {
   }
 }
 
+/** The note a link's text points at: a full path wins, then the closest note with that name. */
+function resolveNote(target: string): string | null {
+  const wanted = target.replace(/[#^].*$/, "").replace(/\.md$/i, "").trim().toLowerCase();
+  if (!wanted) return null;
+  const strip = (p: string) => p.replace(/\.md$/i, "").toLowerCase();
+  const notes = [...allNotes()].sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b));
+  return notes.find((p) => strip(p) === wanted) ?? notes.find((p) => strip(p).split("/").pop() === wanted) ?? null;
+}
+
 /** Follow a `[[wiki link]]`; a link to a note that does not exist creates it. */
 export async function openLink(target: string): Promise<void> {
-  const wanted = target.replace(/[#^].*$/, "").replace(/\.md$/i, "").trim().toLowerCase();
-  if (!wanted) return;
-  const notes = allNotes();
-  const strip = (p: string) => p.replace(/\.md$/i, "").toLowerCase();
-  const match = notes.find((p) => strip(p) === wanted) ?? notes.find((p) => strip(p).split("/").pop() === wanted);
+  const match = resolveNote(target);
   if (match) await openNote(match);
   else await createNote(target.replace(/[#^].*$/, "").trim());
 }
 
+async function loadNote(target: string): Promise<string | null> {
+  const path = resolveNote(target);
+  if (!path) return null;
+  if (sessions.has(path)) return textOf(path);
+  try {
+    return toEditor((await runCore<Note>("note.read", { path })).text);
+  } catch {
+    return null;
+  }
+}
+
 async function onDiskChange(paths: string[]): Promise<void> {
   void refreshTree().catch(() => {});
+  app.set((s) => ({ version: s.version + 1 }));
   for (const path of paths) {
     const session = sessions.get(path);
     if (!session) continue;

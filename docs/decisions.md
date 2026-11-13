@@ -6,6 +6,8 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | Search, links and the graph come from a disposable SQLite index at `.lokus/index.sqlite` (FTS5), rebuilt from the files whenever it is missing or stale | Fast search on large vaults without holding notes in memory; deleting it loses nothing | Claude (default) | v1's live grep and JS link index |
+| 2026-11-12 | The graph is our own small canvas renderer, loaded only when opened | v1 shipped seven graph packages; a few hundred lines cover what the app needs | Claude (default) | sigma, graphology, react-force-graph, three |
 | 2026-11-12 | CI runs only for pull requests and manual runs, on a Linux runner. Work is verified locally and pushed once per batch of related changes | CI minutes are limited; a macOS runner on every push burned them at 10x | Pratham | CI on every push to `next` on macOS |
 | 2026-11-12 | The in-app picture of the real window (`ui.snapshot`) was dropped; layout is checked by measuring the real window, looks by headless screenshots | The Mac webview refuses the DOM-to-image technique | Claude (default) | - |
 | 2026-11-12 | Testing is command-driven: every feature is a named command that the `lokus` CLI or the in-app dev channel can run on real files. A few scripted flows, not piles of generated tests | Generated test suites pass while the feature still fails in production | Pratham | v1's Vitest, Playwright and QA-harness suites |

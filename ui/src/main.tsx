@@ -14,7 +14,7 @@ import { installShortcuts, runCommand } from "./shell/commands";
 import { registerAllCommands } from "./shell/registerCommands";
 import { boot, saveAll } from "./shell/workspace";
 
-startAnalytics();
+void startAnalytics();
 registerAllCommands();
 installShortcuts();
 serveDevCommands(runCommand);

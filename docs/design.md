@@ -188,8 +188,8 @@ is needed.
 | # | Slice | Done when | Status |
 |---|---|---|---|
 | M0 | Skeleton, rules, checks, CI | The empty app builds and the checks pass | built |
-| M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | building |
-| M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | planned |
+| M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | built (login and analytics not yet tried against the real services) |
+| M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | built |
 | M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | planned |
 | M4 | iOS and Android | Builds in TestFlight and the Play internal track | planned |
 | M5 | Databases and kanban | Query engine with new UI | planned |

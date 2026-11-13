@@ -8,7 +8,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::process::ExitCode;
 
 use lokus_core::error::ErrorBody;
-use lokus_core::{commands, Vault};
+use lokus_core::{commands, Core};
 use serde_json::{json, Map, Value};
 
 const USAGE: &str = "usage:
@@ -100,8 +100,22 @@ fn run_on_vault(p: &Parsed) -> Result<Value, Value> {
         .clone()
         .or_else(|| std::env::var("LOKUS_VAULT").ok())
         .unwrap_or_else(|| ".".to_string());
-    let vault = Vault::open(&root).map_err(|e| error_json(&e))?;
-    commands::run(&vault, &p.command, p.args.clone()).map_err(|e| error_json(&e))
+    let core = Core::open(&root).map_err(|e| error_json(&e))?;
+    // A terminal run has no watcher, so catch up with the files first.
+    if [
+        "search.query",
+        "links.backlinks",
+        "links.outgoing",
+        "graph.data",
+        "tags.list",
+    ]
+    .contains(&p.command.as_str())
+    {
+        core.index()
+            .and_then(|mut i| i.refresh())
+            .map_err(|e| error_json(&e))?;
+    }
+    commands::run(&core, &p.command, p.args.clone()).map_err(|e| error_json(&e))
 }
 
 /// The dev build of the desktop app listens on a unix socket and runs any

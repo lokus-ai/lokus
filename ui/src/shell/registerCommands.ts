@@ -55,6 +55,13 @@ export function registerAllCommands(): void {
   registerCommands([
     { id: "palette.commands", title: "Command palette", keys: "Mod-Shift-p", run: () => app.set({ palette: "commands" }) },
     { id: "palette.notes", title: "Go to note…", keys: "Mod-o", run: () => app.set({ palette: "notes" }) },
+    { id: "search.open", title: "Search in all notes…", keys: "Mod-Shift-f", run: () => app.set({ palette: "search" }) },
+    {
+      id: "graph.toggle",
+      title: "Show or hide the graph",
+      keys: "Mod-g",
+      run: () => app.set((s) => ({ view: s.view === "graph" ? "note" : "graph" })),
+    },
     { id: "vault.choose", title: "Open another vault…", run: chooseVault },
     { id: "sidebar.toggle", title: "Show or hide the sidebar", keys: "Mod-\\", run: () => app.set((s) => ({ sidebar: !s.sidebar })) },
     { id: "note.new", title: "New note", keys: "Mod-n", run: () => createNote() },

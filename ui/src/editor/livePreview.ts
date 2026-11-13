@@ -15,6 +15,8 @@ const hide = Decoration.replace({});
 
 /** Does any selection range touch [from, to]? */
 function touches(state: EditorState, from: number, to: number): boolean {
+  // A read-only preview (an embed) has no cursor worth revealing syntax for.
+  if (state.readOnly) return false;
   return state.selection.ranges.some((r) => r.from <= to && r.to >= from);
 }
 
@@ -349,18 +351,116 @@ class Properties extends WidgetType {
 }
 
 /** Frontmatter collapses to one quiet line until the cursor goes into it. */
-/** Multi-line replacements have to come from a state field, not a view plugin. */
-const blocks = StateField.define<DecorationSet>({
-  create: (state) => buildBlocks(state),
-  update(value, tr) {
-    const reparsed = syntaxTree(tr.startState) !== syntaxTree(tr.state);
-    return tr.docChanged || tr.selection || reparsed ? buildBlocks(tr.state) : value;
-  },
-  provide: (field) => EditorView.decorations.from(field),
-});
+/** The part of a note an embed asks for: all of it, one heading's section, or one block. */
+export function sliceNote(text: string, ref: string): string {
+  const body = text.slice(readFrontmatter(text).end).replace(/^\n+/, "");
+  if (!ref) return body;
+  const lines = body.split("\n");
+  if (ref.startsWith("^")) {
+    const at = lines.findIndex((l) => l.trimEnd().endsWith(ref));
+    if (at < 0) return "";
+    let from = at;
+    while (from > 0 && lines[from - 1].trim()) from--;
+    return lines.slice(from, at + 1).join("\n").replace(new RegExp(`\\s*\\${ref}\\s*$`), "");
+  }
+  const want = ref.replace(/^#/, "").trim().toLowerCase();
+  const start = lines.findIndex((l) => /^#{1,6}\s/.test(l) && l.replace(/^#+\s+/, "").trim().toLowerCase() === want);
+  if (start < 0) return "";
+  const level = /^#+/.exec(lines[start])![0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const m = /^(#{1,6})\s/.exec(lines[i]);
+    if (m && m[1].length <= level) {
+      end = i;
+      break;
+    }
+  }
+  return lines.slice(start, end).join("\n");
+}
 
-function buildBlocks(state: EditorState): DecorationSet {
+/** `![[Note]]` on its own line shows that note, read-only, in place. */
+class Embed extends WidgetType {
+  constructor(
+    readonly target: string,
+    readonly from: number,
+    readonly hooks: PreviewHooks,
+  ) {
+    super();
+  }
+  eq(other: Embed) {
+    return other.target === this.target && other.from === this.from;
+  }
+  toDOM(view: EditorView) {
+    const [name, ...rest] = this.target.split(/(?=[#^])/);
+    const ref = rest.join("");
+    const box = document.createElement("div");
+    box.className = "cm-embed";
+    const head = box.appendChild(document.createElement("div"));
+    head.className = "cm-embed-head";
+    const title = head.appendChild(document.createElement("button"));
+    title.textContent = name.trim() + (ref ? ` › ${ref.replace(/^[#^]/, "")}` : "");
+    title.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.hooks.openLink(name.trim());
+    });
+    const body = box.appendChild(document.createElement("div"));
+    body.className = "cm-embed-body";
+    void this.hooks.loadNote?.(name.trim()).then((text) => {
+      if (!box.isConnected) return;
+      const shown = text === null ? null : sliceNote(text, ref);
+      if (!shown) {
+        body.textContent = text === null ? "This note does not exist yet." : "Nothing matches this link.";
+        body.classList.add("cm-embed-missing");
+        return;
+      }
+      const mounted = this.hooks.mountEmbed?.(body, shown);
+      (box as HTMLElement & { cleanup?: () => void }).cleanup = () => mounted?.destroy();
+    });
+    // Clicking the frame puts the cursor on the `![[...]]` line, which reveals it.
+    box.addEventListener("mousedown", (e) => {
+      if ((e.target as HTMLElement).closest(".cm-embed-body .cm-editor")) return;
+      e.preventDefault();
+      view.dispatch({ selection: { anchor: this.from } });
+      view.focus();
+    });
+    return box;
+  }
+  destroy(dom: HTMLElement) {
+    (dom as HTMLElement & { cleanup?: () => void }).cleanup?.();
+  }
+  ignoreEvent() {
+    return true;
+  }
+}
+
+const EMBED_LINE = /^!\[\[([^\]\n|]+)(?:\|[^\]\n]*)?\]\]\s*$/;
+
+/** Multi-line replacements have to come from a state field, not a view plugin. */
+const blocks = (hooks: PreviewHooks) =>
+  StateField.define<DecorationSet>({
+    create: (state) => buildBlocks(state, hooks),
+    update(value, tr) {
+      const reparsed = syntaxTree(tr.startState) !== syntaxTree(tr.state);
+      return tr.docChanged || tr.selection || reparsed ? buildBlocks(tr.state, hooks) : value;
+    },
+    provide: (field) => EditorView.decorations.from(field),
+  });
+
+function buildBlocks(state: EditorState, hooks: PreviewHooks): DecorationSet {
   const out: Range<Decoration>[] = [...foldFrontmatter(state)];
+  if (hooks.loadNote) {
+    const tree = syntaxTree(state);
+    for (let n = 1; n <= state.doc.lines; n++) {
+      const line = state.doc.line(n);
+      if (!line.text.startsWith("![[")) continue;
+      const m = EMBED_LINE.exec(line.text);
+      if (!m || IMAGE_FILE.test(m[1].trim()) || touches(state, line.from, line.to)) continue;
+      if (/Code|Frontmatter/.test(tree.resolveInner(line.from, 1).name)) continue;
+      const widget = new Embed(m[1].trim(), line.from, hooks);
+      out.push(Decoration.replace({ widget, block: true }).range(line.from, line.to));
+    }
+  }
   syntaxTree(state).iterate({
     enter(node) {
       if (node.name !== "Table") return;
@@ -407,8 +507,12 @@ function linkClicks(open: (target: string) => void) {
 export interface PreviewHooks {
   openLink(target: string): void;
   resolveImage(src: string): string | null;
+  /** Text of the note a link points at, or null if there is none. Leave out to turn embeds off. */
+  loadNote?(target: string): Promise<string | null>;
+  /** Show markdown read-only inside `parent`. */
+  mountEmbed?(parent: HTMLElement, text: string): { destroy(): void };
 }
 
 export function livePreview(hooks: PreviewHooks) {
-  return [blocks, inline(hooks), linkClicks(hooks.openLink)];
+  return [blocks(hooks), inline(hooks), linkClicks(hooks.openLink)];
 }

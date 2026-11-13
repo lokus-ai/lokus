@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::error::{CoreError, Result};
-use crate::vault::{Eol, Vault};
+use crate::vault::Eol;
+use crate::Core;
 
 #[derive(Debug, Serialize, Clone, Copy)]
 pub struct CommandSpec {
@@ -72,6 +73,36 @@ pub const COMMANDS: &[CommandSpec] = &[
         args: "path",
     },
     CommandSpec {
+        name: "index.refresh",
+        summary: "Bring the search and link index in line with the files",
+        args: "",
+    },
+    CommandSpec {
+        name: "search.query",
+        summary: "Full-text search; every word must match",
+        args: "q, limit?=30",
+    },
+    CommandSpec {
+        name: "links.backlinks",
+        summary: "Notes that link to this note, with the linking line",
+        args: "path",
+    },
+    CommandSpec {
+        name: "links.outgoing",
+        summary: "Existing notes this note links to",
+        args: "path",
+    },
+    CommandSpec {
+        name: "graph.data",
+        summary: "Every note and the links between them",
+        args: "",
+    },
+    CommandSpec {
+        name: "tags.list",
+        summary: "Tags and how many notes use each",
+        args: "",
+    },
+    CommandSpec {
         name: "folder.create",
         summary: "Create a folder",
         args: "path",
@@ -105,8 +136,52 @@ struct RenameArgs {
     to: String,
 }
 
-pub fn run(vault: &Vault, name: &str, args: Value) -> Result<Value> {
+#[derive(Deserialize)]
+struct SearchArgs {
+    q: String,
+    limit: Option<usize>,
+}
+
+/// Commands that change files; the index is brought up to date after them.
+const WRITES: &[&str] = &[
+    "note.write",
+    "note.create",
+    "note.rename",
+    "note.delete",
+    "folder.create",
+];
+
+pub fn run(core: &Core, name: &str, args: Value) -> Result<Value> {
+    let result = dispatch(core, name, args);
+    if result.is_ok() && WRITES.contains(&name) {
+        core.index()?.refresh()?;
+    }
+    result
+}
+
+fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
+    let vault = &core.vault;
     match name {
+        "index.refresh" => out(core.index()?.refresh()?),
+        "search.query" => {
+            let a: SearchArgs = parse(name, args)?;
+            out(core.index()?.search(&a.q, a.limit.unwrap_or(30))?)
+        }
+        "links.backlinks" => {
+            let a: PathArgs = parse(name, args)?;
+            out(core.index()?.backlinks(&a.path)?)
+        }
+        "links.outgoing" => {
+            let a: PathArgs = parse(name, args)?;
+            out(core.index()?.outgoing(&a.path)?)
+        }
+        "graph.data" => out(core.index()?.graph()?),
+        "tags.list" => out(core
+            .index()?
+            .tags()?
+            .into_iter()
+            .map(|(tag, notes)| json!({ "tag": tag, "notes": notes }))
+            .collect::<Vec<_>>()),
         "commands.list" => out(COMMANDS),
         "vault.info" => Ok(json!({ "name": vault.name(), "root": vault.root() })),
         "vault.tree" => out(vault.tree()?),

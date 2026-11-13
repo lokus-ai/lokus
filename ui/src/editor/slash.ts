@@ -68,7 +68,39 @@ function source(context: CompletionContext) {
   };
 }
 
-export const slashMenu = [
-  autocompletion({ override: [source], icons: false, activateOnTyping: true, defaultKeymap: false }),
-  keymap.of(completionKeymap),
-];
+/** After `[[`, offer the vault's notes. */
+function noteLinks(notePaths: () => string[]) {
+  return (context: CompletionContext) => {
+    const match = context.matchBefore(/\[\[[^\]\n|#^]*/);
+    if (!match) return null;
+    const from = match.from + 2;
+    return {
+      from,
+      validFor: /^[^\]\n|#^]*$/,
+      options: notePaths().map((path) => {
+        const name = path.replace(/\.md$/i, "");
+        const label = name.split("/").pop()!;
+        return {
+          label,
+          detail: name.includes("/") ? name.slice(0, name.lastIndexOf("/")) : undefined,
+          apply(view: EditorView, _c: Completion, start: number, to: number) {
+            const closed = view.state.sliceDoc(to, to + 2) === "]]";
+            view.dispatch({
+              changes: { from: start, to, insert: closed ? label : `${label}]]` },
+              selection: EditorSelection.cursor(start + label.length + 2),
+              userEvent: "input.complete",
+            });
+          },
+        };
+      }),
+    };
+  };
+}
+
+/** The slash menu and `[[` note suggestions share one popup. */
+export function completions(notePaths: () => string[]) {
+  return [
+    autocompletion({ override: [source, noteLinks(notePaths)], icons: false, activateOnTyping: true, defaultKeymap: false }),
+    keymap.of(completionKeymap),
+  ];
+}

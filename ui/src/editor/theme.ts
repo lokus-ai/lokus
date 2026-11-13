@@ -8,7 +8,7 @@ const layout = EditorView.theme({
   "&": { fontSize: "var(--text-body)", color: "var(--fg)", backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
   ".cm-scroller": { fontFamily: "var(--font-editor)", lineHeight: "1.6", overflow: "visible" },
-  ".cm-content": { padding: "0 0 40vh", caretColor: "var(--accent)" },
+  ".cm-content": { padding: "0 0 48px", minHeight: "40vh", caretColor: "var(--accent)" },
   ".cm-line": { padding: "0" },
   ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "1.5px" },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground": {

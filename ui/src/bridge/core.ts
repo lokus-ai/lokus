@@ -92,3 +92,28 @@ export function onCloseTab(handler: () => void): () => void {
 export function closeWindow(): void {
   void getCurrentWindow().close();
 }
+
+/** The index has caught up with the files after opening a vault. */
+export function onIndexReady(handler: () => void): () => void {
+  const stop = listen("index:ready", handler);
+  return () => void stop.then((off) => off());
+}
+
+export interface SearchHit {
+  path: string;
+  title: string;
+  /** Matches are wrapped in `[[[` and `]]]`. */
+  snippet: string;
+}
+
+export interface Mention {
+  path: string;
+  title: string;
+  line: number;
+  context: string;
+}
+
+export interface GraphData {
+  nodes: { path: string; title: string; degree: number }[];
+  edges: [number, number][];
+}

@@ -45,3 +45,10 @@
 .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] { background: var(--bg-hover); color: var(--fg); }
 .cm-editor .cm-tooltip-autocomplete .cm-completionDetail { font-family: var(--font-mono); font-size: var(--text-caption); font-style: normal; color: var(--fg-3); margin: 0; }
 .cm-editor .cm-tooltip-autocomplete .cm-completionMatchedText { text-decoration: none; font-weight: 600; }
+
+/* Embedded notes */
+.cm-editor .cm-embed { border-left: 2px solid var(--border); margin: 6px 0; padding: 2px 0 2px 16px; }
+.cm-editor .cm-embed-head button { color: var(--fg-3); font-size: var(--text-caption); font-family: var(--font-ui); padding: 2px 6px; margin-left: -6px; border-radius: var(--radius-xs); }
+.cm-editor .cm-embed-head button:hover { background: var(--bg-hover); color: var(--fg-2); }
+.cm-editor .cm-embed-body .cm-content { padding: 0; min-height: 0 !important; }
+.cm-editor .cm-embed-missing { color: var(--fg-3); font-size: var(--text-small); }

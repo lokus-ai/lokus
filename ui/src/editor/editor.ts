@@ -10,7 +10,7 @@ import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view
 import { livePreview } from "./livePreview";
 import { insertLink, readFrontmatter, setFrontmatterKey, setHeading, toggleMark } from "./markdownCommands";
 import { markdownPairs, typeText } from "./pairs";
-import { slashMenu } from "./slash";
+import { completions } from "./slash";
 import { editorTheme } from "./theme";
 
 export interface EditorHooks {
@@ -18,6 +18,10 @@ export interface EditorHooks {
   onOpenLink(target: string): void;
   /** Turn an image path from a note into something the window can load. */
   resolveImage(src: string): string | null;
+  /** Text of the note a link points at, for `![[embeds]]`. */
+  loadNote(target: string): Promise<string | null>;
+  /** Paths of every note, for `[[` suggestions. */
+  notePaths(): string[];
 }
 
 /** One editing surface. Each open note keeps its own state (and undo history). */
@@ -45,11 +49,13 @@ export class Editor {
         EditorState.tabSize.of(4),
         markdownPairs,
         closeBrackets(),
-        slashMenu,
+        completions(() => this.hooks.notePaths()),
         yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
         livePreview({
           openLink: (target) => this.hooks.onOpenLink(target),
           resolveImage: (src) => this.hooks.resolveImage(src),
+          loadNote: (target) => this.hooks.loadNote(target),
+          mountEmbed: (parent, text) => this.mountEmbed(parent, text),
         }),
         editorTheme,
         placeholder("Write something, or press / for commands…"),
@@ -68,6 +74,27 @@ export class Editor {
           if (u.docChanged) this.hooks.onChange(u.state.doc.toString());
         }),
       ],
+    });
+  }
+
+  /** A read-only preview of some markdown; embeds inside it are not expanded again. */
+  private mountEmbed(parent: HTMLElement, text: string): EditorView {
+    return new EditorView({
+      parent,
+      state: EditorState.create({
+        doc: text,
+        extensions: [
+          EditorView.lineWrapping,
+          EditorState.readOnly.of(true),
+          EditorView.editable.of(false),
+          yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
+          livePreview({
+            openLink: (target) => this.hooks.onOpenLink(target),
+            resolveImage: (src) => this.hooks.resolveImage(src),
+          }),
+          editorTheme,
+        ],
+      }),
     });
   }
 

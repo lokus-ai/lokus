@@ -7,3 +7,4 @@ dist/
 .DS_Store
 *.log
 apps/desktop/gen/
+checks/fixtures/**/.lokus/

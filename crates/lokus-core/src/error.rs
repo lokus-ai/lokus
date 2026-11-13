@@ -23,6 +23,8 @@ pub enum CoreError {
     Io(#[from] std::io::Error),
     #[error("file watcher: {0}")]
     Watch(String),
+    #[error("index: {0}")]
+    Index(String),
 }
 
 impl CoreError {
@@ -38,6 +40,7 @@ impl CoreError {
             Self::BadArgs { .. } => "bad_args",
             Self::Io(_) => "io",
             Self::Watch(_) => "watch",
+            Self::Index(_) => "index",
         }
     }
 }
