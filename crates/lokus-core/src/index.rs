@@ -18,7 +18,7 @@ use crate::error::{CoreError, Result};
 use crate::vault::{Vault, META_DIR};
 
 /// Bump when the tables change; an old index is thrown away and rebuilt.
-const SCHEMA: i64 = 3;
+const SCHEMA: i64 = 4;
 
 pub struct Index {
     db: Connection,
@@ -153,7 +153,10 @@ fn parse(text: &str) -> (Option<String>, Vec<Link>, Vec<String>) {
         }
         if title.is_none() {
             if let Some(heading) = trimmed.strip_prefix("# ") {
-                title = Some(heading.trim().to_string());
+                // A template's placeholder heading is not a title; its file name is.
+                if !heading.contains("{{") {
+                    title = Some(heading.trim().to_string());
+                }
             }
         }
         let line = code.replace_all(raw, "");
