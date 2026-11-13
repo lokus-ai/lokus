@@ -6,6 +6,7 @@
 
 pub mod commands;
 pub mod error;
+pub mod frontmatter;
 pub mod index;
 pub mod vault;
 pub mod watch;

@@ -114,6 +114,17 @@ export function registerAllCommands(): void {
     { id: "page.addIcon", title: "Page: add or change icon", run: () => editor().setProperty("icon", pick(ICONS)) },
     { id: "page.addCover", title: "Page: add or change cover", run: () => editor().setProperty("cover", pick(COVERS)) },
     { id: "page.removeCover", title: "Page: remove cover", run: () => editor().setProperty("cover", null) },
+    { id: "database.table", title: "Database: show this folder as a table", run: () => editor().setProperty("view", "table") },
+    {
+      id: "database.board",
+      title: "Database: show this folder as a board",
+      run() {
+        const e = editor();
+        e.setProperty("view", "board");
+        if (!e.properties().group) e.setProperty("group", "status");
+      },
+    },
+    { id: "database.off", title: "Database: hide the view", run: () => editor().setProperty("view", null) },
     ...analyticsCommands(notify),
     ...(accountsAvailable
       ? [

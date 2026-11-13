@@ -9,6 +9,7 @@
 | Open a vault, list the tree, read and write notes atomically, fidelity check. | `crates/lokus-core/src/vault` | `core.vault` |
 | The command registry: every core feature is a named command with JSON in and out. | `crates/lokus-core/src/commands` | `core.commands` |
 | Disposable SQLite index: full-text search, links, backlinks, graph, tags. | `crates/lokus-core/src/index` | `core.index` |
+| Read and change a note's properties without touching the rest of the file. | `crates/lokus-core/src/frontmatter` | `core.frontmatter` |
 | File watcher: report changes made outside the app. | `crates/lokus-core/src/watch` | `core.watch` |
 | Sync engine: keeps a vault's files and their CRDT documents in step and talks to the relay. | `crates/lokus-sync/` | `sync` |
 | The relay: accounts' workspaces, roles, invites, the update log and live fan-out. | `crates/lokus-server/` | `server` |
@@ -22,6 +23,7 @@
 | Full-text search palette. | `ui/src/features/search/` | `ui.search` |
 | Linked mentions under a note. | `ui/src/features/backlinks/` | `ui.backlinks` |
 | Graph of notes and links. Loaded only when opened. | `ui/src/features/graph/` | `ui.graph` |
+| Table and board views over the notes in a folder, driven by their properties. | `ui/src/features/database/` | `ui.database` |
 | Team workspaces: connect, create, join, members, invites. | `ui/src/features/teams/` | `ui.teams` |
 | Login screen and session state. | `ui/src/features/auth/` | `ui.auth` |
 | Product analytics events and the opt-out. Never sends note content. | `ui/src/features/analytics/` | `ui.analytics` |

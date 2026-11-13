@@ -98,6 +98,16 @@ pub const COMMANDS: &[CommandSpec] = &[
         args: "",
     },
     CommandSpec {
+        name: "props.rows",
+        summary: "Notes in a folder with their properties, as database rows",
+        args: "folder?",
+    },
+    CommandSpec {
+        name: "props.set",
+        summary: "Set one property of a note; null removes it",
+        args: "path, key, value",
+    },
+    CommandSpec {
         name: "tags.list",
         summary: "Tags and how many notes use each",
         args: "",
@@ -143,7 +153,22 @@ struct SearchArgs {
 }
 
 /// Commands that change files; the index is brought up to date after them.
+#[derive(Deserialize)]
+struct RowsArgs {
+    #[serde(default)]
+    folder: String,
+}
+
+#[derive(Deserialize)]
+struct SetArgs {
+    path: String,
+    key: String,
+    #[serde(default)]
+    value: Value,
+}
+
 const WRITES: &[&str] = &[
+    "props.set",
     "note.write",
     "note.create",
     "note.rename",
@@ -176,6 +201,20 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             out(core.index()?.outgoing(&a.path)?)
         }
         "graph.data" => out(core.index()?.graph()?),
+        "props.rows" => {
+            let a: RowsArgs = parse(name, args)?;
+            out(core.index()?.rows(&a.folder)?)
+        }
+        "props.set" => {
+            let a: SetArgs = parse(name, args)?;
+            let note = vault.read(&a.path)?;
+            let changed = crate::frontmatter::set(&note.text, &a.key, &a.value);
+            if changed == note.text {
+                return Ok(json!({ "path": a.path, "hash": note.hash }));
+            }
+            // The text keeps its own line endings, so it is written back as it is.
+            out(vault.write(&a.path, &changed, Eol::Lf, Some(&note.hash))?)
+        }
         "tags.list" => out(core
             .index()?
             .tags()?

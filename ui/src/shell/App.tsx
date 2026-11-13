@@ -20,6 +20,7 @@ import {
   connectSync,
   createFolder,
   createNoteIn,
+  createRow,
   deleteEntry,
   disconnectSync,
   getEditor,
@@ -32,6 +33,7 @@ import {
 
 // The graph is only loaded when someone opens it.
 const GraphView = lazy(() => import("../features/graph/GraphView"));
+const DatabaseView = lazy(() => import("../features/database/DatabaseView"));
 
 const tabName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
@@ -213,6 +215,22 @@ function Page() {
           onProperty={(key, value) => getEditor()?.setProperty(key, value)}
           onEnter={() => getEditor()?.view.focus()}
         />
+      )}
+      {active && (properties.view === "table" || properties.view === "board") && (
+        <div className={properties.view === "board" ? "page-wide" : "page-column"}>
+          <Suspense fallback={null}>
+            <DatabaseView
+              self={active}
+              mode={properties.view}
+              folder={(properties.source ?? (active.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "")).replace(/^\/|\/$/g, "")}
+              group={properties.group || "status"}
+              order={(properties.order ?? "").replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean)}
+              version={version}
+              onOpen={(p) => void openNote(p)}
+              onNew={createRow}
+            />
+          </Suspense>
+        </div>
       )}
       <div className="page-column">
         <div ref={mount} className="editor-mount" />

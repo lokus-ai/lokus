@@ -18,7 +18,7 @@ use crate::error::{CoreError, Result};
 use crate::vault::{Vault, META_DIR};
 
 /// Bump when the tables change; an old index is thrown away and rebuilt.
-const SCHEMA: i64 = 1;
+const SCHEMA: i64 = 3;
 
 pub struct Index {
     db: Connection,
@@ -38,6 +38,14 @@ pub struct Hit {
     pub title: String,
     /// Matching text with the hits wrapped in `[[[` and `]]]`.
     pub snippet: String,
+}
+
+/// One note as a database row.
+#[derive(Debug, Serialize)]
+pub struct Row {
+    pub path: String,
+    pub title: String,
+    pub props: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -203,6 +211,8 @@ impl Index {
                                      context TEXT NOT NULL);
                  CREATE INDEX links_source ON links (source);
                  CREATE INDEX links_target ON links (target);
+                 CREATE TABLE props (path TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL);
+                 CREATE INDEX props_path ON props (path);
                  CREATE TABLE tags (path TEXT NOT NULL, tag TEXT NOT NULL);
                  CREATE INDEX tags_tag ON tags (tag);
                  CREATE VIRTUAL TABLE text USING fts5 (path UNINDEXED, title, body, tokenize = 'unicode61 remove_diacritics 2');
@@ -424,6 +434,49 @@ impl Index {
         Ok(Graph { nodes, edges })
     }
 
+    /// Notes directly inside `folder` (the vault root when empty) with their properties.
+    pub fn rows(&self, folder: &str) -> Result<Vec<Row>> {
+        let folder = folder.trim_matches('/');
+        let mut q = self
+            .db
+            .prepare("SELECT path, title FROM notes ORDER BY path")
+            .map_err(db_err)?;
+        let found = q
+            .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map_err(db_err)?;
+        let mut rows = Vec::new();
+        for item in found {
+            let (path, title) = item.map_err(db_err)?;
+            let parent = path.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("");
+            if parent == folder {
+                rows.push(Row {
+                    path,
+                    title,
+                    props: serde_json::Map::new(),
+                });
+            }
+        }
+        let mut q = self
+            .db
+            .prepare("SELECT key, value FROM props WHERE path = ?1")
+            .map_err(db_err)?;
+        for row in &mut rows {
+            let found = q
+                .query_map([&row.path], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                })
+                .map_err(db_err)?;
+            for item in found {
+                let (key, value) = item.map_err(db_err)?;
+                row.props.insert(
+                    key,
+                    serde_json::from_str(&value).unwrap_or(serde_json::Value::Null),
+                );
+            }
+        }
+        Ok(rows)
+    }
+
     pub fn tags(&self) -> Result<Vec<(String, usize)>> {
         let mut q = self
             .db
@@ -477,6 +530,7 @@ fn forget(db: &Connection, path: &str) -> Result<()> {
         "DELETE FROM notes WHERE path = ?1",
         "DELETE FROM links WHERE source = ?1",
         "DELETE FROM tags WHERE path = ?1",
+        "DELETE FROM props WHERE path = ?1",
         "DELETE FROM text WHERE path = ?1",
     ] {
         db.execute(sql, [path]).map_err(db_err)?;
@@ -512,6 +566,13 @@ fn put(db: &Connection, vault: &Vault, path: &str, stamp: Option<(i64, i64)>) ->
         db.execute(
             "INSERT INTO links (source, target, line, context) VALUES (?1, ?2, ?3, ?4)",
             params![path, link.target, link.line as i64, link.context],
+        )
+        .map_err(db_err)?;
+    }
+    for (key, value) in crate::frontmatter::read(&text) {
+        db.execute(
+            "INSERT INTO props (path, key, value) VALUES (?1, ?2, ?3)",
+            params![path, key, value.to_string()],
         )
         .map_err(db_err)?;
     }
@@ -589,6 +650,18 @@ mod tests {
             (1, "Home.md", 2)
         );
         assert_eq!(index.outgoing("Home.md").unwrap(), ["work/Plan.md"]);
+
+        fs::write(
+            v.root().join("work/Other.md"),
+            "---\nstatus: doing\nestimate: 3\n---\nbody",
+        )
+        .unwrap();
+        index.update(&["work/Other.md".into()]).unwrap();
+        let rows = index.rows("work").unwrap();
+        let other = rows.iter().find(|r| r.path == "work/Other.md").unwrap();
+        assert_eq!(other.props["status"], serde_json::json!("doing"));
+        assert_eq!(other.props["estimate"], serde_json::json!(3));
+        assert_eq!(rows.len(), 2, "only notes directly in the folder");
 
         let graph = index.graph().unwrap();
         assert_eq!((graph.nodes.len(), graph.edges.len()), (3, 2));

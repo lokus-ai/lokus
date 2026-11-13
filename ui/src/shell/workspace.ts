@@ -497,6 +497,21 @@ export async function createFolder(path: string): Promise<void> {
   }
 }
 
+/** A new note as a database row, optionally with one property set. It is not opened. */
+export async function createRow(folder: string, key?: string, value?: string): Promise<string | null> {
+  const path = uniquePath(folder, "Untitled");
+  try {
+    await runCore("note.create", { path, text: "" });
+    if (key && value !== undefined) await runCore("props.set", { path, key, value });
+    track("note_created");
+    await refreshTree();
+    return path;
+  } catch (e) {
+    report(e);
+    return null;
+  }
+}
+
 export async function createNoteIn(folder: string): Promise<void> {
   const path = uniquePath(folder, "Untitled");
   try {

@@ -6,6 +6,7 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-12 | A database is a view over the notes in a folder: rows are notes, columns are their frontmatter properties, and the view is switched on by `view: table` or `view: board` in a note | Everything stays plain markdown that any other tool can read; no separate database file format | Claude (default) | v1's `.base` and `.kanban` files and the 16k-line Bases engine |
 | 2026-11-12 | The relay keeps its data in one SQLite file | Runs locally and self-hosts as a single binary with no outside service; the owner had not yet chosen a Supabase project or a host | Claude (default) | Postgres edit log on Supabase |
 | 2026-11-12 | Notes are identified by an id in a shared manifest, not by path | Renames and deletes merge like any other edit, and a stale device cannot bring a deleted note back | Claude (default) | - |
 | 2026-11-12 | The relay checks the role once per connection; viewers receive and never send | Edits are high volume; a per-edit permission check and audit row is the over-engineering the owner warned about | Pratham (rule), Claude (shape) | v1's per-revision RPC checks |

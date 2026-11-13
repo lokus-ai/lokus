@@ -198,7 +198,7 @@ is needed.
 | M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | built |
 | M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | built and checked locally; not deployed, and real logins are untested |
 | M4 | iOS and Android | Builds in TestFlight and the Play internal track | planned |
-| M5 | Databases and kanban | Query engine with new UI | planned |
+| M5 | Databases and kanban | Query engine with new UI | built: table and board views over a folder's note properties |
 
 Then plugins, AI and MCP.
 
