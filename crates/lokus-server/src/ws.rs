@@ -60,7 +60,9 @@ const PRESENCE_BYTES: usize = 64 * 1024;
 fn doc_id(doc: &str) -> Result<()> {
     let ok = !doc.is_empty()
         && doc.len() <= 64
-        && doc.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        && doc
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
     if ok {
         Ok(())
     } else {

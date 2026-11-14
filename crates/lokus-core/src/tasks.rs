@@ -55,7 +55,11 @@ fn file_name(title: &str) -> Result<String> {
     while cleaned.contains("..") {
         cleaned = cleaned.replace("..", ".");
     }
-    let cleaned = cleaned.trim_start_matches(['.', '-']).trim_end_matches('.').trim().to_string();
+    let cleaned = cleaned
+        .trim_start_matches(['.', '-'])
+        .trim_end_matches('.')
+        .trim()
+        .to_string();
     if cleaned.is_empty() || cleaned.chars().count() > 120 {
         return Err(bad("a task needs a title of 1 to 120 characters"));
     }
@@ -127,7 +131,14 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
     }
     let due = line(task, "due", 10)?;
     if let Some(d) = &due {
-        let ok = d.len() == 10 && d.chars().enumerate().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() });
+        let ok = d.len() == 10
+            && d.chars().enumerate().all(|(i, c)| {
+                if i == 4 || i == 7 {
+                    c == '-'
+                } else {
+                    c.is_ascii_digit()
+                }
+            });
         if !ok {
             return Err(bad("due is a date like 2026-12-01"));
         }
@@ -139,13 +150,24 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
                 .iter()
                 .filter_map(Value::as_str)
                 .map(|l| l.trim().to_lowercase())
-                .filter(|l| !l.is_empty() && l.chars().count() <= 30 && l.chars().all(|c| c.is_alphanumeric() || c == '-' || c == ' '))
+                .filter(|l| {
+                    !l.is_empty()
+                        && l.chars().count() <= 30
+                        && l.chars()
+                            .all(|c| c.is_alphanumeric() || c == '-' || c == ' ')
+                })
                 .collect(),
         ),
         Some(_) => return Err(bad("labels is a short list of words")),
     };
-    let link = line(task, "link", 500)?.filter(|l| l.starts_with("https://") || l.starts_with("http://"));
-    let text = task.get("text").and_then(Value::as_str).unwrap_or("").trim().to_string();
+    let link =
+        line(task, "link", 500)?.filter(|l| l.starts_with("https://") || l.starts_with("http://"));
+    let text = task
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if text.len() > 32 * 1024 {
         return Err(bad("the text is too long"));
     }
@@ -163,7 +185,9 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
         }
         None => title.as_ref().and_then(|title| {
             let name = file_name(title).ok()?;
-            existing.iter().find(|t| t.title.eq_ignore_ascii_case(&name))
+            existing
+                .iter()
+                .find(|t| t.title.eq_ignore_ascii_case(&name))
         }),
     };
 
@@ -212,7 +236,11 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
             for (key, value) in &props {
                 head = frontmatter::set(&head, key, value);
             }
-            let body = if text.is_empty() { String::new() } else { format!("\n{text}\n") };
+            let body = if text.is_empty() {
+                String::new()
+            } else {
+                format!("\n{text}\n")
+            };
             vault.create(&path, &format!("{}\n{body}", head.trim_end()))?;
             Ok((path, number))
         }
@@ -237,21 +265,62 @@ mod tests {
     fn a_task_gets_a_number_and_is_updated_not_made_twice() {
         let (_dir, v) = vault();
         let first = record(&v, &json!({ "title": "Fix CSV export over 50k rows", "priority": "high", "customer": "Northwind", "labels": ["Bug", "churn risk"], "text": "Third report." })).unwrap();
-        assert_eq!(first, ("tasks/Fix CSV export over 50k rows.md".to_string(), 1));
+        assert_eq!(
+            first,
+            ("tasks/Fix CSV export over 50k rows.md".to_string(), 1)
+        );
         let made = props(&v, &first.0);
-        assert_eq!((made["type"].clone(), made["number"].clone(), made["status"].clone()), (json!("task"), json!(1), json!("todo")));
+        assert_eq!(
+            (
+                made["type"].clone(),
+                made["number"].clone(),
+                made["status"].clone()
+            ),
+            (json!("task"), json!(1), json!("todo"))
+        );
         assert_eq!(made["labels"], json!(["bug", "churn risk"]));
-        assert!(v.read(&first.0).unwrap().text.ends_with("\nThird report.\n"));
+        assert!(v
+            .read(&first.0)
+            .unwrap()
+            .text
+            .ends_with("\nThird report.\n"));
 
         let second = record(&v, &json!({ "title": "Audit log" })).unwrap();
         assert_eq!(second.1, 2);
 
         // The same title again, or its number, moves the task on instead of making another.
-        assert_eq!(record(&v, &json!({ "title": "fix csv export over 50k rows", "status": "Doing" })).unwrap().1, 1);
-        assert_eq!(record(&v, &json!({ "key": "T-1", "assignee": "Pratham", "due": "2026-12-01" })).unwrap().1, 1);
+        assert_eq!(
+            record(
+                &v,
+                &json!({ "title": "fix csv export over 50k rows", "status": "Doing" })
+            )
+            .unwrap()
+            .1,
+            1
+        );
+        assert_eq!(
+            record(
+                &v,
+                &json!({ "key": "T-1", "assignee": "Pratham", "due": "2026-12-01" })
+            )
+            .unwrap()
+            .1,
+            1
+        );
         let now = props(&v, &first.0);
-        assert_eq!((now["status"].clone(), now["assignee"].clone(), now["due"].clone()), (json!("doing"), json!("Pratham"), json!("2026-12-01")));
-        assert_eq!(now["priority"], json!("high"), "what was not sent is left as it was");
+        assert_eq!(
+            (
+                now["status"].clone(),
+                now["assignee"].clone(),
+                now["due"].clone()
+            ),
+            (json!("doing"), json!("Pratham"), json!("2026-12-01"))
+        );
+        assert_eq!(
+            now["priority"],
+            json!("high"),
+            "what was not sent is left as it was"
+        );
         assert_eq!(all(&v).unwrap().len(), 2);
     }
 

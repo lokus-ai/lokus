@@ -65,7 +65,13 @@ pub fn briefing(config: &Config) -> Option<String> {
     );
     for api in live {
         let about = api.about.trim();
-        text.push_str(&format!("\n- **{}** ({}){}{}", api.name, api.url.trim_end_matches('/'), if about.is_empty() { "" } else { ": " }, about));
+        text.push_str(&format!(
+            "\n- **{}** ({}){}{}",
+            api.name,
+            api.url.trim_end_matches('/'),
+            if about.is_empty() { "" } else { ": " },
+            about
+        ));
     }
     Some(text)
 }
@@ -76,18 +82,30 @@ fn local(host: &str) -> bool {
 
 /// The full address for a path on this system, or why it cannot be asked for.
 fn address(api: &OwnApi, path: &str, query: &Value) -> Result<Url, String> {
-    let base = Url::parse(api.url.trim()).map_err(|_| format!("{}'s address is not a web address", api.name))?;
+    let base = Url::parse(api.url.trim())
+        .map_err(|_| format!("{}'s address is not a web address", api.name))?;
     let host = base.host_str().unwrap_or_default().to_string();
     if base.scheme() != "https" && !(base.scheme() == "http" && local(&host)) {
         return Err(format!("{}'s address must start with https://", api.name));
     }
-    if !path.starts_with('/') || path.starts_with("//") || path.contains("://") || path.contains('\\') || path.chars().any(char::is_control) {
-        return Err("path must start with / and name a route on that system, like /v1/admin".into());
+    if !path.starts_with('/')
+        || path.starts_with("//")
+        || path.contains("://")
+        || path.contains('\\')
+        || path.chars().any(char::is_control)
+    {
+        return Err(
+            "path must start with / and name a route on that system, like /v1/admin".into(),
+        );
     }
     let (route, inline) = path.split_once('?').unwrap_or((path, ""));
     let mut url = base.clone();
     url.set_path(&format!("{}{}", base.path().trim_end_matches('/'), route));
-    url.set_query(if inline.is_empty() { None } else { Some(inline) });
+    url.set_query(if inline.is_empty() {
+        None
+    } else {
+        Some(inline)
+    });
     if let Some(pairs) = query.as_object() {
         let mut out = url.query_pairs_mut();
         for (key, value) in pairs {
@@ -99,7 +117,10 @@ fn address(api: &OwnApi, path: &str, query: &Value) -> Result<Url, String> {
         }
     }
     // Whatever the path held, the request still goes to the system the team named.
-    if url.host_str() != base.host_str() || url.port_or_known_default() != base.port_or_known_default() || url.scheme() != base.scheme() {
+    if url.host_str() != base.host_str()
+        || url.port_or_known_default() != base.port_or_known_default()
+        || url.scheme() != base.scheme()
+    {
         return Err("that path leads somewhere other than this system".into());
     }
     Ok(url)
@@ -108,57 +129,120 @@ fn address(api: &OwnApi, path: &str, query: &Value) -> Result<Url, String> {
 /// Carry out one call. `write` is whether it came through `api_send`.
 pub async fn call(config: &Config, write: bool, input: &Value) -> Result<String, String> {
     let live: Vec<&OwnApi> = config.apis.iter().filter(|a| a.enabled).collect();
-    let wanted = input["api"].as_str().unwrap_or_default().trim().to_lowercase();
+    let wanted = input["api"]
+        .as_str()
+        .unwrap_or_default()
+        .trim()
+        .to_lowercase();
     let api = match (wanted.is_empty(), live.len()) {
-        (_, 0) => return Err("no system of the team's own is connected (Settings, Connections)".into()),
+        (_, 0) => {
+            return Err("no system of the team's own is connected (Settings, Connections)".into())
+        }
         (true, 1) => live[0],
-        (true, _) => return Err(format!("say which system with `api`: {}", live.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(", "))),
+        (true, _) => {
+            return Err(format!(
+                "say which system with `api`: {}",
+                live.iter()
+                    .map(|a| a.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+        }
         (false, _) => *live
             .iter()
             .find(|a| a.name.to_lowercase() == wanted)
-            .ok_or_else(|| format!("there is no system called {wanted}; there is: {}", live.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(", ")))?,
+            .ok_or_else(|| {
+                format!(
+                    "there is no system called {wanted}; there is: {}",
+                    live.iter()
+                        .map(|a| a.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?,
     };
     let method = if write {
-        match input["method"].as_str().unwrap_or("POST").to_uppercase().as_str() {
+        match input["method"]
+            .as_str()
+            .unwrap_or("POST")
+            .to_uppercase()
+            .as_str()
+        {
             "POST" => Method::POST,
             "PUT" => Method::PUT,
             "PATCH" => Method::PATCH,
             "DELETE" => Method::DELETE,
-            other => return Err(format!("{other} is not something api_send does; use POST, PUT, PATCH or DELETE")),
+            other => {
+                return Err(format!(
+                    "{other} is not something api_send does; use POST, PUT, PATCH or DELETE"
+                ))
+            }
         }
     } else {
         Method::GET
     };
-    let url = address(api, input["path"].as_str().unwrap_or_default(), &input["query"])?;
+    let url = address(
+        api,
+        input["path"].as_str().unwrap_or_default(),
+        &input["query"],
+    )?;
     let http = reqwest::Client::builder()
         .redirect(redirect::Policy::none())
         .timeout(TIMEOUT)
         .build()
         .map_err(|e| e.to_string())?;
-    let mut request = http.request(method.clone(), url.clone()).header("accept", "application/json");
+    let mut request = http
+        .request(method.clone(), url.clone())
+        .header("accept", "application/json");
     if let Some(key) = secret(&api_account(&api.name)).filter(|k| !k.is_empty()) {
         request = request.bearer_auth(key);
     }
     if write && method != Method::DELETE || input["body"].is_object() {
-        request = request.json(&if input["body"].is_object() { input["body"].clone() } else { json!({}) });
+        request = request.json(&if input["body"].is_object() {
+            input["body"].clone()
+        } else {
+            json!({})
+        });
     }
     let response = request.send().await.map_err(|e| {
         if e.is_timeout() {
-            format!("{} did not answer within {} seconds", api.name, TIMEOUT.as_secs())
+            format!(
+                "{} did not answer within {} seconds",
+                api.name,
+                TIMEOUT.as_secs()
+            )
         } else {
-            format!("could not reach {} at {}", api.name, url.host_str().unwrap_or_default())
+            format!(
+                "could not reach {} at {}",
+                api.name,
+                url.host_str().unwrap_or_default()
+            )
         }
     })?;
     let status = response.status();
-    let moved = response.headers().get("location").and_then(|v| v.to_str().ok()).map(str::to_string);
+    let moved = response
+        .headers()
+        .get("location")
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_string);
     let body = response.text().await.unwrap_or_default();
-    let shown = serde_json::from_str::<Value>(&body).ok().and_then(|v| serde_json::to_string_pretty(&v).ok()).unwrap_or(body);
+    let shown = serde_json::from_str::<Value>(&body)
+        .ok()
+        .and_then(|v| serde_json::to_string_pretty(&v).ok())
+        .unwrap_or(body);
     let line = format!("{} {} answered {}", method, url.path(), status.as_u16());
     if status.is_redirection() {
-        return Err(format!("{line} and pointed elsewhere ({}). It was not followed.", moved.unwrap_or_default()));
+        return Err(format!(
+            "{line} and pointed elsewhere ({}). It was not followed.",
+            moved.unwrap_or_default()
+        ));
     }
     if status.as_u16() == 401 || status.as_u16() == 403 {
-        return Err(format!("{line}: the key for {} was not accepted for this. {}", api.name, shown.chars().take(600).collect::<String>()));
+        return Err(format!(
+            "{line}: the key for {} was not accepted for this. {}",
+            api.name,
+            shown.chars().take(600).collect::<String>()
+        ));
     }
     if status.is_success() {
         Ok(format!("{line}\n{shown}"))
@@ -172,7 +256,12 @@ mod tests {
     use super::*;
 
     fn api(url: &str) -> OwnApi {
-        OwnApi { name: "clean".into(), url: url.into(), about: "Start with GET /v1/admin.".into(), enabled: true }
+        OwnApi {
+            name: "clean".into(),
+            url: url.into(),
+            about: "Start with GET /v1/admin.".into(),
+            enabled: true,
+        }
     }
 
     /// A key must never leave for anywhere but the system it was given for.
@@ -180,10 +269,27 @@ mod tests {
     fn a_request_can_only_go_to_the_system_that_was_named() {
         let clean = api("https://app.example.com/base/");
         let to = |path: &str| address(&clean, path, &Value::Null).map(|u| u.to_string());
-        assert_eq!(to("/v1/admin").unwrap(), "https://app.example.com/base/v1/admin");
-        assert_eq!(to("/v1/clients?limit=5").unwrap(), "https://app.example.com/base/v1/clients?limit=5");
-        assert_eq!(address(&clean, "/v1/x", &json!({ "family": "sequencer", "n": 3 })).unwrap().query(), Some("family=sequencer&n=3"));
-        for bad in ["https://evil.example/steal", "//evil.example/x", "v1/admin", "/x\\y", "/a://b"] {
+        assert_eq!(
+            to("/v1/admin").unwrap(),
+            "https://app.example.com/base/v1/admin"
+        );
+        assert_eq!(
+            to("/v1/clients?limit=5").unwrap(),
+            "https://app.example.com/base/v1/clients?limit=5"
+        );
+        assert_eq!(
+            address(&clean, "/v1/x", &json!({ "family": "sequencer", "n": 3 }))
+                .unwrap()
+                .query(),
+            Some("family=sequencer&n=3")
+        );
+        for bad in [
+            "https://evil.example/steal",
+            "//evil.example/x",
+            "v1/admin",
+            "/x\\y",
+            "/a://b",
+        ] {
             assert!(to(bad).is_err(), "{bad}");
         }
         // Plain http is for a system on this computer only.
@@ -198,6 +304,12 @@ mod tests {
         config.apis.push(api("https://app.example.com"));
         let told = briefing(&config).unwrap();
         assert!(told.contains("**clean** (https://app.example.com): Start with GET /v1/admin."));
-        assert_eq!(tools().iter().map(|t| (t.name.as_str(), t.writes)).collect::<Vec<_>>(), [("api_get", false), ("api_send", true)]);
+        assert_eq!(
+            tools()
+                .iter()
+                .map(|t| (t.name.as_str(), t.writes))
+                .collect::<Vec<_>>(),
+            [("api_get", false), ("api_send", true)]
+        );
     }
 }

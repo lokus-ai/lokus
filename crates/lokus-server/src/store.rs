@@ -587,7 +587,14 @@ impl Store {
 
 /// Facts pushed by a team's own systems, held until a device writes them into notes.
 impl Store {
-    pub fn create_key(&self, workspace: &str, id: &str, hash: &str, label: &str, by: &str) -> Result<()> {
+    pub fn create_key(
+        &self,
+        workspace: &str,
+        id: &str,
+        hash: &str,
+        label: &str,
+        by: &str,
+    ) -> Result<()> {
         let mut db = self.db()?;
         let tx = db.transaction()?;
         let live: i64 = tx.query_row(
@@ -686,7 +693,12 @@ impl Store {
 
     /// Hand the oldest waiting facts to one device. A fact a device took and never finished
     /// is handed out again after a while, so one that crashed does not strand it.
-    pub fn claim_inbox(&self, workspace: &str, device: &str, limit: i64) -> Result<Vec<(i64, String)>> {
+    pub fn claim_inbox(
+        &self,
+        workspace: &str,
+        device: &str,
+        limit: i64,
+    ) -> Result<Vec<(i64, String)>> {
         let mut db = self.db()?;
         let tx = db.transaction()?;
         let stale = now() - CLAIM_SECONDS;
@@ -695,7 +707,9 @@ impl Store {
                 "SELECT seq, body FROM inbox WHERE workspace = ?1
                  AND (claimed_by IS NULL OR claimed_by = ?2 OR claimed_at < ?3) ORDER BY seq LIMIT ?4",
             )?;
-            let rows = q.query_map(params![workspace, device, stale, limit], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            let rows = q.query_map(params![workspace, device, stale, limit], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?;
             rows.collect::<rusqlite::Result<_>>()?
         };
         for (seq, _) in &taken {
@@ -737,7 +751,13 @@ pub struct Release {
 
 /// The app's own releases and news: the same for every workspace, read by every copy of the app.
 impl Store {
-    pub fn put_release(&self, version: &str, platform: &str, url: &str, signature: &str) -> Result<()> {
+    pub fn put_release(
+        &self,
+        version: &str,
+        platform: &str,
+        url: &str,
+        signature: &str,
+    ) -> Result<()> {
         self.db()?.execute(
             "INSERT INTO app_releases (version, platform, url, signature, at) VALUES (?1, ?2, ?3, ?4, ?5)
              ON CONFLICT (version, platform) DO UPDATE SET url = ?3, signature = ?4, pulled = 0",
@@ -756,7 +776,8 @@ impl Store {
 
     pub fn releases(&self) -> Result<Vec<Release>> {
         let db = self.db()?;
-        let mut q = db.prepare("SELECT version, platform, url, signature, at, pulled FROM app_releases")?;
+        let mut q =
+            db.prepare("SELECT version, platform, url, signature, at, pulled FROM app_releases")?;
         let all = q
             .query_map([], |r| {
                 Ok(Release {
@@ -790,14 +811,18 @@ impl Store {
     }
 
     pub fn drop_news(&self, id: &str) -> Result<usize> {
-        Ok(self.db()?.execute("DELETE FROM app_news WHERE id = ?1", [id])?)
+        Ok(self
+            .db()?
+            .execute("DELETE FROM app_news WHERE id = ?1", [id])?)
     }
 
     /// The newest posts, newest first, each as the JSON it was published as.
     pub fn news(&self, limit: i64) -> Result<Vec<String>> {
         let db = self.db()?;
         let mut q = db.prepare("SELECT body FROM app_news ORDER BY at DESC, id DESC LIMIT ?1")?;
-        let all = q.query_map([limit], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?;
+        let all = q
+            .query_map([limit], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
         Ok(all)
     }
 }

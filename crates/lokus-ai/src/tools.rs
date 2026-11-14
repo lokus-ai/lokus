@@ -313,7 +313,9 @@ fn list_folder(tree: &Value, path: &str) -> Result<String, String> {
         let next = here
             .iter()
             .find(|e| e["kind"] == "folder" && e["name"] == part)
-            .ok_or_else(|| format!("there is no folder {path}; list its parent to see what exists"))?;
+            .ok_or_else(|| {
+                format!("there is no folder {path}; list its parent to see what exists")
+            })?;
         here = next["children"].as_array().cloned().unwrap_or_default();
     }
     let mut lines: Vec<String> = Vec::new();
@@ -344,7 +346,10 @@ fn read_part(body: &str, from_line: usize) -> Result<String, String> {
     let lines: Vec<&str> = body.split_inclusive('\n').collect();
     let start = from_line.max(1) - 1;
     if start > 0 && start >= lines.len() {
-        return Err(format!("the note has {} lines; from_line is past the end", lines.len()));
+        return Err(format!(
+            "the note has {} lines; from_line is past the end",
+            lines.len()
+        ));
     }
     let mut out = String::new();
     let mut end = start;
@@ -359,9 +364,18 @@ fn read_part(body: &str, from_line: usize) -> Result<String, String> {
         out.push('\n');
     }
     out.push_str(&if end < lines.len() {
-        format!("[Lines {}-{end} of {}. Read on with from_line={}.]", start + 1, lines.len(), end + 1)
+        format!(
+            "[Lines {}-{end} of {}. Read on with from_line={}.]",
+            start + 1,
+            lines.len(),
+            end + 1
+        )
     } else {
-        format!("[Lines {}-{end} of {}. This is the end of the note.]", start + 1, lines.len())
+        format!(
+            "[Lines {}-{end} of {}. This is the end of the note.]",
+            start + 1,
+            lines.len()
+        )
     });
     Ok(out)
 }
@@ -369,7 +383,12 @@ fn read_part(body: &str, from_line: usize) -> Result<String, String> {
 /// The tasks as a short list the model can read, the most pressing first.
 fn tasks(rows: &[Value], include_done: bool) -> String {
     let word = |props: &Value, key: &str| props[key].as_str().unwrap_or_default().to_string();
-    let weight = |p: &str| lokus_core::tasks::PRIORITIES.iter().position(|x| *x == p).unwrap_or(9);
+    let weight = |p: &str| {
+        lokus_core::tasks::PRIORITIES
+            .iter()
+            .position(|x| *x == p)
+            .unwrap_or(9)
+    };
     let mut listed: Vec<(usize, i64, String)> = Vec::new();
     let mut done = 0;
     for row in rows {
@@ -378,14 +397,29 @@ fn tasks(rows: &[Value], include_done: bool) -> String {
             continue;
         }
         let status = word(props, "status");
-        if !include_done && matches!(status.as_str(), "done" | "closed" | "cancelled" | "canceled") {
+        if !include_done
+            && matches!(
+                status.as_str(),
+                "done" | "closed" | "cancelled" | "canceled"
+            )
+        {
             done += 1;
             continue;
         }
         let number = props["number"].as_i64().unwrap_or(0);
         let path = row["path"].as_str().unwrap_or_default();
-        let title = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md");
-        let mut parts = vec![format!("T-{number} {title}"), format!("status {}", if status.is_empty() { "none" } else { &status })];
+        let title = path
+            .rsplit('/')
+            .next()
+            .unwrap_or(path)
+            .trim_end_matches(".md");
+        let mut parts = vec![
+            format!("T-{number} {title}"),
+            format!(
+                "status {}",
+                if status.is_empty() { "none" } else { &status }
+            ),
+        ];
         for key in ["priority", "assignee", "customer", "due"] {
             let value = word(props, key);
             if !value.is_empty() {
@@ -398,17 +432,36 @@ fn tasks(rows: &[Value], include_done: bool) -> String {
                 parts.push(format!("labels {}", labels.join(", ")));
             }
         }
-        listed.push((weight(&word(props, "priority")), number, format!("- {}. ({path})", parts.join("; "))));
+        listed.push((
+            weight(&word(props, "priority")),
+            number,
+            format!("- {}. ({path})", parts.join("; ")),
+        ));
     }
     listed.sort();
     if listed.is_empty() {
-        return format!("There are no open tasks.{}", if done > 0 { format!(" {done} are finished.") } else { String::new() });
+        return format!(
+            "There are no open tasks.{}",
+            if done > 0 {
+                format!(" {done} are finished.")
+            } else {
+                String::new()
+            }
+        );
     }
     format!(
         "{} tasks{}.\n{}",
         listed.len(),
-        if done > 0 { format!(" ({done} finished ones not shown)") } else { String::new() },
-        listed.into_iter().map(|(_, _, line)| line).collect::<Vec<_>>().join("\n"),
+        if done > 0 {
+            format!(" ({done} finished ones not shown)")
+        } else {
+            String::new()
+        },
+        listed
+            .into_iter()
+            .map(|(_, _, line)| line)
+            .collect::<Vec<_>>()
+            .join("\n"),
     )
 }
 
@@ -419,7 +472,14 @@ const REMEMBERED: &str = "## Remembered";
 /// The customers as a short list the model can read: one line each, then what the team tracks.
 fn customers(rows: &[Value]) -> String {
     let prefix = format!("{}/", lokus_core::ingest::CUSTOMERS);
-    let closed = ["done", "closed", "resolved", "fixed", "canceled", "cancelled"];
+    let closed = [
+        "done",
+        "closed",
+        "resolved",
+        "fixed",
+        "canceled",
+        "cancelled",
+    ];
     let mut lines = Vec::new();
     let mut details = std::collections::BTreeSet::new();
     for row in rows {
@@ -431,7 +491,10 @@ fn customers(rows: &[Value]) -> String {
         let name = rest.trim_end_matches(".md");
         let folder = format!("{prefix}{name}/");
         let (mut open, mut messages, mut last) = (0, 0, String::new());
-        for item in rows.iter().filter(|r| r["path"].as_str().is_some_and(|p| p.starts_with(&folder))) {
+        for item in rows
+            .iter()
+            .filter(|r| r["path"].as_str().is_some_and(|p| p.starts_with(&folder)))
+        {
             let props = &item["props"];
             let status = props["status"].as_str().unwrap_or_default().to_lowercase();
             if props["kind"] == "issue" && !closed.contains(&status.as_str()) {
@@ -448,17 +511,35 @@ fn customers(rows: &[Value]) -> String {
         let mut known = Vec::new();
         if let Some(props) = row["props"].as_object() {
             for (key, value) in props {
-                if matches!(key.as_str(), "type" | "summary" | "icon" | "cover" | "cover_layout") || value.is_null() {
+                if matches!(
+                    key.as_str(),
+                    "type" | "summary" | "icon" | "cover" | "cover_layout"
+                ) || value.is_null()
+                {
                     continue;
                 }
                 details.insert(key.clone());
-                known.push(format!("{key}: {}", value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string())));
+                known.push(format!(
+                    "{key}: {}",
+                    value
+                        .as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| value.to_string())
+                ));
             }
         }
         lines.push(format!(
             "- {name} ({path}). {}. {open} open issues, {messages} messages, last activity {}.",
-            if known.is_empty() { "no details yet".to_string() } else { known.join("; ") },
-            if last.is_empty() { "never" } else { last.get(..10).unwrap_or(&last) },
+            if known.is_empty() {
+                "no details yet".to_string()
+            } else {
+                known.join("; ")
+            },
+            if last.is_empty() {
+                "never"
+            } else {
+                last.get(..10).unwrap_or(&last)
+            },
         ));
     }
     if lines.is_empty() {
@@ -554,10 +635,14 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                 let _ = index.refresh();
             }
             let rows = call("props.rows", json!({ "folder": lokus_core::tasks::TASKS }))?;
-            Ok(tasks(rows.as_array().map(Vec::as_slice).unwrap_or_default(), input["include_done"] == true))
+            Ok(tasks(
+                rows.as_array().map(Vec::as_slice).unwrap_or_default(),
+                input["include_done"] == true,
+            ))
         }
         "record_task" => {
-            let (path, number) = lokus_core::tasks::record(&core.vault, input).map_err(|e| e.to_string())?;
+            let (path, number) =
+                lokus_core::tasks::record(&core.vault, input).map_err(|e| e.to_string())?;
             Ok(format!("T-{number} is at {path}"))
         }
         "timeline" => {
@@ -566,30 +651,56 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             if let Ok(mut index) = core.index() {
                 let _ = index.refresh();
             }
-            let folder = if about.contains('/') { about.trim_end_matches(".md").to_string() } else { format!("{}/{}", lokus_core::ingest::CUSTOMERS, about) };
+            let folder = if about.contains('/') {
+                about.trim_end_matches(".md").to_string()
+            } else {
+                format!("{}/{}", lokus_core::ingest::CUSTOMERS, about)
+            };
             let rows = call("props.rows", json!({ "folder": folder, "deep": true }))?;
             let since = lokus_core::ingest::iso(
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) - days * 86_400,
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0)
+                    - days * 86_400,
             );
-            let word = |row: &Value, key: &str| row["props"][key].as_str().unwrap_or_default().to_string();
+            let word =
+                |row: &Value, key: &str| row["props"][key].as_str().unwrap_or_default().to_string();
             let mut lines: Vec<(String, String)> = rows
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|row| !word(row, "at").is_empty() && word(row, "at").as_str() >= &since[..10])
+                .filter(|row| {
+                    !word(row, "at").is_empty() && word(row, "at").as_str() >= &since[..10]
+                })
                 .map(|row| {
                     let at = word(row, "at");
                     let who = match (word(row, "direction").as_str(), word(row, "from")) {
-                        ("out", from) => format!("us{}", if from.is_empty() { String::new() } else { format!(" ({from})") }),
+                        ("out", from) => format!(
+                            "us{}",
+                            if from.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" ({from})")
+                            }
+                        ),
                         (_, from) if !from.is_empty() => from,
                         _ => String::new(),
                     };
                     let status = word(row, "status");
-                    let mut line = format!("{} · {} {}", at[..at.len().min(16)].replace('T', " "), word(row, "source"), word(row, "kind"));
+                    let mut line = format!(
+                        "{} · {} {}",
+                        at[..at.len().min(16)].replace('T', " "),
+                        word(row, "source"),
+                        word(row, "kind")
+                    );
                     if !who.is_empty() {
                         line.push_str(&format!(" · {who}"));
                     }
-                    line.push_str(&format!(" · {}", word(row, "title").chars().take(160).collect::<String>()));
+                    line.push_str(&format!(
+                        " · {}",
+                        word(row, "title").chars().take(160).collect::<String>()
+                    ));
                     if !status.is_empty() {
                         line.push_str(&format!(" [{status}]"));
                     }
@@ -598,8 +709,21 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                 .collect();
             lines.sort();
             let total = lines.len();
-            let shown: Vec<String> = lines.into_iter().rev().take(120).rev().map(|(_, line)| line).collect();
-            let mut out = format!("{about}: {total} things on record in the last {days} days, oldest first{}.\n", if total > 120 { " (the latest 120 shown)" } else { "" });
+            let shown: Vec<String> = lines
+                .into_iter()
+                .rev()
+                .take(120)
+                .rev()
+                .map(|(_, line)| line)
+                .collect();
+            let mut out = format!(
+                "{about}: {total} things on record in the last {days} days, oldest first{}.\n",
+                if total > 120 {
+                    " (the latest 120 shown)"
+                } else {
+                    ""
+                }
+            );
             out.push_str(&shown.join("\n"));
             if !about.contains('/') {
                 let tasks = call("props.rows", json!({ "folder": lokus_core::tasks::TASKS }))?;
@@ -607,10 +731,33 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .filter(|t| t["props"]["customer"].as_str().is_some_and(|c| c.eq_ignore_ascii_case(&about)) && !matches!(t["props"]["status"].as_str(), Some("done" | "closed" | "cancelled")))
-                    .map(|t| format!("T-{} [{}] {} · {}", t["props"]["number"], t["props"]["status"].as_str().unwrap_or("todo"), t["props"]["priority"].as_str().unwrap_or("no priority"), t["props"]["assignee"].as_str().unwrap_or("nobody's")))
+                    .filter(|t| {
+                        t["props"]["customer"]
+                            .as_str()
+                            .is_some_and(|c| c.eq_ignore_ascii_case(&about))
+                            && !matches!(
+                                t["props"]["status"].as_str(),
+                                Some("done" | "closed" | "cancelled")
+                            )
+                    })
+                    .map(|t| {
+                        format!(
+                            "T-{} [{}] {} · {}",
+                            t["props"]["number"],
+                            t["props"]["status"].as_str().unwrap_or("todo"),
+                            t["props"]["priority"].as_str().unwrap_or("no priority"),
+                            t["props"]["assignee"].as_str().unwrap_or("nobody's")
+                        )
+                    })
                     .collect();
-                out.push_str(&format!("\n\nOpen tasks for them: {}", if open.is_empty() { "none".to_string() } else { format!("\n{}", open.join("\n")) }));
+                out.push_str(&format!(
+                    "\n\nOpen tasks for them: {}",
+                    if open.is_empty() {
+                        "none".to_string()
+                    } else {
+                        format!("\n{}", open.join("\n"))
+                    }
+                ));
             }
             if total == 0 {
                 out.push_str("\nNothing is filed. That does not mean nothing happened: look in the connected services.");
@@ -621,26 +768,62 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
         "report_finding" => {
             let key = text(input, "key")?;
             // The user reads these at a glance: anything longer than a glance is sent back to be cut.
-            let long = |field: &str, most: usize| input[field].as_str().is_some_and(|v| v.chars().count() > most);
-            let mut too_long: Vec<String> = [("title", 60), ("summary", 140), ("recommend", 90), ("metric", 12)]
-                .iter()
-                // Bold marks are formatting, not words: they are not counted.
-                .filter(|(field, most)| long(field, *most + 12 + input[*field].as_str().map_or(0, |v| v.matches("**").count() * 2)))
-                .map(|(field, most)| format!("{field} (at most {} characters)", if *field == "metric" { 22 } else { *most }))
-                .collect();
+            let long = |field: &str, most: usize| {
+                input[field]
+                    .as_str()
+                    .is_some_and(|v| v.chars().count() > most)
+            };
+            let mut too_long: Vec<String> = [
+                ("title", 60),
+                ("summary", 140),
+                ("recommend", 90),
+                ("metric", 12),
+            ]
+            .iter()
+            // Bold marks are formatting, not words: they are not counted.
+            .filter(|(field, most)| {
+                long(
+                    field,
+                    *most
+                        + 12
+                        + input[*field]
+                            .as_str()
+                            .map_or(0, |v| v.matches("**").count() * 2),
+                )
+            })
+            .map(|(field, most)| {
+                format!(
+                    "{field} (at most {} characters)",
+                    if *field == "metric" { 22 } else { *most }
+                )
+            })
+            .collect();
             let evidence = input["evidence"].as_array().cloned().unwrap_or_default();
-            if evidence.len() > 5 || evidence.iter().any(|e| e["text"].as_str().is_some_and(|t| t.chars().count() > 115)) {
+            if evidence.len() > 5
+                || evidence
+                    .iter()
+                    .any(|e| e["text"].as_str().is_some_and(|t| t.chars().count() > 115))
+            {
                 too_long.push("evidence (at most 5, each at most 100 characters)".into());
             }
             // Five at a time, at most. More than that is a pile, and a pile does not get read.
             let waiting = call("noticed.list", json!({}))?;
-            let recent = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) - 600;
+            let recent = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0)
+                - 600;
             let id = lokus_core::noticed::id_of(&format!("finding {key}"));
             let just_now = waiting
                 .as_array()
                 .into_iter()
                 .flatten()
-                .filter(|i| i["kind"] == "finding" && i["state"] == "new" && i["created"].as_i64().unwrap_or(0) >= recent && i["id"] != id.as_str())
+                .filter(|i| {
+                    i["kind"] == "finding"
+                        && i["state"] == "new"
+                        && i["created"].as_i64().unwrap_or(0) >= recent
+                        && i["id"] != id.as_str()
+                })
                 .count();
             if just_now >= 5 {
                 return Err("Not reported: you have already left 5 things in the last few minutes, which is the most the user will read. Stop reporting. If this one matters more than one you left, say so in your reply instead.".into());
@@ -656,11 +839,18 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                 too_long.push("if_ignored (at most 90 characters)".into());
             }
             if !too_long.is_empty() {
-                return Err(format!("Too long to read at a glance. Shorten and send again: {}.", too_long.join("; ")));
+                return Err(format!(
+                    "Too long to read at a glance. Shorten and send again: {}.",
+                    too_long.join("; ")
+                ));
             }
             let mut item = input.clone();
             item["kind"] = json!("finding");
-            call("noticed.report", json!({ "key": format!("finding {key}"), "item": item })).map(|said| said.as_str().unwrap_or("noted").to_string())
+            call(
+                "noticed.report",
+                json!({ "key": format!("finding {key}"), "item": item }),
+            )
+            .map(|said| said.as_str().unwrap_or("noted").to_string())
         }
         "suggest_note_change" => {
             let path = text(input, "path")?;
@@ -668,10 +858,17 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             let mut item = input.clone();
             item["kind"] = json!("suggestion");
             let words: String = text(input, "text")?.chars().take(40).collect();
-            call("noticed.report", json!({ "key": format!("suggestion {path} {words}"), "item": item })).map(|said| said.as_str().unwrap_or("noted").to_string())
+            call(
+                "noticed.report",
+                json!({ "key": format!("suggestion {path} {words}"), "item": item }),
+            )
+            .map(|said| said.as_str().unwrap_or("noted").to_string())
         }
         "remember" => {
-            let fact = text(input, "fact")?.split_whitespace().collect::<Vec<_>>().join(" ");
+            let fact = text(input, "fact")?
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
             if fact.is_empty() || fact.chars().count() > 400 {
                 return Err("a thing to remember is one sentence of up to 400 characters".into());
             }
@@ -686,8 +883,16 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                     if body.contains(&fact) {
                         return Ok("already remembered".into());
                     }
-                    let gap = if body.ends_with('\n') || body.is_empty() { "" } else { "\n" };
-                    let heading = if body.contains(REMEMBERED) { String::new() } else { format!("\n{REMEMBERED}\n\n") };
+                    let gap = if body.ends_with('\n') || body.is_empty() {
+                        ""
+                    } else {
+                        "\n"
+                    };
+                    let heading = if body.contains(REMEMBERED) {
+                        String::new()
+                    } else {
+                        format!("\n{REMEMBERED}\n\n")
+                    };
                     call(
                         "note.write",
                         json!({ "path": MEMORY, "text": format!("{body}{gap}{heading}{line}\n"), "eol": "lf", "expected_hash": note["hash"] }),
@@ -705,15 +910,21 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             if let Ok(mut index) = core.index() {
                 let _ = index.refresh();
             }
-            let rows = call("props.rows", json!({ "folder": lokus_core::ingest::CUSTOMERS, "deep": true }))?;
-            Ok(customers(rows.as_array().map(Vec::as_slice).unwrap_or_default()))
+            let rows = call(
+                "props.rows",
+                json!({ "folder": lokus_core::ingest::CUSTOMERS, "deep": true }),
+            )?;
+            Ok(customers(
+                rows.as_array().map(Vec::as_slice).unwrap_or_default(),
+            ))
         }
         "record_customer" => {
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or(0);
-            let mut wrote = lokus_core::ingest::apply(&core.vault, input, now).map_err(|e| e.to_string())?;
+            let mut wrote =
+                lokus_core::ingest::apply(&core.vault, input, now).map_err(|e| e.to_string())?;
             // A conversation arrives as many events; each is filed like a single one would be.
             let many = input["events"].as_array().cloned().unwrap_or_default();
             if many.len() > 50 {
@@ -721,7 +932,10 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             }
             for event in many {
                 let fact = json!({ "customer": input["customer"], "name": input["name"], "source": input["source"], "event": event });
-                wrote.extend(lokus_core::ingest::apply(&core.vault, &fact, now).map_err(|e| e.to_string())?);
+                wrote.extend(
+                    lokus_core::ingest::apply(&core.vault, &fact, now)
+                        .map_err(|e| e.to_string())?,
+                );
             }
             wrote.dedup();
             Ok(if wrote.is_empty() {
@@ -750,7 +964,9 @@ mod tests {
     fn a_customer_is_recorded_once_and_then_listed_with_what_is_known() {
         let dir = tempfile::tempdir().unwrap();
         let core = Core::open(dir.path()).unwrap();
-        assert!(run(&core, "list_customers", &json!({})).unwrap().contains("no customers yet"));
+        assert!(run(&core, "list_customers", &json!({}))
+            .unwrap()
+            .contains("no customers yet"));
 
         let fact = json!({
             "customer": "acme.com", "name": "Acme", "source": "slack",
@@ -759,40 +975,88 @@ mod tests {
             "person": { "name": "Dana Whitlock", "role": "Head of Ops" },
         });
         let wrote = run(&core, "record_customer", &fact).unwrap();
-        assert!(wrote.contains("customers/Acme.md") && wrote.contains("people/Dana Whitlock.md"), "{wrote}");
-        assert!(run(&core, "record_customer", &fact).unwrap().contains("nothing changed"));
+        assert!(
+            wrote.contains("customers/Acme.md") && wrote.contains("people/Dana Whitlock.md"),
+            "{wrote}"
+        );
+        assert!(run(&core, "record_customer", &fact)
+            .unwrap()
+            .contains("nothing changed"));
         // A whole conversation in one call: every message is kept, in the customer's folder.
         let talk = json!({ "customer": "acme.com", "source": "slack", "events": [
             { "id": "t1", "kind": "message", "thread": "export", "direction": "in", "from": "Dana", "text": "Any update on the export?" },
             { "id": "t2", "kind": "message", "thread": "export", "direction": "out", "from": "Pratham", "text": "Shipping Friday." },
         ] });
         let kept = run(&core, "record_customer", &talk).unwrap();
-        assert!(kept.contains("slack-t1.md") && kept.contains("slack-t2.md"), "{kept}");
+        assert!(
+            kept.contains("slack-t1.md") && kept.contains("slack-t2.md"),
+            "{kept}"
+        );
         // A fact that makes no sense comes back as something the model can act on.
         assert!(run(&core, "record_customer", &json!({ "set": {} })).is_err());
 
         // Work is tracked as tasks, numbered, tied to the customer, and updated rather than repeated.
-        assert!(run(&core, "list_tasks", &json!({})).unwrap().contains("no open tasks"));
+        assert!(run(&core, "list_tasks", &json!({}))
+            .unwrap()
+            .contains("no open tasks"));
         let made = run(&core, "record_task", &json!({ "title": "Fix the export", "priority": "high", "customer": "Acme", "labels": ["bug", "churn-risk"] })).unwrap();
         assert_eq!(made, "T-1 is at tasks/Fix the export.md");
-        run(&core, "record_task", &json!({ "title": "Write the audit log", "priority": "low" })).unwrap();
-        run(&core, "record_task", &json!({ "key": "T-2", "status": "done" })).unwrap();
+        run(
+            &core,
+            "record_task",
+            &json!({ "title": "Write the audit log", "priority": "low" }),
+        )
+        .unwrap();
+        run(
+            &core,
+            "record_task",
+            &json!({ "key": "T-2", "status": "done" }),
+        )
+        .unwrap();
         let board = run(&core, "list_tasks", &json!({})).unwrap();
-        assert!(board.starts_with("1 tasks (1 finished ones not shown)."), "{board}");
+        assert!(
+            board.starts_with("1 tasks (1 finished ones not shown)."),
+            "{board}"
+        );
         assert!(board.contains("T-1 Fix the export; status todo; priority high; customer Acme; labels bug, churn-risk"), "{board}");
 
         // What it is told to remember is kept once, in a note the person can read.
-        run(&core, "remember", &json!({ "fact": "Pratham owns the  Acme account." })).unwrap();
-        run(&core, "remember", &json!({ "fact": "Replies to customers are drafted, never sent." })).unwrap();
-        assert_eq!(run(&core, "remember", &json!({ "fact": "Pratham owns the Acme account." })).unwrap(), "already remembered");
+        run(
+            &core,
+            "remember",
+            &json!({ "fact": "Pratham owns the  Acme account." }),
+        )
+        .unwrap();
+        run(
+            &core,
+            "remember",
+            &json!({ "fact": "Replies to customers are drafted, never sent." }),
+        )
+        .unwrap();
+        assert_eq!(
+            run(
+                &core,
+                "remember",
+                &json!({ "fact": "Pratham owns the Acme account." })
+            )
+            .unwrap(),
+            "already remembered"
+        );
         let memory = std::fs::read_to_string(dir.path().join("Assistant.md")).unwrap();
         assert_eq!(memory.matches("## Remembered").count(), 1, "{memory}");
         assert_eq!(memory.matches("\n- ").count(), 2, "{memory}");
 
         let listed = run(&core, "list_customers", &json!({})).unwrap();
         assert!(listed.starts_with("1 customers."), "{listed}");
-        assert!(listed.contains("Acme (customers/Acme.md)") && listed.contains("plan: Scale"), "{listed}");
-        assert!(listed.contains("1 open issues") && listed.contains("Details in use: domain, health, plan"), "{listed}");
+        assert!(
+            listed.contains("Acme (customers/Acme.md)") && listed.contains("plan: Scale"),
+            "{listed}"
+        );
+        assert!(
+            listed.contains("1 open issues")
+                && listed.contains("Details in use: domain, health, plan"),
+            "{listed}"
+        );
     }
 
     #[test]
@@ -821,10 +1085,18 @@ mod tests {
 
     #[test]
     fn a_long_note_is_read_in_parts_that_join_back_exactly() {
-        let body: String = (1..=4000).map(|n| format!("line {n} of a long note\n")).collect();
+        let body: String = (1..=4000)
+            .map(|n| format!("line {n} of a long note\n"))
+            .collect();
         let first = read_part(&body, 1).unwrap();
         assert!(first.len() <= READ_CHARS + 80);
-        let next: usize = first.rsplit("from_line=").next().unwrap().trim_end_matches(".]").parse().unwrap();
+        let next: usize = first
+            .rsplit("from_line=")
+            .next()
+            .unwrap()
+            .trim_end_matches(".]")
+            .parse()
+            .unwrap();
         let mut joined: String = first.rsplit_once("[Lines").unwrap().0.to_string();
         let mut from = next;
         loop {

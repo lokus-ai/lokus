@@ -94,7 +94,10 @@ pub async fn ingest(
         .and_then(|v| v.strip_prefix("Bearer "))
         .filter(|k| k.starts_with("lk_"))
         .ok_or(Error::Unauthorized)?;
-    let workspace = app.store.key_workspace(&hash(key))?.ok_or(Error::Unauthorized)?;
+    let workspace = app
+        .store
+        .key_workspace(&hash(key))?
+        .ok_or(Error::Unauthorized)?;
 
     let facts: Vec<&Value> = match body.get("items") {
         Some(Value::Array(items)) => items.iter().collect(),
@@ -115,7 +118,9 @@ pub async fn ingest(
                 .and_then(Value::as_str)
                 .is_some_and(|c| !c.trim().is_empty() && c.chars().count() <= 120)
         };
-        let about = short("customer") || (short("kind") && short("id")) || fact.get("log").is_some_and(Value::is_object);
+        let about = short("customer")
+            || (short("kind") && short("id"))
+            || fact.get("log").is_some_and(Value::is_object);
         if !fact.is_object() || !about {
             return Err(Error::BadRequest(
                 "each fact says what it is about: {\"customer\": \"acme.com\", ...}, {\"kind\": \"order\", \"id\": \"A-1\", ...} or {\"log\": {\"message\": \"...\"}}".into(),
@@ -181,14 +186,18 @@ pub async fn ack(
     if body.seqs.len() > 500 {
         return Err(Error::BadRequest("too many at once".into()));
     }
-    let done = app.store.ack_inbox(&id, device(&body.device)?, &body.seqs)?;
+    let done = app
+        .store
+        .ack_inbox(&id, device(&body.device)?, &body.seqs)?;
     Ok(Json(json!({ "done": done })))
 }
 
 fn device(raw: &str) -> Result<&str> {
     let ok = !raw.is_empty()
         && raw.len() <= 64
-        && raw.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        && raw
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
     if ok {
         Ok(raw)
     } else {

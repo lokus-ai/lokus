@@ -46,7 +46,12 @@ pub(crate) fn file_name(raw: &str) -> Result<String> {
         cleaned = cleaned.replace("..", ".");
     }
     // No dot at the end either: "Acme Inc." would otherwise become the file "Acme Inc..md".
-    let cleaned = cleaned.trim().trim_start_matches(['.', '-']).trim_end_matches('.').trim().to_string();
+    let cleaned = cleaned
+        .trim()
+        .trim_start_matches(['.', '-'])
+        .trim_end_matches('.')
+        .trim()
+        .to_string();
     if cleaned.is_empty() || cleaned.chars().count() > MAX_NAME {
         return Err(bad("a name must be 1 to 120 characters"));
     }
@@ -212,18 +217,31 @@ pub(crate) fn find_customer(vault: &Vault, key: &str) -> Result<Option<String>> 
 fn looks_like_domain(key: &str) -> bool {
     key.contains('.')
         && !key.starts_with('.')
-        && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
 }
 
 /// Keep something that happened, in the folder of whatever it happened to. Sent again, it is
 /// the same event: only what moved on is changed.
-pub(crate) fn write_event(vault: &Vault, folder: &str, source: &str, event: &Event, now: i64, changed: &mut Vec<String>) -> Result<()> {
+pub(crate) fn write_event(
+    vault: &Vault,
+    folder: &str,
+    source: &str,
+    event: &Event,
+    now: i64,
+    changed: &mut Vec<String>,
+) -> Result<()> {
     let id = event.id.clone().unwrap_or_else(|| {
         let seed = format!("{}|{}", event.title, event.at.as_deref().unwrap_or(""));
         blake3::hash(seed.as_bytes()).to_hex()[..12].to_string()
     });
     // An id that already starts with where it came from is not given that prefix twice.
-    let named = if id.starts_with(&format!("{source}-")) { id.clone() } else { format!("{source}-{id}") };
+    let named = if id.starts_with(&format!("{source}-")) {
+        id.clone()
+    } else {
+        format!("{source}-{id}")
+    };
     let note = format!("{folder}/{}.md", file_name(&named)?);
     let at = event.at.clone().unwrap_or_else(|| iso(now));
     let props = [
@@ -279,7 +297,9 @@ pub fn apply(vault: &Vault, fact: &Value, now: i64) -> Result<Vec<String>> {
     // Read the whole fact before writing any of it, so a bad one changes nothing.
     let mut details = Vec::new();
     if let Some(set) = fact.get("set") {
-        let set = set.as_object().ok_or_else(|| bad("set is a list of details"))?;
+        let set = set
+            .as_object()
+            .ok_or_else(|| bad("set is a list of details"))?;
         if set.len() > MAX_DETAILS {
             return Err(bad("too many details in one fact"));
         }
@@ -315,7 +335,10 @@ pub fn apply(vault: &Vault, fact: &Value, now: i64) -> Result<Vec<String>> {
     let folder = format!("{CUSTOMERS}/{name}");
 
     let before = frontmatter::read(&vault.read(&path)?.text);
-    let props: Vec<(&str, Value)> = details.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+    let props: Vec<(&str, Value)> = details
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.clone()))
+        .collect();
     if update(vault, &path, &props)? || created {
         changed.push(path.clone());
     }
@@ -398,7 +421,12 @@ pub(crate) fn read_event(value: &Value) -> Result<Event> {
             None => Ok(None),
         }
     };
-    let text = value.get("text").and_then(Value::as_str).unwrap_or("").trim().to_string();
+    let text = value
+        .get("text")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if text.len() > MAX_TEXT {
         return Err(bad("the text is too long"));
     }
@@ -414,7 +442,11 @@ pub(crate) fn read_event(value: &Value) -> Result<Event> {
     };
     let kind = match text_of(value, "kind").unwrap_or("event") {
         kind @ ("event" | "issue" | "message" | "meeting") => kind.to_string(),
-        other => return Err(bad(format!("{other:?} is not event, issue, message or meeting"))),
+        other => {
+            return Err(bad(format!(
+                "{other:?} is not event, issue, message or meeting"
+            )))
+        }
     };
     let direction = match text_of(value, "direction") {
         None => None,
@@ -447,8 +479,12 @@ struct Person {
 }
 
 fn read_person(value: &Value) -> Result<Person> {
-    let object = value.as_object().ok_or_else(|| bad("a person is a list of details"))?;
-    let name = text_of(value, "name").ok_or_else(|| bad("a person needs a name"))?.to_string();
+    let object = value
+        .as_object()
+        .ok_or_else(|| bad("a person is a list of details"))?;
+    let name = text_of(value, "name")
+        .ok_or_else(|| bad("a person needs a name"))?
+        .to_string();
     let mut details = Vec::new();
     for (raw, detail) in object {
         if raw == "name" || raw == "customer" {
@@ -480,19 +516,33 @@ mod tests {
         let first = json!({ "customer": "acme.com", "name": "Acme", "set": { "plan": "Growth", "MRR": 900 } });
         assert_eq!(apply(&v, &first, 100).unwrap(), ["customers/Acme.md"]);
         let made = props(&v, "customers/Acme.md");
-        assert_eq!((made["type"].clone(), made["domain"].clone()), (json!("customer"), json!("acme.com")));
-        assert_eq!((made["plan"].clone(), made["mrr"].clone()), (json!("Growth"), json!(900)));
+        assert_eq!(
+            (made["type"].clone(), made["domain"].clone()),
+            (json!("customer"), json!("acme.com"))
+        );
+        assert_eq!(
+            (made["plan"].clone(), made["mrr"].clone()),
+            (json!("Growth"), json!(900))
+        );
 
         // The same fact again changes nothing, so a sender can retry.
         assert!(apply(&v, &first, 101).unwrap().is_empty());
 
         // A new value is set, and the change is written down beside the customer.
-        let changed = apply(&v, &json!({ "customer": "ACME.com", "set": { "mrr": 1200 } }), 1_794_606_005).unwrap();
+        let changed = apply(
+            &v,
+            &json!({ "customer": "ACME.com", "set": { "mrr": 1200 } }),
+            1_794_606_005,
+        )
+        .unwrap();
         assert_eq!(changed.len(), 2);
         assert_eq!(props(&v, "customers/Acme.md")["mrr"], json!(1200));
         let history = props(&v, &changed[1]);
         assert_eq!(history["field"], json!("mrr"));
-        assert_eq!(history["title"], json!("Monthly revenue changed from 900 to 1200"));
+        assert_eq!(
+            history["title"],
+            json!("Monthly revenue changed from 900 to 1200")
+        );
         assert_eq!(history["at"], json!("2026-11-13T21:40:05Z"));
     }
 
@@ -504,12 +554,25 @@ mod tests {
                 "event": { "id": "ENG-1", "kind": "issue", "title": "Export fails", "status": status, "from": "Dana", "text": "Third report." } })
         };
         let made = apply(&v, &issue("todo"), 100).unwrap();
-        assert_eq!(made, ["customers/Acme.md", "customers/Acme/linear-ENG-1.md"]);
-        assert!(v.read(&made[1]).unwrap().text.ends_with("\n\nThird report.\n"));
+        assert_eq!(
+            made,
+            ["customers/Acme.md", "customers/Acme/linear-ENG-1.md"]
+        );
+        assert!(v
+            .read(&made[1])
+            .unwrap()
+            .text
+            .ends_with("\n\nThird report.\n"));
         // Sent again later, with no time of its own: still nothing changes.
         assert!(apply(&v, &issue("todo"), 5_000).unwrap().is_empty());
-        assert_eq!(apply(&v, &issue("done"), 100).unwrap(), ["customers/Acme/linear-ENG-1.md"]);
-        assert_eq!(props(&v, "customers/Acme/linear-ENG-1.md")["status"], json!("done"));
+        assert_eq!(
+            apply(&v, &issue("done"), 100).unwrap(),
+            ["customers/Acme/linear-ENG-1.md"]
+        );
+        assert_eq!(
+            props(&v, "customers/Acme/linear-ENG-1.md")["status"],
+            json!("done")
+        );
     }
 
     #[test]
@@ -519,9 +582,18 @@ mod tests {
         apply(&v, &fact, 100).unwrap();
         // A name ending in a dot does not leave a doubled dot in the file's name.
         let made = apply(&v, &json!({ "customer": "Neuron Industries Inc.", "source": "slack", "event": { "id": "slack-C1-99", "title": "hello" } }), 100).unwrap();
-        assert_eq!(made, ["customers/Neuron Industries Inc.md", "customers/Neuron Industries Inc/slack-C1-99.md"]);
+        assert_eq!(
+            made,
+            [
+                "customers/Neuron Industries Inc.md",
+                "customers/Neuron Industries Inc/slack-C1-99.md"
+            ]
+        );
         let dana = props(&v, "people/Dana Whitlock.md");
-        assert_eq!((dana["type"].clone(), dana["customer"].clone()), (json!("person"), json!("Acme")));
+        assert_eq!(
+            (dana["type"].clone(), dana["customer"].clone()),
+            (json!("person"), json!("Acme"))
+        );
         assert_eq!(dana["email"], json!("dana@acme.com"));
     }
 
@@ -529,9 +601,14 @@ mod tests {
     fn a_fact_cannot_reach_outside_its_place_or_break_a_note() {
         let (_dir, v) = vault();
         // A name is only ever a file name, never a path.
-        let sneaky = json!({ "customer": "../../etc/passwd", "event": { "id": "../../x", "title": "t" } });
+        let sneaky =
+            json!({ "customer": "../../etc/passwd", "event": { "id": "../../x", "title": "t" } });
         let made = apply(&v, &sneaky, 100).unwrap();
-        assert!(made.iter().all(|p| p.starts_with("customers/") && !p.contains("..")), "{made:?}");
+        assert!(
+            made.iter()
+                .all(|p| p.starts_with("customers/") && !p.contains("..")),
+            "{made:?}"
+        );
         // A detail cannot change what a note is, and a bad fact writes nothing at all.
         for bad in [
             json!({ "customer": "Acme", "set": { "type": "note" } }),
@@ -546,6 +623,9 @@ mod tests {
         let loud = json!({ "customer": "Acme", "set": { "plan": "pro\n---\ntype: evil" } });
         apply(&v, &loud, 100).unwrap();
         let acme = props(&v, "customers/Acme.md");
-        assert_eq!((acme["type"].clone(), acme["plan"].clone()), (json!("customer"), json!("pro --- type: evil")));
+        assert_eq!(
+            (acme["type"].clone(), acme["plan"].clone()),
+            (json!("customer"), json!("pro --- type: evil"))
+        );
     }
 }

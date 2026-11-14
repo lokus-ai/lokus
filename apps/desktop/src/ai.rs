@@ -129,7 +129,12 @@ pub async fn ai_mcp_check(server: McpServer) -> Result<Vec<Value>, Value> {
 /// Run one request. Progress arrives as `ai:event` messages tagged with the
 /// chat; the reply to this call is the messages to add to the conversation.
 #[tauri::command]
-pub async fn ai_send(app: AppHandle, chat: String, messages: Vec<Value>, briefing: String) -> Result<Value, Value> {
+pub async fn ai_send(
+    app: AppHandle,
+    chat: String,
+    messages: Vec<Value>,
+    briefing: String,
+) -> Result<Value, Value> {
     // App tools run in the window: it is told what to do and answers through `ai_act_done`.
     let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
     let act: AppRunner = Arc::new(move |id: &str, name: &str, input: &Value| {
@@ -137,7 +142,10 @@ pub async fn ai_send(app: AppHandle, chat: String, messages: Vec<Value>, briefin
         if let Ok(mut acting) = acting.lock() {
             acting.insert(id.to_string(), answer);
         }
-        let _ = window.emit("ai:act", json!({ "chat": tag, "id": id, "name": name, "input": input }));
+        let _ = window.emit(
+            "ai:act",
+            json!({ "chat": tag, "id": id, "name": name, "input": input }),
+        );
         wait
     });
     let request = Request {

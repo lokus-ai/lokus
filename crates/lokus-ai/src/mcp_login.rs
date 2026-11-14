@@ -119,7 +119,11 @@ pub async fn login(server: &McpServer, show: impl FnOnce(&str)) -> Result<()> {
         Some(a) => TcpListener::bind(("::1", a.port)).await.ok(),
         None => None,
     };
-    let host = if app.is_some() { "localhost" } else { "127.0.0.1" };
+    let host = if app.is_some() {
+        "localhost"
+    } else {
+        "127.0.0.1"
+    };
     let redirect = format!("http://{host}:{port}/callback");
 
     let mut request = AuthorizationRequest::new(redirect).with_client_name("Lokus");

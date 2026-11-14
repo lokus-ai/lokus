@@ -80,7 +80,13 @@ pub fn list(vault: &Vault) -> Result<Vec<Summary>> {
 /// Keep a conversation as it now stands. `body` is whatever the app needs to show and continue it.
 pub fn save(vault: &Vault, id: &str, title: &str, updated: i64, body: &Value) -> Result<()> {
     let path = file(vault, id)?;
-    let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(120).collect();
+    let title: String = title
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(120)
+        .collect();
     let text = json!({ "id": id, "title": title, "updated": updated, "body": body }).to_string();
     if text.len() > MAX_BYTES {
         return Err(bad("this conversation is too long to keep"));
@@ -114,14 +120,34 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = Vault::open(dir.path()).unwrap();
         assert!(list(&vault).unwrap().is_empty());
-        save(&vault, "chat-1", "First   question\nwith a break", 100, &json!({ "items": [1] })).unwrap();
+        save(
+            &vault,
+            "chat-1",
+            "First   question\nwith a break",
+            100,
+            &json!({ "items": [1] }),
+        )
+        .unwrap();
         save(&vault, "chat-2", "Second", 200, &json!({ "items": [2] })).unwrap();
-        save(&vault, "chat-1", "First question", 300, &json!({ "items": [1, 3] })).unwrap();
+        save(
+            &vault,
+            "chat-1",
+            "First question",
+            300,
+            &json!({ "items": [1, 3] }),
+        )
+        .unwrap();
 
         let all = list(&vault).unwrap();
-        assert_eq!(all.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["chat-1", "chat-2"]);
+        assert_eq!(
+            all.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+            ["chat-1", "chat-2"]
+        );
         assert_eq!(all[0].title, "First question");
-        assert_eq!(load(&vault, "chat-1").unwrap()["body"]["items"], json!([1, 3]));
+        assert_eq!(
+            load(&vault, "chat-1").unwrap()["body"]["items"],
+            json!([1, 3])
+        );
 
         // It lives in the folder that is never synced, and an id cannot name anywhere else.
         assert!(dir.path().join(".lokus/chats/chat-2.json").exists());

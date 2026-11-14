@@ -45,7 +45,13 @@ const CONNECT: std::time::Duration = std::time::Duration::from_secs(20);
 pub async fn connect_soon(server: &McpServer) -> Result<Connection> {
     match tokio::time::timeout(CONNECT, connect(server)).await {
         Ok(result) => result,
-        Err(_) => Err(AiError::Mcp { server: server.name.clone(), message: format!("it did not answer within {} seconds and was left out of this reply", CONNECT.as_secs()) }),
+        Err(_) => Err(AiError::Mcp {
+            server: server.name.clone(),
+            message: format!(
+                "it did not answer within {} seconds and was left out of this reply",
+                CONNECT.as_secs()
+            ),
+        }),
     }
 }
 
@@ -113,7 +119,13 @@ impl Connection {
         // A service that never answers must not hold the whole reply up for ever.
         let result = tokio::time::timeout(CALL, self.service.call_tool(params))
             .await
-            .map_err(|_| format!("{} did not answer within {} seconds; it was given up on", self.server, CALL.as_secs()))?
+            .map_err(|_| {
+                format!(
+                    "{} did not answer within {} seconds; it was given up on",
+                    self.server,
+                    CALL.as_secs()
+                )
+            })?
             .map_err(|e| e.to_string())?;
         let failed = result.is_error.unwrap_or(false);
         // Text parts are joined; anything else is passed on as JSON.

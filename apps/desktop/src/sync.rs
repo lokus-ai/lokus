@@ -48,7 +48,11 @@ impl Sync {
     /// Tell the running connection to stop. It ends at its next pause; whoever connects next
     /// waits for that.
     pub fn stop(&self) {
-        let old = self.running.lock().ok().and_then(|mut running| running.take());
+        let old = self
+            .running
+            .lock()
+            .ok()
+            .and_then(|mut running| running.take());
         if let Some(old) = old {
             old.task.abort();
             if let Ok(mut ending) = self.ending.lock() {
@@ -73,7 +77,10 @@ pub async fn sync_connect(
     let ending = {
         let sync = app.state::<Sync>();
         sync.stop();
-        let mut ending = sync.ending.lock().map_err(|_| fail("sync", "sync stopped"))?;
+        let mut ending = sync
+            .ending
+            .lock()
+            .map_err(|_| fail("sync", "sync stopped"))?;
         std::mem::take(&mut *ending)
     };
     for task in ending {

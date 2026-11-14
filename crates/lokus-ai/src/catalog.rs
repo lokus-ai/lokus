@@ -81,40 +81,161 @@ const SLACK: App = App {
 
 /// The registered app for a tool server, when signing in to it needs one.
 pub fn app_for(name: &str, url: &str) -> Option<App> {
-    all().into_iter().find(|c| c.id == name && c.url == url)?.app
+    all()
+        .into_iter()
+        .find(|c| c.id == name && c.url == url)?
+        .app
 }
 
-const fn open(id: &'static str, name: &'static str, kind: &'static str, about: &'static str, url: &'static str) -> Connector {
-    Connector { id, name, about, url, kind, ready: Ready::Yes, app: None }
+const fn open(
+    id: &'static str,
+    name: &'static str,
+    kind: &'static str,
+    about: &'static str,
+    url: &'static str,
+) -> Connector {
+    Connector {
+        id,
+        name,
+        about,
+        url,
+        kind,
+        ready: Ready::Yes,
+        app: None,
+    }
 }
 
-const fn closed(id: &'static str, name: &'static str, kind: &'static str, about: &'static str, url: &'static str) -> Connector {
-    Connector { id, name, about, url, kind, ready: Ready::NeedsRegistration, app: None }
+const fn closed(
+    id: &'static str,
+    name: &'static str,
+    kind: &'static str,
+    about: &'static str,
+    url: &'static str,
+) -> Connector {
+    Connector {
+        id,
+        name,
+        about,
+        url,
+        kind,
+        ready: Ready::NeedsRegistration,
+        app: None,
+    }
 }
 
 /// Every connector, the ready ones first.
 pub fn all() -> Vec<Connector> {
     vec![
-        open("linear", "Linear", "Issues", "Read and update issues, projects and customer requests.", "https://mcp.linear.app/mcp"),
-        open("notion", "Notion", "Docs", "Search and read pages and databases; create and update pages.", "https://mcp.notion.com/mcp"),
-        open("granola", "Granola", "Meetings", "Read meeting notes and transcripts.", "https://mcp.granola.ai/mcp"),
-        open("sentry", "Sentry", "Errors", "Look up errors, issues and releases.", "https://mcp.sentry.dev/mcp"),
-        open("atlassian", "Jira and Confluence", "Issues", "Search and update Jira issues and Confluence pages.", "https://mcp.atlassian.com/v2/mcp"),
-        open("stripe", "Stripe", "Billing", "Look up customers, subscriptions, invoices and payments.", "https://mcp.stripe.com"),
-        open("intercom", "Intercom", "Support", "Read conversations and contacts.", "https://mcp.intercom.com/mcp"),
-        open("zapier", "Zapier", "Automation", "Run the actions you have set up in Zapier, across thousands of apps.", "https://mcp.zapier.com/api/mcp/mcp"),
+        open(
+            "linear",
+            "Linear",
+            "Issues",
+            "Read and update issues, projects and customer requests.",
+            "https://mcp.linear.app/mcp",
+        ),
+        open(
+            "notion",
+            "Notion",
+            "Docs",
+            "Search and read pages and databases; create and update pages.",
+            "https://mcp.notion.com/mcp",
+        ),
+        open(
+            "granola",
+            "Granola",
+            "Meetings",
+            "Read meeting notes and transcripts.",
+            "https://mcp.granola.ai/mcp",
+        ),
+        open(
+            "sentry",
+            "Sentry",
+            "Errors",
+            "Look up errors, issues and releases.",
+            "https://mcp.sentry.dev/mcp",
+        ),
+        open(
+            "atlassian",
+            "Jira and Confluence",
+            "Issues",
+            "Search and update Jira issues and Confluence pages.",
+            "https://mcp.atlassian.com/v2/mcp",
+        ),
+        open(
+            "stripe",
+            "Stripe",
+            "Billing",
+            "Look up customers, subscriptions, invoices and payments.",
+            "https://mcp.stripe.com",
+        ),
+        open(
+            "intercom",
+            "Intercom",
+            "Support",
+            "Read conversations and contacts.",
+            "https://mcp.intercom.com/mcp",
+        ),
+        open(
+            "zapier",
+            "Zapier",
+            "Automation",
+            "Run the actions you have set up in Zapier, across thousands of apps.",
+            "https://mcp.zapier.com/api/mcp/mcp",
+        ),
         Connector {
             // Works in the workspace the Slack app was made in; other workspaces need the app
             // to be published in the Slack Marketplace first.
             app: Some(SLACK),
-            ..open("slack", "Slack", "Messages", "Search and read channels and threads; send and draft messages.", "https://mcp.slack.com/mcp")
+            ..open(
+                "slack",
+                "Slack",
+                "Messages",
+                "Search and read channels and threads; send and draft messages.",
+                "https://mcp.slack.com/mcp",
+            )
         },
-        closed("github", "GitHub", "Code", "Read and update issues, pull requests and code.", "https://api.githubcopilot.com/mcp/"),
-        closed("gmail", "Gmail", "Messages", "Search and read mail; draft replies.", "https://gmailmcp.googleapis.com/mcp/v1"),
-        closed("google-calendar", "Google Calendar", "Meetings", "Read and create events.", "https://calendarmcp.googleapis.com/mcp/v1"),
-        closed("google-drive", "Google Drive", "Docs", "Search and read files.", "https://drivemcp.googleapis.com/mcp/v1"),
-        closed("asana", "Asana", "Issues", "Read and update tasks and projects.", "https://mcp.asana.com/v2/mcp"),
-        closed("hubspot", "HubSpot", "Customers", "Read and update contacts, companies and deals.", "https://mcp.hubspot.com"),
+        closed(
+            "github",
+            "GitHub",
+            "Code",
+            "Read and update issues, pull requests and code.",
+            "https://api.githubcopilot.com/mcp/",
+        ),
+        closed(
+            "gmail",
+            "Gmail",
+            "Messages",
+            "Search and read mail; draft replies.",
+            "https://gmailmcp.googleapis.com/mcp/v1",
+        ),
+        closed(
+            "google-calendar",
+            "Google Calendar",
+            "Meetings",
+            "Read and create events.",
+            "https://calendarmcp.googleapis.com/mcp/v1",
+        ),
+        closed(
+            "google-drive",
+            "Google Drive",
+            "Docs",
+            "Search and read files.",
+            "https://drivemcp.googleapis.com/mcp/v1",
+        ),
+        closed(
+            "asana",
+            "Asana",
+            "Issues",
+            "Read and update tasks and projects.",
+            "https://mcp.asana.com/v2/mcp",
+        ),
+        closed(
+            "hubspot",
+            "HubSpot",
+            "Customers",
+            "Read and update contacts, companies and deals.",
+            "https://mcp.hubspot.com",
+        ),
         Connector {
             id: "imessage",
             name: "iMessage",
@@ -138,11 +259,26 @@ mod tests {
         for c in &all {
             assert!(seen.insert(c.id), "{} is listed twice", c.id);
             // The id becomes part of a tool's name, so it stays to letters, digits and `-`.
-            assert!(c.id.chars().all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-'), "{}", c.id);
+            assert!(
+                c.id.chars()
+                    .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-'),
+                "{}",
+                c.id
+            );
             assert_eq!(c.url.is_empty(), c.ready == Ready::NotBuilt, "{}", c.id);
-            assert!(c.url.is_empty() || c.url.starts_with("https://"), "{} must be reached over https", c.id);
+            assert!(
+                c.url.is_empty() || c.url.starts_with("https://"),
+                "{} must be reached over https",
+                c.id
+            );
             if let Some(app) = c.app {
-                assert!(app.client_id.chars().all(|ch| ch.is_ascii_digit() || ch == '.'), "{}", c.id);
+                assert!(
+                    app.client_id
+                        .chars()
+                        .all(|ch| ch.is_ascii_digit() || ch == '.'),
+                    "{}",
+                    c.id
+                );
                 assert!(app.port > 1024 && !app.scopes.is_empty(), "{}", c.id);
             }
         }

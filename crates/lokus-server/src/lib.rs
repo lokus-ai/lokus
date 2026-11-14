@@ -96,7 +96,12 @@ impl App {
     }
 
     /// A relay that also hands out the app's own releases and news, published with this key.
-    pub fn with_publisher(store: Store, auth: Auth, limits: Limits, publish_key: Option<String>) -> Arc<Self> {
+    pub fn with_publisher(
+        store: Store,
+        auth: Auth,
+        limits: Limits,
+        publish_key: Option<String>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             store,
             auth,
@@ -187,7 +192,10 @@ pub fn router(app: Arc<App>) -> Router {
             "/v1/ingest",
             post(inbox::ingest).layer(DefaultBodyLimit::max(inbox::MAX_BODY)),
         )
-        .route("/v1/app/update/{target}/{arch}/{current}", get(releases::update))
+        .route(
+            "/v1/app/update/{target}/{arch}/{current}",
+            get(releases::update),
+        )
         .route("/v1/app/releases", get(releases::list))
         .route(
             "/v1/app/releases/{version}",

@@ -129,8 +129,9 @@ fn vault_default(app: AppHandle, open: bool) -> Result<Value, Value> {
     if !open {
         return Ok(json!({ "root": folder }));
     }
-    std::fs::create_dir_all(&folder)
-        .map_err(|e| json!({ "code": "io", "message": format!("Could not make {}: {e}", folder.display()) }))?;
+    std::fs::create_dir_all(&folder).map_err(
+        |e| json!({ "code": "io", "message": format!("Could not make {}: {e}", folder.display()) }),
+    )?;
     open_vault(&app, &folder.to_string_lossy())
 }
 

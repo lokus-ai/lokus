@@ -41,9 +41,9 @@ pub fn open(app: &AppHandle) -> Result<String, Value> {
                 .inner_size(size.width as f64 / scale, size.height as f64 / scale);
         }
     }
-    builder
-        .build()
-        .map_err(|e| json!({ "code": "window", "message": format!("Could not open another window: {e}") }))?;
+    builder.build().map_err(
+        |e| json!({ "code": "window", "message": format!("Could not open another window: {e}") }),
+    )?;
     Ok(label)
 }
 

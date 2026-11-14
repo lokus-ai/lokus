@@ -783,7 +783,10 @@ mod tests {
         a.write("Other.md", "other\n");
         exchange(&mut a, &mut b);
         // A hostile or broken device moves two notes to places no device may write.
-        for (note, bad) in [("Plan.md", "../evil.md"), ("Other.md", ".lokus/plugins/evil/main.js")] {
+        for (note, bad) in [
+            ("Plan.md", "../evil.md"),
+            ("Other.md", ".lokus/plugins/evil/main.js"),
+        ] {
             let id = a.engine.doc_id(note).unwrap().unwrap();
             let manifest = a.engine.load(MANIFEST).unwrap();
             let entry = Entry {
@@ -799,7 +802,11 @@ mod tests {
         assert!(!outside.exists());
         assert!(!b.vault.root().join(".lokus/plugins/evil/main.js").exists());
         assert_eq!(b.read("Plan.md").as_deref(), Some("the plan\n"));
-        assert!(b.engine.events.iter().any(|e| matches!(e, Event::Skipped { path } if path == "../evil.md")));
+        assert!(b
+            .engine
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Skipped { path } if path == "../evil.md")));
         // And the next ordinary change still arrives.
         a.write("Later.md", "still syncing\n");
         a.engine.scan().unwrap();

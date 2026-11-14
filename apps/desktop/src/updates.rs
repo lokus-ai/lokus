@@ -54,7 +54,9 @@ fn plain(error: &Error) -> Value {
 /// The `.app` this copy is running from, on a Mac.
 fn bundle() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    exe.ancestors().find(|p| p.extension().is_some_and(|e| e == "app")).map(Path::to_path_buf)
+    exe.ancestors()
+        .find(|p| p.extension().is_some_and(|e| e == "app"))
+        .map(Path::to_path_buf)
 }
 
 /// A reason this copy cannot be replaced where it is, in words that say what to do about it.
@@ -83,7 +85,11 @@ fn stuck() -> Option<&'static str> {
 
 /// Is there a newer version for this computer? `server` is where releases are published.
 #[tauri::command]
-pub async fn update_check(app: AppHandle, state: State<'_, Updates>, server: String) -> Result<Value, Value> {
+pub async fn update_check(
+    app: AppHandle,
+    state: State<'_, Updates>,
+    server: String,
+) -> Result<Value, Value> {
     let current = app.package_info().version.to_string();
     if let Some(version) = state.installed.lock().ok().and_then(|v| v.clone()) {
         return Ok(json!({ "current": current, "version": version, "installed": true }));
@@ -91,11 +97,20 @@ pub async fn update_check(app: AppHandle, state: State<'_, Updates>, server: Str
     let server = server.trim_end_matches('/');
     let local = server.starts_with("http://127.0.0.1:") || server.starts_with("http://localhost:");
     if !server.starts_with("https://") && !local {
-        return Err(fail("no_server", "This copy of Lokus was not told where updates come from."));
+        return Err(fail(
+            "no_server",
+            "This copy of Lokus was not told where updates come from.",
+        ));
     }
-    let endpoint = format!("{server}/v1/app/update/{{{{target}}}}/{{{{arch}}}}/{{{{current_version}}}}")
-        .parse()
-        .map_err(|_| fail("no_server", "The address updates come from is not a web address."))?;
+    let endpoint =
+        format!("{server}/v1/app/update/{{{{target}}}}/{{{{arch}}}}/{{{{current_version}}}}")
+            .parse()
+            .map_err(|_| {
+                fail(
+                    "no_server",
+                    "The address updates come from is not a web address.",
+                )
+            })?;
     let updater = app
         .updater_builder()
         .endpoints(vec![endpoint])
@@ -126,7 +141,12 @@ pub async fn update_install(app: AppHandle, state: State<'_, Updates>) -> Result
         .lock()
         .ok()
         .and_then(|found| found.clone())
-        .ok_or_else(|| fail("nothing", "There is no update waiting. Check for updates first."))?;
+        .ok_or_else(|| {
+            fail(
+                "nothing",
+                "There is no update waiting. Check for updates first.",
+            )
+        })?;
     if let Some(reason) = stuck() {
         return Err(fail("cannot_replace", reason));
     }
@@ -141,10 +161,15 @@ pub async fn update_install(app: AppHandle, state: State<'_, Updates>) -> Result
             |chunk, total| {
                 received += chunk as u64;
                 // One message per percent, not one per packet.
-                let step = total.filter(|t| *t > 0).map_or(received / 262_144, |t| received * 100 / t);
+                let step = total
+                    .filter(|t| *t > 0)
+                    .map_or(received / 262_144, |t| received * 100 / t);
                 if step != shown {
                     shown = step;
-                    let _ = progress.emit("update:progress", json!({ "received": received, "total": total }));
+                    let _ = progress.emit(
+                        "update:progress",
+                        json!({ "received": received, "total": total }),
+                    );
                 }
             },
             || {

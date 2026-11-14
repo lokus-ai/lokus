@@ -416,18 +416,32 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
         }
         "logs.search" => {
             let a: LogArgs = parse(name, args)?;
-            let want = crate::things::Wanted { query: &a.query, level: &a.level, stream: &a.stream, about: &a.about, hours: a.hours.unwrap_or(24), limit: a.limit.unwrap_or(40).min(200) };
+            let want = crate::things::Wanted {
+                query: &a.query,
+                level: &a.level,
+                stream: &a.stream,
+                about: &a.about,
+                hours: a.hours.unwrap_or(24),
+                limit: a.limit.unwrap_or(40).min(200),
+            };
             crate::things::search(vault, &want, now_secs())
         }
         "noticed.list" => Ok(json!(crate::noticed::list(vault)?)),
         "noticed.report" => {
             let a: NoticedArgs = parse(name, args)?;
-            Ok(json!(crate::noticed::report(vault, &a.key, a.item, now_secs())?))
+            Ok(json!(crate::noticed::report(
+                vault,
+                &a.key,
+                a.item,
+                now_secs()
+            )?))
         }
         "noticed.resolve" => {
             let a: ResolveArgs = parse(name, args)?;
             let today = crate::ingest::iso(now_secs());
-            Ok(json!({ "learned": crate::noticed::resolve(vault, &a.id, &a.state, a.learn, &today[..10])? }))
+            Ok(
+                json!({ "learned": crate::noticed::resolve(vault, &a.id, &a.state, a.learn, &today[..10])? }),
+            )
         }
         "noticed.remove" => {
             let a: IdArgs = parse(name, args)?;

@@ -141,7 +141,12 @@ const FACTS_EVERY: Duration = Duration::from_secs(60);
 /// Take the facts a team's own systems pushed to the relay and write them into the customer
 /// notes, beside the live connection. The relay hands each fact to one device at a time; this
 /// device says so once the notes are written, and the edits then sync like any other.
-async fn facts(link: &Link, config: &Config, arrived: &Notify, report: &(impl Fn(Value) + Send + Sync)) {
+async fn facts(
+    link: &Link,
+    config: &Config,
+    arrived: &Notify,
+    report: &(impl Fn(Value) + Send + Sync),
+) {
     let device = uuid::Uuid::new_v4().simple().to_string();
     let base = format!("/v1/workspaces/{}/inbox", config.workspace);
     loop {
@@ -161,7 +166,9 @@ async fn facts(link: &Link, config: &Config, arrived: &Notify, report: &(impl Fn
             if items.is_empty() {
                 break;
             }
-            let Ok(vault) = with(&link.engine, |e| Ok(e.vault.clone())) else { break };
+            let Ok(vault) = with(&link.engine, |e| Ok(e.vault.clone())) else {
+                break;
+            };
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs() as i64)
@@ -321,7 +328,9 @@ async fn session(
             _ => Error::Net(text),
         });
     }
-    report(json!({ "event": "online", "role": answer["role"], "user": answer["user"], "conn": answer["conn"] }));
+    report(
+        json!({ "event": "online", "role": answer["role"], "user": answer["user"], "conn": answer["conn"] }),
+    );
     let mut renew = tokio::time::interval(RENEW_CHECK);
     renew.tick().await;
     let mut in_flight: HashSet<i64> = HashSet::new();

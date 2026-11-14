@@ -238,8 +238,11 @@ pub struct Outcome {
 pub type Approver = Arc<dyn Fn(&str) -> oneshot::Receiver<bool> + Send + Sync>;
 
 /// Runs an app tool (call id, tool name, input) in the window; resolves to what happened.
-pub type AppRunner =
-    Arc<dyn Fn(&str, &str, &Value) -> oneshot::Receiver<std::result::Result<String, String>> + Send + Sync>;
+pub type AppRunner = Arc<
+    dyn Fn(&str, &str, &Value) -> oneshot::Receiver<std::result::Result<String, String>>
+        + Send
+        + Sync,
+>;
 
 enum Source {
     Vault,
@@ -294,7 +297,14 @@ fn shelf_list(shelf: &[(Tool, Source)], servers: &[String]) -> String {
         }
         text.push_str(&format!("\n{server} ({} tools):\n", mine.len()));
         for tool in mine {
-            let line: String = tool.description.split('\n').next().unwrap_or_default().chars().take(SHELF_LINE).collect();
+            let line: String = tool
+                .description
+                .split('\n')
+                .next()
+                .unwrap_or_default()
+                .chars()
+                .take(SHELF_LINE)
+                .collect();
             text.push_str(&format!("- {}: {}\n", tool.name, line.trim()));
         }
     }
@@ -304,12 +314,22 @@ fn shelf_list(shelf: &[(Tool, Source)], servers: &[String]) -> String {
 /// Tools this conversation has already used or asked for, so they are ready without asking again.
 fn already_wanted(messages: &[Value]) -> std::collections::HashSet<String> {
     let mut names = std::collections::HashSet::new();
-    for block in messages.iter().filter_map(|m| m["content"].as_array()).flatten() {
+    for block in messages
+        .iter()
+        .filter_map(|m| m["content"].as_array())
+        .flatten()
+    {
         if block["type"] != "tool_use" {
             continue;
         }
         match block["name"].as_str() {
-            Some(LOADER) => names.extend(block["input"]["names"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(str::to_string))),
+            Some(LOADER) => names.extend(
+                block["input"]["names"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|n| n.as_str().map(str::to_string)),
+            ),
             Some(name) => {
                 names.insert(name.to_string());
             }
@@ -335,7 +355,12 @@ fn lighten(messages: &mut [Value]) -> usize {
     }
     let mut results: Vec<(usize, usize)> = Vec::new();
     for (m, message) in messages.iter().enumerate() {
-        for (b, block) in message["content"].as_array().into_iter().flatten().enumerate() {
+        for (b, block) in message["content"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
             if block["type"] == "tool_result" {
                 results.push((m, b));
             }
@@ -345,7 +370,9 @@ fn lighten(messages: &mut [Value]) -> usize {
     let mut cut = 0;
     for (m, b) in results.into_iter().take(old) {
         let block = &mut messages[m]["content"][b];
-        let Some(text) = block["content"].as_str() else { continue };
+        let Some(text) = block["content"].as_str() else {
+            continue;
+        };
         if text.chars().count() > STUB + 200 {
             let head: String = text.chars().take(STUB).collect();
             block["content"] = json!(format!("{head}\n[The rest of this result was put away to make room. Run the step again if you need it.]"));
@@ -369,7 +396,9 @@ fn without_blanks(input: &Value, schema: &Value) -> Value {
         .unwrap_or_default();
     let kept = fields
         .iter()
-        .filter(|(key, value)| required.contains(&key.as_str()) || !(value.is_null() || value.as_str() == Some("")))
+        .filter(|(key, value)| {
+            required.contains(&key.as_str()) || !(value.is_null() || value.as_str() == Some(""))
+        })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
     Value::Object(kept)
@@ -436,7 +465,9 @@ pub async fn send(
         .chain(extra_servers.iter());
     // All at once: four services one after another was several seconds before the first word.
     let servers: Vec<&McpServer> = servers.collect();
-    for result in futures_util::future::join_all(servers.iter().map(|server| mcp::connect_soon(server))).await {
+    for result in
+        futures_util::future::join_all(servers.iter().map(|server| mcp::connect_soon(server))).await
+    {
         match result {
             Ok(connection) => connections.push(connection),
             Err(e) => emit(Event::Notice {
@@ -492,7 +523,9 @@ pub async fn send(
         offered.push(loader());
         // What this conversation has used before is ready from the start.
         let wanted = already_wanted(&messages);
-        let (ready, rest): (Vec<_>, Vec<_>) = shelf.into_iter().partition(|(tool, _)| wanted.contains(&tool.name));
+        let (ready, rest): (Vec<_>, Vec<_>) = shelf
+            .into_iter()
+            .partition(|(tool, _)| wanted.contains(&tool.name));
         shelf = rest;
         for (tool, source) in ready {
             offered.push(tool);
@@ -673,18 +706,29 @@ mod tests {
         let len = |m: &Value| m["content"][0]["content"].as_str().unwrap().len();
         assert!(len(&heavy[0]) < 700 && len(&heavy[3]) < 700);
         assert_eq!((len(&heavy[4]), len(&heavy[11])), (40_000, 40_000));
-        assert!(heavy[0]["content"][0]["content"].as_str().unwrap().contains("put away"));
+        assert!(heavy[0]["content"][0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("put away"));
     }
 
     fn service_tool(name: &str, words: usize) -> (Tool, Source) {
-        let tool = Tool { name: name.into(), description: format!("Does {name}.\n{}", "more ".repeat(words)), schema: json!({ "type": "object" }), writes: false };
+        let tool = Tool {
+            name: name.into(),
+            description: format!("Does {name}.\n{}", "more ".repeat(words)),
+            schema: json!({ "type": "object" }),
+            writes: false,
+        };
         (tool, Source::Server(0, name.into()))
     }
 
     /// The shelf shows each tool as one short line, however long the service's own description.
     #[test]
     fn the_shelf_lists_a_tool_in_one_line() {
-        let shelf = vec![service_tool("mcp__linear__list_issues", 4000), service_tool("mcp__linear__get_issue", 4000)];
+        let shelf = vec![
+            service_tool("mcp__linear__list_issues", 4000),
+            service_tool("mcp__linear__get_issue", 4000),
+        ];
         let list = shelf_list(&shelf, &["linear".to_string()]);
         assert!(list.contains("linear (2 tools)"));
         assert!(list.contains("- mcp__linear__list_issues: Does mcp__linear__list_issues."));
@@ -702,7 +746,11 @@ mod tests {
             ] }),
         ];
         let wanted = already_wanted(&messages);
-        assert!(wanted.contains("mcp__slack__search") && wanted.contains("mcp__slack__send") && wanted.contains("mcp__linear__list_issues"));
+        assert!(
+            wanted.contains("mcp__slack__search")
+                && wanted.contains("mcp__slack__send")
+                && wanted.contains("mcp__linear__list_issues")
+        );
         assert!(!wanted.contains("load_tools"));
     }
 
@@ -710,6 +758,9 @@ mod tests {
     fn empty_optional_fields_are_left_out_of_a_call_to_a_service() {
         let schema = json!({ "required": ["query"] });
         let sent = json!({ "query": "", "cursor": "", "context_channel_id": null, "limit": 20, "include_bots": false });
-        assert_eq!(without_blanks(&sent, &schema), json!({ "query": "", "limit": 20, "include_bots": false }));
+        assert_eq!(
+            without_blanks(&sent, &schema),
+            json!({ "query": "", "limit": 20, "include_bots": false })
+        );
     }
 }

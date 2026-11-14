@@ -39,9 +39,13 @@ async fn main() {
         data.display()
     );
     // Releases and news can be published only when a key of 24 characters or more is set.
-    let publish_key = std::env::var("LOKUS_PUBLISH_KEY").ok().filter(|k| !k.is_empty());
+    let publish_key = std::env::var("LOKUS_PUBLISH_KEY")
+        .ok()
+        .filter(|k| !k.is_empty());
     match publish_key.as_deref().map(str::len) {
-        Some(n) if n < 24 => eprintln!("warning: LOKUS_PUBLISH_KEY is shorter than 24 characters and is ignored"),
+        Some(n) if n < 24 => {
+            eprintln!("warning: LOKUS_PUBLISH_KEY is shorter than 24 characters and is ignored")
+        }
         Some(_) => eprintln!("releases and news can be published with LOKUS_PUBLISH_KEY"),
         None => {}
     }

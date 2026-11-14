@@ -50,7 +50,12 @@ fn main() -> ExitCode {
     if !in_app && parsed.command == "sync" {
         return sync(&parsed);
     }
-    if !in_app && matches!(parsed.command.as_str(), "release" | "release.pull" | "release.list" | "news" | "news.remove") {
+    if !in_app
+        && matches!(
+            parsed.command.as_str(),
+            "release" | "release.pull" | "release.list" | "news" | "news.remove"
+        )
+    {
         return publish(&parsed);
     }
     if !in_app && parsed.command == "ai" {
@@ -98,7 +103,10 @@ fn publish(p: &Parsed) -> ExitCode {
     });
     match outcome {
         Ok(value) => {
-            println!("{}", serde_json::to_string_pretty(&value).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_default()
+            );
             ExitCode::SUCCESS
         }
         Err(body) => fail(body),

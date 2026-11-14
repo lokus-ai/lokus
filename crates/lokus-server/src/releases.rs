@@ -64,7 +64,9 @@ fn address(text: &str, what: &str) -> Result<String> {
     if ok {
         Ok(text.to_string())
     } else {
-        Err(Error::BadRequest(format!("{what} must be an https address")))
+        Err(Error::BadRequest(format!(
+            "{what} must be an https address"
+        )))
     }
 }
 
@@ -118,7 +120,9 @@ pub async fn list(State(app): State<Arc<App>>) -> Result<Json<Value>> {
     let mut all = app.store.releases()?;
     all.sort_by(|a, b| {
         let key = |v: &str| Version::parse(v).ok();
-        key(&b.version).cmp(&key(&a.version)).then(a.platform.cmp(&b.platform))
+        key(&b.version)
+            .cmp(&key(&a.version))
+            .then(a.platform.cmp(&b.platform))
     });
     Ok(Json(json!(all)))
 }
@@ -164,8 +168,17 @@ pub async fn publish(
     for (platform, url, signature) in &builds {
         app.store.put_release(&v, platform, url, signature)?;
     }
-    eprintln!("published {v} for {}", builds.iter().map(|b| b.0.as_str()).collect::<Vec<_>>().join(", "));
-    Ok(Json(json!({ "version": v, "platforms": builds.iter().map(|b| &b.0).collect::<Vec<_>>() })))
+    eprintln!(
+        "published {v} for {}",
+        builds
+            .iter()
+            .map(|b| b.0.as_str())
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    Ok(Json(
+        json!({ "version": v, "platforms": builds.iter().map(|b| &b.0).collect::<Vec<_>>() }),
+    ))
 }
 
 /// Take a version back: nobody is offered it from now on. Copies already installed stay.
@@ -204,7 +217,9 @@ pub async fn post(
     publisher(&app, &headers)?;
     let named = !id.is_empty()
         && id.len() <= 64
-        && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
     if !named {
         return Err(Error::BadRequest(
             "a post's id is lowercase letters, digits and dashes".into(),
@@ -213,7 +228,9 @@ pub async fn post(
     let text = |key: &str, most: usize| -> Result<String> {
         let value = body[key].as_str().unwrap_or_default().trim().to_string();
         if value.chars().count() > most {
-            return Err(Error::BadRequest(format!("{key} is limited to {most} characters")));
+            return Err(Error::BadRequest(format!(
+                "{key} is limited to {most} characters"
+            )));
         }
         Ok(value)
     };
@@ -232,7 +249,11 @@ pub async fn post(
         "quiet" => "quiet",
         _ => return Err(Error::BadRequest("show is popup or quiet".into())),
     };
-    let for_version = match body["version"].as_str().map(str::trim).filter(|s| !s.is_empty()) {
+    let for_version = match body["version"]
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(v) => version(v)?.to_string(),
         None => String::new(),
     };

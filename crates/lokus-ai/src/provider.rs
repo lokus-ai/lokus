@@ -255,10 +255,14 @@ async fn anthropic(
             }
             "message_start" => {
                 let usage = &event["message"]["usage"];
-                tokens.0 = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]
-                    .iter()
-                    .filter_map(|k| usage[*k].as_u64())
-                    .sum();
+                tokens.0 = [
+                    "input_tokens",
+                    "cache_read_input_tokens",
+                    "cache_creation_input_tokens",
+                ]
+                .iter()
+                .filter_map(|k| usage[*k].as_u64())
+                .sum();
             }
             "message_delta" => {
                 if let Some(reason) = event["delta"]["stop_reason"].as_str() {
@@ -674,7 +678,10 @@ mod tests {
             { "slug": "gpt-reserve", "display_name": "GPT-Reserve", "visibility": "hide", "priority": 5 },
             { "slug": "gpt-6-astra", "display_name": "GPT-6-Astra", "visibility": "list", "priority": 2 },
         ] });
-        assert_eq!(model_ids(&body, Provider::ChatGpt), ["gpt-6.1-sol", "gpt-6-astra"]);
+        assert_eq!(
+            model_ids(&body, Provider::ChatGpt),
+            ["gpt-6.1-sol", "gpt-6-astra"]
+        );
         let keyed = json!({ "data": [{ "id": "b" }, { "id": "a" }] });
         assert_eq!(model_ids(&keyed, Provider::OpenAi), ["a", "b"]);
     }

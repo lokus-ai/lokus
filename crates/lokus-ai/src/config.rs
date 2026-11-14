@@ -102,8 +102,6 @@ pub struct OwnApi {
     pub enabled: bool,
 }
 
-
-
 impl Config {
     pub fn load(dir: &Path) -> Self {
         fs::read_to_string(dir.join(FILE))
@@ -153,8 +151,9 @@ fn entry(account: &str) -> Result<keyring::Entry> {
 /// What the keychain answered for each account since the app started. The keychain is asked
 /// once per account per run: on macOS every read can put a password prompt on screen, and the
 /// settings page alone used to read four entries each time it opened.
-static ASKED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, Option<String>>>> =
-    std::sync::LazyLock::new(Default::default);
+static ASKED: std::sync::LazyLock<
+    std::sync::Mutex<std::collections::HashMap<String, Option<String>>>,
+> = std::sync::LazyLock::new(Default::default);
 
 /// Store a secret in the OS keychain; an empty value removes it.
 pub fn set_secret(account: &str, secret: &str) -> Result<()> {
@@ -176,7 +175,10 @@ pub fn set_secret(account: &str, secret: &str) -> Result<()> {
     };
     result.map_err(|e| AiError::Keychain(e.to_string()))?;
     if let Ok(mut asked) = ASKED.lock() {
-        asked.insert(account.to_string(), Some(secret.to_string()).filter(|s| !s.is_empty()));
+        asked.insert(
+            account.to_string(),
+            Some(secret.to_string()).filter(|s| !s.is_empty()),
+        );
     }
     Ok(())
 }
@@ -189,12 +191,14 @@ pub fn secret(account: &str) -> Option<String> {
     if let Some(known) = asked.get(account) {
         return known.clone();
     }
-    let read = entry(account).map_err(|_| ()).and_then(|e| match e.get_password() {
-        Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        // Refused or dismissed: that says nothing about whether a sign-in is saved.
-        Err(_) => Err(()),
-    });
+    let read = entry(account)
+        .map_err(|_| ())
+        .and_then(|e| match e.get_password() {
+            Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            // Refused or dismissed: that says nothing about whether a sign-in is saved.
+            Err(_) => Err(()),
+        });
     match read {
         Ok(found) => {
             asked.insert(account.to_string(), found.clone());
