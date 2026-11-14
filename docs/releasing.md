@@ -44,13 +44,14 @@ password manager and in the CI secrets, nowhere else.
 ## Publishing a version
 
 ```sh
-# 1. Build with the signed update files. On this Mac (signs, notarizes when credentials are stored):
-sh deploy/release/mac.sh 2.0.1 https://relay…
-#    Other platforms: the "Release build" workflow, or by hand:
-TAURI_SIGNING_PRIVATE_KEY=… VITE_LOKUS_UPDATES=https://relay… \
-  pnpm tauri build --config apps/desktop/release.conf.json
+# 1. Build on a Mac: signed, notarized, with the installer window and the update file.
+#    Once per Mac: xcrun notarytool store-credentials lokus --key … --key-id … --issuer …
+sh deploy/release/mac.sh 2.0.1 https://relay.lokusmd.com            # Apple Silicon
+sh deploy/release/mac.sh 2.0.1 https://relay.lokusmd.com x86_64     # Intel
+#    What comes out is in dist-release/2.0.1/. Eject any open "Lokus" disk first.
 
-# 2. Put the files somewhere with an https address, each with its .sig beside it
+# 2. Put the files on GitHub as a PRE-release (never "latest": Lokus 1 updates from "latest")
+gh release create v2.0.1 --prerelease --latest=false --target main dist-release/2.0.1/*
 
 # 3. Write what is new (see below) and publish it first, so the pop-up can show it
 lokus news file=news/2-0-1.md server=https://relay…
@@ -66,6 +67,7 @@ lokus release version=2.0.1 server=https://relay… \
 `lokus release` refuses to publish when:
 
 - a file cannot be downloaded from the address given, or its signature was not made with our key
+- the signature does not say which version it was signed for (the app refuses those)
 - the release has no build for a platform the release before it had (pass `partial=true` only
   if that is meant)
 

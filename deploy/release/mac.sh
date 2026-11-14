@@ -3,7 +3,10 @@
 # notarized by Apple when credentials are stored, with the signed update file beside it.
 # Run from the repo root.
 #
-#   sh deploy/release/mac.sh 2.0.0-alpha.1 https://relay.example
+#   sh deploy/release/mac.sh 2.0.0-alpha.1 https://relay.example            (this Mac's kind)
+#   sh deploy/release/mac.sh 2.0.0-alpha.1 https://relay.example x86_64     (Intel Macs)
+#   sh deploy/release/mac.sh 2.0.0-alpha.1 https://relay.example aarch64    (Apple Silicon)
+# Building for the other kind of Mac needs that target: rustup target add x86_64-apple-darwin
 #
 # Needs: the update signing key at ~/.lokus-release/updater.key, a "Developer ID Application"
 # certificate in the keychain, and for notarization a stored profile named "lokus":
@@ -26,14 +29,26 @@ export TAURI_SIGNING_PRIVATE_KEY="$(cat "$KEY")" TAURI_SIGNING_PRIVATE_KEY_PASSW
 export APPLE_SIGNING_IDENTITY="$IDENTITY"
 # An absolute place: the build runs from apps/desktop and would put a relative one there.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target/release-build}"
-ARCH=$(uname -m | sed 's/arm64/aarch64/')
+HERE_ARCH=$(uname -m | sed 's/arm64/aarch64/')
+ARCH="${3:-$HERE_ARCH}"
+TARGET_FLAG=""
+BUILT="$CARGO_TARGET_DIR/release"
+if [ "$ARCH" != "$HERE_ARCH" ]; then
+  # The other kind of Mac is built with rustup's toolchain, which is the one that has it.
+  export PATH="$HOME/.cargo/bin:$PATH"
+  # The same compiler version this Mac builds with, so both kinds come from one compiler:
+  #   rustup toolchain install 1.97.1 --profile minimal --target x86_64-apple-darwin
+  export RUSTUP_TOOLCHAIN="${LOKUS_RUST:-1.97.1}"
+  TARGET_FLAG="--target $ARCH-apple-darwin"
+  BUILT="$CARGO_TARGET_DIR/$ARCH-apple-darwin/release"
+fi
 
 # Only the app is built here. Tauri's own disk-image step mounts a temporary disk and has to
 # unmount it again, which fails on a Mac where something (Spotlight, a file-sync tool) grabs
 # every disk that appears; the image is made below in a way that never mounts anything.
-pnpm tauri build --bundles app --config apps/desktop/release.conf.json --config "{\"version\":\"$VERSION\"}"
+pnpm tauri build $TARGET_FLAG --bundles app --config apps/desktop/release.conf.json --config "{\"version\":\"$VERSION\"}"
 
-OUT="$CARGO_TARGET_DIR/release/bundle"
+OUT="$BUILT/bundle"
 APP=$(ls -d "$OUT"/macos/*.app | head -1)
 [ -d "$APP" ] && [ -f "$APP.tar.gz.sig" ] || { echo "the build did not leave an app and a signed update file in $OUT"; exit 1; }
 codesign --verify --deep --strict "$APP" && echo "signed: $APP"
