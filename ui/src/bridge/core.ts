@@ -57,6 +57,16 @@ export function onVaultChanged(handler: (paths: string[]) => void): () => void {
   return () => void stop.then((off) => off());
 }
 
+/** Every workspace on this computer: the folders this person has opened in Lokus. */
+export function listVaults(): Promise<VaultInfo[]> {
+  return invoke<VaultInfo[]>("vault_list");
+}
+
+/** Take a workspace off the list. Its folder stays where it is. */
+export function forgetVault(root: string): Promise<void> {
+  return invoke("vault_forget", { root });
+}
+
 export function onVaultOpened(handler: (vault: VaultInfo) => void): () => void {
   const stop = listen<VaultInfo>("vault:opened", (e) => handler(e.payload));
   return () => void stop.then((off) => off());

@@ -334,6 +334,17 @@ Device and relay exchange only what the other is missing; after that edits are r
 Cursors and presence pass through memory and are never stored. A personal vault is local-only
 by default; turning sync on makes it a one-person workspace on the same pipeline.
 
+### Workspaces and the switcher (built; tried in the real app)
+
+A workspace is a folder. A person can have several (one for a team, one for school) and
+nothing is shared between them. The shell keeps the list of every folder opened in Lokus
+(`vaults.json` beside `last-vault`; a folder that is gone drops out). The workspace's name at
+the top of the sidebar opens the switcher, after Notion's: the open workspace with Settings
+and Invite people, the others with "Team" on the shared ones, invitations waiting with a Join
+button, and "Add workspace", which makes a folder of that name in Documents. A new workspace
+is private; sharing it is one step under Settings, Team. Every window still shows the same
+workspace: switching in one switches them all.
+
 ### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
 
 An owner types an address under Settings, Team. The relay emails that person from

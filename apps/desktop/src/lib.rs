@@ -9,6 +9,7 @@ mod ai;
 mod dev_channel;
 mod sync;
 mod updates;
+mod vaults;
 mod windows;
 
 use std::path::PathBuf;
@@ -88,6 +89,7 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
         }
         let _ = std::fs::write(file, vault.root().to_string_lossy().as_bytes());
     }
+    vaults::remember(app, vault.root());
     let shell = app.state::<Shell>();
     if let Ok(mut open) = shell.open.lock() {
         *open = Some(OpenVault {
@@ -277,6 +279,8 @@ macro_rules! commands {
             updates::app_quit,
             windows::window_new,
             vault_default,
+            vaults::vault_list,
+            vaults::vault_forget,
             $($extra),*
         ]
     };

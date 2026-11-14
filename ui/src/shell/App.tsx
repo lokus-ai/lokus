@@ -17,6 +17,7 @@ import { Boundary } from "./Boundary";
 import { formatKeys, runCommand } from "./commands";
 import { Icon } from "./Icon";
 import { Palette } from "./Palette";
+import { WorkspaceSwitcher } from "./Switcher";
 import { useStore } from "./store";
 import {
   app,
@@ -63,7 +64,6 @@ const TaskProfile = lazy(() => import("../features/tasks/TaskProfile"));
 const tabName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
 function Sidebar() {
-  const vault = useStore(app, (s) => s.vault);
   const tree = useStore(app, (s) => s.tree);
   const active = useStore(app, (s) => s.active);
   const open = useStore(app, (s) => s.sidebar);
@@ -95,10 +95,7 @@ function Sidebar() {
     <aside className={`sidebar${open ? "" : " closed"}`} aria-hidden={!open}>
      <div className="sidebar-inner">
       <div className="sidebar-top" data-tauri-drag-region />
-      <button className="vault-name" title="Open another vault" onClick={() => act("vault.choose")}>
-        <span className="vault-badge">{vault?.name.slice(0, 1).toUpperCase()}</span>
-        <span className="tree-name">{vault?.name}</span>
-      </button>
+      <WorkspaceSwitcher />
       <div className="sidebar-actions">
         <button onClick={() => act("palette.notes")}>
           <Icon name="goto" />

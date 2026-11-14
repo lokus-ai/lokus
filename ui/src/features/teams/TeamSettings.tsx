@@ -43,7 +43,8 @@ export function TeamSettings() {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
-  const [name, setName] = useState("");
+  // A private workspace is shared under its own name unless another is typed.
+  const [name, setName] = useState(vault?.name ?? "");
   const [code, setCode] = useState("");
   /** The irreversible thing the person has clicked once and must confirm. */
   const [confirming, setConfirming] = useState<"leave" | "delete" | null>(null);
@@ -298,10 +299,10 @@ export function TeamSettings() {
             </>
           )}
           <form onSubmit={create}>
-            <Row label="Start a new workspace" hint="You become its owner and can invite people.">
+            <Row label="Share this workspace with a team">
               <input value={name} placeholder="Workspace name" onChange={(e) => setName(e.target.value)} />
-              <button className="settings-button" disabled={!token || !name.trim()}>
-                Create
+              <button className="primary" disabled={!token || !name.trim()}>
+                Share
               </button>
             </Row>
           </form>

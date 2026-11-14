@@ -49,6 +49,40 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
   display: flex; align-items: center; gap: 8px; margin: 0 8px 6px; padding: 0 8px;
   height: 32px; border-radius: var(--radius-sm); font-weight: 600; text-align: left;
 }
+.switcher { position: relative; }
+.switcher .vault-name { width: calc(100% - 16px); }
+.switcher .vault-name > svg { flex: none; margin-left: auto; color: var(--fg-3); }
+.switcher-menu { position: absolute; left: 8px; right: 8px; top: calc(100% - 2px); z-index: 30; padding: 6px; display: flex; flex-direction: column; border-radius: var(--radius-lg); background: var(--bg); box-shadow: var(--shadow-pop); animation: rise var(--menu) var(--ease-out); }
+.switcher-menu hr { border: 0; border-top: 1px solid var(--border); margin: 6px -6px; }
+.switcher-current { display: flex; align-items: center; gap: 10px; padding: 8px 8px 6px; }
+.switcher-current > div { min-width: 0; display: flex; flex-direction: column; }
+.switcher-current strong { font-size: var(--text-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switcher-current small { color: var(--fg-3); font-size: var(--text-caption); }
+.vault-badge.big { width: 32px; height: 32px; border-radius: 8px; font-size: 15px; }
+.vault-badge.ghost { background: transparent; color: var(--fg-2); box-shadow: inset 0 0 0 1px var(--border); }
+.switcher-actions { display: flex; gap: 6px; padding: 2px 8px 4px; }
+.switcher-actions button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; height: 26px; padding: 0 9px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--border); color: var(--fg-2); font-size: var(--text-caption); }
+.switcher-actions button:hover { background: var(--bg-hover); color: var(--fg); }
+.switcher-list { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
+.switcher-row { display: flex; align-items: center; border-radius: var(--radius-sm); }
+.switcher-row:hover { background: var(--bg-hover); }
+.switcher-row > button:first-child { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; text-align: left; font-size: var(--text-small); }
+.switcher-row > button:first-child > svg { flex: none; margin-left: auto; color: var(--fg-2); }
+.switcher-tag { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--bg-active); color: var(--fg-2); font-size: 10.5px; font-weight: 550; }
+.switcher-forget { width: 24px; height: 24px; margin-right: 4px; flex: none; display: none; place-items: center; border-radius: var(--radius-xs); color: var(--fg-3); }
+.switcher-row:hover .switcher-forget { display: grid; }
+.switcher-forget:hover { background: var(--bg-active); color: var(--fg); }
+.switcher-row.invite { gap: 9px; height: 32px; padding: 0 6px 0 8px; font-size: var(--text-small); color: var(--fg-2); }
+.switcher-row.invite .tree-name { flex: 1; min-width: 0; }
+.switcher-join { height: 22px; padding: 0 9px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); font-size: var(--text-caption); font-weight: 600; }
+.switcher-new, .switcher-quiet { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: var(--radius-sm); text-align: left; font-size: var(--text-small); }
+.switcher-new { color: var(--accent); }
+.switcher-quiet { color: var(--fg-3); font-size: var(--text-caption); height: 28px; }
+.switcher-new:hover, .switcher-quiet:hover { background: var(--bg-hover); }
+.switcher-add { display: flex; gap: 6px; padding: 4px 2px; }
+.switcher-add input { flex: 1; min-width: 0; height: 30px; padding: 0 9px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--fg); outline: 0; font: inherit; font-size: var(--text-small); }
+.switcher-add input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--selection); }
+.switcher-add .primary { height: 30px; padding: 0 12px; font-size: var(--text-small); }
 .vault-name:hover, .sidebar-actions button:hover, .tree-row:not(:disabled):hover { background: var(--bg-hover); }
 .vault-badge {
   width: 20px; height: 20px; flex: none; border-radius: var(--radius-xs); display: grid; place-items: center;
