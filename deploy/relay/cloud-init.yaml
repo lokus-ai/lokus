@@ -22,7 +22,7 @@ write_files:
       ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev
       ExecStartPre=-/usr/bin/docker rm -f relay
       ExecStartPre=/bin/sh -c "touch /mnt/disks/data/relay/relay.env; chmod 600 /mnt/disks/data/relay/relay.env"
-      ExecStart=/usr/bin/docker run --rm --name relay --network host -v /mnt/disks/data/relay:/data --env-file /mnt/disks/data/relay/relay.env -e SUPABASE_URL=https://pauprjaxfxhkxnwzafif.supabase.co -e LOKUS_DATA=/data/relay.sqlite -e PORT=8787 us-central1-docker.pkg.dev/lokus-relay/relay/lokus-relay:v1
+      ExecStart=/usr/bin/docker run --rm --name relay --network host -v /mnt/disks/data/relay:/data --env-file /mnt/disks/data/relay/relay.env -e SUPABASE_URL=https://fdmevkqucntpozjmnnms.supabase.co -e LOKUS_DATA=/data/relay.sqlite -e PORT=8787 us-central1-docker.pkg.dev/lokus-relay/relay/lokus-relay:v1
       ExecStop=/usr/bin/docker stop relay
       Restart=always
       RestartSec=5

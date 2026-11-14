@@ -10,6 +10,9 @@ PROJECT=lokus-relay
 ZONE=us-central1-a
 IMAGE=us-central1-docker.pkg.dev/lokus-relay/relay/lokus-relay:v1
 ENV=/mnt/disks/data/relay/relay.env
+# The account service whose sign-ins the relay accepts. Changing it means everyone signs in
+# with the new one; workspaces made under the old one are left with no members.
+SUPABASE=https://fdmevkqucntpozjmnnms.supabase.co
 on_vm() { gcloud compute ssh relay --project="$PROJECT" --zone="$ZONE" --command="$1"; }
 
 if [ "$1" = "key" ]; then
@@ -22,4 +25,4 @@ fi
 
 [ "$1" = "restart" ] || gcloud builds submit --project="$PROJECT" --config=deploy/relay/cloudbuild.yaml .
 # The unit on the VM was written before the relay read an env file; add that once.
-on_vm "sudo sh -c 'touch $ENV && chmod 600 $ENV; U=/etc/systemd/system/relay.service; grep -q env-file \$U || sed -i \"s#-e SUPABASE_URL=#--env-file $ENV -e SUPABASE_URL=#\" \$U; systemctl daemon-reload' && sudo HOME=/var/lib/relay-home docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev && sudo HOME=/var/lib/relay-home docker pull $IMAGE && sudo systemctl restart relay && sleep 4 && curl -s -o /dev/null -w 'update check answers %{http_code} (204 = healthy, nothing published yet)\n' http://127.0.0.1:8787/v1/app/update/darwin/aarch64/2.0.0-alpha.0"
+on_vm "sudo sh -c 'touch $ENV && chmod 600 $ENV; U=/etc/systemd/system/relay.service; grep -q env-file \$U || sed -i \"s#-e SUPABASE_URL=#--env-file $ENV -e SUPABASE_URL=#\" \$U; sed -i \"s#SUPABASE_URL=https://[a-z0-9]*\\.supabase\\.co#SUPABASE_URL=$SUPABASE#\" \$U; systemctl daemon-reload' && sudo HOME=/var/lib/relay-home docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev && sudo HOME=/var/lib/relay-home docker pull $IMAGE && sudo systemctl restart relay && sleep 4 && curl -s -o /dev/null -w 'update check answers %{http_code} (204 = healthy, nothing published yet)\n' http://127.0.0.1:8787/v1/app/update/darwin/aarch64/2.0.0-alpha.0"
