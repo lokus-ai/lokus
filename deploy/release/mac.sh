@@ -48,7 +48,7 @@ if xcrun notarytool history --keychain-profile lokus >/dev/null 2>&1; then
   xcrun stapler staple "$APP"
   # The update file was packed before the ticket was attached; pack and sign it again.
   tar -czf "$APP.tar.gz" -C "$(dirname "$APP")" "$(basename "$APP")"
-  pnpm -s tauri signer sign "$APP.tar.gz" >/dev/null
+  pnpm -s tauri signer sign --app-version "$VERSION" "$APP.tar.gz" >/dev/null
   NOTARIZED=yes
   echo "notarized"
 else

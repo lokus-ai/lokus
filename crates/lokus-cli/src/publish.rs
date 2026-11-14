@@ -95,12 +95,33 @@ async fn fetch(url: &str) -> Result<Vec<u8>, Value> {
 }
 
 /// Download a build and its `.sig`, exactly as an installed copy would, and check the two agree.
-async fn checked(pubkey: &PublicKey, url: &str) -> Result<(String, usize), Value> {
+/// The app accepts an update only if its signature says which version it was signed for, and
+/// that is the version being offered. A file signed without one would be published, offered,
+/// downloaded and then refused by every copy: found the night before the first release.
+fn names_version(signature_text: &str, version: &str) -> bool {
+    signature_text
+        .lines()
+        .find_map(|line| line.strip_prefix("trusted comment:"))
+        .is_some_and(|comment| {
+            comment
+                .split('\t')
+                .any(|part| part.trim() == format!("version:{version}"))
+        })
+}
+
+async fn checked(pubkey: &PublicKey, url: &str, version: &str) -> Result<(String, usize), Value> {
     let build = fetch(url).await?;
     let packed = String::from_utf8(fetch(&format!("{url}.sig")).await?)
         .map_err(|_| fail("bad_signature", format!("{url}.sig is not text")))?;
-    let signature = Signature::decode(&unwrap64(&format!("{url}.sig"), &packed)?)
-        .map_err(|e| fail("bad_signature", format!("{url}.sig: {e}")))?;
+    let text = unwrap64(&format!("{url}.sig"), &packed)?;
+    if !names_version(&text, version) {
+        return Err(fail(
+            "bad_signature",
+            format!("{url}.sig does not say it was signed for version {version}; an installed copy would refuse it. Sign it again with `tauri signer sign --app-version {version}`."),
+        ));
+    }
+    let signature =
+        Signature::decode(&text).map_err(|e| fail("bad_signature", format!("{url}.sig: {e}")))?;
     pubkey.verify(&build, &signature, true).map_err(|_| {
         fail(
             "bad_signature",
@@ -161,7 +182,7 @@ pub async fn release(args: &Value) -> Outcome {
     let mut platforms = Map::new();
     let mut report = Vec::new();
     for (platform, url) in builds {
-        let (signature, size) = checked(&pubkey, url).await?;
+        let (signature, size) = checked(&pubkey, url, version).await?;
         report.push(json!({ "platform": platform, "url": url, "megabytes": (size as f64 / 104_857.6).round() / 10.0, "signature": "ok" }));
         platforms.insert(
             platform.clone(),
@@ -233,4 +254,20 @@ pub async fn news(args: &Value) -> Outcome {
 pub async fn unpost(args: &Value) -> Outcome {
     let (id, server, key) = (text(args, "id")?, text(args, "server")?, key()?);
     call(server, &key, "DELETE", &format!("/v1/app/news/{id}"), None).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::names_version;
+
+    #[test]
+    fn a_signature_must_say_which_version_it_is_for() {
+        let signed = "untrusted comment: signature from tauri secret key\nRWS...\ntrusted comment: timestamp:1794646978\tfile:Lokus_aarch64.app.tar.gz\tversion:2.0.0-alpha.1\nabc==\n";
+        assert!(names_version(signed, "2.0.0-alpha.1"));
+        assert!(!names_version(signed, "2.0.0-alpha.10"));
+        assert!(!names_version(
+            "trusted comment: timestamp:1\tfile:Lokus.app.tar.gz\n",
+            "2.0.0-alpha.1"
+        ));
+    }
 }
