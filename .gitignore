@@ -13,3 +13,4 @@ checks/fixtures/**/.lokus/
 .dev-sign
 dist-release/
 windows-smoke/
+/.lokus/
