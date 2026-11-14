@@ -8,7 +8,7 @@ import { type Entry, vaultFileUrl } from "../../bridge/core";
 import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { allFiles, app, getEditor, notify, openNote, renderMarkdown } from "../../shell/workspace";
-import { aiSettings } from "../../bridge/ai";
+import { aiSettings, saveAiConfig } from "../../bridge/ai";
 import { Logo } from "../connections/logos";
 import { type Customer, loadCustomers, show as shown, threads, tone } from "../customers/data";
 import { fileName, fileTag, kindOf } from "../files/files";
@@ -105,7 +105,7 @@ function Tool({ item }: { item: Extract<Item, { kind: "tool" }> }) {
           <button className="primary" onClick={() => answer(item.id, true)}>
             Allow
           </button>
-          <button title="Allow this and every further change of the same kind until this request is finished" onClick={() => answerAll(item.id)}>
+          <button title="Allow this and every further change of the same kind for the rest of this chat" onClick={() => answerAll(item.id)}>
             Allow all like this
           </button>
           <button onClick={() => answer(item.id, false)}>Decline</button>
@@ -262,6 +262,33 @@ function Earlier() {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Whether the assistant asks before it changes anything. "Asks first" shows each change with
+ * Allow and Decline; "Auto" lets it carry on by itself. The choice is this person's, on this
+ * computer, for every chat and workspace; it is not shared with a team.
+ */
+function Mode() {
+  const [auto, setAuto] = useState<boolean | null>(null);
+  useEffect(() => {
+    void aiSettings().then(
+      (s) => setAuto(s.config.auto_approve),
+      () => {},
+    );
+  }, []);
+  if (auto === null) return null;
+  const flip = async () => {
+    const { config } = await aiSettings();
+    await saveAiConfig({ ...config, auto_approve: !auto });
+    setAuto(!auto);
+    notify(!auto ? "Auto: the assistant makes changes without asking" : "The assistant asks before each change");
+  };
+  return (
+    <button className={`ai-mode${auto ? " auto" : ""}`} title={auto ? "Auto: changes are made without asking. Click to be asked first." : "Asks before each change. Click to let it work on its own."} onClick={() => void flip()}>
+      {auto ? "Auto" : "Asks first"}
+    </button>
   );
 }
 
@@ -564,6 +591,7 @@ export function AiPanel() {
           }}
         />
         <ModelPicker />
+        <Mode />
         <button className="ai-services" title={services.length ? `Connected: ${services.map(titled).join(", ")}` : "Connect the tools you use"} onClick={() => app.set({ settings: "connections" })}>
           {services.slice(0, 4).map((id) => (
             <Logo key={id} id={id} name={id} size={18} />

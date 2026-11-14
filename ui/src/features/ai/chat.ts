@@ -88,6 +88,10 @@ let carried: string | null = null;
  * Kinds of change the person has said need not be asked about again for the request in hand.
  * It lasts until that request is finished or stopped; the next one asks afresh.
  */
+/**
+ * Kinds of change the person said yes to with "Allow all like this". They hold for the rest of
+ * the conversation and no longer: a new chat asks again. Nothing here is saved or shared.
+ */
 const allowed = new Set<string>();
 /** The open note as the assistant last saw it, so it is only sent again when it has changed. */
 let seen: { path: string; text: string } | null = null;
@@ -218,7 +222,7 @@ function onEvent(event: AiEvent): void {
           return [...settle(items), { kind: "question", id: event.id, question: String(event.input.question ?? ""), options, multiple: event.input.multiple === true }];
         }
         if (event.asks && allowed.has(event.name)) {
-          // Already allowed for this request: say yes without stopping to ask.
+          // Already allowed in this conversation: say yes without stopping to ask.
           void aiApprove(event.id, true);
           return [...settle(items), { kind: "tool", id: event.id, name: event.name, input: event.input, status: "running" }];
         }
@@ -299,7 +303,6 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     });
   }
   const note = app.get().active;
-  allowed.clear();
   chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: text.trim(), note: note ?? undefined, files: files.length ? files : undefined }] }));
   const sending = chatId;
   let pending: { role: string; content: unknown } | null = null;
@@ -381,6 +384,7 @@ export async function openChat(id: string): Promise<void> {
   const kept = await runCore<{ body: { items?: Item[]; history?: unknown[]; unanswered?: { role: string; content: string } } }>("chats.load", { id });
   asked.clear();
   chatId = id;
+  allowed.clear();
   history = kept.body.history ?? [];
   let items = kept.body.items ?? [];
   const cut = kept.body.unanswered;
@@ -497,6 +501,7 @@ export function newChat(): void {
   if (chat.get().busy) stop();
   asked.clear();
   chatId = freshId();
+  allowed.clear();
   history = [];
   briefing = null;
   carried = null;
