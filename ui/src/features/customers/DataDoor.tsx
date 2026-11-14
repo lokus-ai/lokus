@@ -3,7 +3,9 @@ import { track } from "../../bridge/analytics";
 import { useCallback, useEffect, useState } from "react";
 
 import { relay } from "../../bridge/sync";
-import { notify } from "../../shell/workspace";
+import { accessToken } from "../../bridge/auth";
+import { useStore } from "../../shell/store";
+import { app, notify } from "../../shell/workspace";
 import { Row } from "../settings/parts";
 
 interface Key {
@@ -184,4 +186,15 @@ export function DataDoor({ server, token, workspace }: Props) {
       )}
     </>
   );
+}
+
+/** The keys of the workspace this folder is shared with, for an owner; nothing otherwise. */
+export function WorkspaceKeys() {
+  const sync = useStore(app, (s) => s.sync);
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    void accessToken().then(setToken, () => setToken(null));
+  }, [sync.workspace]);
+  if (sync.role !== "owner" || !sync.server || !sync.workspace || !token) return null;
+  return <DataDoor server={sync.server} token={token} workspace={sync.workspace} />;
 }

@@ -5,7 +5,6 @@ import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
 import { app, connectSync, disconnectSync } from "../../shell/workspace";
-import { DataDoor } from "../customers/DataDoor";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
@@ -140,7 +139,6 @@ export function TeamSettings() {
     return (
       <Section title="Team">
         <div className="team-head">
-          <span className="vault-badge team-badge">{(teamName.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpperCase()}</span>
           <div className="team-head-main">
             <strong>{teamName}</strong>
             <small>
@@ -221,7 +219,6 @@ export function TeamSettings() {
 
         <InvitedList />
 
-        {owner && token && current.workspace && <DataDoor server={server} token={token} workspace={current.workspace} />}
 
         <Row label="Stop syncing on this computer">
           <button className="settings-button" onClick={() => void disconnectSync()}>
