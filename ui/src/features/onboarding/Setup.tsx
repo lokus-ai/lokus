@@ -290,7 +290,8 @@ export default function Onboarding() {
     [order],
   );
   const can =
-    step === "account" ? !looking : step === "invited" ? Boolean(answer) : step === "uses" ? answers.uses.length > 0 : step === "aim" ? Boolean(answers.aim) && (answers.aim !== "other" || answers.aimText.trim().length > 1) : step === "team" ? Boolean(answers.team) : step === "look" ? Boolean(answers.look) : step !== "building";
+    // Everyone who uses Lokus has an account: setup does not go on without one.
+    step === "account" ? !looking && Boolean(account) : step === "invited" ? Boolean(answer) : step === "uses" ? answers.uses.length > 0 : step === "aim" ? Boolean(answers.aim) && (answers.aim !== "other" || answers.aimText.trim().length > 1) : step === "team" ? Boolean(answers.team) : step === "look" ? Boolean(answers.look) : step !== "building";
   const next = useCallback(() => can && go(index + 1), [can, go, index]);
   const skip = () => leaveOnboarding(true, step);
 
@@ -361,7 +362,7 @@ export default function Onboarding() {
           <Said text={account ? `Good to meet you, ${name || "there"}.` : "First, sign in"} />
         </h1>
         <p className="ob-sub">
-          {account ? `You are signed in as ${account.email}.` : "An account is how your team finds you, and how your work follows you to another computer. Your notes stay on this computer either way."}
+          {account ? `You are signed in as ${account.email}.` : "One account for all of Lokus on this computer: every workspace you make or join uses it. Your notes stay on this computer."}
         </p>
         {!account && (
           <div className="ai-connect">
@@ -593,7 +594,7 @@ export default function Onboarding() {
         >
           {muted ? "Sound off" : "Sound on"}
         </button>
-        {step !== "building" && (
+        {step !== "building" && (account || !needsAccount.current) && (
           <button className="ob-quiet" onClick={skip}>
             Skip setup
           </button>
@@ -618,11 +619,6 @@ export default function Onboarding() {
           {(step === "tools" || step === "heard") && !(step === "tools" ? answers.tools.length : answers.heard) && (
             <button className="link" onClick={() => go(index + 1)}>
               {step === "tools" ? "None of these" : "Skip this one"}
-            </button>
-          )}
-          {step === "account" && !account && (
-            <button className="link" onClick={() => go(index + 1)}>
-              Not now
             </button>
           )}
           {step === "assistant" && !model.ready && (

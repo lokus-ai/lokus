@@ -142,6 +142,12 @@ pub const COMMANDS: &[CommandSpec] = &[
         Write,
     ),
     spec(
+        "customers.record",
+        "File one fact about a customer: details to set, something that happened, or a person there",
+        "fact",
+        Write,
+    ),
+    spec(
         "file.read",
         "A file that is not a note, whole: its base64, size and kind",
         "path",
@@ -398,6 +404,14 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             vault.write_file(&a.path, &bytes)?;
             Ok(json!({ "path": a.path, "size": bytes.len() }))
         }
+        "customers.record" => {
+            let a: FactArgs = parse(name, args)?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            out(crate::ingest::apply(vault, &a.fact, now)?)
+        }
         "file.read" => {
             let a: PathArgs = parse(name, args)?;
             crate::files::read(vault, &a.path)
@@ -532,6 +546,11 @@ struct FileArgs {
     #[serde(default)]
     base64: String,
     text: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FactArgs {
+    fact: Value,
 }
 
 #[derive(Deserialize)]
