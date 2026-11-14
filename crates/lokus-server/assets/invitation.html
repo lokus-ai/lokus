@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>{{who}} invited you to {{workspace}}</title>
+<style>
+  @media (prefers-color-scheme: dark) {
+    .page { background: #171717 !important; }
+    .ink { color: #e6e6e3 !important; }
+    .soft { color: #a3a29d !important; }
+    .faint { color: #7d7c77 !important; }
+    .card { background: #1f1f1f !important; border-color: #303030 !important; }
+    .tile { background: #26324a !important; color: #9dbcff !important; }
+    .rule { border-color: #2c2c2c !important; }
+    .num { background: #262626 !important; color: #e6e6e3 !important; }
+    .button { background: #6b9bff !important; color: #10131a !important; }
+    .link { color: #8fb3ff !important; }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 28px 20px 36px !important; }
+    .title { font-size: 24px !important; line-height: 30px !important; }
+  }
+</style>
+</head>
+<body class="page" style="margin:0;padding:0;background:#ffffff;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{{preheader}}</div>
+<table role="presentation" class="page" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;">
+<tr><td class="wrap" style="padding:44px 32px 48px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Helvetica,Arial,sans-serif;">
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td style="padding-right:9px;"><img src="{{logo}}" width="20" height="20" alt="" style="display:block;border:0;padding:3px;background:#ffffff;border-radius:7px;"></td>
+    <td class="ink" style="font-size:16px;line-height:26px;font-weight:600;letter-spacing:-0.01em;color:#2b2a27;">Lokus</td>
+  </tr>
+  </table>
+
+  <h1 class="ink title" style="margin:40px 0 0;font-size:28px;line-height:34px;font-weight:650;letter-spacing:-0.022em;color:#2b2a27;">{{who}} invited you to {{workspace}}</h1>
+
+  <p class="soft" style="margin:14px 0 0;font-size:16px;line-height:25px;color:#6f6e69;">Lokus is where a team keeps its customers, tasks and notes in one place. You would join as {{role}}.</p>
+
+  <table role="presentation" class="card" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0 0;background:#fafaf9;border:1px solid #e8e8e4;border-radius:12px;">
+  <tr>
+    <td width="44" valign="middle" style="padding:16px 0 16px 16px;">
+      <div class="tile" style="width:44px;height:44px;border-radius:10px;background:#e3ecfd;color:#2f6fed;font-size:19px;line-height:44px;font-weight:650;text-align:center;">{{initial}}</div>
+    </td>
+    <td valign="middle" style="padding:16px 16px 16px 14px;">
+      <div class="ink" style="font-size:16px;line-height:22px;font-weight:600;color:#2b2a27;">{{workspace}}</div>
+      <div class="soft" style="font-size:14px;line-height:20px;color:#6f6e69;">{{role_name}}, invited by {{by}}</div>
+    </td>
+  </tr>
+  </table>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 0;">
+  <tr><td class="button" align="center" bgcolor="#2f6fed" style="border-radius:9px;background:#2f6fed;">
+    <a class="button" href="{{link}}" style="display:inline-block;padding:13px 26px;font-size:16px;line-height:20px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:9px;">Accept invitation</a>
+  </td></tr>
+  </table>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:36px 0 0;">
+  <tr><td class="rule" style="border-top:1px solid #ecece8;font-size:0;line-height:0;">&nbsp;</td></tr>
+  </table>
+
+  <p class="ink" style="margin:26px 0 12px;font-size:15px;line-height:22px;font-weight:600;color:#2b2a27;">What happens next</p>
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+  <tr>
+    <td valign="top" style="padding:0 12px 12px 0;"><div class="num" style="width:22px;height:22px;border-radius:11px;background:#f1f1ee;color:#2b2a27;font-size:12px;line-height:22px;font-weight:600;text-align:center;">1</div></td>
+    <td class="soft" valign="top" style="padding:0 0 12px;font-size:15px;line-height:22px;color:#6f6e69;">Get Lokus for your Mac. It is free.</td>
+  </tr>
+  <tr>
+    <td valign="top" style="padding:0 12px 12px 0;"><div class="num" style="width:22px;height:22px;border-radius:11px;background:#f1f1ee;color:#2b2a27;font-size:12px;line-height:22px;font-weight:600;text-align:center;">2</div></td>
+    <td class="soft" valign="top" style="padding:0 0 12px;font-size:15px;line-height:22px;color:#6f6e69;">Sign in as <span class="ink" style="color:#2b2a27;font-weight:550;">{{to}}</span>.</td>
+  </tr>
+  <tr>
+    <td valign="top" style="padding:0 12px 0 0;"><div class="num" style="width:22px;height:22px;border-radius:11px;background:#f1f1ee;color:#2b2a27;font-size:12px;line-height:22px;font-weight:600;text-align:center;">3</div></td>
+    <td class="soft" valign="top" style="padding:0;font-size:15px;line-height:22px;color:#6f6e69;">Your invitation is waiting inside. Click Join.</td>
+  </tr>
+  </table>
+
+  <p class="faint" style="margin:36px 0 0;font-size:13px;line-height:20px;color:#8d8c87;">The invitation works until {{until}}. Not expecting it? Ignore this email and nothing happens.</p>
+  <p class="faint" style="margin:10px 0 0;font-size:13px;line-height:20px;color:#8d8c87;">If the button does nothing, open this in your browser:<br><a class="link" href="{{link}}" style="color:#2f6fed;text-decoration:none;word-break:break-all;">{{link}}</a></p>
+
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

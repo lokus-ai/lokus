@@ -13,10 +13,11 @@ import { type Account, accountsAvailable, signInWithGoogle } from "../../bridge/
 import { ConnectModel, useModel } from "../ai/Connect";
 import { AccountDialog } from "../auth/AccountDialog";
 import { useMe } from "../profile/profiles";
+import { asWhat, invited, lookForInvites, type Waiting, whoSent } from "../teams/invites";
 import { AIMS, aimInWords, type Answers, connectService, EMPTY, finish, HEARD, type Job, jobs, leaveOnboarding, LOOKS, type Option, TEAMS, USES, wear } from "./onboarding";
 import { chime, done as doneSound, muteSounds, pop, soundsMuted, sweep, tick, wakeSounds } from "./sounds";
 
-type Step = "hello" | "account" | "uses" | "aim" | "team" | "look" | "assistant" | "tools" | "heard" | "folder" | "building";
+type Step = "hello" | "account" | "invited" | "uses" | "aim" | "team" | "look" | "assistant" | "tools" | "heard" | "folder" | "building";
 
 /** `--i` is a thing's place in line: the stylesheet turns it into when it arrives. */
 const nth = (i: number) => ({ "--i": i }) as CSSProperties;
@@ -151,8 +152,8 @@ function Preview({ answers, name }: { answers: Answers; name: string }) {
 }
 
 /** The last screen: each thing the answers turn into, done in front of them. */
-function Building({ answers, name, onOpen }: { answers: Answers; name: string; onOpen(): void }) {
-  const list = useMemo<Job[]>(() => jobs(answers), [answers]);
+function Building({ answers, name, joining, onOpen }: { answers: Answers; name: string; joining: Waiting | null; onOpen(): void }) {
+  const list = useMemo<Job[]>(() => jobs(answers, joining), [answers, joining]);
   const [at, setAt] = useState(0);
   const [failed, setFailed] = useState("");
   const started = useRef(false);
@@ -215,12 +216,17 @@ export default function Onboarding() {
   const [signing, setSigning] = useState(false);
   const [byEmail, setByEmail] = useState(false);
   const [signProblem, setSignProblem] = useState("");
+  // Someone who was invited is asked about that before anything else, so the answer is waited for.
+  const [looking, setLooking] = useState(false);
   const signedIn = (who: Account) => {
     identify(who.id);
     app.set({ account: who });
     setByEmail(false);
     track("action", { feature: "account", action: "signed_in", from: "setup" });
+    setLooking(true);
+    void lookForInvites().finally(() => setLooking(false));
   };
+  useEffect(() => void lookForInvites(), []);
   const google = async () => {
     setSignProblem("");
     setSigning(true);
@@ -238,13 +244,37 @@ export default function Onboarding() {
     if (model.ready === false) setNeedsModel(true);
   }, [model.ready]);
   const hadVault = useRef(Boolean(vault));
-  const order = useMemo<Step[]>(() => ["hello", ...(needsAccount.current ? (["account"] as Step[]) : []), "uses", "aim", "team", "look", ...(needsModel ? (["assistant"] as Step[]) : []), "tools", "heard", ...(hadVault.current ? [] : (["folder"] as Step[])), "building"], [needsModel]);
+  // An invitation is offered to someone with no folder yet: the team's workspace becomes their first.
+  const waiting = useStore(invited, (s) => s.waiting);
+  // Kept once seen: joining takes it off the waiting list, and the last screen still needs to name it.
+  const [offer, setOffer] = useState<Waiting | null>(null);
+  useEffect(() => {
+    if (!hadVault.current && !offer && waiting[0]) setOffer(waiting[0]);
+  }, [waiting, offer]);
+  const [answer, setAnswer] = useState<"join" | "own" | "">("");
+  const joining = offer && answer === "join" ? offer : null;
+  const order = useMemo<Step[]>(
+    () => [
+      "hello",
+      ...(needsAccount.current ? (["account"] as Step[]) : []),
+      ...(offer ? (["invited"] as Step[]) : []),
+      // The pages and what they are for are the team's to decide; a person joining is asked only about themselves.
+      ...(joining ? [] : (["uses", "aim", "team"] as Step[])),
+      "look",
+      ...(needsModel ? (["assistant"] as Step[]) : []),
+      "tools",
+      "heard",
+      ...(hadVault.current ? [] : (["folder"] as Step[])),
+      "building",
+    ],
+    [needsModel, offer, joining],
+  );
   const index = order.indexOf(step);
   const set = (patch: Partial<Answers>) => setAnswers((a) => ({ ...a, ...patch }));
 
   useEffect(() => void aiConnectors().then(setCatalog, () => {}), []);
 
-  const optionCount = { hello: 0, account: 0, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, assistant: 0, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
+  const optionCount = { hello: 0, account: 0, invited: 2, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, assistant: 0, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
   useEffect(() => {
     track("onboarding_step", { step });
     if (step !== "hello") sweep();
@@ -260,7 +290,7 @@ export default function Onboarding() {
     [order],
   );
   const can =
-    step === "uses" ? answers.uses.length > 0 : step === "aim" ? Boolean(answers.aim) && (answers.aim !== "other" || answers.aimText.trim().length > 1) : step === "team" ? Boolean(answers.team) : step === "look" ? Boolean(answers.look) : step !== "building";
+    step === "account" ? !looking : step === "invited" ? Boolean(answer) : step === "uses" ? answers.uses.length > 0 : step === "aim" ? Boolean(answers.aim) && (answers.aim !== "other" || answers.aimText.trim().length > 1) : step === "team" ? Boolean(answers.team) : step === "look" ? Boolean(answers.look) : step !== "building";
   const next = useCallback(() => can && go(index + 1), [can, go, index]);
   const skip = () => leaveOnboarding(true, step);
 
@@ -346,6 +376,21 @@ export default function Onboarding() {
           </div>
         )}
         {byEmail && <AccountDialog onClose={() => setByEmail(false)} onDone={signedIn} />}
+      </section>
+    );
+  } else if (step === "invited" && offer) {
+    ask = (
+      <section className="ob-ask">
+        <h1>
+          <Said text={`${whoSent(offer)} invited you to ${offer.name}`} />
+        </h1>
+        <p className="ob-sub">
+          You would join as {asWhat(offer.role)}. The team’s customers, tasks and notes come to this computer and stay in step with everyone else’s.
+        </p>
+        <div className="ob-list">
+          <Choice option={{ id: "join", label: `Join ${offer.name}`, hint: offer.from ? `Invited by ${offer.from}` : "Recommended", icon: "team" }} index={0} on={answer === "join"} onPick={() => (wakeSounds(), pop(true, 0), setAnswer("join"))} />
+          <Choice option={{ id: "own", label: "Set up my own Lokus first", hint: "The invitation waits under Settings, Team", icon: "person" }} index={1} on={answer === "own"} onPick={() => (wakeSounds(), pop(true, 1), setAnswer("own"))} />
+        </div>
       </section>
     );
   } else if (step === "uses") {
@@ -512,11 +557,11 @@ export default function Onboarding() {
     ask = (
       <section className="ob-ask">
         <h1>
-          <Said text="Where should your notes live?" />
+          <Said text={joining ? `Where should ${joining.name} live?` : "Where should your notes live?"} />
         </h1>
         <p className="ob-sub">They are ordinary files on your computer. You can open them in Finder any time, with or without Lokus.</p>
         <div className="ob-list">
-          <Choice option={{ id: "default", label: "In Documents, in a folder called Lokus", hint: "Recommended. We make it for you.", icon: "folder" }} index={0} on={!answers.folder} onPick={() => set({ folder: "" })} />
+          <Choice option={{ id: "default", label: `In Documents, in a folder called ${joining?.name ?? "Lokus"}`, hint: "Recommended. We make it for you.", icon: "folder" }} index={0} on={!answers.folder} onPick={() => set({ folder: "" })} />
           <Choice
             option={{ id: "pick", label: answers.folder ? answers.folder.split("/").slice(-2).join(" / ") : "Somewhere else", hint: answers.folder ? "Chosen. Click to change." : "Choose a folder you already have", icon: "open" }}
             index={1}
@@ -527,7 +572,7 @@ export default function Onboarding() {
       </section>
     );
   } else {
-    ask = <Building answers={answers} name={name} onOpen={() => void finish(answers)} />;
+    ask = <Building answers={answers} name={name} joining={joining} onOpen={() => void finish(answers, Boolean(joining))} />;
   }
 
   return (

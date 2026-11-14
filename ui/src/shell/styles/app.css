@@ -388,6 +388,34 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
 .team-code-row { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
 .team-code { flex: 1; padding: 7px 10px; border-radius: var(--radius-sm); background: var(--code-bg); font-family: var(--font-mono); font-size: var(--text-caption); user-select: all; -webkit-user-select: all; }
 .team-own { margin-top: 10px; }
+.team-avatar.waiting { background: transparent; box-shadow: inset 0 0 0 1px var(--border); color: var(--fg-3); }
+.team-invite { display: flex; gap: 8px; margin: 8px 0 6px; }
+.settings .team-invite input:not([type=checkbox]):not([type=range]) { flex: 1; min-width: 0; width: 0; max-width: none; height: 34px; }
+.team-invite select { height: 34px; padding: 0 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; font-size: var(--text-small); }
+.team-invite .primary { height: 34px; padding: 0 14px; white-space: nowrap; }
+.team-invite-hint { margin: 0 0 10px; color: var(--fg-3); font-size: var(--text-caption); line-height: 1.5; }
+.team-invite-hint .link { font-size: inherit; }
+.app.narrow .team-invite { flex-wrap: wrap; }
+.app.narrow .settings .team-invite input:not([type=checkbox]):not([type=range]) { flex-basis: 100%; width: auto; }
+.invited { display: flex; flex-direction: column; gap: 12px; }
+.invited-head { display: flex; align-items: center; gap: 12px; }
+.invited-head > div { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.invited-head strong { font-size: var(--text-ui); font-weight: 650; letter-spacing: -0.005em; line-height: 1.3; text-wrap: balance; }
+.invited-head small { color: var(--fg-2); font-size: var(--text-small); line-height: 1.4; overflow-wrap: anywhere; }
+.invited-tile { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--accent) 14%, var(--bg)); color: var(--accent); font-size: 17px; font-weight: 650; }
+.invited-where { display: flex; flex-direction: column; gap: 6px; }
+.invited-where button { display: flex; flex-direction: column; gap: 1px; padding: 9px 12px 9px 34px; position: relative; text-align: left; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--border); transition: background var(--fast), box-shadow var(--fast); }
+.invited-where button::before { content: ""; position: absolute; left: 12px; top: 12px; width: 13px; height: 13px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--fg-3); }
+.invited-where button.on { box-shadow: inset 0 0 0 1.5px var(--accent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.invited-where button.on::before { box-shadow: inset 0 0 0 4px var(--accent); }
+.invited-where button:hover:not(.on) { background: var(--bg-hover); }
+.invited-where b { font-size: var(--text-small); font-weight: 600; }
+.invited-where small { color: var(--fg-2); font-size: var(--text-caption); line-height: 1.4; }
+.invited-note { margin: 0; color: var(--fg-2); font-size: var(--text-caption); line-height: 1.5; }
+.invited-note.error { color: var(--danger); }
+.update-card.invited-card { top: 54px; bottom: auto; width: 380px; z-index: 26; }
+.invited-list .invited { padding: 14px; }
+.invited-list .invited + .invited { border-top: 1px solid var(--border); }
 .settings-button.danger { color: var(--danger); box-shadow: 0 0 0 1px color-mix(in srgb, var(--danger) 45%, transparent); }
 .settings-label .sync-dot { display: inline-block; margin-right: 6px; vertical-align: 1px; }
 .settings form { display: contents; }

@@ -85,6 +85,27 @@ pub struct Invite {
     pub role: Role,
     pub created_by: String,
     pub expires_at: i64,
+    /// Who it was emailed to; `None` for an invite handed over as a link.
+    pub email: Option<String>,
+    /// When the email last went out.
+    pub sent_at: Option<i64>,
+}
+
+/// Everything an invitation says about itself: to the person invited, and in the email.
+#[derive(Debug, Clone, Serialize)]
+pub struct Invitation {
+    pub code: String,
+    /// The workspace's id and its name.
+    pub workspace: String,
+    pub name: String,
+    pub role: Role,
+    /// The address of the owner who sent it, and the name they go by.
+    pub from: Option<String>,
+    pub from_name: Option<String>,
+    pub email: Option<String>,
+    pub expires_at: i64,
+    #[serde(skip)]
+    pub sent_at: Option<i64>,
 }
 
 /// One change to who may do what in a workspace.
@@ -159,6 +180,39 @@ fn role_in(tx: &Transaction, workspace: &str, user: &str) -> rusqlite::Result<Op
     Ok(role.map(role_of))
 }
 
+/// Give `table` a column it does not have yet.
+fn add_column(db: &Connection, table: &str, column: &str, kind: &str) -> rusqlite::Result<()> {
+    let has: i64 = db.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name = ?2",
+        params![table, column],
+        |r| r.get(0),
+    )?;
+    if has == 0 {
+        db.execute_batch(&format!("ALTER TABLE {table} ADD COLUMN {column} {kind};"))?;
+    }
+    Ok(())
+}
+
+/// An invitation that can still be used, by its code.
+const LIVE: &str = "i.used_by IS NULL AND i.revoked = 0 AND i.expires_at > ?2";
+const INVITATION: &str = "SELECT i.code, i.workspace, w.name, i.role, m.email, i.inviter, i.email, i.expires_at, i.sent_at
+     FROM invites i JOIN workspaces w ON w.id = i.workspace
+     LEFT JOIN members m ON m.workspace = i.workspace AND m.user = i.created_by";
+
+fn invitation(r: &rusqlite::Row) -> rusqlite::Result<Invitation> {
+    Ok(Invitation {
+        code: r.get(0)?,
+        workspace: r.get(1)?,
+        name: r.get(2)?,
+        role: role_of(r.get(3)?),
+        from: r.get(4)?,
+        from_name: r.get(5)?,
+        email: r.get(6)?,
+        expires_at: r.get(7)?,
+        sent_at: r.get(8)?,
+    })
+}
+
 const LAST_OWNER: &str =
     "a workspace needs an owner: make someone else an owner first, or delete the workspace";
 
@@ -214,6 +268,19 @@ impl Store {
              CREATE TABLE IF NOT EXISTS app_news (id TEXT PRIMARY KEY, body TEXT NOT NULL, at INTEGER NOT NULL);
              PRAGMA user_version = {SCHEMA};"
         ))?;
+        // Columns added after the first relay went live. A database made before them gains
+        // them here, so a new build starts on last week's data.
+        for (column, kind) in [
+            ("email", "TEXT"),
+            ("inviter", "TEXT"),
+            ("sent_at", "INTEGER"),
+            ("sends", "INTEGER NOT NULL DEFAULT 0"),
+        ] {
+            add_column(&db, "invites", column, kind)?;
+        }
+        db.execute_batch(
+            "CREATE INDEX IF NOT EXISTS invites_by_email ON invites (email) WHERE email IS NOT NULL;",
+        )?;
         Ok(Self { db: Mutex::new(db) })
     }
 
@@ -357,6 +424,9 @@ impl Store {
     }
 
     /// Make an invite that works once, until `expires_at`.
+    /// Make an invite. One with an `email` is for that person: it replaces any earlier unused
+    /// one sent to the same address, and is refused if they are already in the workspace.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_invite(
         &self,
         code: &str,
@@ -364,9 +434,27 @@ impl Store {
         role: Role,
         by: &str,
         expires_at: i64,
+        email: Option<&str>,
+        inviter: Option<&str>,
     ) -> Result<()> {
         let mut db = self.db()?;
         let tx = db.transaction()?;
+        if let Some(email) = email {
+            let inside: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM members WHERE workspace = ?1 AND lower(email) = ?2",
+                params![workspace, email],
+                |r| r.get(0),
+            )?;
+            if inside > 0 {
+                return Err(Error::BadRequest(format!(
+                    "{email} is already in this workspace"
+                )));
+            }
+            tx.execute(
+                "UPDATE invites SET revoked = 1 WHERE workspace = ?1 AND email = ?2 AND used_by IS NULL AND revoked = 0",
+                params![workspace, email],
+            )?;
+        }
         let pending: i64 = tx.query_row(
             "SELECT COUNT(*) FROM invites WHERE workspace = ?1 AND used_by IS NULL AND revoked = 0 AND expires_at > ?2",
             params![workspace, now()],
@@ -378,8 +466,9 @@ impl Store {
             ));
         }
         tx.execute(
-            "INSERT INTO invites (code, workspace, role, created_by, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![code, workspace, role.name(), by, now(), expires_at],
+            "INSERT INTO invites (code, workspace, role, created_by, created_at, expires_at, email, inviter)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![code, workspace, role.name(), by, now(), expires_at, email, inviter],
         )?;
         record(
             &tx,
@@ -387,7 +476,7 @@ impl Store {
             by,
             "invite_created",
             Some(role.name()),
-            None,
+            email,
         )?;
         Ok(tx.commit()?)
     }
@@ -396,7 +485,7 @@ impl Store {
     pub fn invites(&self, workspace: &str) -> Result<Vec<Invite>> {
         let db = self.db()?;
         let mut q = db.prepare(
-            "SELECT code, role, created_by, expires_at FROM invites
+            "SELECT code, role, created_by, expires_at, email, sent_at FROM invites
              WHERE workspace = ?1 AND used_by IS NULL AND revoked = 0 AND expires_at > ?2 ORDER BY created_at",
         )?;
         let rows = q.query_map(params![workspace, now()], |r| {
@@ -405,9 +494,54 @@ impl Store {
                 role: role_of(r.get(1)?),
                 created_by: r.get(2)?,
                 expires_at: r.get(3)?,
+                email: r.get(4)?,
+                sent_at: r.get(5)?,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// One invitation that can still be used, with what it says about itself.
+    pub fn invitation(&self, code: &str) -> Result<Option<Invitation>> {
+        let db = self.db()?;
+        Ok(db
+            .query_row(
+                &format!("{INVITATION} WHERE i.code = ?1 AND {LIVE}"),
+                params![code, now()],
+                invitation,
+            )
+            .optional()?)
+    }
+
+    /// The invitations waiting for whoever owns `email`, leaving out workspaces `user` is
+    /// already in.
+    pub fn invitations_for(&self, email: &str, user: &str) -> Result<Vec<Invitation>> {
+        let db = self.db()?;
+        let mut q = db.prepare(&format!(
+            "{INVITATION} WHERE i.email = ?1 AND {LIVE}
+               AND NOT EXISTS (SELECT 1 FROM members x WHERE x.workspace = i.workspace AND x.user = ?3)
+             ORDER BY i.created_at DESC"
+        ))?;
+        let rows = q.query_map(params![email.to_lowercase(), now(), user], invitation)?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// An invitation's email went out.
+    pub fn invite_sent(&self, code: &str) -> Result<()> {
+        self.db()?.execute(
+            "UPDATE invites SET sent_at = ?2, sends = sends + 1 WHERE code = ?1",
+            params![code, now()],
+        )?;
+        Ok(())
+    }
+
+    /// How many invitation emails `user` has had sent in the last day.
+    pub fn sent_today(&self, user: &str) -> Result<i64> {
+        Ok(self.db()?.query_row(
+            "SELECT COALESCE(SUM(sends), 0) FROM invites WHERE created_by = ?1 AND sent_at > ?2",
+            params![user, now() - 86_400],
+            |r| r.get(0),
+        )?)
     }
 
     /// Cancel an invite nobody has used.

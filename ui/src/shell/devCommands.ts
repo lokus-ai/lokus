@@ -158,6 +158,19 @@ const commands: Command[] = [
     },
   },
   {
+    // Be someone a local relay knows by a fixed token, to drive teams and invitations: `email=` and `token=`.
+    id: "account.pretend",
+    title: "Stand in for a sign-in",
+    hidden: true,
+    async run(args) {
+      const { pretendAccount } = await import("../bridge/auth");
+      const { app } = await import("./workspace");
+      const account = pretendAccount(String(args.email ?? ""), String(args.token ?? ""));
+      app.set({ account });
+      return { account };
+    },
+  },
+  {
     id: "analytics.recent",
     title: "The last things counted",
     hidden: true,

@@ -6,6 +6,7 @@ import type { IconName } from "../../shell/Icon";
 import { type Preferences, setPreference } from "../../shell/preferences";
 import { createStore } from "../../shell/store";
 import { app, applyLayout, openCustomers, openTasks, refreshTree, setVault } from "../../shell/workspace";
+import { join, type Waiting } from "../teams/invites";
 
 /**
  * The first-run setup: a few questions, and a workspace made from the answers.
@@ -143,15 +144,23 @@ export interface Job {
   run(): Promise<void>;
 }
 
-/** What the answers turn into, in the order it is shown being done. */
-export function jobs(a: Answers): Job[] {
+/**
+ * What the answers turn into, in the order it is shown being done. Someone joining a team gets
+ * a folder and the team's workspace in it; the pages are the team's, so none are made here.
+ */
+export function jobs(a: Answers, joining: Waiting | null = null): Job[] {
   const list: Job[] = [];
   if (!app.get().vault) {
     list.push({
       id: "folder",
-      says: a.folder ? "Opening the folder you chose" : "Making a home for your notes in Documents",
-      run: async () => setVault(a.folder || (await defaultVault(true)).root),
+      says: a.folder ? "Opening the folder you chose" : joining ? `Making a folder for ${joining.name} in Documents` : "Making a home for your notes in Documents",
+      run: async () => setVault(a.folder || (await defaultVault(true, joining?.name)).root),
     });
+  }
+  if (joining) {
+    list.push({ id: "join", says: `Joining ${joining.name}`, run: () => join(joining, "here") });
+    list.push({ id: "arrive", says: "Bringing the team’s notes to this computer", run: async () => {} });
+    return list;
   }
   const has = (path: string) => runCore("note.read", { path }).then(
     () => true,
@@ -199,9 +208,10 @@ export function jobs(a: Answers): Job[] {
 }
 
 /** Keep the answers, tell us (when sharing is on), and open what was made. */
-export async function finish(a: Answers): Promise<void> {
+export async function finish(a: Answers, joined = false): Promise<void> {
   localStorage.setItem(KEPT, JSON.stringify(a));
   track("onboarding_done", {
+    joined,
     uses: a.uses.join(","),
     aim: aimInWords(a).slice(0, 200),
     team: a.team,

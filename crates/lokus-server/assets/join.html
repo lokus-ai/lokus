@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>{{title}}</title>
+<link rel="icon" href="/brand/lokus.png">
+<style>
+  :root { --bg:#fff; --card:#fafaf9; --line:#e8e8e4; --ink:#2b2a27; --soft:#6f6e69; --faint:#8d8c87; --accent:#2f6fed; --on:#fff; --tile:#e3ecfd; --num:#f1f1ee; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#171717; --card:#1f1f1f; --line:#303030; --ink:#e6e6e3; --soft:#a3a29d; --faint:#7d7c77; --accent:#6b9bff; --on:#10131a; --tile:#26324a; --num:#262626; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased; }
+  main { max-width:560px; margin:0 auto; padding:56px 32px 72px; }
+  .brand { display:flex; align-items:center; gap:9px; font-weight:600; letter-spacing:-0.01em; }
+  .brand img { width:26px; height:26px; padding:3px; background:#fff; border-radius:7px; }
+  h1 { margin:44px 0 0; font-size:30px; line-height:1.2; font-weight:650; letter-spacing:-0.022em; text-wrap:balance; }
+  .lead { margin:14px 0 0; color:var(--soft); }
+  .card { display:flex; align-items:center; gap:14px; margin:28px 0 0; padding:16px; background:var(--card); border:1px solid var(--line); border-radius:12px; }
+  .tile { flex:none; width:44px; height:44px; display:grid; place-items:center; border-radius:10px; background:var(--tile); color:var(--accent); font-size:19px; font-weight:650; }
+  .card strong { display:block; font-weight:600; line-height:1.35; }
+  .card span { display:block; color:var(--soft); font-size:14px; line-height:1.45; }
+  ol { list-style:none; margin:34px 0 0; padding:0; counter-reset:step; }
+  li { position:relative; padding:0 0 26px 38px; counter-increment:step; }
+  li::before { content:counter(step); position:absolute; left:0; top:1px; width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:var(--num); font-size:12px; font-weight:600; }
+  li:not(:last-child)::after { content:""; position:absolute; left:11.5px; top:31px; bottom:6px; width:1px; background:var(--line); }
+  li b { font-weight:600; }
+  li p { margin:2px 0 0; color:var(--soft); font-size:15px; }
+  .get { display:flex; flex-wrap:wrap; gap:10px; margin:12px 0 0; }
+  a.button { display:inline-block; padding:11px 20px; border-radius:9px; background:var(--accent); color:var(--on); font-weight:600; font-size:15px; text-decoration:none; }
+  a.button.second { background:transparent; color:var(--ink); box-shadow:inset 0 0 0 1px var(--line); }
+  a.button:focus-visible, button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .to { color:var(--ink); font-weight:550; }
+  .other { margin:8px 0 0; padding:20px 0 0; border-top:1px solid var(--line); color:var(--faint); font-size:13.5px; line-height:1.5; }
+  .code { display:flex; align-items:center; gap:8px; margin:10px 0 0; }
+  code { flex:1; min-width:0; padding:8px 10px; border-radius:8px; background:var(--num); color:var(--ink); font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap:anywhere; user-select:all; -webkit-user-select:all; }
+  button { flex:none; padding:8px 12px; border:0; border-radius:8px; background:var(--num); color:var(--ink); font:inherit; font-size:13px; font-weight:550; cursor:pointer; }
+  .gone { margin:14px 0 0; color:var(--soft); }
+  @media (max-width:560px) { main { padding:36px 20px 56px; } h1 { font-size:25px; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="/brand/lokus.png" alt="">Lokus</div>
+  {{body}}
+</main>
+<script>
+  for (const b of document.querySelectorAll("[data-copy]")) b.addEventListener("click", () => {
+    navigator.clipboard.writeText(b.dataset.copy).then(() => { const was = b.textContent; b.textContent = "Copied"; setTimeout(() => (b.textContent = was), 1600); });
+  });
+</script>
+</body>
+</html>

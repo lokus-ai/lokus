@@ -4,6 +4,7 @@ import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, use
 
 import { identify } from "../bridge/analytics";
 import { accountsAvailable } from "../bridge/auth";
+import { isMainWindow } from "../bridge/core";
 import { AiPanel } from "../features/ai/AiPanel";
 import { chat, continueShared, newChat, shareChat } from "../features/ai/chat";
 import { AccountDialog } from "../features/auth/AccountDialog";
@@ -47,6 +48,7 @@ const DatabaseView = lazy(() => import("../features/database/DatabaseView"));
 import { Avatar } from "../features/profile/Profile";
 import { onboarding } from "../features/onboarding/onboarding";
 import { Start } from "../features/onboarding/Start";
+import { Invited } from "../features/teams/Invite";
 import { NoteSuggestions, NoticedButton, NoticedDrawer } from "../features/noticed/NoticedList";
 import { Misplaced, NewsButton, UpdateCard, WhatsNew } from "../features/updates/UpdateCard";
 import { useMe } from "../features/profile/profiles";
@@ -499,6 +501,8 @@ export function App() {
         </Suspense>
       )}
       <Misplaced />
+      {/* While setup is open it makes the offer itself, as one of its steps. */}
+      {!onboardingOpen && isMainWindow() && <Invited />}
     </>
   );
 }

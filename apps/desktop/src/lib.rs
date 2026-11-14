@@ -118,14 +118,22 @@ fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
 
 /// The folder notes are kept in when someone does not want to choose one: Documents, Lokus.
 /// With `open` it is made if need be and opened; without, only its place is told.
+/// A `name` asks for a folder of that name instead, for a team's workspace joined by invitation.
 #[tauri::command(async)]
-fn vault_default(app: AppHandle, open: bool) -> Result<Value, Value> {
+fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Value, Value> {
+    // A workspace's name is whatever its owner typed; only what is safe as a folder is kept.
+    let named: String = name
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control() && !"/\\:".contains(*c))
+        .collect();
+    let named = named.trim().trim_start_matches('.').trim();
     let folder = app
         .path()
         .document_dir()
         .or_else(|_| app.path().home_dir())
         .map_err(|e| json!({ "code": "io", "message": format!("Could not find your Documents folder: {e}") }))?
-        .join("Lokus");
+        .join(if named.is_empty() { "Lokus" } else { named });
     if !open {
         return Ok(json!({ "root": folder }));
     }

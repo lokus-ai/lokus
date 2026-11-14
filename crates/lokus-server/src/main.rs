@@ -49,7 +49,12 @@ async fn main() {
         Some(_) => eprintln!("releases and news can be published with LOKUS_PUBLISH_KEY"),
         None => {}
     }
-    let app = App::with_publisher(store, auth, Limits::from_env(), publish_key);
+    let mailer = lokus_server::mail::Mailer::from_env();
+    match &mailer {
+        Some(m) => eprintln!("invitations are emailed; their links point at {}", m.site),
+        None => eprintln!("no LOKUS_MAIL_KEY: invitations are handed over as links, not emailed"),
+    }
+    let app = App::build(store, auth, Limits::from_env(), publish_key, mailer);
     let serve = axum::serve(listener, router(app));
     if let Err(e) = serve
         .with_graceful_shutdown(async {
