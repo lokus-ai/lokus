@@ -257,7 +257,17 @@ impl Letter {
             .replace("{{by}}", &escape(&by))
             .replace("{{workspace}}", &escape(workspace))
             .replace("{{initial}}", &escape(&initial))
-            .replace("{{role}}", &escape(role))
+            .replace(
+                "{{from_email}}",
+                &escape(invitation.from.as_deref().unwrap_or_default()),
+            )
+            .replace(
+                "{{role_can}}",
+                match invitation.role {
+                    Role::Viewer => "Can read everything",
+                    _ => "Can read and change everything",
+                },
+            )
             .replace("{{role_name}}", &escape(&capital(invitation.role.name())))
             .replace("{{to}}", &escape(to))
             .replace("{{until}}", &escape(&until))
@@ -345,7 +355,8 @@ mod tests {
         assert!(!letter.html.contains("<script>"));
         assert!(letter.html.contains("Acme &lt;script&gt;"));
         assert!(letter.html.contains("https://relay.example/join/abc"));
-        assert!(letter.html.contains("Alice (alice@x.io)"));
+        assert!(letter.html.contains("alice@x.io"));
+        assert!(letter.text.contains("Alice (alice@x.io)"));
         assert!(!letter.html.contains("{{"));
         assert_eq!(
             letter.subject,
