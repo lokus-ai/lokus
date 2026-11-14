@@ -38,7 +38,10 @@ jobs:
 
   # Lokus on Windows: the tests, then the real app started and used through its dev channel,
   # then the installer people would download. The pictures and the installer are kept.
+  # It takes about forty minutes, so it runs when asked for (Actions, CI, Run workflow) or on
+  # a pull request labelled "windows", not on every push.
   windows:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'windows')
     runs-on: windows-latest
     timeout-minutes: 60
     steps:

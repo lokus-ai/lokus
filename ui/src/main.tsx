@@ -38,6 +38,8 @@ window.addEventListener("blur", () => void saveAll());
 
 createRoot(document.getElementById("root")!).render(<App />);
 // The setup and the update pop-up belong to the first window; a second one opens straight to work.
+// The stylesheet leaves room for a Mac's window buttons; elsewhere the system draws its own bar.
+document.documentElement.dataset.platform = /Mac/i.test(navigator.userAgent) ? "mac" : /Windows/i.test(navigator.userAgent) ? "windows" : "linux";
 void boot().then(() => {
   if (!isMainWindow()) return;
   startOnboarding();

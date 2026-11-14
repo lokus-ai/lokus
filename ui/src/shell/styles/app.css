@@ -137,6 +137,8 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
   transition: padding-left var(--dialog) var(--ease-out);
 }
 .tabs.inset { padding-left: 84px; }
+:root:not([data-platform="mac"]) .tabs.inset { padding-left: 8px; }
+:root:not([data-platform="mac"]) .sidebar-top { height: 10px; }
 .tab {
   position: relative; align-self: flex-end; flex: 1 1 0; display: flex; align-items: center; gap: 6px;
   height: calc(var(--bar-height) - 6px); max-width: 220px; min-width: 0; padding: 0 6px 0 12px;

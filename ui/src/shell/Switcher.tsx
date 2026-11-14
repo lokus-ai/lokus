@@ -79,7 +79,7 @@ export function WorkspaceSwitcher() {
             <span className="vault-badge big">{letter(vault?.name ?? "")}</span>
             <div>
               <strong>{vault?.name}</strong>
-              <small>{team ? "Team workspace" : "Only on this Mac"}</small>
+              <small>{team ? "Team workspace" : "Private"}</small>
             </div>
           </div>
           <div className="switcher-actions">
@@ -103,7 +103,7 @@ export function WorkspaceSwitcher() {
                 {v.root !== vault?.root && (
                   <button
                     className="switcher-forget"
-                    title="Remove from this list. The folder stays on your Mac."
+                    title="Remove from this list. The folder stays on your computer."
                     aria-label={`Remove ${v.name} from the list`}
                     onClick={() => void forgetVault(v.root).then(() => setAll((had) => had.filter((x) => x.root !== v.root)))}
                   >

@@ -54,7 +54,7 @@ function chord(e: KeyboardEvent): string {
 export function formatKeys(keys: string): string {
   return keys
     .split("-")
-    .map((k) => (k === "Mod" ? (isMac ? "⌘" : "Ctrl") : k === "Ctrl" ? "⌃" : k === "Shift" ? "⇧" : k === "Alt" ? "⌥" : k.toUpperCase()))
+    .map((k) => (isMac ? (k === "Mod" ? "⌘" : k === "Ctrl" ? "⌃" : k === "Shift" ? "⇧" : k === "Alt" ? "⌥" : k.toUpperCase()) : k === "Mod" ? "Ctrl" : k.length > 1 ? k : k.toUpperCase()))
     .join(isMac ? "" : "+");
 }
 
