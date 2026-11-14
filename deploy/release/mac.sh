@@ -56,12 +56,8 @@ else
   echo "NOT NOTARIZED: no stored credentials. A downloaded copy will be blocked by macOS until this is done."
 fi
 
-# The disk image people download: the app and a shortcut to Applications to drag it onto.
-STAGE="$OUT/dmg-stage"
-mkdir -p "$STAGE/Lokus.app"
-rsync -a --delete "$APP/" "$STAGE/Lokus.app/"
-[ -L "$STAGE/Applications" ] || ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "Lokus" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+# The disk image people download, with its "drag Lokus into Applications" window.
+sh "$(dirname "$0")/dmg.sh" "$APP" "$DMG"
 codesign --sign "$IDENTITY" "$DMG"
 if [ "$NOTARIZED" = yes ]; then
   xcrun notarytool submit "$DMG" --keychain-profile lokus --wait
