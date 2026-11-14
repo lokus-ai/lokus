@@ -66,13 +66,20 @@ impl Mailer {
     /// Email an invitation. The error is for the log; the caller words its own for the person.
     pub async fn invite(&self, invitation: &Invitation) -> Result<(), String> {
         let to = invitation.email.as_deref().ok_or("no address")?;
-        let letter = Letter::of(invitation, &self.link(&invitation.code), &self.site);
+        let letter = Letter::of(invitation, &self.link(&invitation.code));
         let mut body = json!({
             "from": self.from,
             "to": [to],
             "subject": letter.subject,
             "html": letter.html,
             "text": letter.text,
+            // The picture travels inside the email, so it shows without asking a server for it.
+            "attachments": [{
+                "content": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, PICTURE),
+                "filename": "lokus.jpg",
+                "content_type": "image/jpeg",
+                "content_id": "lokus-invitation",
+            }],
         });
         // A reply goes to the person who invited, not into a mailbox nobody reads.
         if let Some(from) = &invitation.from {
@@ -214,7 +221,7 @@ pub struct Letter {
 }
 
 impl Letter {
-    pub fn of(invitation: &Invitation, link: &str, site: &str) -> Self {
+    pub fn of(invitation: &Invitation, link: &str) -> Self {
         let who = sender(invitation);
         let workspace = invitation.name.as_str();
         let to = invitation.email.as_deref().unwrap_or_default();
@@ -240,11 +247,6 @@ impl Letter {
              3. Your invitation is waiting inside. Click Join.\n\n\
              The invitation works until {until}. Not expecting it? Ignore this email and nothing happens.\n"
         );
-        let initial = workspace
-            .chars()
-            .find(|c| c.is_alphanumeric())
-            .map(|c| c.to_uppercase().to_string())
-            .unwrap_or_else(|| "L".into());
         let html = TEMPLATE
             .replace(
                 "{{preheader}}",
@@ -252,23 +254,16 @@ impl Letter {
                     "Join as {role}. The invitation works until {until}."
                 )),
             )
-            .replace("{{logo}}", &format!("{site}/brand/lokus.png"))
             .replace("{{who}}", &escape(&who))
             .replace("{{by}}", &escape(&by))
             .replace("{{workspace}}", &escape(workspace))
-            .replace("{{initial}}", &escape(&initial))
             .replace(
-                "{{from_email}}",
-                &escape(invitation.from.as_deref().unwrap_or_default()),
-            )
-            .replace(
-                "{{role_can}}",
+                "{{role_long}}",
                 match invitation.role {
-                    Role::Viewer => "Can read everything",
-                    _ => "Can read and change everything",
+                    Role::Viewer => "a viewer, so you can read everything",
+                    _ => "an editor, so you can read and change everything",
                 },
             )
-            .replace("{{role_name}}", &escape(&capital(invitation.role.name())))
             .replace("{{to}}", &escape(to))
             .replace("{{until}}", &escape(&until))
             .replace("{{link}}", &escape(link));
@@ -292,6 +287,8 @@ pub fn capital(word: &str) -> String {
 /// programs keep. The colours are the app's own light theme; the `<style>` block turns it dark
 /// in the programs that honour one.
 const TEMPLATE: &str = include_str!("../assets/invitation.html");
+/// The picture at the top of the email.
+const PICTURE: &[u8] = include_bytes!("../assets/invitation.jpg");
 
 #[cfg(test)]
 mod tests {
@@ -347,11 +344,7 @@ mod tests {
             expires_at: 1_794_614_400,
             sent_at: None,
         };
-        let letter = Letter::of(
-            &invitation,
-            "https://relay.example/join/abc",
-            "https://relay.example",
-        );
+        let letter = Letter::of(&invitation, "https://relay.example/join/abc");
         assert!(!letter.html.contains("<script>"));
         assert!(letter.html.contains("Acme &lt;script&gt;"));
         assert!(letter.html.contains("https://relay.example/join/abc"));
