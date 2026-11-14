@@ -401,6 +401,7 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
 .team-tabs button span { margin-left: 3px; color: var(--fg-3); }
 .team-tabs button:hover { color: var(--fg); }
 .team-tabs button.on { background: var(--bg-active); color: var(--fg); font-weight: 550; }
+.door-brief { margin: 4px 0 8px; color: var(--fg-3); font-size: var(--text-caption); }
 .team-empty { margin: 0 0 8px; padding: 28px 0; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--border); color: var(--fg-3); font-size: var(--text-small); text-align: center; }
 .invite-overlay { z-index: 40; background: rgba(0, 0, 0, 0.32); }
 .invite-dialog { width: 480px; max-width: calc(100vw - 48px); display: flex; flex-direction: column; padding: 22px 24px 20px; border-radius: var(--radius-lg); background: var(--bg); box-shadow: var(--shadow-pop); animation: rise var(--dialog) var(--ease-out); }

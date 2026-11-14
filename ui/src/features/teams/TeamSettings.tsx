@@ -138,15 +138,14 @@ export function TeamSettings() {
 
   if (connected) {
     return (
-      <Section title="Team" hint="This vault is shared. Everyone in the workspace keeps a full copy and can work offline.">
+      <Section title="Team">
         <div className="team-head">
           <span className="vault-badge team-badge">{(teamName.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpperCase()}</span>
           <div className="team-head-main">
             <strong>{teamName}</strong>
             <small>
               <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]}
-              {current.role ? ` You are ${current.role === "owner" ? "an owner" : current.role === "editor" ? "an editor" : "a viewer"}.` : ""}
-            </small>
+              </small>
           </div>
           {owner && token && (
             <button className="primary team-invite-button" onClick={() => setInviting(true)}>
@@ -224,13 +223,13 @@ export function TeamSettings() {
 
         {owner && token && current.workspace && <DataDoor server={server} token={token} workspace={current.workspace} />}
 
-        <Row label="Stop syncing on this computer" hint="This computer keeps its notes and stops sending and receiving changes. You stay in the workspace.">
+        <Row label="Stop syncing on this computer">
           <button className="settings-button" onClick={() => void disconnectSync()}>
             Stop syncing
           </button>
         </Row>
         {current.user && !(owner && owners === 1) && (
-          <Row label="Leave this workspace" hint="You stop receiving changes and need a new invite to come back. Your notes stay on this computer.">
+          <Row label="Leave this workspace">
             {confirming === "leave" ? (
               <>
                 <button className="settings-button danger" onClick={() => void leave()}>
@@ -248,7 +247,7 @@ export function TeamSettings() {
           </Row>
         )}
         {owner && (
-          <Row label="Delete this workspace" hint="Removes the shared copy and its history for everyone. Each person keeps the notes already on their own computer.">
+          <Row label="Delete this workspace" hint="For everyone. Notes already on each computer stay.">
             {confirming === "delete" ? (
               <>
                 <button className="settings-button danger" onClick={() => void remove()}>

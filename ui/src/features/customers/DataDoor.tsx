@@ -126,12 +126,12 @@ export function DataDoor({ server, token, workspace }: Props) {
   if (!supported) return null;
   return (
     <>
-      <h3>Customer data from your own systems</h3>
+      <h3>API keys</h3>
       <Row
-        label="Keys"
-        hint="Your backend sends facts about customers (a plan change, a payment, a support message) with a key. Each fact lands on that customer's page for the whole team."
+        label="New key"
+        hint="For your backend to send data in."
       >
-        <input value={label} placeholder="What will use it, like Billing" aria-label="Name for the new key" onChange={(e) => setLabel(e.target.value)} />
+        <input value={label} placeholder="Name, like Billing" aria-label="Name for the new key" onChange={(e) => setLabel(e.target.value)} />
         <button className="settings-button" onClick={() => void make()}>
           Make a key
         </button>
@@ -178,8 +178,8 @@ export function DataDoor({ server, token, workspace }: Props) {
         </div>
       )}
       {!fresh && (
-        <button className="link" onClick={() => copy(brief(server), "Instructions copied")}>
-          Copy instructions for a coding assistant
+        <button className="link door-brief" onClick={() => copy(brief(server), "Instructions copied")}>
+          Copy setup instructions
         </button>
       )}
     </>
