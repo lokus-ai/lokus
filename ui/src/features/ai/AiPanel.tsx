@@ -1,4 +1,5 @@
 /** @part-of ui.ai */
+import lokusMark from "./lokus.svg";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { Entry } from "../../bridge/core";
@@ -113,7 +114,8 @@ type Step = Extract<Item, { kind: "tool" }>;
 /** The small picture beside a step: the service's mark, or a dot for our own tools. */
 function Mark({ step }: { step: Step }) {
   const from = service(step.name);
-  return from ? <Logo id={from.id} name={from.id} size={16} /> : <span className={`ai-dot ${step.status}`} />;
+  // Lokus's own steps wear Lokus's mark, drawn in the text colour so it sits right in any theme.
+  return from ? <Logo id={from.id} name={from.id} size={16} /> : <span className={`ai-own ${step.status}`} style={{ maskImage: `url(${lokusMark})`, WebkitMaskImage: `url(${lokusMark})` }} />;
 }
 
 /**

@@ -236,6 +236,10 @@ img.cust-logo { object-fit: cover; background: var(--bg-hover); }
 .ai-dot { display: inline-block; width: 6px; height: 6px; flex: none; margin: 0 5px; border-radius: 50%; background: var(--fg-3); }
 .ai-dot.running { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
 .ai-dot.failed { background: var(--danger); }
+.ai-own { display: inline-block; flex: none; width: 14px; height: 14px; margin: 0 1px; background: var(--fg-3); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.ai-own.running { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.ai-own.failed { background: var(--danger); }
+.ai-step:hover .ai-own:not(.running):not(.failed), .ai-steps-head:hover .ai-own:not(.running):not(.failed) { background: var(--fg-2); }
 .ai-steps { font-size: var(--text-small); color: var(--fg-2); }
 .ai-steps-head { display: flex; align-items: center; gap: 8px; max-width: 100%; height: 28px; margin-left: -6px; padding: 0 8px 0 6px; border-radius: var(--radius-sm); text-align: left; }
 .ai-steps-head:hover { background: var(--bg-hover); color: var(--fg); }
