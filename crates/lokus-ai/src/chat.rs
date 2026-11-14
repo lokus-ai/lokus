@@ -140,6 +140,9 @@ pub struct Outcome {
     pub input_tokens: u64,
     pub output_tokens: u64,
     pub tools: Vec<String>,
+    /// How big the first request was, by part, in characters: the instructions, each source of
+    /// tools with how many it offered, and the conversation. For seeing what a request is made of.
+    pub context: Value,
 }
 
 /// Asks the person to allow a tool call; resolves to their answer.
@@ -153,6 +156,76 @@ enum Source {
     Vault,
     App,
     Server(usize, String),
+    /// The tool that brings a connected service's tools off the shelf.
+    Loader,
+}
+
+/// Connected services describe their tools at length: four of them came to 437,000 characters,
+/// 98% of every request, before a word was said (measured 2026-11-14). Past this many
+/// characters they are kept on a shelf instead: the model is shown each tool's name and a line
+/// about it, and asks for the ones it needs. Below it they are simply offered, since asking
+/// costs a round trip that a small set does not earn.
+const SHELVE_OVER: usize = 40_000;
+/// How much of a tool's description the shelf's list shows.
+const SHELF_LINE: usize = 90;
+const LOADER: &str = "load_tools";
+
+fn weigh(tool: &Tool) -> usize {
+    tool.name.len() + tool.description.len() + tool.schema.to_string().len()
+}
+
+fn loader() -> Tool {
+    Tool {
+        name: LOADER.into(),
+        description: "Get tools from the user's connected services ready to use. The services and their tools are listed in your instructions under \"Connected services\". Name the ones you need; you can call them from your next step on. Ask for everything a task needs in one go.".into(),
+        schema: json!({
+            "type": "object",
+            "properties": { "names": { "type": "array", "items": { "type": "string" }, "description": "Tool names exactly as listed, up to 15." } },
+            "required": ["names"],
+        }),
+        writes: false,
+    }
+}
+
+/// The shelf as the model reads it: every service, and each of its tools by name with a line.
+fn shelf_list(shelf: &[(Tool, Source)], servers: &[String]) -> String {
+    let mut text = String::from(
+        "## Connected services\n\nThese tools exist but are not loaded. To use any, call load_tools with their names first, then call them. Tools you have already used in this conversation are loaded.\n",
+    );
+    for (index, server) in servers.iter().enumerate() {
+        let mine: Vec<&Tool> = shelf
+            .iter()
+            .filter(|(_, source)| matches!(source, Source::Server(i, _) if *i == index))
+            .map(|(tool, _)| tool)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        text.push_str(&format!("\n{server} ({} tools):\n", mine.len()));
+        for tool in mine {
+            let line: String = tool.description.split('\n').next().unwrap_or_default().chars().take(SHELF_LINE).collect();
+            text.push_str(&format!("- {}: {}\n", tool.name, line.trim()));
+        }
+    }
+    text
+}
+
+/// Tools this conversation has already used or asked for, so they are ready without asking again.
+fn already_wanted(messages: &[Value]) -> std::collections::HashSet<String> {
+    let mut names = std::collections::HashSet::new();
+    for block in messages.iter().filter_map(|m| m["content"].as_array()).flatten() {
+        if block["type"] != "tool_use" {
+            continue;
+        }
+        match block["name"].as_str() {
+            Some(LOADER) => names.extend(block["input"]["names"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(str::to_string))),
+            Some(name) => {
+                names.insert(name.to_string());
+            }
+            None => {}
+        }
+    }
+    names
 }
 
 /// A tool result short enough to hand to the model.
@@ -218,7 +291,7 @@ pub async fn send(
         briefing,
         app,
     } = request;
-    let system = if briefing.trim().is_empty() {
+    let mut system = if briefing.trim().is_empty() {
         SYSTEM.to_string()
     } else {
         format!("{SYSTEM}\n\n{}", briefing.trim())
@@ -257,17 +330,64 @@ pub async fn send(
             offered.push(tool);
         }
     }
+    let mut shelf: Vec<(Tool, Source)> = Vec::new();
     for (index, connection) in connections.iter().enumerate() {
         for tool in &connection.tools {
-            sources.push(Source::Server(index, tool.name.clone()));
-            offered.push(Tool {
-                name: mcp::tool_name(&connection.server, &tool.name),
-                description: tool.description.clone(),
-                schema: tool.schema.clone(),
-                writes: tool.writes,
-            });
+            shelf.push((
+                Tool {
+                    name: mcp::tool_name(&connection.server, &tool.name),
+                    description: tool.description.clone(),
+                    schema: tool.schema.clone(),
+                    writes: tool.writes,
+                },
+                Source::Server(index, tool.name.clone()),
+            ));
         }
     }
+    let shelved = shelf.iter().map(|(tool, _)| weigh(tool)).sum::<usize>() > SHELVE_OVER;
+    if shelved {
+        let servers: Vec<String> = connections.iter().map(|c| c.server.clone()).collect();
+        system.push_str("\n\n");
+        system.push_str(&shelf_list(&shelf, &servers));
+        sources.push(Source::Loader);
+        offered.push(loader());
+        // What this conversation has used before is ready from the start.
+        let wanted = already_wanted(&messages);
+        let (ready, rest): (Vec<_>, Vec<_>) = shelf.into_iter().partition(|(tool, _)| wanted.contains(&tool.name));
+        shelf = rest;
+        for (tool, source) in ready {
+            offered.push(tool);
+            sources.push(source);
+        }
+    } else {
+        for (tool, source) in shelf.drain(..) {
+            offered.push(tool);
+            sources.push(source);
+        }
+    }
+
+    // What this request is made of, measured before anything is sent.
+    let context = {
+        let mut by_source: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+        for (tool, source) in offered.iter().zip(&sources) {
+            let from = match source {
+                Source::Vault => "vault".to_string(),
+                Source::App => "app".to_string(),
+                Source::Server(index, _) => connections[*index].server.clone(),
+                Source::Loader => "loader".to_string(),
+            };
+            let entry = by_source.entry(from).or_default();
+            entry.0 += 1;
+            entry.1 += weigh(tool);
+        }
+        json!({
+            "instructions": SYSTEM.len(),
+            "briefing": system.len().saturating_sub(SYSTEM.len()),
+            "conversation": messages.iter().map(|m| m.to_string().len()).sum::<usize>(),
+            "shelved": shelf.len(),
+            "tools": by_source.iter().map(|(k, v)| (k.clone(), json!({ "count": v.0, "chars": v.1 }))).collect::<serde_json::Map<_, _>>(),
+        })
+    };
 
     let mut added: Vec<Value> = Vec::new();
     let mut stop = String::from("end_turn");
@@ -307,6 +427,29 @@ pub async fn send(
                         Err("The user declined this.".into())
                     } else {
                         match position.map(|p| &sources[p]) {
+                            Some(Source::Loader) => {
+                                let asked: Vec<String> = input["names"].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(str::to_string)).take(15).collect();
+                                let (mut loaded, mut missing) = (Vec::new(), Vec::new());
+                                for name in asked {
+                                    if offered.iter().any(|t| t.name == name) {
+                                        loaded.push(name);
+                                    } else if let Some(at) = shelf.iter().position(|(t, _)| t.name == name) {
+                                        let (tool, source) = shelf.remove(at);
+                                        offered.push(tool);
+                                        sources.push(source);
+                                        loaded.push(name);
+                                    } else {
+                                        missing.push(name);
+                                    }
+                                }
+                                if loaded.is_empty() {
+                                    Err(format!("None of those are tools of a connected service: {}. Use the names exactly as listed under Connected services.", missing.join(", ")))
+                                } else if missing.is_empty() {
+                                    Ok(format!("Ready to use: {}.", loaded.join(", ")))
+                                } else {
+                                    Ok(format!("Ready to use: {}. Not found (check the name): {}.", loaded.join(", "), missing.join(", ")))
+                                }
+                            }
                             Some(Source::Vault) => match &core {
                                 Some(core) => tools::run(core, &name, &input),
                                 None => Err("no vault is open".into()),
@@ -362,12 +505,43 @@ pub async fn send(
         input_tokens: read,
         output_tokens: written,
         tools: used,
+        context,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn service_tool(name: &str, words: usize) -> (Tool, Source) {
+        let tool = Tool { name: name.into(), description: format!("Does {name}.\n{}", "more ".repeat(words)), schema: json!({ "type": "object" }), writes: false };
+        (tool, Source::Server(0, name.into()))
+    }
+
+    /// The shelf shows each tool as one short line, however long the service's own description.
+    #[test]
+    fn the_shelf_lists_a_tool_in_one_line() {
+        let shelf = vec![service_tool("mcp__linear__list_issues", 4000), service_tool("mcp__linear__get_issue", 4000)];
+        let list = shelf_list(&shelf, &["linear".to_string()]);
+        assert!(list.contains("linear (2 tools)"));
+        assert!(list.contains("- mcp__linear__list_issues: Does mcp__linear__list_issues."));
+        assert!(list.len() < 600, "{}", list.len());
+    }
+
+    /// A tool used earlier in the conversation, or asked for by name, is ready without asking again.
+    #[test]
+    fn what_a_conversation_used_before_is_remembered() {
+        let messages = vec![
+            json!({ "role": "user", "content": "hi" }),
+            json!({ "role": "assistant", "content": [
+                { "type": "tool_use", "id": "1", "name": "load_tools", "input": { "names": ["mcp__slack__search", "mcp__slack__send"] } },
+                { "type": "tool_use", "id": "2", "name": "mcp__linear__list_issues", "input": {} },
+            ] }),
+        ];
+        let wanted = already_wanted(&messages);
+        assert!(wanted.contains("mcp__slack__search") && wanted.contains("mcp__slack__send") && wanted.contains("mcp__linear__list_issues"));
+        assert!(!wanted.contains("load_tools"));
+    }
 
     #[test]
     fn empty_optional_fields_are_left_out_of_a_call_to_a_service() {

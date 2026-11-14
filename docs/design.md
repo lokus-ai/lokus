@@ -422,6 +422,15 @@ Checked by `checks/flows/assistant.sh` against a stand-in provider and tool serv
 flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
 Not built yet: saving conversations to disk, and compaction of very long ones.
 
+### What a request is made of
+
+Every request carries the instructions, a briefing about this workspace, the conversation, and
+the tools. Lokus's own tools (16) are always there. A connected service's tools are offered
+directly only while all of them together stay under 40,000 characters; past that they go on a
+shelf: the instructions list each by name with one line, and the assistant calls `load_tools`
+for the ones it needs. Tools a conversation has used stay loaded for the rest of it. Each
+request's make-up is measured and sent with its trace (`chars_tools_<service>` and so on).
+
 ### Connections (the catalog is built; signing in to a real service is untried)
 
 A connector is a tool server (MCP) that a service runs itself. Settings, Connections lists them

@@ -24,6 +24,10 @@ const TOOLS: Record<string, (input: Record<string, unknown>) => string> = {
   edit_note: (i) => `Edit ${String(i.path ?? "a note")}`,
   set_property: (i) => `Set ${String(i.key ?? "a property")} on ${String(i.path ?? "a note")}`,
   list_customers: () => "Looking at your customers",
+  load_tools: (i) => {
+    const services = [...new Set((Array.isArray(i.names) ? i.names : []).map((n) => String(n).split("__")[1]).filter(Boolean))];
+    return services.length ? `Getting ${services.map((s) => s.replace(/^./, (c) => c.toUpperCase())).join(" and ")} ready` : "Getting tools ready";
+  },
   list_tasks: () => "Looking at the board",
   record_task: (i) => (i.key ? `Update ${String(i.key)}${i.status ? `: ${String(i.status)}` : ""}` : `Add a task: ${String(i.title ?? "")}`),
   remember: (i) => `Remembered: ${String(i.fact ?? "")}`,

@@ -149,6 +149,8 @@ export interface ChatTrace {
   stop: string;
   /** Empty when it worked. */
   error: string;
+  /** What the request was made of, in characters by part, and how many tools were offered. */
+  made: Record<string, number>;
   /** Sent only when conversation sharing is on. */
   question: string;
   answer: string;
@@ -168,6 +170,7 @@ export function traceChat(t: ChatTrace): void {
     rounds: t.rounds,
     tool_count: t.tools.length,
     tools_used: [...new Set(t.tools)].join(","),
+    ...t.made,
     ...(shared ? { $ai_input: [{ role: "user", content: t.question }], $ai_output_choices: [{ role: "assistant", content: t.answer }] } : {}),
   });
 }

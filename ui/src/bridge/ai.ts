@@ -56,6 +56,8 @@ export interface AiOutcome {
   input_tokens: number;
   output_tokens: number;
   tools: string[];
+  /** What the first request was made of, in characters, by part. */
+  context: { instructions: number; briefing: number; conversation: number; tools: Record<string, { count: number; chars: number }> };
 }
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {

@@ -197,6 +197,21 @@ const STOPPED: Record<string, string> = {
   max_tokens: "The answer was cut off because it reached the length limit.",
 };
 
+/** A request's parts as flat numbers: characters of instructions, briefing, conversation and each tool source. */
+function made(outcome: AiOutcome | null): Record<string, number> {
+  const c = outcome?.context;
+  if (!c) return {};
+  const sources = Object.entries(c.tools ?? {});
+  return {
+    chars_instructions: c.instructions,
+    chars_briefing: c.briefing,
+    chars_conversation: c.conversation,
+    chars_tools: sources.reduce((n, [, t]) => n + t.chars, 0),
+    tools_offered: sources.reduce((n, [, t]) => n + t.count, 0),
+    ...Object.fromEntries(sources.flatMap(([name, t]) => [[`chars_tools_${name}`, t.chars], [`tools_offered_${name}`, t.count]])),
+  };
+}
+
 /** Tell us how a request to the assistant went: how long, which model, which tools, whether it failed. */
 function traced(id: string, began: number, question: string, outcome: AiOutcome | null, error: string): void {
   const items = chat.get().items;
@@ -213,6 +228,7 @@ function traced(id: string, began: number, question: string, outcome: AiOutcome 
         outputTokens: outcome?.output_tokens ?? 0,
         tools: outcome?.tools ?? since.flatMap((i) => (i.kind === "tool" ? [i.name] : [])),
         stop: outcome?.stop ?? "error",
+        made: made(outcome),
         error,
         question,
         answer: since.map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim(),
