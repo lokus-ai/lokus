@@ -31,7 +31,7 @@ function example(server: string, key: string): string {
 
 /** What to hand a coding assistant so it wires a team's own backend to this workspace. */
 function brief(server: string): string {
-  return `Send our customer data to Lokus, our team's shared notes.
+  return `Send what our product knows to Lokus, our team's shared notes: our customers, the things they have with us, and our logs.
 
 Endpoint: POST ${server}/v1/ingest
 Headers: "authorization: Bearer $LOKUS_KEY" (read the key from an environment variable; never commit it) and "content-type: application/json".
@@ -56,6 +56,25 @@ Body: one fact, or {"items": [fact, ...]} for up to 100 at once. A fact is:
   },
   "person": { "name": "Dana Whitlock", "email": "dana@acme.com", "role": "Head of Ops" }   // optional: someone at the customer
 }
+
+Anything else our product is made of (orders, buildings, devices, jobs: whatever we have) is sent the same way, with "kind" and "id" in place of "customer". No schema is declared first; send the record as we already hold it:
+
+{
+  "kind": "order",               // required: what this is, one word of our choosing
+  "id": "A-1042",                // required: our own id for it; the same id again updates it
+  "name": "Order A-1042",        // optional: what to call it
+  "set": { "total": 1840, "status": "shipped", "address": { "city": "Pune" }, "tags": ["rush"], "items": [{ "sku": "X1", "qty": 2 }] },
+                                 // any shape: nested objects are flattened (address_city), lists of plain
+                                 // values stay lists, lists of records are counted and kept as text
+  "links": { "customer": "acme.com", "warehouse": "wh-3" },   // optional: what it belongs to, by kind and id
+  "event": { ... }               // optional: something that happened to it, same shape as above
+}
+
+Log lines go to the same endpoint and are kept for two weeks so the assistant can search them when something goes wrong:
+
+{ "log": { "message": "export failed: timeout after 30s", "level": "error", "stream": "api", "job": 77 }, "customer": "acme.com" }
+
+Send errors and warnings, and the info lines that mark a job starting or finishing; not every request. Up to 100 per call.
 
 Rules: it is safe to retry (the same fact twice changes nothing). A changed detail is recorded as history automatically. A 401 means the key is wrong or removed; a 400 says what is wrong with the body.
 

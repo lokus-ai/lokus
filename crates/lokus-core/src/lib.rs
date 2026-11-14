@@ -15,6 +15,7 @@ pub mod noticed;
 pub mod plugins;
 pub mod starter;
 pub mod tasks;
+pub mod things;
 pub mod vault;
 pub mod watch;
 

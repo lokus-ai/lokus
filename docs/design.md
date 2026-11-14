@@ -194,6 +194,24 @@ a place for facts whose customer is
 ambiguous, the assistant writing the summary, replying to a message from Lokus, opening an item
 in the tool it came from, and limits on how fast one key may push.
 
+### Any kind of thing, and logs (built; tried with a made-up survey company's data)
+
+The push door also takes records that are not customers. `{"kind": "order", "id": "A-1042",
+"set": {...}, "links": {"customer": "acme.com"}}` becomes `data/order/<name>.md` with `type:
+order`, its `id`, and whatever was sent as properties: nested objects flattened
+(`address_city`), lists of plain values kept as lists, lists of records counted (`items_count`)
+and kept as a JSON block in the note. `links` become properties holding `[[links]]` to the
+customer or to another thing (made as a placeholder if it has not arrived). A changed detail
+leaves a history note; an `event` is filed under the thing. Each kind gets `data/<Kind>
+list.md`, an ordinary table view. `crates/lokus-core/src/things.rs`.
+
+`{"log": {"message", "level", "stream", ...}}` is appended to
+`.lokus/logs/<stream>/<day>.jsonl`: not synced, two weeks kept, 20 MB a day per stream. The
+assistant reads them with `search_logs`.
+
+Not built: asking their system to do something (the door is one way), a page made for a kind
+(things open as plain notes with properties), logs on teammates' devices.
+
 ## 5d. Tasks (built)
 
 The team's work, kept the way customers are: one note each.

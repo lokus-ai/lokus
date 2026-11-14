@@ -23,7 +23,7 @@ const MAX_TITLE: usize = 300;
 const MAX_TEXT: usize = 16 * 1024;
 const MAX_DETAILS: usize = 50;
 
-fn bad(message: impl Into<String>) -> CoreError {
+pub(crate) fn bad(message: impl Into<String>) -> CoreError {
     CoreError::BadArgs {
         command: "ingest".into(),
         message: message.into(),
@@ -31,7 +31,7 @@ fn bad(message: impl Into<String>) -> CoreError {
 }
 
 /// A name that is safe as a file name: no path separators, no control characters, not hidden.
-fn file_name(raw: &str) -> Result<String> {
+pub(crate) fn file_name(raw: &str) -> Result<String> {
     let cleaned: String = raw
         .trim()
         .chars()
@@ -54,7 +54,7 @@ fn file_name(raw: &str) -> Result<String> {
 }
 
 /// A detail's name as it is stored: lower case, words joined by `_`.
-fn detail_key(raw: &str) -> Result<String> {
+pub(crate) fn detail_key(raw: &str) -> Result<String> {
     let key: String = raw
         .trim()
         .to_lowercase()
@@ -85,7 +85,7 @@ fn detail_value(key: &str, value: &Value) -> Result<Value> {
     }
 }
 
-fn text_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+pub(crate) fn text_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value
         .get(key)
         .and_then(Value::as_str)
@@ -93,17 +93,17 @@ fn text_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
         .filter(|s| !s.is_empty())
 }
 
-fn stem(path: &str) -> &str {
+pub(crate) fn stem(path: &str) -> &str {
     let name = path.rsplit('/').next().unwrap_or(path);
     name.strip_suffix(".md").unwrap_or(name)
 }
 
-fn same(a: &str, b: &str) -> bool {
+pub(crate) fn same(a: &str, b: &str) -> bool {
     a.trim().eq_ignore_ascii_case(b.trim())
 }
 
 /// A value as a person reads it in a sentence.
-fn plain(value: &Value) -> String {
+pub(crate) fn plain(value: &Value) -> String {
     match value {
         Value::String(s) => s.clone(),
         Value::Null => "nothing".into(),
@@ -112,7 +112,7 @@ fn plain(value: &Value) -> String {
 }
 
 /// A detail's name as people read it: `signed_up` is "Signed up".
-fn label(key: &str) -> String {
+pub(crate) fn label(key: &str) -> String {
     match key {
         "mrr" => return "Monthly revenue".into(),
         "arr" => return "Yearly revenue".into(),
@@ -149,7 +149,7 @@ pub fn iso(secs: i64) -> String {
 }
 
 /// A new note's text from its properties and body.
-fn compose(props: &[(&str, Value)], body: &str) -> String {
+pub(crate) fn compose(props: &[(&str, Value)], body: &str) -> String {
     let mut text = String::new();
     for (key, value) in props {
         if !value.is_null() {
@@ -165,7 +165,7 @@ fn compose(props: &[(&str, Value)], body: &str) -> String {
 }
 
 /// Set properties on a note that exists. Gives back whether anything changed.
-fn update(vault: &Vault, path: &str, props: &[(&str, Value)]) -> Result<bool> {
+pub(crate) fn update(vault: &Vault, path: &str, props: &[(&str, Value)]) -> Result<bool> {
     let note = vault.read(path)?;
     let mut text = note.text.clone();
     let had = frontmatter::read(&note.text);
@@ -182,7 +182,7 @@ fn update(vault: &Vault, path: &str, props: &[(&str, Value)]) -> Result<bool> {
 }
 
 /// The customer a fact is about: matched by `domain`, by `id`, or by the note's name.
-fn find_customer(vault: &Vault, key: &str) -> Result<Option<String>> {
+pub(crate) fn find_customer(vault: &Vault, key: &str) -> Result<Option<String>> {
     let prefix = format!("{CUSTOMERS}/");
     for path in vault.notes()? {
         let Some(rest) = path.strip_prefix(&prefix) else {
@@ -215,9 +215,60 @@ fn looks_like_domain(key: &str) -> bool {
         && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
 }
 
+/// Keep something that happened, in the folder of whatever it happened to. Sent again, it is
+/// the same event: only what moved on is changed.
+pub(crate) fn write_event(vault: &Vault, folder: &str, source: &str, event: &Event, now: i64, changed: &mut Vec<String>) -> Result<()> {
+    let id = event.id.clone().unwrap_or_else(|| {
+        let seed = format!("{}|{}", event.title, event.at.as_deref().unwrap_or(""));
+        blake3::hash(seed.as_bytes()).to_hex()[..12].to_string()
+    });
+    // An id that already starts with where it came from is not given that prefix twice.
+    let named = if id.starts_with(&format!("{source}-")) { id.clone() } else { format!("{source}-{id}") };
+    let note = format!("{folder}/{}.md", file_name(&named)?);
+    let at = event.at.clone().unwrap_or_else(|| iso(now));
+    let props = [
+        ("kind", json!(event.kind)),
+        ("source", json!(source)),
+        ("title", json!(event.title)),
+        ("from", opt(&event.from)),
+        ("status", opt(&event.status)),
+        ("thread", opt(&event.thread)),
+        ("channel", opt(&event.channel)),
+        ("direction", opt(&event.direction)),
+        ("link", opt(&event.link)),
+        ("at", json!(at)),
+    ];
+    let wrote = if vault.resolve(&note)?.exists() {
+        // Sent again: it is the same thing, so only what moved on (a status, say) is set.
+        // Its time stays as first recorded unless the sender states one: sending it again
+        // later must not make it look as if it just happened.
+        let moved: Vec<(&str, Value)> = props
+            .iter()
+            .filter(|(key, v)| !v.is_null() && (*key != "at" || event.at.is_some()))
+            .cloned()
+            .collect();
+        update(vault, &note, &moved)?
+    } else {
+        vault.create(&note, &compose(&props, &event.text))?;
+        true
+    };
+    if wrote {
+        changed.push(note);
+    }
+    Ok(())
+}
+
 /// Write one fact into the vault. `now` is the time in seconds since 1970.
 /// Gives back the notes it created or changed, the customer's own note first.
 pub fn apply(vault: &Vault, fact: &Value, now: i64) -> Result<Vec<String>> {
+    // A log line is kept in a file for its day; a thing of any other kind goes to `data/`.
+    if fact.get("log").is_some() {
+        crate::things::log(vault, fact, now)?;
+        return Ok(Vec::new());
+    }
+    if text_of(fact, "kind").is_some_and(|kind| !same(kind, "customer")) {
+        return crate::things::apply(vault, fact, now);
+    }
     let key = text_of(fact, "customer").ok_or_else(|| bad("a fact names its customer"))?;
     if key.chars().count() > MAX_NAME {
         return Err(bad("the customer's name or domain is too long"));
@@ -294,43 +345,7 @@ pub fn apply(vault: &Vault, fact: &Value, now: i64) -> Result<Vec<String>> {
     }
 
     if let Some(event) = event {
-        let id = event.id.clone().unwrap_or_else(|| {
-            let seed = format!("{}|{}", event.title, event.at.as_deref().unwrap_or(""));
-            blake3::hash(seed.as_bytes()).to_hex()[..12].to_string()
-        });
-        // An id that already starts with where it came from is not given that prefix twice.
-        let named = if id.starts_with(&format!("{source}-")) { id.clone() } else { format!("{source}-{id}") };
-        let note = format!("{folder}/{}.md", file_name(&named)?);
-        let at = event.at.clone().unwrap_or_else(|| iso(now));
-        let props = [
-            ("kind", json!(event.kind)),
-            ("source", json!(source)),
-            ("title", json!(event.title)),
-            ("from", opt(&event.from)),
-            ("status", opt(&event.status)),
-            ("thread", opt(&event.thread)),
-            ("channel", opt(&event.channel)),
-            ("direction", opt(&event.direction)),
-            ("link", opt(&event.link)),
-            ("at", json!(at)),
-        ];
-        let wrote = if vault.resolve(&note)?.exists() {
-            // Sent again: it is the same thing, so only what moved on (a status, say) is set.
-            // Its time stays as first recorded unless the sender states one: sending it again
-            // later must not make it look as if it just happened.
-            let moved: Vec<(&str, Value)> = props
-                .iter()
-                .filter(|(key, v)| !v.is_null() && (*key != "at" || event.at.is_some()))
-                .cloned()
-                .collect();
-            update(vault, &note, &moved)?
-        } else {
-            vault.create(&note, &compose(&props, &event.text))?;
-            true
-        };
-        if wrote {
-            changed.push(note);
-        }
+        write_event(vault, &folder, source, &event, now, &mut changed)?;
     }
 
     // Work to be done for this customer: filed with the team's tasks, tied to the customer.
@@ -361,7 +376,7 @@ fn opt(value: &Option<String>) -> Value {
     value.as_ref().map_or(Value::Null, |v| json!(v))
 }
 
-struct Event {
+pub(crate) struct Event {
     id: Option<String>,
     title: String,
     kind: String,
@@ -375,7 +390,7 @@ struct Event {
     text: String,
 }
 
-fn read_event(value: &Value) -> Result<Event> {
+pub(crate) fn read_event(value: &Value) -> Result<Event> {
     let line = |key: &str, most: usize| -> Result<Option<String>> {
         match text_of(value, key) {
             Some(text) if text.chars().count() > most => Err(bad(format!("{key} is too long"))),

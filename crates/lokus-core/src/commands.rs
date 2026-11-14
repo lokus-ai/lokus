@@ -206,6 +206,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec("chats.save", "Keep a conversation with the assistant", "id, title, updated, body", Private),
     spec("chats.load", "One kept conversation", "id", Private),
     spec("chats.delete", "Forget a kept conversation", "id", Private),
+    spec("logs.search", "Find log lines sent by the team's own systems, newest first", "query?, level?, stream?, about?, hours?=24, limit?=40", Private),
     spec("noticed.list", "What the assistant noticed on its own, newest first", "", Private),
     spec("noticed.report", "Keep something the assistant noticed", "key, item", Private),
     spec("noticed.resolve", "Mark something noticed as done or dismissed; learn=true writes the choice into Assistant.md", "id, state, learn?", Private),
@@ -413,6 +414,11 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             let (path, number) = crate::tasks::record(vault, &a.task)?;
             Ok(json!({ "path": path, "number": number }))
         }
+        "logs.search" => {
+            let a: LogArgs = parse(name, args)?;
+            let want = crate::things::Wanted { query: &a.query, level: &a.level, stream: &a.stream, about: &a.about, hours: a.hours.unwrap_or(24), limit: a.limit.unwrap_or(40).min(200) };
+            crate::things::search(vault, &want, now_secs())
+        }
         "noticed.list" => Ok(json!(crate::noticed::list(vault)?)),
         "noticed.report" => {
             let a: NoticedArgs = parse(name, args)?;
@@ -474,6 +480,17 @@ struct VersionArgs {
 #[derive(Deserialize)]
 struct IdArgs {
     id: String,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct LogArgs {
+    query: String,
+    level: String,
+    stream: String,
+    about: String,
+    hours: Option<i64>,
+    limit: Option<usize>,
 }
 
 #[derive(Deserialize)]

@@ -125,6 +125,22 @@ pub fn vault_tools() -> Vec<Tool> {
             true,
         ),
         tool(
+            "search_logs",
+            "Search the log lines the team's own systems have sent to Lokus (the last two weeks, on this device). \
+             Use it when working out why something went wrong for a customer or a thing: look for errors around \
+             the time it happened. Gives the newest matching lines, how many matched and how many of each level.",
+            json!({
+                "query": { "type": "string", "description": "Words that must all be in the line. Leave out to see everything." },
+                "level": { "type": "string", "description": "Only this level: error, warn, info, debug." },
+                "stream": { "type": "string", "description": "Only this stream (a service or job name). Leave out for all; the answer lists the streams there are." },
+                "about": { "type": "string", "description": "A customer's domain or a thing's id that the line must mention." },
+                "hours": { "type": "integer", "description": "How far back to look. 24 unless said." },
+                "limit": { "type": "integer", "description": "How many lines to bring back, 40 unless said." }
+            }),
+            &[],
+            false,
+        ),
+        tool(
             "report_finding",
             "Tell the user about something you noticed that they would want to know, with what you would do about it. \
              It goes to their Noticed list; it changes nothing else. Use it when checking on the workspace without \
@@ -528,6 +544,7 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             let (path, number) = lokus_core::tasks::record(&core.vault, input).map_err(|e| e.to_string())?;
             Ok(format!("T-{number} is at {path}"))
         }
+        "search_logs" => call("logs.search", input.clone()).map(shown),
         "report_finding" => {
             let key = text(input, "key")?;
             // The user reads these at a glance: anything longer than a glance is sent back to be cut.

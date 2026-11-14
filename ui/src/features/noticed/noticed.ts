@@ -220,6 +220,34 @@ export async function addToNote(item: Noticed): Promise<void> {
   await resolve(item, "done", false);
 }
 
+const KINDS = "lokus.data.kinds";
+
+/**
+ * The first time a kind of thing arrives from the team's systems, say so, and offer what a
+ * person would otherwise do by hand: read a few, give the fields readable names, and choose
+ * which ones the list shows.
+ */
+async function newKind(kind: string): Promise<void> {
+  if (!kind || kind.includes(".")) return;
+  const known = JSON.parse(localStorage.getItem(KINDS) ?? "[]") as string[];
+  if (known.includes(kind)) return;
+  localStorage.setItem(KINDS, JSON.stringify([...known, kind]));
+  const label = kind.replace(/_/g, " ");
+  await runCore("noticed.report", {
+    key: `new kind ${kind}`,
+    item: {
+      kind: "finding",
+      urgency: "fyi",
+      title: `Your systems started sending ${label} records`,
+      summary: `They are in **data/${kind}**, with whatever fields were sent. Nothing says yet what each field means.`,
+      recommend: "Let me read a few and set up the list",
+      situation: "a new kind of data starts arriving from the team's own systems",
+      action: `A new kind of record, "${kind}", has started arriving in the folder data/${kind}/ (list note: data/${label.replace(/^./, (c) => c.toUpperCase())} list.md). Read up to 8 of them. Then tell me, as a table: each field, what you think it means, its type and unit, and whether it belongs in the list. Say which fields you are unsure about. Name the 5 fields that matter most day to day and why. Do not change any notes yet; ask me before setting anything.`,
+    },
+  }).catch(() => {});
+  await loadNoticed();
+}
+
 let timer = 0;
 let soon = 0;
 let reload = 0;
@@ -252,7 +280,9 @@ export function startWatching(): void {
   }, 45_000);
   // Something pushed in from the team's own systems is a reason to look, once things settle.
   onSyncEvent((event) => {
-    if ((event as { event: string }).event !== "fact" || watchEvery() === 0) return;
+    const fact = event as { event: string; path?: string };
+    if (fact.event === "fact" && fact.path?.startsWith("data/")) void newKind(fact.path.split("/")[1] ?? "");
+    if (fact.event !== "fact" || watchEvery() === 0) return;
     window.clearTimeout(soon);
     soon = window.setTimeout(() => void check("New customer information has just arrived from the team's own systems; start with what changed."), 90_000);
   });

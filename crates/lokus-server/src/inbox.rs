@@ -108,13 +108,17 @@ pub async fn ingest(
     }
     let mut bodies = Vec::with_capacity(facts.len());
     for fact in facts {
-        let named = fact
-            .get("customer")
-            .and_then(Value::as_str)
-            .is_some_and(|c| !c.trim().is_empty() && c.chars().count() <= 120);
-        if !fact.is_object() || !named {
+        // The relay checks only that a fact says what it is about: a customer, a thing of
+        // some kind with an id, or a log line. What it means is decided on the device.
+        let short = |key: &str| {
+            fact.get(key)
+                .and_then(Value::as_str)
+                .is_some_and(|c| !c.trim().is_empty() && c.chars().count() <= 120)
+        };
+        let about = short("customer") || (short("kind") && short("id")) || fact.get("log").is_some_and(Value::is_object);
+        if !fact.is_object() || !about {
             return Err(Error::BadRequest(
-                "each fact names its customer: {\"customer\": \"acme.com\", ...}".into(),
+                "each fact says what it is about: {\"customer\": \"acme.com\", ...}, {\"kind\": \"order\", \"id\": \"A-1\", ...} or {\"log\": {\"message\": \"...\"}}".into(),
             ));
         }
         let text = fact.to_string();
