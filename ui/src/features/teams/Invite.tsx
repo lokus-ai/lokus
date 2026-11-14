@@ -3,6 +3,7 @@ import { type FormEvent, useState } from "react";
 
 import { track } from "../../bridge/analytics";
 import { relay } from "../../bridge/sync";
+import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { app, notify } from "../../shell/workspace";
 import { useMe } from "../profile/profiles";
@@ -31,18 +32,15 @@ function span(seconds: number): string {
 }
 
 /**
- * Settings, Team, for an owner: write to someone by email, and see who has not answered yet.
- * An invite can still go out as a link, for a person the owner would sooner message themselves.
+ * Settings, Team, for an owner: write to someone by email. An invite can still go out as a
+ * link, for a person the owner would sooner message themselves.
  */
-export function InvitePeople({ server, token, base, invites, reload }: { server: string; token: string; base: string; invites: Invite[]; reload(): Promise<void> }) {
+export function InviteBox({ server, token, base, workspace, reload }: { server: string; token: string; base: string; workspace: string; reload(): Promise<void> }) {
   const me = useMe();
   const [to, setTo] = useState("");
   const [role, setRole] = useState<"editor" | "viewer">("editor");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
-  const now = Date.now() / 1000;
-
-  const copy = (code: string) => void navigator.clipboard.writeText(joinLink(server, code)).then(() => notify("Invite link copied"));
 
   const send = async (e: FormEvent) => {
     e.preventDefault();
@@ -63,7 +61,7 @@ export function InvitePeople({ server, token, base, invites, reload }: { server:
       try {
         const made = await relay<Made>(server, token, "POST", `${base}/invites`, { role, email, name: me?.name ?? "" });
         if (made.sent) sent += 1;
-        else problems.push(`The email to ${email} could not be sent. Their invite is in the list below: copy its link and send it yourself.`);
+        else problems.push(`The email to ${email} could not be sent. They are in the list below: copy their link and send it yourself.`);
       } catch (err) {
         left.push(email);
         problems.push(said(err));
@@ -81,77 +79,92 @@ export function InvitePeople({ server, token, base, invites, reload }: { server:
     setProblem("");
     try {
       const made = await relay<Made>(server, token, "POST", `${base}/invites`, { role });
-      copy(made.code);
+      await navigator.clipboard.writeText(joinLink(server, made.code));
+      notify("Invite link copied. It works once, for 7 days.");
       await reload();
     } catch (err) {
       setProblem(said(err));
     }
   };
 
+  return (
+    <form onSubmit={send}>
+      <div className="invite-card">
+        <div className="invite-card-body">
+          <strong>Invite people</strong>
+          <p>They get an email from Lokus, sign in with that address and join {workspace} in one click.</p>
+          <div className="invite-fields">
+            <label className="invite-field grow">
+              <span>Email address</span>
+              <input type="text" inputMode="email" autoComplete="off" spellCheck={false} value={to} placeholder="jane@company.com" onChange={(e) => setTo(e.target.value)} />
+            </label>
+            <label className="invite-field">
+              <span>Role</span>
+              <select value={role} onChange={(e) => setRole(e.target.value as "editor" | "viewer")}>
+                <option value="editor">Editor, can change things</option>
+                <option value="viewer">Viewer, can only read</option>
+              </select>
+            </label>
+          </div>
+          {problem && <p className="invite-problem">{problem}</p>}
+        </div>
+        <div className="invite-card-foot">
+          <button type="button" className="invite-link" onClick={() => void link()}>
+            <Icon name="share" size={14} /> Copy an invite link instead
+          </button>
+          <button className="primary" disabled={busy || !to.trim()}>
+            {busy ? "Sending…" : "Send invite"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/** The people who have been invited and have not answered, as rows in the list of people. */
+export function PendingRows({ server, token, base, invites, reload }: { server: string; token: string; base: string; invites: Invite[]; reload(): Promise<void> }) {
+  const now = Date.now() / 1000;
+  const copy = (code: string) => void navigator.clipboard.writeText(joinLink(server, code)).then(() => notify("Invite link copied"));
   const again = async (i: Invite) => {
-    setProblem("");
     try {
       const made = await relay<Made>(server, token, "POST", `${base}/invites/${i.code}/send`);
-      if (made.sent) notify(`Sent again to ${i.email}`);
-      else setProblem(`The email to ${i.email} could not be sent. Copy the link and send it yourself.`);
+      notify(made.sent ? `Sent again to ${i.email}` : `The email to ${i.email} could not be sent. Copy the link and send it yourself.`);
     } catch (err) {
-      setProblem(said(err));
+      notify(said(err));
     }
     await reload();
   };
-
   const cancel = async (i: Invite) => {
-    await relay(server, token, "DELETE", `${base}/invites/${i.code}`).catch((err) => setProblem(said(err)));
+    await relay(server, token, "DELETE", `${base}/invites/${i.code}`).catch((err) => notify(said(err)));
     await reload();
   };
-
+  if (!invites.length) return <p className="team-empty">Nobody is waiting on an invitation.</p>;
   return (
-    <>
-      <h3>Invite people</h3>
-      <form className="team-invite" onSubmit={send}>
-        <input type="text" inputMode="email" autoComplete="off" spellCheck={false} value={to} placeholder="name@company.com" aria-label="Email address to invite" onChange={(e) => setTo(e.target.value)} />
-        <select value={role} aria-label="What they may do" onChange={(e) => setRole(e.target.value as "editor" | "viewer")}>
-          <option value="editor">Can edit</option>
-          <option value="viewer">Can read</option>
-        </select>
-        <button className="primary" disabled={busy || !to.trim()}>
-          {busy ? "Sending…" : "Send invite"}
-        </button>
-      </form>
-      <p className="team-invite-hint">
-        We email them a link from Lokus. They sign in with that address and join in one click.{" "}
-        <button type="button" className="link" onClick={() => void link()}>
-          Copy an invite link instead
-        </button>
-      </p>
-      {problem && <p className="settings-hint error">{problem}</p>}
-      {invites.length > 0 && (
-        <div className="settings-list">
-          {invites.map((i) => (
-            <div key={i.code} className="settings-item">
-              <span className="team-avatar waiting">{(i.email ?? "@").slice(0, 1).toUpperCase()}</span>
-              <div className="settings-item-main">
-                <strong>{i.email ?? `Invite link for ${asWhat(i.role)}`}</strong>
-                <small>
-                  {i.email ? `${i.role === "editor" ? "Can edit" : "Can read"}. ${i.sent_at ? `Emailed ${span(now - i.sent_at)} ago` : "Email not sent"}, not accepted yet.` : "Not used yet."} Works for {span(i.expires_at - now)}.
-                </small>
-              </div>
-              {i.email && (
-                <button className="link" disabled={Boolean(i.sent_at && now - i.sent_at < 60)} onClick={() => void again(i)}>
-                  Send again
-                </button>
-              )}
-              <button className="link" onClick={() => copy(i.code)}>
-                Copy link
-              </button>
-              <button className="link danger" onClick={() => void cancel(i)}>
-                Cancel
-              </button>
-            </div>
-          ))}
+    <div className="settings-list team-list">
+      {invites.map((i) => (
+        <div key={i.code} className="settings-item">
+          <span className="team-avatar waiting">{i.email ? i.email.slice(0, 1).toUpperCase() : <Icon name="share" size={13} />}</span>
+          <div className="settings-item-main">
+            <strong>{i.email ?? "Invite link"}</strong>
+            <small>
+              {i.email ? (i.sent_at ? `Invited ${span(now - i.sent_at)} ago` : "The email could not be sent") : "Not used yet"}, works for {span(i.expires_at - now)}
+            </small>
+          </div>
+          <span className="team-role">{i.role === "editor" ? "Editor" : "Viewer"}</span>
+          {i.email && (
+            <button className="settings-button" disabled={Boolean(i.sent_at && now - i.sent_at < 60)} onClick={() => void again(i)}>
+              Send again
+            </button>
+          )}
+          <button className="settings-button" onClick={() => copy(i.code)}>
+            Copy link
+          </button>
+          <button className="link danger" onClick={() => void cancel(i)}>
+            Cancel
+          </button>
         </div>
-      )}
-    </>
+      ))}
+    </div>
   );
 }
 

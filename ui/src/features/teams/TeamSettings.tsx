@@ -9,7 +9,7 @@ import { DataDoor } from "../customers/DataDoor";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
-import { type Invite, InvitedList, InvitePeople } from "./Invite";
+import { type Invite, InviteBox, InvitedList, PendingRows } from "./Invite";
 import { HOME, lookForInvites, type Role } from "./invites";
 
 interface Workspace {
@@ -25,7 +25,6 @@ interface Member {
 }
 
 const ROLES: Record<Role, string> = { owner: "Owner", editor: "Editor", viewer: "Viewer" };
-const CAN: Record<Role, string> = { owner: "Can edit, invite and remove people", editor: "Can edit notes", viewer: "Can read notes" };
 const STATUS: Record<string, string> = {
   connecting: "Connecting…",
   online: "Up to date.",
@@ -50,6 +49,7 @@ export function TeamSettings() {
   /** The irreversible thing the person has clicked once and must confirm. */
   const [confirming, setConfirming] = useState<"leave" | "delete" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<"members" | "invited">("members");
 
   useEffect(() => {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
@@ -133,26 +133,44 @@ export function TeamSettings() {
     setConfirming(null);
   };
   const owners = members.filter((m) => m.role === "owner").length;
+  const teamName = here?.name ?? "Workspace";
 
   if (connected) {
     return (
       <Section title="Team" hint="This vault is shared. Everyone in the workspace keeps a full copy and can work offline.">
-        <Row
-          label={here?.name ?? "Workspace"}
-          hint={
-            <>
+        <div className="team-head">
+          <span className="team-tile">{(teamName.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpperCase()}</span>
+          <div className="team-head-main">
+            <strong>{teamName}</strong>
+            <small>
               <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]}
               {current.role ? ` You are ${current.role === "owner" ? "an owner" : current.role === "editor" ? "an editor" : "a viewer"}.` : ""}
-            </>
-          }
-        >
+            </small>
+          </div>
           <button className="settings-button" onClick={() => void disconnectSync()}>
             Stop syncing on this computer
           </button>
-        </Row>
+        </div>
 
-        <h3>People</h3>
-        <div className="settings-list">
+        {owner && token && <InviteBox server={server} token={token} base={base} workspace={teamName} reload={async () => {
+          await loadTeam();
+          setTab("invited");
+        }} />}
+
+        <div className="team-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "members"} className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}>
+            Members <span>{members.length}</span>
+          </button>
+          {owner && (
+            <button role="tab" aria-selected={tab === "invited"} className={tab === "invited" ? "on" : ""} onClick={() => setTab("invited")}>
+              Invited <span>{invites.length}</span>
+            </button>
+          )}
+        </div>
+        {tab === "invited" && owner && token ? (
+          <PendingRows server={server} token={token} base={base} invites={invites} reload={loadTeam} />
+        ) : (
+        <div className="settings-list team-list">
           {members.map((m) => {
             const me = m.user === current.user;
             // The only owner cannot be made less, or the workspace would have nobody in charge.
@@ -166,7 +184,7 @@ export function TeamSettings() {
                     {me && <span className="settings-version"> you</span>}
                   </strong>
                   <small>
-                    {[profiles[(m.email ?? "").toLowerCase()]?.role, m.email, CAN[m.role]].filter(Boolean).join(" · ")}
+                    {[profiles[(m.email ?? "").toLowerCase()]?.role, m.email].filter(Boolean).join(", ")}
                   </small>
                 </div>
                 {fixed ? (
@@ -189,8 +207,7 @@ export function TeamSettings() {
             );
           })}
         </div>
-
-        {owner && token && <InvitePeople server={server} token={token} base={base} invites={invites} reload={loadTeam} />}
+        )}
 
         <InvitedList />
 

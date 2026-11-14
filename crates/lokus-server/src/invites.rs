@@ -330,3 +330,15 @@ pub async fn logo() -> Response {
     )
         .into_response()
 }
+
+/// The picture at the top of the invitation page; the email carries its own copy.
+pub async fn picture() -> Response {
+    (
+        [
+            (header::CONTENT_TYPE, "image/jpeg"),
+            (header::CACHE_CONTROL, "public, max-age=604800"),
+        ],
+        include_bytes!("../assets/invitation.jpg").as_slice(),
+    )
+        .into_response()
+}
