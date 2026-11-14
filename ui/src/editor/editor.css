@@ -29,7 +29,9 @@
 .cm-editor .cm-table { padding: 6px 0; overflow-x: auto; cursor: text; }
 .cm-editor .cm-table table { border-collapse: collapse; font-size: 0.94em; }
 .cm-editor .cm-table th, .cm-editor .cm-table td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; vertical-align: top; min-width: 80px; }
-.cm-editor .cm-table th { background: var(--bg-sidebar); font-weight: 600; }
+.cm-editor .cm-table th { background: var(--bg-sidebar); font-weight: 600; white-space: nowrap; }
+.cm-editor .cm-table td:first-child { white-space: nowrap; }
+.cm-editor .cm-table .cm-wikilink { cursor: pointer; }
 .cm-editor .cm-table code { font-family: var(--font-mono); font-size: 0.9em; background: var(--code-bg); border-radius: var(--radius-xs); padding: 0.1em 0.3em; }
 
 /* Slash menu */

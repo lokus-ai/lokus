@@ -11,6 +11,7 @@ pub mod frontmatter;
 pub mod history;
 pub mod index;
 pub mod ingest;
+pub mod noticed;
 pub mod plugins;
 pub mod starter;
 pub mod tasks;

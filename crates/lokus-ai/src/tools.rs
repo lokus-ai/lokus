@@ -125,6 +125,50 @@ pub fn vault_tools() -> Vec<Tool> {
             true,
         ),
         tool(
+            "report_finding",
+            "Tell the user about something you noticed that they would want to know, with what you would do about it. \
+             It goes to their Noticed list; it changes nothing else. Use it when checking on the workspace without \
+             being asked, and in conversation when you spot something beyond what was asked. One per situation. \
+             Write it the way a sharp colleague would say it across the desk, not the way a monitoring tool would: \
+             plain words, real names, what actually happened. Title: a full plain statement with a verb, like \
+             'Haladir hasn't heard back in 7 days' or 'The fix Quivly asked for already shipped'; never a label \
+             like 'Haladir waiting' or 'LinkedIn safety issue'. Recommendation: what you would actually do, said \
+             plainly, like 'Send them the steps to regenerate leads'. Never use: verify, confirm, ensure, triage, \
+             follow up, accountable, visibility, remains, unclear, outstanding, action item, stakeholder. In the \
+             summary and each evidence line put the one thing that matters (a name, a number, a date) in **bold** \
+             and nothing else; no other Markdown.",
+            json!({
+                "key": { "type": "string", "description": "A stable name for this exact situation, so noticing it again updates the same card: e.g. 'waiting quivly export-thread' or 'contradiction status-page uptime'." },
+                "title": { "type": "string", "description": "A plain statement with a verb, at most 60 characters, starting with who or what it is about." },
+                "summary": { "type": "string", "description": "One sentence, at most 140 characters: why it matters now." },
+                "evidence": { "type": "array", "description": "Up to 3 facts this rests on, each at most 100 characters, with where it came from.", "items": { "type": "object", "properties": { "text": { "type": "string" }, "source": { "type": "string", "description": "slack, linear, a note path, …" }, "link": { "type": "string" } }, "required": ["text", "source"] } },
+                "metric": { "type": "string", "description": "The one number that makes this matter, at most 16 characters: '7 days', '53 leads', '$2,400 a month', 'renews Nov 23'. Leave out if there is none or the title already says it." },
+                "recommend": { "type": "string", "description": "What you would do, in plain words: at most 90 characters, starting with a verb a person would use (send, tell, assign, fix, move, ask)." },
+                "action": { "type": "string", "description": "What you would do if the user says go, written as an instruction to yourself with every name, id and link needed to do it without looking anything up again." },
+                "situation": { "type": "string", "description": "The kind of situation this is, with no names in it, so the user's choice can be applied next time: e.g. 'a customer reports a bug that a deploy has already fixed'." },
+                "follows": { "type": "string", "description": "If this recommendation follows something under 'How we handle things', quote that line. Otherwise leave out." },
+                "customer": { "type": "string", "description": "The customer's name as it is in Lokus, when this is about one." },
+                "urgency": { "type": "string", "enum": ["now", "soon", "fyi"] }
+            }),
+            &["key", "title", "summary", "recommend", "situation", "urgency"],
+            false,
+        ),
+        tool(
+            "suggest_note_change",
+            "Propose text for a note without changing the note. The user sees it on that note as a suggestion they can \
+             add or dismiss. Use it when a note is missing something you found, or says something that is no longer \
+             true. Write the text exactly as it should read in the note.",
+            json!({
+                "path": path,
+                "text": { "type": "string", "description": "The Markdown to add, ready to paste: a sentence, a list or a short section." },
+                "after": { "type": "string", "description": "The heading (its text, without #) to put it under. Leave out to add at the end." },
+                "why": { "type": "string", "description": "One sentence: what you found that makes this worth adding, and where." },
+                "link": { "type": "string", "description": "A link to what you found, if there is one." }
+            }),
+            &["path", "text", "why"],
+            false,
+        ),
+        tool(
             "remember",
             "Keep something for later conversations. It is added to the note Assistant.md, which you are shown at \
              the start of every conversation and which the user can read and edit. Use it when the user tells you \
@@ -483,6 +527,35 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
         "record_task" => {
             let (path, number) = lokus_core::tasks::record(&core.vault, input).map_err(|e| e.to_string())?;
             Ok(format!("T-{number} is at {path}"))
+        }
+        "report_finding" => {
+            let key = text(input, "key")?;
+            // The user reads these at a glance: anything longer than a glance is sent back to be cut.
+            let long = |field: &str, most: usize| input[field].as_str().is_some_and(|v| v.chars().count() > most);
+            let mut too_long: Vec<String> = [("title", 60), ("summary", 140), ("recommend", 90), ("metric", 12)]
+                .iter()
+                // Bold marks are formatting, not words: they are not counted.
+                .filter(|(field, most)| long(field, *most + 12 + input[*field].as_str().map_or(0, |v| v.matches("**").count() * 2)))
+                .map(|(field, most)| format!("{field} (at most {} characters)", if *field == "metric" { 22 } else { *most }))
+                .collect();
+            let evidence = input["evidence"].as_array().cloned().unwrap_or_default();
+            if evidence.len() > 3 || evidence.iter().any(|e| e["text"].as_str().is_some_and(|t| t.chars().count() > 115)) {
+                too_long.push("evidence (at most 3, each at most 100 characters)".into());
+            }
+            if !too_long.is_empty() {
+                return Err(format!("Too long to read at a glance. Shorten and send again: {}.", too_long.join("; ")));
+            }
+            let mut item = input.clone();
+            item["kind"] = json!("finding");
+            call("noticed.report", json!({ "key": format!("finding {key}"), "item": item })).map(|said| said.as_str().unwrap_or("noted").to_string())
+        }
+        "suggest_note_change" => {
+            let path = text(input, "path")?;
+            call("note.read", json!({ "path": path }))?;
+            let mut item = input.clone();
+            item["kind"] = json!("suggestion");
+            let words: String = text(input, "text")?.chars().take(40).collect();
+            call("noticed.report", json!({ "key": format!("suggestion {path} {words}"), "item": item })).map(|said| said.as_str().unwrap_or("noted").to_string())
         }
         "remember" => {
             let fact = text(input, "fact")?.split_whitespace().collect::<Vec<_>>().join(" ");

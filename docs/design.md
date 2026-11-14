@@ -422,6 +422,26 @@ Checked by `checks/flows/assistant.sh` against a stand-in provider and tool serv
 flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
 Not built yet: saving conversations to disk, and compaction of very long ones.
 
+### Working on its own (built; tried on a real workspace)
+
+`ui/src/features/noticed/` wakes the assistant while the app is open: on a timer (hourly unless
+changed in Settings, Assistant), 90 seconds after a customer fact is pushed in, and with any
+note in `watches/` marked `type: watch` (`every:` minutes) added to what it looks for. A look is
+an ordinary request with one difference: every tool that would change something is refused.
+What it finds goes through two tools into `.lokus/noticed/` (never synced):
+
+- `report_finding`: a plain statement, the one thing recommended, up to three facts with their
+  sources, an `action` it can carry out later, and the kind of `situation` with no names in it.
+  The tool refuses anything longer than a glance.
+- `suggest_note_change`: text for a note, shown on that note as a suggestion until added or
+  dismissed.
+
+"Do it" hands the action to the assistant in the open, where each change is asked about, and
+writes what was chosen under "How we handle things" in `Assistant.md`, which every request and
+every look is shown. Not built: looking while the app is closed, system notifications, a
+team's own admin API as a connection (it works today only if that API is offered as an MCP
+server), GitHub.
+
 ### What a request is made of
 
 Every request carries the instructions, a briefing about this workspace, the conversation, and

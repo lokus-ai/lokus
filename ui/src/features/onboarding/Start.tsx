@@ -7,6 +7,7 @@ import { Icon, type IconName } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { allNotes, app, openNote } from "../../shell/workspace";
 import { Logo } from "../connections/logos";
+import { NoticedOnStart } from "../noticed/NoticedList";
 import { useMe } from "../profile/profiles";
 import { aimInWords, keptAnswers } from "./onboarding";
 
@@ -77,6 +78,8 @@ export function Start() {
             </button>
           ))}
         </div>
+
+        <NoticedOnStart />
 
         {waiting.length > 0 && (
           <div className="start-tools">

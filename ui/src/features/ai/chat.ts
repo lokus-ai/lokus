@@ -50,7 +50,7 @@ const allowed = new Set<string>();
 let seen: { path: string; text: string } | null = null;
 
 /** What the assistant is told once, at the start: the date, the shape of the vault, the person's instructions. */
-async function brief(): Promise<string> {
+export async function brief(): Promise<string> {
   const { vault, tree } = app.get();
   const count = (entries: Entry[]): number => entries.reduce((n, e) => n + (e.kind === "folder" ? count(e.children ?? []) : e.kind === "note" ? 1 : 0), 0);
   const folders = tree.filter((e) => e.kind === "folder").map((e) => `${e.name}/ (${count(e.children ?? [])} notes)`);

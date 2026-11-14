@@ -206,6 +206,10 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec("chats.save", "Keep a conversation with the assistant", "id, title, updated, body", Private),
     spec("chats.load", "One kept conversation", "id", Private),
     spec("chats.delete", "Forget a kept conversation", "id", Private),
+    spec("noticed.list", "What the assistant noticed on its own, newest first", "", Private),
+    spec("noticed.report", "Keep something the assistant noticed", "key, item", Private),
+    spec("noticed.resolve", "Mark something noticed as done or dismissed; learn=true writes the choice into Assistant.md", "id, state, learn?", Private),
+    spec("noticed.remove", "Forget something noticed", "id", Private),
     spec("plugins.data.get", "A plugin's stored data", "id", Private),
     spec(
         "plugins.data.set",
@@ -409,6 +413,21 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             let (path, number) = crate::tasks::record(vault, &a.task)?;
             Ok(json!({ "path": path, "number": number }))
         }
+        "noticed.list" => Ok(json!(crate::noticed::list(vault)?)),
+        "noticed.report" => {
+            let a: NoticedArgs = parse(name, args)?;
+            Ok(json!(crate::noticed::report(vault, &a.key, a.item, now_secs())?))
+        }
+        "noticed.resolve" => {
+            let a: ResolveArgs = parse(name, args)?;
+            let today = crate::ingest::iso(now_secs());
+            Ok(json!({ "learned": crate::noticed::resolve(vault, &a.id, &a.state, a.learn, &today[..10])? }))
+        }
+        "noticed.remove" => {
+            let a: IdArgs = parse(name, args)?;
+            crate::noticed::remove(vault, &a.id)?;
+            Ok(Value::Null)
+        }
         "chats.list" => out(crate::chats::list(vault)?),
         "chats.save" => {
             let a: ChatArgs = parse(name, args)?;
@@ -455,6 +474,27 @@ struct VersionArgs {
 #[derive(Deserialize)]
 struct IdArgs {
     id: String,
+}
+
+#[derive(Deserialize)]
+struct NoticedArgs {
+    key: String,
+    item: Value,
+}
+
+#[derive(Deserialize)]
+struct ResolveArgs {
+    id: String,
+    state: String,
+    #[serde(default)]
+    learn: bool,
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
 }
 
 #[derive(Deserialize)]

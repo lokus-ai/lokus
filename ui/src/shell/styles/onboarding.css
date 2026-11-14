@@ -171,3 +171,64 @@
 .start-tools { display: flex; align-items: center; gap: 10px; margin-top: 26px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-sidebar); font-size: var(--text-small); }
 .start-tools > span:not(.conn-logo) { flex: 1; min-width: 0; color: var(--fg-2); }
 .start-tools .conn-logo { flex: none; border-radius: 50%; margin-right: -4px; box-shadow: 0 0 0 2px var(--bg-sidebar); }
+
+/* Noticed: what the assistant found on its own. Rows to be read at a glance: what it is, the
+   one thing recommended, and the button that does it. Everything else waits behind a click. */
+.nt-scrim { position: fixed; inset: 0; z-index: 22; background: rgba(0, 0, 0, 0.18); animation: fade var(--menu) var(--ease-out); }
+.nt-drawer { position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100vw); display: flex; flex-direction: column; background: var(--bg); box-shadow: var(--shadow-pop); animation: slide-in var(--dialog) var(--ease-out); }
+.nt-drawer header { flex: none; display: flex; align-items: center; gap: 12px; padding: 16px 52px 6px 20px; position: relative; }
+.nt-drawer h2 { flex: 1; margin: 0; font-size: var(--text-h3); font-weight: 680; letter-spacing: -0.015em; }
+.nt-close { top: 12px; right: 12px; background: none; }
+.nt-tabs { flex: none; display: flex; align-items: center; gap: 4px; padding: 6px 14px 10px; border-bottom: 1px solid var(--border); }
+.nt-tabs button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--radius-sm); color: var(--fg-2); font-size: var(--text-small); font-weight: 500; }
+.nt-tabs button:hover { color: var(--fg); }
+.nt-tabs button.active { background: var(--bg-active); color: var(--fg); }
+.nt-tabs b { min-width: 17px; height: 17px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 11px; font-weight: 650; }
+.nt-tabs span { margin-left: auto; padding-right: 6px; color: var(--fg-3); font-size: var(--text-caption); }
+.nt-problem { margin: 0; padding: 8px 20px; color: var(--danger); font-size: var(--text-caption); border-bottom: 1px solid var(--border); user-select: text; -webkit-user-select: text; }
+.nt-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 16px; }
+.nt-empty { margin: 22vh auto 0; max-width: 260px; display: flex; flex-direction: column; gap: 6px; text-align: center; color: var(--fg-3); font-size: var(--text-small); line-height: 1.5; }
+.nt-empty strong { color: var(--fg); font-size: var(--text-ui); }
+
+.nt-row { border-bottom: 1px solid var(--border); }
+.nt-row:last-child { border-bottom: 0; }
+.nt-line { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 0; border-radius: var(--radius-md); transition: background var(--fast); }
+.nt-line:hover, .nt-row.open .nt-line { background: var(--bg-hover); }
+.nt-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 11px 4px 11px 10px; text-align: left; }
+.nt-face { position: relative; flex: none; display: grid; }
+.nt-face .cust-logo, .nt-face .conn-logo { border-radius: 7px; }
+.nt-face i { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--bg); }
+.nt-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.nt-text strong { font-size: var(--text-ui); font-weight: 550; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-text small { color: var(--fg-2); font-size: var(--text-small); line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nt-text small b { margin-right: 7px; color: var(--fg); font-weight: 550; font-variant-numeric: tabular-nums; }
+.nt-row.open .nt-text strong, .nt-row.open .nt-text small { white-space: normal; }
+.nt-go { flex: none; height: 26px; padding: 0 10px; border-radius: var(--radius-sm); box-shadow: inset 0 0 0 1px var(--border); color: var(--fg); font-size: var(--text-small); font-weight: 500; opacity: 0.75; transition: opacity var(--fast), background var(--fast), color var(--fast); }
+.nt-line:hover .nt-go, .nt-row.open .nt-go { opacity: 1; background: var(--accent); color: var(--accent-fg); box-shadow: none; }
+.nt-go:disabled { opacity: 0.5; }
+.nt-more { display: flex; flex-direction: column; gap: 8px; padding: 2px 12px 12px 48px; user-select: text; -webkit-user-select: text; animation: ob-up 180ms var(--ease-out) both; }
+.nt-more p { margin: 0; color: var(--fg-2); font-size: var(--text-small); line-height: 1.5; }
+.nt-evidence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.nt-evidence li { display: flex; align-items: baseline; gap: 8px; color: var(--fg-2); font-size: var(--text-small); line-height: 1.45; }
+.nt-evidence li::before { content: ""; flex: none; width: 4px; height: 4px; border-radius: 50%; background: var(--fg-3); transform: translateY(-3px); }
+.nt-evidence li > span { flex: 1; min-width: 0; }
+.nt-source { flex: none; padding: 0 6px; border-radius: var(--radius-xs); background: var(--bg-active); color: var(--fg-3); font-size: var(--text-caption); font-style: normal; text-transform: capitalize; }
+button.nt-source:hover { color: var(--fg); }
+.nt-more .nt-follows { color: var(--fg-3); font-size: var(--text-caption); }
+.nt-actions { display: flex; align-items: center; gap: 14px; margin-top: 2px; }
+.nt-actions > span { margin-right: auto; color: var(--fg-3); font-size: var(--text-caption); }
+.nt-actions .link { font-size: var(--text-caption); }
+.nt-actions .primary { height: 30px; padding: 0 14px; font-size: var(--text-small); }
+.nt-count { min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 11px; font-weight: 650; }
+.nt-busy { width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: var(--accent); animation: pulse 1s infinite; }
+.nt-start { border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--border); padding: 0 2px; }
+.start h2 { display: flex; align-items: center; justify-content: space-between; }
+.nt-kind { display: flex; align-items: center; gap: 7px; margin: 0; color: var(--fg-3); font-size: var(--text-caption); font-weight: 550; }
+.nt-kind span { margin-left: auto; font-weight: 400; }
+
+/* A suggestion on a note: plainly not the note's own text. */
+.nt-on-note { width: min(var(--column-width), 100% - 48px); margin: 0 auto 6px; display: flex; flex-direction: column; gap: 8px; }
+.nt-suggestion { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: var(--radius-md); border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 5%, var(--bg)); }
+.nt-suggestion .nt-kind { color: var(--accent); }
+.nt-proposed { padding: 2px 0 2px 12px; border-left: 2px solid var(--accent); font-size: var(--text-ui); line-height: 1.55; user-select: text; -webkit-user-select: text; }
+.nt-why { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--fg-2); font-size: var(--text-small); line-height: 1.45; }

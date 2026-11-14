@@ -10,6 +10,7 @@ import { useStore } from "../../shell/store";
 import { app, applyLayout } from "../../shell/workspace";
 import { loadPlugins, pluginSettings, setPluginSetting } from "../plugins/host";
 import { Connections } from "../connections/Connections";
+import { WatchSettings } from "../noticed/NoticedList";
 import { ProfileSettings } from "../profile/Profile";
 import { UpdateSettings } from "../updates/UpdateCard";
 import { TeamSettings } from "../teams/TeamSettings";
@@ -92,6 +93,7 @@ function Assistant() {
       </Row>
 
       {note && <p className="settings-hint error">{note}</p>}
+      <WatchSettings />
     </Section>
   );
 }

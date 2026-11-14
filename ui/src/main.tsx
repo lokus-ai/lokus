@@ -15,6 +15,7 @@ import { createRoot } from "react-dom/client";
 import { describe, startAnalytics, watchErrors } from "./bridge/analytics";
 import { DEV_CHANNEL, serveDevCommands } from "./bridge/dev";
 import { isMainWindow } from "./bridge/core";
+import { followNoticed, startWatching } from "./features/noticed/noticed";
 import { startOnboarding } from "./features/onboarding/onboarding";
 import { startPlugins } from "./features/plugins/host";
 import { startUpdates } from "./features/updates/updates";
@@ -38,3 +39,6 @@ createRoot(document.getElementById("root")!).render(<App />);
 // The setup and the update pop-up belong to the first window; a second one opens straight to work.
 void boot().then(() => isMainWindow() && startOnboarding());
 if (isMainWindow()) startUpdates();
+// One window does the looking; every window shows what was found.
+if (isMainWindow()) startWatching();
+else followNoticed();

@@ -47,6 +47,7 @@ const DatabaseView = lazy(() => import("../features/database/DatabaseView"));
 import { Avatar } from "../features/profile/Profile";
 import { onboarding } from "../features/onboarding/onboarding";
 import { Start } from "../features/onboarding/Start";
+import { NoteSuggestions, NoticedButton, NoticedDrawer } from "../features/noticed/NoticedList";
 import { NewsButton, UpdateCard, WhatsNew } from "../features/updates/UpdateCard";
 import { useMe } from "../features/profile/profiles";
 
@@ -127,6 +128,7 @@ function Sidebar() {
           <span>Assistant</span>
           <kbd>{formatKeys("Mod-j")}</kbd>
         </button>
+        <NoticedButton />
         <button onClick={() => act("note.new")}>
           <Icon name="compose" />
           <span>New note</span>
@@ -310,6 +312,7 @@ function Page() {
           onEnter={() => getEditor()?.view.focus()}
         />
       )}
+      {active && <NoteSuggestions path={active} />}
       {active && (properties.view === "table" || properties.view === "board") && (
         <div className={properties.view === "board" ? "page-wide" : "page-column"}>
           <Boundary name="This view">
@@ -547,6 +550,7 @@ function Workspace() {
           </Suspense>
         </Boundary>
       )}
+      <NoticedDrawer />
       <UpdateCard />
       <WhatsNew />
       {notice && <div className="toast">{notice}</div>}

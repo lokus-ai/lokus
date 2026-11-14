@@ -263,14 +263,22 @@ const inline = (hooks: PreviewHooks) =>
 
 /** Inline marks inside a table cell: bold, italic, code, strikethrough. */
 function cellContent(cell: HTMLElement, text: string): void {
-  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|~~[^~]+~~|\*[^*]+\*)/);
+  const parts = text.split(/(`[^`]+`|\[\[[^\]]+\]\]|\*\*[^*]+\*\*|~~[^~]+~~|\*[^*]+\*)/);
   for (const part of parts) {
     const wrap = (tag: string, inner: string) => {
       const el = document.createElement(tag);
       el.textContent = inner;
       cell.append(el);
     };
-    if (/^`.+`$/.test(part)) wrap("code", part.slice(1, -1));
+    if (/^\[\[.+\]\]$/.test(part)) {
+      // A link to a note works in a table as it does in a sentence.
+      const [target, shown] = part.slice(2, -2).split("|");
+      const link = document.createElement("span");
+      link.className = "cm-wikilink";
+      link.dataset.target = target.trim();
+      link.textContent = (shown ?? target).trim();
+      cell.append(link);
+    } else if (/^`.+`$/.test(part)) wrap("code", part.slice(1, -1));
     else if (/^\*\*.+\*\*$/.test(part)) wrap("strong", part.slice(2, -2));
     else if (/^~~.+~~$/.test(part)) wrap("s", part.slice(2, -2));
     else if (/^\*.+\*$/.test(part)) wrap("em", part.slice(1, -1));
@@ -315,6 +323,7 @@ class Table extends WidgetType {
     });
     // Clicking the table puts the cursor in its markdown, which reveals it.
     wrap.addEventListener("mousedown", (e) => {
+      if ((e.target as HTMLElement).closest(".cm-wikilink")) return;
       e.preventDefault();
       view.dispatch({ selection: { anchor: this.from + 2 } });
       view.focus();

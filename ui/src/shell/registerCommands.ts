@@ -95,6 +95,8 @@ export function registerAllCommands(): void {
     { id: "teams.open", title: "Team sync…", run: () => app.set({ settings: "team" }) },
     { id: "window.new", title: "New window", keys: "Mod-Shift-n", run: () => newWindow().catch((e) => notify(e instanceof Error ? e.message : String(e))) },
     { id: "onboarding.open", title: "Lokus: run the setup again", run: () => void import("../features/onboarding/onboarding").then((o) => o.onboarding.set({ open: true })) },
+    { id: "noticed.open", title: "Assistant: what it noticed", keys: "Mod-Shift-i", run: () => void import("../features/noticed/noticed").then((n) => n.noticed.set({ open: true })) },
+    { id: "noticed.check", title: "Assistant: look for things now", run: () => import("../features/noticed/noticed").then((n) => n.check("The user asked you to look now.")) },
     { id: "updates.check", title: "Lokus: check for updates", run: () => void import("../features/updates/updates").then((u) => u.check(true)) },
     { id: "news.open", title: "Lokus: what’s new", run: () => void import("../features/updates/updates").then((u) => u.readNews("all")) },
     {
