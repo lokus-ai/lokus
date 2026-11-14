@@ -35,3 +35,39 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: node checks/run.mjs
+
+  # Lokus on Windows: the tests, then the real app started and used through its dev channel,
+  # then the installer people would download. The pictures and the installer are kept.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cargo test --workspace
+      - name: Build the app with its dev channel
+        run: pnpm tauri build --debug --no-bundle
+        env:
+          VITE_LOKUS_DEV_CHANNEL: "1"
+      - run: cargo build -p lokus-cli
+      - name: Start Lokus and use it
+        shell: pwsh
+        run: ./checks/windows-smoke.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-smoke
+          path: windows-smoke/
+      - name: Build the installer
+        run: pnpm tauri build --bundles nsis
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lokus-windows-installer
+          path: target/release/bundle/nsis/*.exe

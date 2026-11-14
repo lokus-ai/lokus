@@ -1,5 +1,6 @@
 //! @part-of desktop
-//! Dev builds only: a unix socket that runs any command inside the live app.
+//! Dev builds only: a local socket that runs any command inside the live app. A unix socket
+//! on macOS and Linux; on Windows, which has none worth the name, a port on this computer.
 //!
 //! `lokus app editor.toggleBold` sends one JSON line `{name, args}` and gets
 //! one back: `{ok: true, value}` or `{ok: false, error}`. Core commands run
@@ -8,7 +9,6 @@
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::Mutex;
@@ -28,13 +28,33 @@ pub struct Pending {
     waiting: Mutex<HashMap<u64, mpsc::Sender<Value>>>,
 }
 
-pub fn start(app: AppHandle) {
+#[cfg(unix)]
+type Stream = std::os::unix::net::UnixStream;
+#[cfg(not(unix))]
+type Stream = std::net::TcpStream;
+
+#[cfg(unix)]
+fn listen() -> std::io::Result<std::os::unix::net::UnixListener> {
     // A second instance (for two-device tests) gets its own socket.
     let path = std::env::var("LOKUS_DEV_SOCK")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::temp_dir().join("lokus-dev.sock"));
     let _ = std::fs::remove_file(&path);
-    let listener = match UnixListener::bind(&path) {
+    std::os::unix::net::UnixListener::bind(&path)
+}
+
+/// The port `lokus app` finds the dev app on where there are no unix sockets.
+#[cfg(not(unix))]
+fn listen() -> std::io::Result<std::net::TcpListener> {
+    let port = std::env::var("LOKUS_DEV_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(47615u16);
+    std::net::TcpListener::bind(("127.0.0.1", port))
+}
+
+pub fn start(app: AppHandle) {
+    let listener = match listen() {
         Ok(listener) => listener,
         Err(e) => {
             eprintln!("dev channel disabled: {e}");
@@ -49,7 +69,7 @@ pub fn start(app: AppHandle) {
     });
 }
 
-fn serve(app: AppHandle, stream: UnixStream) {
+fn serve(app: AppHandle, stream: Stream) {
     let mut line = String::new();
     let Ok(read_half) = stream.try_clone() else {
         return;

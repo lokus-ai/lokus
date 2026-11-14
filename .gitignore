@@ -12,3 +12,4 @@ checks/fixtures/**/.lokus/
 # A developer's own signing certificate name, for checks/dev-run.sh
 .dev-sign
 dist-release/
+windows-smoke/

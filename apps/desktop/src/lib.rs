@@ -5,7 +5,7 @@
 
 mod account;
 mod ai;
-#[cfg(all(debug_assertions, unix, desktop))]
+#[cfg(all(debug_assertions, desktop))]
 mod dev_channel;
 mod sync;
 mod updates;
@@ -313,7 +313,7 @@ pub fn run() {
         }
     });
 
-    #[cfg(all(debug_assertions, unix, desktop))]
+    #[cfg(all(debug_assertions, desktop))]
     let builder = builder
         .manage(dev_channel::Pending::default())
         .invoke_handler(commands!(dev_channel::dev_reply))
@@ -322,7 +322,7 @@ pub fn run() {
             Ok(())
         });
 
-    #[cfg(not(all(debug_assertions, unix, desktop)))]
+    #[cfg(not(all(debug_assertions, desktop)))]
     let builder = builder.invoke_handler(commands!());
 
     builder
