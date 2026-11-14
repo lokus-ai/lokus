@@ -341,11 +341,33 @@ fn to_openai(system: &str, messages: &[Value]) -> Vec<Value> {
                 json!({ "role": "tool", "tool_call_id": block["tool_use_id"], "content": content }),
             );
         }
-        if !text.is_empty() {
+        // A picture goes as a picture: the message becomes parts, the words first.
+        let pictures: Vec<Value> = blocks
+            .iter()
+            .filter_map(data_url)
+            .map(|url| json!({ "type": "image_url", "image_url": { "url": url } }))
+            .collect();
+        if !pictures.is_empty() {
+            let mut parts = vec![json!({ "type": "text", "text": text.join("\n") })];
+            parts.extend(pictures);
+            out.push(json!({ "role": "user", "content": parts }));
+        } else if !text.is_empty() {
             out.push(json!({ "role": "user", "content": text.join("\n") }));
         }
     }
     out
+}
+
+/// An attached picture as the address-with-the-bytes-in-it that OpenAI's APIs take.
+fn data_url(block: &Value) -> Option<String> {
+    if block["type"] != "image" {
+        return None;
+    }
+    Some(format!(
+        "data:{};base64,{}",
+        block["source"]["media_type"].as_str()?,
+        block["source"]["data"].as_str()?
+    ))
 }
 
 async fn openai(
@@ -501,6 +523,11 @@ fn to_responses(messages: &[Value]) -> Vec<Value> {
                         other => other.to_string(),
                     };
                     out.push(json!({ "type": "function_call_output", "call_id": block["tool_use_id"], "output": output }));
+                }
+                "image" => {
+                    if let Some(url) = data_url(block) {
+                        out.push(json!({ "role": "user", "content": [{ "type": "input_image", "image_url": url }] }));
+                    }
                 }
                 _ => {}
             }

@@ -199,6 +199,11 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let close_tab = MenuItemBuilder::with_id("close-tab", "Close Tab")
         .accelerator("CmdOrCtrl+W")
         .build(app)?;
+    // The system's own "Close Window" also answers to Cmd+W, and it won: Cmd+W closed the
+    // window, and with it the app, instead of the tab. Ours takes Cmd+Shift+W.
+    let close_window = MenuItemBuilder::with_id("close-window", "Close Window")
+        .accelerator("CmdOrCtrl+Shift+W")
+        .build(app)?;
     let app_menu = SubmenuBuilder::new(app, "Lokus")
         .about(None)
         .separator()
@@ -217,7 +222,7 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .item(&new_window)
         .separator()
         .item(&close_tab)
-        .close_window()
+        .item(&close_window)
         .build()?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .undo()
@@ -302,6 +307,7 @@ pub fn run() {
     let builder = builder.menu(menu).on_menu_event(|app, event| {
         match event.id().as_ref() {
             "close-tab" => windows::tell_front(app, "menu:close-tab"),
+            "close-window" => windows::close_front(app),
             "new-window" => {
                 let app = app.clone();
                 // Off the menu's own thread: a window cannot be made from inside its handler.

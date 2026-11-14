@@ -10,6 +10,7 @@ import { chat, continueShared, newChat, shareChat } from "../features/ai/chat";
 import { AccountDialog } from "../features/auth/AccountDialog";
 import { Backlinks } from "../features/backlinks/Backlinks";
 import { FileTree } from "../features/file-tree/FileTree";
+import { FileView } from "../features/files/FileView";
 import { PluginView } from "../features/plugins/PluginView";
 import { isPicture, PageHeader } from "../features/page-header/PageHeader";
 import { SearchPalette } from "../features/search/SearchPalette";
@@ -31,7 +32,7 @@ import {
   deleteEntry,
   getEditor,
   GRAPH_TAB,
-  openNote,
+  isNotePath, openNote,
   reloadFromDisk,
   renameEntry,
   resolveImage,
@@ -222,6 +223,7 @@ function Tabs() {
   const narrow = useStore(app, (s) => s.narrow);
   const peers = useStore(app, (s) => s.peers);
   const view = useStore(app, (s) => s.view);
+  const file = useStore(app, (s) => s.file);
   const icon = useStore(app, (s) => s.properties.icon);
   // A page's own icon is only known while it is the open note, so each tab remembers the last one seen.
   const icons = useRef<Record<string, string | undefined>>({});
@@ -241,8 +243,10 @@ function Tabs() {
             </button>
           </div>
         ) : (
-        <div key={path} className={`tab${view === "note" && path === active ? " active" : ""}`} onMouseDown={() => void openNote(path)}>
-          {isPicture(icons.current[path]) ? (
+        <div key={path} className={`tab${(view === "note" && path === active) || (view === "file" && path === file) ? " active" : ""}`} onMouseDown={() => void openNote(path)}>
+          {!isNotePath(path) ? (
+            <Icon name="file" size={14} />
+          ) : isPicture(icons.current[path]) ? (
             <img className="tab-icon picture" src={resolveImage(icons.current[path]) ?? ""} alt="" />
           ) : icons.current[path] ? (
             <span className="tab-icon">{icons.current[path]}</span>
@@ -511,6 +515,7 @@ function Workspace() {
   const sidebarWidth = useStore(app, (s) => s.sidebarWidth);
   const palette = useStore(app, (s) => s.palette);
   const view = useStore(app, (s) => s.view);
+  const file = useStore(app, (s) => s.file);
   const version = useStore(app, (s) => s.version);
   const open = useCallback((path: string) => void openNote(path), []);
   const accountDialog = useStore(app, (s) => s.accountDialog);
@@ -529,6 +534,11 @@ function Workspace() {
             <Suspense fallback={null}>
               <GraphView active={active} version={version} onOpen={open} />
             </Suspense>
+          </Boundary>
+        )}
+        {view === "file" && file && (
+          <Boundary name="This file">
+            <FileView key={file} path={file} />
           </Boundary>
         )}
         {!active && view === "note" && <Start />}

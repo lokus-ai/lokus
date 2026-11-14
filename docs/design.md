@@ -334,6 +334,28 @@ Device and relay exchange only what the other is missing; after that edits are r
 Cursors and presence pass through memory and are never stored. A personal vault is local-only
 by default; turning sync on makes it a one-person workspace on the same pipeline.
 
+### Files that are not notes (built; tried in the real app with a ChatGPT-plan model)
+
+A vault holds pictures, PDFs and CSVs beside its notes, and they sync like any attachment.
+
+- **Looking at one.** Clicking a file in the sidebar opens it in a tab: a picture as a picture,
+  a PDF in the system's own PDF view, a CSV as a table (first 1,000 rows), a text file as text.
+  Nothing is edited there. `file.read` hands a file over whole and `file.text` gives its words
+  (a PDF's text through `pdf-extract`), in parts for a long one.
+- **Attaching to the assistant.** The + in the message box, a drop or a paste puts a file with
+  the next message; "Ask about this" on an open file does the same. A file from outside is
+  first kept in `attachments/`, so the conversation can be reopened and a teammate has it too.
+  The conversation stores only the file's place (`{type: "attachment", path}`); what the model
+  is sent is made for each request in `lokus-ai/src/files.rs`: a picture as a picture (all
+  three providers), anything with words as up to 24,000 characters of them, the rest read with
+  `read_file`. A picture over 4.5 MB is named and left out.
+- **Files the assistant makes.** `create_file` writes a CSV, an SVG chart or a text file;
+  `create_pdf` writes a PDF from text laid out like a note (`file.pdf`, Latin letters only, since
+  it uses the fonts every reader has). Both ask first. What was made shows as a card under the
+  reply, a picture as itself, and opens in a tab.
+- **Not built.** Pictures made by an image model; looking at a picture already in the vault
+  without it being attached; scanned PDFs (no text in them); editing a CSV in place.
+
 ### Workspaces and the switcher (built; tried in the real app)
 
 A workspace is a folder. A person can have several (one for a team, one for school) and
