@@ -124,5 +124,23 @@ computer; alpha.1 installed by hand, then updated twice from inside the app.
 | Relay unreachable | "could not reach the update server" when asked by hand; silent otherwise |
 | Publishing with a wrong key, an unsigned file, or a missing platform | each refused |
 
-Not tested: Windows and Linux; a signed and notarized Mac build downloaded through a browser;
+## Tested over the internet (2026-11-14, the first public release)
+
+2.0.0-alpha.2, published as a GitHub pre-release and offered by `relay.lokusmd.com`. A copy at
+2.0.0-alpha.1, asking the production relay:
+
+| Step | Result |
+|---|---|
+| Asked the relay, was offered alpha.2 with its "what's new" | works |
+| Update now: downloaded the file from GitHub, checked its signature and version | works |
+| What was left on disk | the notarized alpha.2 app, accepted by macOS |
+| Restart now | closed and came back by itself as a new process within 6 seconds |
+| Intel build | notarized, starts under Rosetta, offered to `darwin-x86_64` |
+| Lokus 1's `latest.json` after all of it | still 1.3.0 |
+
+Found on the way, and now checked by `lokus release`: an update file re-signed after
+notarizing had lost the version in its signature, and every installed copy would have refused
+it.
+
+Not tested: Windows and Linux (not built); a download through a browser on someone else's Mac;
 an app sitting in `/Applications` owned by another user; the release workflow in CI.

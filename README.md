@@ -5,8 +5,15 @@ one app, with an assistant that reads the tools the team already uses and keeps 
 step. Everything is a plain markdown file in a folder you choose, so nothing is locked in.
 
 **Status: alpha.** Lokus 2 is a ground-up rewrite. It runs from source with the commands below.
-Mac builds are signed and update themselves; a notarized download is not published yet. The
+Mac builds are signed, notarized and update themselves. There are no Windows or Linux builds yet. The
 previous app (Lokus 1) is kept at the tag `v1-legacy`.
+
+## Get it
+
+Early builds for Macs, for people who do not mind rough edges:
+[Apple Silicon](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.2/Lokus_2.0.0-alpha.2_aarch64.dmg)
+or [Intel](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.2/Lokus_2.0.0-alpha.2_x86_64.dmg).
+Open the download and drag Lokus into Applications. It updates itself from then on.
 
 ## What it does
 
@@ -28,7 +35,7 @@ What a typical day looks like: a customer complains in Slack. Ask the assistant 
 board up to date and it finds the complaint, adds or updates the task for it, ties the task to
 the customer, and marks the customer at risk if the complaint sounds like someone about to leave.
 
-Not there yet: notarized installers for download, Windows and Linux builds tried by real people, mobile apps, a hosted server run for you, the assistant doing
+Not there yet: Windows and Linux builds, end-to-end encryption of synced notes, mobile apps, a hosted server run for you, the assistant doing
 this on its own without being asked, GitHub and Google connections (each needs Lokus registered
 with that service first).
 
