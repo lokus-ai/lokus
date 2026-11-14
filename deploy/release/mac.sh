@@ -30,6 +30,8 @@ export APPLE_SIGNING_IDENTITY="$IDENTITY"
 # An absolute place: the build runs from apps/desktop and would put a relative one there.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target/release-build}"
 HERE_ARCH=$(uname -m | sed 's/arm64/aarch64/')
+# Build folders are kept out of Spotlight, or every build shows up there as another "Lokus".
+mkdir -p "$CARGO_TARGET_DIR" && touch "$CARGO_TARGET_DIR/.metadata_never_index"
 ARCH="${3:-$HERE_ARCH}"
 TARGET_FLAG=""
 BUILT="$CARGO_TARGET_DIR/release"
@@ -84,6 +86,7 @@ mkdir -p "$DIST"
 cp "$APP.tar.gz" "$DIST/Lokus_$ARCH.app.tar.gz"
 cp "$APP.tar.gz.sig" "$DIST/Lokus_$ARCH.app.tar.gz.sig"
 cp "$DMG" "$DIST/Lokus_${VERSION}_$ARCH.dmg"
+touch "$DIST/.metadata_never_index"
 echo "Ready in $DIST:"
 ls -la "$DIST"
 echo "Upload these, then: lokus release version=$VERSION server=$SERVER darwin-$ARCH=<address of Lokus_$ARCH.app.tar.gz>"
