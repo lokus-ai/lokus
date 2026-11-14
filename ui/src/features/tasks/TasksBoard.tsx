@@ -1,4 +1,5 @@
 /** @part-of ui.tasks */
+import { track } from "../../bridge/analytics";
 import { type PointerEvent, useEffect, useMemo, useState } from "react";
 
 import { Icon } from "../../shell/Icon";
@@ -88,6 +89,7 @@ export default function TasksBoard({ version, onOpen }: Props) {
   const columns = columnsOf(all).filter((c) => showDone || c !== "done");
 
   const move = async (task: Task, status: string) => {
+    track("action", { feature: "tasks", action: "moved", to: status });
     if (task.status === status) return;
     // Show it where it was dropped at once; the note catches up a moment later.
     setTasks((now) => (now ?? []).map((t) => (t.path === task.path ? { ...t, status } : t)));
@@ -95,6 +97,7 @@ export default function TasksBoard({ version, onOpen }: Props) {
     setTick((t) => t + 1);
   };
   const add = async (status: string, title: string) => {
+    track("action", { feature: "tasks", action: "created", in: status });
     setAdding(null);
     if (!title.trim()) return;
     await recordTask({ title: title.trim(), status }).catch(() => {});

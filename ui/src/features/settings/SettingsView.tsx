@@ -2,7 +2,7 @@
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { type AiConfig, type AiSettings, aiSettings, chatgptLogin, chatgptLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
-import { analyticsEnabled, setAnalyticsEnabled } from "../../bridge/analytics";
+import { analyticsEnabled, chatSharingEnabled, setAnalyticsEnabled, setChatSharing, track } from "../../bridge/analytics";
 import { type InstalledPlugin, pickFolder, type PluginManifest, runCore } from "../../bridge/core";
 import { Icon, type IconName } from "../../shell/Icon";
 import { noteFont, type Preferences, preferences, setPreference } from "../../shell/preferences";
@@ -259,15 +259,26 @@ function Appearance() {
 
 function Privacy() {
   const [analytics, setAnalytics] = useState(analyticsEnabled());
+  const [chats, setChats] = useState(chatSharingEnabled());
   return (
     <Section title="Privacy">
-      <Row label="Share anonymous usage" hint="Which features are used and what you answered during setup. Never note names or contents.">
+      <Row label="Share anonymous usage" hint="Which features are used, errors, and what you answered during setup. Never note names or contents.">
         <Toggle
           on={analytics}
           label="Share anonymous usage"
           onChange={(on) => {
             setAnalyticsEnabled(on);
             setAnalytics(analyticsEnabled());
+          }}
+        />
+      </Row>
+      <Row label="Share assistant conversations" hint="Off: we see only how long a reply took, which model and which tools it used. On: what you ask and what it answers is sent too, and that can include your notes and customers.">
+        <Toggle
+          on={chats && analytics}
+          label="Share assistant conversations"
+          onChange={(on) => {
+            setChatSharing(on);
+            setChats(chatSharingEnabled());
           }}
         />
       </Row>
@@ -295,6 +306,7 @@ interface Props {
 
 /** Settings open over the app as a dialog: pages on the left, the chosen page on the right. */
 export default function SettingsView({ page, onPage, onClose }: Props) {
+  useEffect(() => track("settings_opened", { page }), [page]);
   const current = PAGES.find((p) => p.id === page) ?? PAGES[0];
   useEffect(() => {
     const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();

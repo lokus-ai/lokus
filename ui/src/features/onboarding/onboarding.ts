@@ -118,7 +118,13 @@ export function leaveOnboarding(skipped: boolean, at = ""): void {
 /** Sign in to a service in the browser and keep it among the assistant's connections. */
 export async function connectService(c: Connector): Promise<void> {
   const server = { name: c.id, url: c.url, enabled: true };
-  await mcpLogin(server);
+  try {
+    await mcpLogin(server);
+  } catch (e) {
+    track("connection_failed", { service: c.id, from: "setup" });
+    throw e;
+  }
+  track("connection_added", { service: c.id, from: "setup" });
   const { config } = await aiSettings();
   if (!config.mcp.some((s) => s.name === c.id)) await saveAiConfig({ ...config, mcp: [...config.mcp, server] });
 }

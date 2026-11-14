@@ -2,6 +2,7 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { aiConnectors, type Connector } from "../../bridge/ai";
+import { track } from "../../bridge/analytics";
 import { pickFolder } from "../../bridge/core";
 import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
@@ -213,6 +214,7 @@ export default function Onboarding() {
 
   const optionCount = { hello: 0, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
   useEffect(() => {
+    track("onboarding_step", { step });
     if (step !== "hello") sweep();
     // One tick per thing as it lands, in time with the stylesheet's delays.
     for (let i = 0; i < Math.min(optionCount, 12); i++) tick(i, 0.42 + i * 0.055);

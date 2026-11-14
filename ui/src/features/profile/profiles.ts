@@ -1,4 +1,5 @@
 /** @part-of ui.profile */
+import { track } from "../../bridge/analytics";
 import { useEffect } from "react";
 
 import { rememberName } from "../../bridge/auth";
@@ -153,6 +154,7 @@ export function profileNamed(profiles: Record<string, Profile>, name: string): P
 
 /** Change how someone appears. Makes their profile note the first time. */
 export async function saveProfile(email: string, change: { name?: string; role?: string; picture?: string | null }, remember = true): Promise<void> {
+  if (remember) track("action", { feature: "profile", action: "saved", fields: Object.keys(change).join(",") });
   const key = email.toLowerCase();
   const existing = store.get().byEmail[key];
   const path = existing?.path ?? `${FOLDER}/${slug(email)}.md`;
@@ -193,6 +195,7 @@ async function writePicture(email: string, image: string): Promise<string> {
  * device, so it can be written into the next workspace you open.
  */
 export async function savePicture(email: string, image: string): Promise<void> {
+  track("action", { feature: "profile", action: "picture_set" });
   const path = await writePicture(email, image);
   keepMine(email, { image });
   await saveProfile(email, { picture: path });

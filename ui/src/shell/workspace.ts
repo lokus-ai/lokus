@@ -1,7 +1,7 @@
 /** @part-of ui.shell */
 import type { EditorState } from "@codemirror/state";
 
-import { identify, track } from "../bridge/analytics";
+import { identify, track, reportError } from "../bridge/analytics";
 import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
 import {
   closeWindow,
@@ -198,7 +198,21 @@ export function notify(message: string): void {
 }
 
 function report(e: unknown): void {
+  reportError(e, "shown");
   notify(e instanceof Error ? e.message : String(e));
+}
+
+/** The kind of page a path is, for counting which parts of Lokus get used. Never the name. */
+function pageKind(path: string): string {
+  if (path === "Customers.md") return "customer_list";
+  if (path === "Tasks.md") return "task_board";
+  if (path === "Assistant.md") return "assistant_notes";
+  if (path.startsWith("customers/")) return path.split("/").length > 2 ? "customer_item" : "customer";
+  if (path.startsWith("people/")) return "person";
+  if (path.startsWith("tasks/")) return "task";
+  if (path.startsWith("chats/")) return "shared_chat";
+  if (path.startsWith("daily/")) return "daily_note";
+  return "note";
 }
 
 /** Draw markdown read-only, the way a note looks, whether or not a note is open. */
@@ -385,6 +399,7 @@ function watchSync(): void {
   onSyncEvent((event) => {
     const { sync } = app.get();
     if (event.event === "online") {
+      if (app.get().sync.status !== "online") track("sync_connected", { role: event.role });
       if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
       retriedSignIn = false;
       app.set({ sync: { ...sync, status: "online", role: event.role, user: event.user, reason: undefined } });
@@ -541,6 +556,7 @@ export async function openNote(path: string): Promise<void> {
       const state = shared ? editor.createSharedState(shared.text, shared.awareness) : editor.createState(text);
       sessions.set(path, { state, saved: text, eol: note.eol, hash: note.hash, shared: shared ?? undefined });
       track("note_opened");
+      track("page_opened", { kind: pageKind(path) });
     }
     show(path);
   } catch (e) {

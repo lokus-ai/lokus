@@ -1,4 +1,5 @@
 /** @part-of ui.shell */
+import { track } from "../bridge/analytics";
 import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 import { identify } from "../bridge/analytics";
@@ -303,7 +304,7 @@ function Page() {
             const folder = active.includes("/") ? `${active.slice(0, active.lastIndexOf("/"))}/` : "";
             void renameEntry(active, `${folder}${name}.md`);
           }}
-          onProperty={(key, value) => getEditor()?.setProperty(key, value)}
+          onProperty={(key, value) => (track("action", { feature: "page", action: "property_changed" }), getEditor()?.setProperty(key, value))}
           resolveImage={resolveImage}
           saveImage={saveFile}
           onEnter={() => getEditor()?.view.focus()}
@@ -340,7 +341,7 @@ function Page() {
         <div className="page-column">
           <Boundary name="This task">
             <Suspense fallback={null}>
-              <TaskProfile properties={properties} onProperty={(key, value) => getEditor()?.setProperty(key, value)} onOpen={(p) => void openNote(p)} />
+              <TaskProfile properties={properties} onProperty={(key, value) => (track("action", { feature: "tasks", action: "property_changed", key }), getEditor()?.setProperty(key, value))} onOpen={(p) => void openNote(p)} />
             </Suspense>
           </Boundary>
         </div>
@@ -378,7 +379,7 @@ function Page() {
                 path={active}
                 properties={properties}
                 version={version}
-                onProperty={(key, value) => getEditor()?.setProperty(key, value)}
+                onProperty={(key, value) => (track("action", { feature: "page", action: "property_changed" }), getEditor()?.setProperty(key, value))}
                 onOpen={(p) => void openNote(p)}
               />
             </Suspense>
@@ -393,7 +394,7 @@ function Page() {
                 path={active}
                 properties={properties}
                 version={version}
-                onProperty={(key, value) => getEditor()?.setProperty(key, value)}
+                onProperty={(key, value) => (track("action", { feature: "page", action: "property_changed" }), getEditor()?.setProperty(key, value))}
                 onOpen={(p) => void openNote(p)}
               />
             </Suspense>

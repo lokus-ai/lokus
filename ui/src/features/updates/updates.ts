@@ -1,5 +1,6 @@
 /** @part-of ui.updates */
 import { aboutApp, checkForUpdate, fetchNews, installUpdate, type Post, restartApp, UPDATE_SERVER } from "../../bridge/updates";
+import { reportError, track } from "../../bridge/analytics";
 import { createStore } from "../../shell/store";
 import { notify, saveAll } from "../../shell/workspace";
 
@@ -97,6 +98,7 @@ function markSeen(ids: string[]): void {
 export function readNews(id: string | null): void {
   updates.set({ reading: id });
   if (id && id !== "all") markSeen([id]);
+  if (id) track("news_opened", { post: id });
 }
 
 /** Closing "What's new" counts as having seen what it listed. */
@@ -129,6 +131,7 @@ export async function check(byHand = false): Promise<void> {
       const already = state.phase === "available" && state.version === offer.version;
       // What the new version brings may have been written since news was last read.
       if (!state.posts.some((p) => p.version === offer.version)) void loadNews(false);
+      if (!already) track("update_offered", { version: offer.version, blocked: Boolean(offer.blocked) });
       updates.set({ phase: "available", current: offer.current, version: offer.version, blocked: offer.blocked ?? "", error: "", card: byHand || (already ? state.card : !putOff), said: `Version ${offer.version} is ready to install.` });
     } else {
       updates.set({ phase: "idle", current: offer.current, version: "", card: false, said: "You have the newest version." });
@@ -143,13 +146,17 @@ export async function check(byHand = false): Promise<void> {
 export async function install(): Promise<void> {
   if (updates.get().phase !== "available" && updates.get().phase !== "failed") return;
   updates.set({ phase: "downloading", fraction: 0, error: "", card: true });
+  track("update_started", { version: updates.get().version });
   try {
     await installUpdate((p) => {
       if (p.installing) updates.set({ phase: "installing" });
       else updates.set({ fraction: p.total ? Math.min(1, (p.received ?? 0) / p.total) : null });
     });
     updates.set({ phase: "ready", card: true });
+    track("update_installed", { version: updates.get().version });
   } catch (e) {
+    track("update_failed", { version: updates.get().version });
+    reportError(e, "update");
     updates.set({ phase: "failed", error: e instanceof Error ? e.message : String(e), card: true });
   }
 }
@@ -157,6 +164,7 @@ export async function install(): Promise<void> {
 /** "Restart now": save what is open, then close and come back as the new version. */
 export async function restart(): Promise<void> {
   updates.set({ phase: "restarting", card: true });
+  track("update_restarted", { version: updates.get().version });
   await saveAll().catch(() => {});
   restartApp();
 }

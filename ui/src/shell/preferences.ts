@@ -1,4 +1,5 @@
 /** @part-of ui.shell */
+import { describe, track } from "../bridge/analytics";
 import { createStore } from "./store";
 
 /** Choices that belong to this device, not to a vault. */
@@ -61,6 +62,10 @@ export function setPreference<K extends keyof Preferences>(key: K, value: Prefer
   preferences.set({ [key]: value } as Partial<Preferences>);
   localStorage.setItem(KEY, JSON.stringify(preferences.get()));
   apply();
+  if (key !== "customFont") {
+    track("preference_changed", { key, value: String(value) });
+    describe({ [key]: String(value) });
+  }
 }
 
 apply();

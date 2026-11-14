@@ -1,4 +1,5 @@
 /** @part-of ui.customers */
+import { track } from "../../bridge/analytics";
 import { Fragment, useEffect, useMemo, useState } from "react";
 
 import { runCore } from "../../bridge/core";
@@ -99,11 +100,13 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
     void saveSchema(schema, patch).catch(() => {});
   };
   const addColumn = (key: string, as?: Kind) => {
+    track("action", { feature: "customers", action: "column_added", kind: as ?? "auto" });
     save({ columns: [...columns, key], ...(as ? { kinds: { ...schema.kinds, [key]: as } } : {}) });
     setMenu(null);
     setFresh({ name: "", kind: "text" });
   };
   const move = (key: string, by: number) => {
+    track("action", { feature: "customers", action: "column_moved" });
     const at = columns.indexOf(key);
     const next = [...columns];
     next.splice(at, 1);
@@ -152,6 +155,7 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
   const total = (key: string) => rows.reduce((sum, c) => sum + (Number(c.props[key]) || 0), 0);
 
   const write = async (path: string, key: string, text: string) => {
+    track("action", { feature: "customers", action: "cell_edited" });
     const trimmed = text.trim();
     const plain = trimmed.replace(/[$,]/g, "");
     const value = trimmed === "" ? null : numeric(key) && !Number.isNaN(Number(plain)) ? Number(plain) : trimmed;
@@ -170,6 +174,7 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
       return next;
     });
   const setArchived = async (list: Customer[], on: boolean) => {
+    track("action", { feature: "customers", action: on ? "archived" : "unarchived", count: list.length });
     setMenu(null);
     for (const c of list) await runCore("props.set", { path: c.path, key: "archived", value: on ? true : null }).catch(() => {});
     clear();
@@ -177,6 +182,7 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
   };
   /** A customer goes with everything filed under it: what happened, and the people there. */
   const remove = async (list: Customer[]) => {
+    track("action", { feature: "customers", action: "deleted", count: list.length });
     setMenu(null);
     const names = new Set(list.map((c) => c.name.toLowerCase()));
     const people = await runCore<{ path: string; props: Record<string, unknown> }[]>("props.rows", { folder: "", deep: true })
@@ -189,10 +195,12 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
     setTick((t) => t + 1);
   };
   const create = async () => {
+    track("action", { feature: "customers", action: "created" });
     const path = await onNew(folder, "type", "customer");
     if (path) onOpen(path);
   };
   const sortBy = (key: string, down: boolean) => {
+    track("action", { feature: "customers", action: "sorted" });
     setSort({ key, down });
     setMenu(null);
   };

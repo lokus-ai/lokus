@@ -1,4 +1,5 @@
 /** @part-of ui.customers */
+import { track } from "../../bridge/analytics";
 import { useCallback, useEffect, useState } from "react";
 
 import { relay } from "../../bridge/sync";
@@ -86,6 +87,7 @@ export function DataDoor({ server, token, workspace }: Props) {
   }, [load]);
 
   const make = async () => {
+    track("action", { feature: "data_door", action: "key_made" });
     try {
       const made = await relay<{ key: string }>(server, token, "POST", base, { label: label.trim() || "Our backend" });
       setFresh(made.key);
@@ -96,6 +98,7 @@ export function DataDoor({ server, token, workspace }: Props) {
     }
   };
   const remove = async (id: string) => {
+    track("action", { feature: "data_door", action: "key_removed" });
     await relay(server, token, "DELETE", `${base}/${id}`).catch(() => {});
     await load();
   };

@@ -1,4 +1,5 @@
 /** @part-of ui.connections */
+import { track } from "../../bridge/analytics";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
@@ -63,12 +64,14 @@ export function Connections() {
     const server = { name: c.id, url: c.url, enabled: true };
     try {
       await mcpLogin(server);
+      track("connection_added", { service: c.id, from: "settings" });
       if (!added(c.id)) await save({ mcp: [...config.mcp, server] });
       await reload();
       notify(`${c.name} is connected`);
       setOpen(c.id);
       void look(server);
     } catch (e) {
+      track("connection_failed", { service: c.id, from: "settings" });
       setNote(`${c.name}: ${message(e)}`);
     }
     setBusy(null);

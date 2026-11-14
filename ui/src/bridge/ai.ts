@@ -50,6 +50,12 @@ export interface AiOutcome {
   /** Messages to add to the conversation. Opaque here; they are sent back as they are. */
   messages: unknown[];
   stop: string;
+  /** What it took: the model, how many times it was asked, tokens (0 when the provider does not say), tools used. */
+  model: string;
+  rounds: number;
+  input_tokens: number;
+  output_tokens: number;
+  tools: string[];
 }
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {

@@ -133,6 +133,13 @@ pub struct Outcome {
     /// Messages to add to the conversation, in order.
     pub messages: Vec<Value>,
     pub stop: String,
+    /// What it took, for anyone measuring: which model, how many times it was asked, tokens
+    /// read and written (zero when the provider does not say), and the tools it used.
+    pub model: String,
+    pub rounds: u32,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub tools: Vec<String>,
 }
 
 /// Asks the person to allow a tool call; resolves to their answer.
@@ -264,15 +271,20 @@ pub async fn send(
 
     let mut added: Vec<Value> = Vec::new();
     let mut stop = String::from("end_turn");
+    let (mut rounds, mut read, mut written, mut used) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
         for _ in 0..MAX_ROUNDS {
             let mut on_text = |delta: &str| emit(Event::Text { delta: delta.to_string() });
             let turn = provider::turn(&http, &config, &key, &system, &offered, &messages, &mut on_text).await?;
             stop = turn.stop.clone();
+            rounds += 1;
+            read += turn.tokens.0;
+            written += turn.tokens.1;
             let reply = json!({ "role": "assistant", "content": turn.content });
             messages.push(reply.clone());
             added.push(reply);
             let calls: Vec<&Value> = turn.content.iter().filter(|b| b["type"] == "tool_use").collect();
+            used.extend(calls.iter().filter_map(|c| c["name"].as_str().map(str::to_string)));
             if calls.is_empty() {
                 break;
             }
@@ -341,9 +353,15 @@ pub async fn send(
             "ChatGPT no longer accepts this sign-in. Sign in with ChatGPT again in Settings, Assistant.".into(),
         ));
     }
+    let model = config.model().unwrap_or_default().to_string();
     result.map(|()| Outcome {
         messages: added,
         stop,
+        model,
+        rounds,
+        input_tokens: read,
+        output_tokens: written,
+        tools: used,
     })
 }
 

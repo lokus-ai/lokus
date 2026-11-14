@@ -1,6 +1,8 @@
 /** @part-of ui.shell */
 import { Component, type ReactNode } from "react";
 
+import { reportError } from "../bridge/analytics";
+
 /**
  * A view that throws while rendering shows a short message in its own space
  * instead of blanking the whole window; the notes stay reachable.
@@ -10,6 +12,10 @@ export class Boundary extends Component<{ name: string; children: ReactNode }, {
 
   static getDerivedStateFromError(error: unknown) {
     return { failed: error instanceof Error ? error.message : String(error) };
+  }
+
+  componentDidCatch(error: unknown) {
+    reportError(error, `view:${this.props.name}`);
   }
 
   render() {

@@ -7,11 +7,12 @@ import "./shell/styles/work.css";
 import "./shell/styles/onboarding.css";
 import "./shell/styles/density.css";
 import "./editor/editor.css";
-import "./shell/preferences";
+import { preferences } from "./shell/preferences";
+import { aboutApp } from "./bridge/updates";
 
 import { createRoot } from "react-dom/client";
 
-import { startAnalytics } from "./bridge/analytics";
+import { describe, startAnalytics, watchErrors } from "./bridge/analytics";
 import { DEV_CHANNEL, serveDevCommands } from "./bridge/dev";
 import { isMainWindow } from "./bridge/core";
 import { startOnboarding } from "./features/onboarding/onboarding";
@@ -23,6 +24,9 @@ import { registerAllCommands } from "./shell/registerCommands";
 import { boot, saveAll } from "./shell/workspace";
 
 void startAnalytics();
+watchErrors();
+void aboutApp().then((a) => describe({ app_version: a.version, platform: a.platform, arch: a.arch, window: isMainWindow() ? "main" : "extra" }), () => {});
+describe({ density: preferences.get().density, detail: preferences.get().detail, layout: preferences.get().layout, theme: preferences.get().theme });
 registerAllCommands();
 installShortcuts();
 serveDevCommands(runCommand);

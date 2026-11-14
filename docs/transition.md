@@ -7,7 +7,7 @@ breaks if it is skipped. Nothing here has been done yet unless it says so. Writt
 
 | # | Step | Why | Who |
 |---|---|---|---|
-| 1 | **Commit the work on `next`.** About 90 files are changed and none are committed | Everything built since the rewrite began exists only in one working folder on one laptop | Owner says go; then anyone |
+| 1 | **Commit the work on `next`.** Done 2026-11-14 | Everything built since the rewrite began exists only in one working folder on one laptop | Owner says go; then anyone |
 | 2 | **Check the tag `v1-legacy` on the day of the switch.** Today it already holds everything on `main` (checked 2026-11-13); if `main` gains a commit before the switch, tag it again | So the last Lokus 1 can always be rebuilt | Owner |
 | 3 | **Rotate the Supabase secret key and the password** pasted into a chat on 2026-11-13 | They were shown in plain text | Owner |
 | 4 | **Decide what happens to outside contributors' open issues and pull requests** against Lokus 1 | They were left open on purpose; after the switch they point at code that is gone | Owner |
@@ -27,7 +27,7 @@ breaks if it is skipped. Nothing here has been done yet unless it says so. Writt
 | # | Step | State today |
 |---|---|---|
 | 10 | **Signed, notarized installers** for macOS, and builds for Windows and Linux | The updater is built and tested with three local releases (`docs/releasing.md`). The release workflow is rewritten for signed update files but has not been run in CI; notarization is untested |
-| 11 | **The hosted relay brought up to date** and given a real name | It runs an older build with no data-push door, under a temporary `sslip.io` name. Daily backups are on; restoring one has never been tried |
+| 11 | **The hosted relay brought up to date** and given a real name | Brought up to date on 2026-11-14 (data-push door, releases and news, a publish key). Still under a temporary `sslip.io` name. Daily backups are on; restoring one has never been tried |
 | 12 | **One Supabase project chosen for production**, with Google sign-in set to the production return address | The app points at a project made for testing |
 | 13 | **The Slack app published** in the Slack Marketplace | It works only in the workspace it was made in. GitHub and Google need the same kind of registration and have not been started |
 | 14 | **The app pointed at the hosted relay** in a release build (`VITE_LOKUS_RELAY`) | The development copy points at a relay on the developer's laptop |

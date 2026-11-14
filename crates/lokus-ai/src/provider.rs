@@ -36,6 +36,8 @@ pub struct Turn {
     pub stop: String,
     /// Ids of tool calls whose arguments did not arrive as valid JSON.
     pub invalid: Vec<String>,
+    /// Tokens read and written, when the provider says. Zero when it does not.
+    pub tokens: (u64, u64),
 }
 
 fn network(config: &Config) -> impl Fn(reqwest::Error) -> AiError + '_ {
@@ -195,6 +197,7 @@ async fn anthropic(
     let mut partial: Vec<String> = Vec::new();
     let mut invalid = Vec::new();
     let mut stop = String::from("end_turn");
+    let mut tokens = (0u64, 0u64);
     events(response, config, |data| {
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             return Ok(());
@@ -237,9 +240,19 @@ async fn anthropic(
                     }
                 }
             }
+            "message_start" => {
+                let usage = &event["message"]["usage"];
+                tokens.0 = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"]
+                    .iter()
+                    .filter_map(|k| usage[*k].as_u64())
+                    .sum();
+            }
             "message_delta" => {
                 if let Some(reason) = event["delta"]["stop_reason"].as_str() {
                     stop = reason.to_string();
+                }
+                if let Some(written) = event["usage"]["output_tokens"].as_u64() {
+                    tokens.1 = written;
                 }
             }
             "error" => {
@@ -262,6 +275,7 @@ async fn anthropic(
         content: blocks,
         stop,
         invalid,
+        tokens,
     })
 }
 
@@ -353,12 +367,19 @@ async fn openai(
     // (id, name, arguments so far), by the index the provider gives each call.
     let mut calls: Vec<(String, String, String)> = Vec::new();
     let mut stop = String::from("end_turn");
+    let mut tokens = (0u64, 0u64);
     events(response, config, |data| {
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             return Ok(());
         };
         if let Some(message) = event["error"]["message"].as_str() {
             return Err(AiError::Provider(message.to_string()));
+        }
+        if event["usage"].is_object() {
+            tokens = (
+                event["usage"]["prompt_tokens"].as_u64().unwrap_or(0),
+                event["usage"]["completion_tokens"].as_u64().unwrap_or(0),
+            );
         }
         let choice = &event["choices"][0];
         if let Some(piece) = choice["delta"]["content"].as_str() {
@@ -414,6 +435,7 @@ async fn openai(
         content,
         stop,
         invalid,
+        tokens,
     })
 }
 
@@ -507,6 +529,7 @@ async fn responses(
     let mut text = String::new();
     let mut invalid = Vec::new();
     let mut stop = String::new();
+    let mut tokens = (0u64, 0u64);
     events(response, config, |data| {
         let Ok(event) = serde_json::from_str::<Value>(data) else {
             return Ok(());
@@ -529,7 +552,14 @@ async fn responses(
                     json!({ "type": "tool_use", "id": id, "name": item["name"], "input": input }),
                 );
             }
-            "response.completed" => stop = "end_turn".into(),
+            "response.completed" => {
+                stop = "end_turn".into();
+                let usage = &event["response"]["usage"];
+                tokens = (
+                    usage["input_tokens"].as_u64().unwrap_or(0),
+                    usage["output_tokens"].as_u64().unwrap_or(0),
+                );
+            }
             "response.incomplete" => stop = "max_tokens".into(),
             "response.failed" | "error" => {
                 let error = if event["response"]["error"].is_object() {
@@ -563,6 +593,7 @@ async fn responses(
         content,
         stop,
         invalid,
+        tokens,
     })
 }
 

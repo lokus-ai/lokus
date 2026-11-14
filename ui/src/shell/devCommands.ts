@@ -158,6 +158,15 @@ const commands: Command[] = [
     },
   },
   {
+    id: "analytics.recent",
+    title: "The last things counted",
+    hidden: true,
+    async run() {
+      const a = await import("../bridge/analytics");
+      return { on: a.analyticsEnabled(), chats: a.chatSharingEnabled(), events: a.recent.slice(-40) };
+    },
+  },
+  {
     id: "ui.measure",
     title: "Position and size of elements",
     hidden: true,

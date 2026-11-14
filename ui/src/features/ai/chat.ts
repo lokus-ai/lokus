@@ -1,6 +1,7 @@
 /** @part-of ui.ai */
-import { aiActDone, aiApprove, type AiEvent, aiSend, aiSettings, aiStop, onAiAct, onAiEvent } from "../../bridge/ai";
+import { aiActDone, type AiOutcome, aiApprove, type AiEvent, aiSend, aiSettings, aiStop, onAiAct, onAiEvent } from "../../bridge/ai";
 import { type Entry, type Note, runCore } from "../../bridge/core";
+import { traceChat, track } from "../../bridge/analytics";
 import { createStore } from "../../shell/store";
 import { allFiles, app, getEditor, notify, openNote, refreshTree, showGraph } from "../../shell/workspace";
 
@@ -128,6 +129,7 @@ const asked = new Map<string, (answer: string) => void>();
 
 /** The person's answer to a question the assistant asked. */
 export function reply(id: string, text: string): void {
+  track("action", { feature: "assistant", action: "question_answered" });
   const said = text.trim();
   if (!said) return;
   update((items) => items.map((i) => (i.kind === "question" && i.id === id ? { ...i, answer: said } : i)));
@@ -195,6 +197,30 @@ const STOPPED: Record<string, string> = {
   max_tokens: "The answer was cut off because it reached the length limit.",
 };
 
+/** Tell us how a request to the assistant went: how long, which model, which tools, whether it failed. */
+function traced(id: string, began: number, question: string, outcome: AiOutcome | null, error: string): void {
+  const items = chat.get().items;
+  const since = items.slice(items.map((i) => i.kind).lastIndexOf("user") + 1);
+  void aiSettings().then(
+    ({ config }) =>
+      traceChat({
+        trace: `${id}-${began}`,
+        provider: config.provider,
+        model: outcome?.model || config.model || "default",
+        seconds: (Date.now() - began) / 1000,
+        rounds: outcome?.rounds ?? 0,
+        inputTokens: outcome?.input_tokens ?? 0,
+        outputTokens: outcome?.output_tokens ?? 0,
+        tools: outcome?.tools ?? since.flatMap((i) => (i.kind === "tool" ? [i.name] : [])),
+        stop: outcome?.stop ?? "error",
+        error,
+        question,
+        answer: since.map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim(),
+      }),
+    () => {},
+  );
+}
+
 /** Ask a question. `mentions` are the paths of notes (or folders, ending in "/") picked with @. */
 export async function ask(text: string, mentions: string[] = []): Promise<void> {
   const question = text.trim();
@@ -215,19 +241,25 @@ export async function ask(text: string, mentions: string[] = []): Promise<void> 
   chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: question, note: note ?? undefined }] }));
   const sending = chatId;
   let pending: { role: string; content: string } | null = null;
+  let began = 0;
+  track("assistant_asked", { mentions: mentions.length, turn: chat.get().items.filter((i) => i.kind === "user").length });
   try {
     const state = await appState(mentions);
     const message = { role: "user", content: state.text + question };
     pending = message;
     briefing ??= (await brief()) + (carried ? `\n\nThe user is carrying on a conversation that was shared with their workspace. What was said in it, for you to build on:\n<shared_conversation>\n${carried}\n</shared_conversation>` : "");
     if (sending !== chatId) return;
+    began = Date.now();
     const outcome = await aiSend(sending, [...history, message], briefing);
+    traced(sending, began, question, outcome, "");
     if (sending !== chatId) return;
     history = [...history, message, ...outcome.messages];
     pending = null;
     seen = state.attached;
     update((items) => (STOPPED[outcome.stop] ? [...settle(items), { kind: "notice", text: STOPPED[outcome.stop] }] : settle(items)));
   } catch (e) {
+    const failed = e as { code?: string; message?: string };
+    if (began) traced(sending, began, question, null, failed.code === "stopped" ? "stopped" : (failed.message ?? String(e)));
     if (sending !== chatId) return;
     const err = e as { code?: string; message?: string };
     // The question is kept even though no answer came back, with whatever had been said so far.
@@ -263,6 +295,7 @@ export const keptChats = () => runCore<Kept[]>("chats.list").catch(() => [] as K
 
 /** Bring a kept conversation back, ready to be continued. */
 export async function openChat(id: string): Promise<void> {
+  track("action", { feature: "assistant", action: "chat_reopened" });
   if (chat.get().busy) stop();
   const kept = await runCore<{ body: { items?: Item[]; history?: unknown[] } }>("chats.load", { id });
   asked.clear();
@@ -275,6 +308,7 @@ export async function openChat(id: string): Promise<void> {
 }
 
 export async function forgetChat(id: string): Promise<void> {
+  track("action", { feature: "assistant", action: "chat_deleted" });
   await runCore("chats.delete", { id }).catch(() => {});
   if (id === chatId) newChat();
 }
@@ -315,6 +349,7 @@ function transcript(items: Item[]): string {
  * any other. Until someone does this, a conversation stays on the device it happened on.
  */
 export async function shareChat(): Promise<void> {
+  track("action", { feature: "assistant", action: "chat_shared" });
   const items = settle(chat.get().items);
   const first = items.find((i) => i.kind === "user");
   if (!first || first.kind !== "user") return;
@@ -336,6 +371,7 @@ export async function shareChat(): Promise<void> {
 
 /** Start a new conversation that carries on from a shared one. */
 export async function continueShared(path: string): Promise<void> {
+  track("action", { feature: "assistant", action: "shared_chat_continued" });
   const note = await runCore<Note>("note.read", { path });
   const body = note.text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
   newChat();
@@ -346,22 +382,26 @@ export async function continueShared(path: string): Promise<void> {
 }
 
 export function stop(): void {
+  track("action", { feature: "assistant", action: "stopped" });
   void aiStop(chatId);
 }
 
 /** Allow this change and every further change of the same kind until the current request is done. */
 export function answerAll(id: string): void {
+  track("action", { feature: "assistant", action: "allowed_all" });
   const item = chat.get().items.find((i) => i.kind === "tool" && i.id === id);
   if (item?.kind === "tool") allowed.add(item.name);
   answer(id, true);
 }
 
 export function answer(id: string, allow: boolean): void {
+  track("action", { feature: "assistant", action: allow ? "change_allowed" : "change_declined" });
   update((items) => items.map((i) => (i.kind === "tool" && i.id === id && i.status === "asking" ? { ...i, status: "running" } : i)));
   void aiApprove(id, allow);
 }
 
 export function newChat(): void {
+  track("action", { feature: "assistant", action: "new_chat" });
   if (chat.get().busy) stop();
   asked.clear();
   chatId = freshId();
