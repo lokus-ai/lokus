@@ -491,3 +491,13 @@ body:has(.task-card.carried) { cursor: grabbing; }
 .conn-own.api { flex-wrap: wrap; }
 .conn-own.api textarea { flex: 1 1 100%; min-height: 62px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; font-size: var(--text-small); line-height: 1.45; resize: vertical; outline: 0; }
 .conn-own.api textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--selection); }
+
+.update-card.misplaced { z-index: 70; width: 380px; }
+.update-card.misplaced ol { margin: 2px 0; padding-left: 18px; color: var(--fg); font-size: var(--text-small); line-height: 1.6; }
+.ai-connect { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: min(300px, 100%); margin-top: 6px; }
+.ai-connect .primary { height: 38px; }
+.ai-connect small { color: var(--fg-3); font-size: var(--text-caption); text-align: center; margin-bottom: 6px; }
+.ai-connect .settings-button { height: 34px; }
+.ai-connect-problem { margin: 4px 0 0; color: var(--danger); font-size: var(--text-small); line-height: 1.45; }
+.ob .ai-connect { margin-top: 24px; width: min(340px, 100%); }
+.ob .ai-connect small { text-align: left; }

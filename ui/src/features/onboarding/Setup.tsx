@@ -8,11 +8,12 @@ import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { app } from "../../shell/workspace";
 import { Logo } from "../connections/logos";
+import { ConnectModel, useModel } from "../ai/Connect";
 import { useMe } from "../profile/profiles";
 import { AIMS, aimInWords, type Answers, connectService, EMPTY, finish, HEARD, type Job, jobs, leaveOnboarding, LOOKS, type Option, TEAMS, USES, wear } from "./onboarding";
 import { chime, done as doneSound, muteSounds, pop, soundsMuted, sweep, tick, wakeSounds } from "./sounds";
 
-type Step = "hello" | "uses" | "aim" | "team" | "look" | "tools" | "heard" | "folder" | "building";
+type Step = "hello" | "uses" | "aim" | "team" | "look" | "assistant" | "tools" | "heard" | "folder" | "building";
 
 /** `--i` is a thing's place in line: the stylesheet turns it into when it arrives. */
 const nth = (i: number) => ({ "--i": i }) as CSSProperties;
@@ -205,14 +206,20 @@ export default function Onboarding() {
   const [linked, setLinked] = useState<Record<string, "busy" | "done" | string>>({});
   const [muted, setMuted] = useState(soundsMuted());
   // Whether a folder was open when setup began decides if the folder question is asked at all.
+  const model = useModel();
+  // Asked only of someone with no model connected when setup began.
+  const [needsModel, setNeedsModel] = useState(false);
+  useEffect(() => {
+    if (model.ready === false) setNeedsModel(true);
+  }, [model.ready]);
   const hadVault = useRef(Boolean(vault));
-  const order = useMemo<Step[]>(() => ["hello", "uses", "aim", "team", "look", "tools", "heard", ...(hadVault.current ? [] : (["folder"] as Step[])), "building"], []);
+  const order = useMemo<Step[]>(() => ["hello", "uses", "aim", "team", "look", ...(needsModel ? (["assistant"] as Step[]) : []), "tools", "heard", ...(hadVault.current ? [] : (["folder"] as Step[])), "building"], [needsModel]);
   const index = order.indexOf(step);
   const set = (patch: Partial<Answers>) => setAnswers((a) => ({ ...a, ...patch }));
 
   useEffect(() => void aiConnectors().then(setCatalog, () => {}), []);
 
-  const optionCount = { hello: 0, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
+  const optionCount = { hello: 0, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, assistant: 0, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
   useEffect(() => {
     track("onboarding_step", { step });
     if (step !== "hello") sweep();
@@ -375,6 +382,22 @@ export default function Onboarding() {
         </div>
       </section>
     );
+  } else if (step === "assistant") {
+    ask = (
+      <section className="ask ob-ask">
+        <h1>
+          <Said text="Turn the assistant on" />
+        </h1>
+        <p className="ob-sub">It is what does the linking for you: reads what customers say, updates the board, tells you what needs you. It needs a model to think with.</p>
+        {model.ready ? (
+          <p className="ob-line" style={nth(0)}>
+            Connected. It is ready.
+          </p>
+        ) : (
+          <ConnectModel from="setup" onDone={model.recheck} />
+        )}
+      </section>
+    );
   } else if (step === "tools") {
     ask = (
       <section className="ob-ask">
@@ -501,6 +524,11 @@ export default function Onboarding() {
           {(step === "tools" || step === "heard") && !(step === "tools" ? answers.tools.length : answers.heard) && (
             <button className="link" onClick={() => go(index + 1)}>
               {step === "tools" ? "None of these" : "Skip this one"}
+            </button>
+          )}
+          {step === "assistant" && !model.ready && (
+            <button className="link" onClick={() => go(index + 1)}>
+              Later
             </button>
           )}
           <button className="primary" disabled={!can} onClick={next}>

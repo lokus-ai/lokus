@@ -1,4 +1,5 @@
 /** @part-of ui.ai */
+import { ConnectModel, useModel } from "./Connect";
 import lokusMark from "./lokus.svg";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -317,6 +318,7 @@ export function AiPanel() {
   const input = useRef<HTMLTextAreaElement>(null);
   /** Things worth doing right now, read from the customers; offered before the first question. */
   const [nudges, setNudges] = useState<string[]>([]);
+  const model = useModel();
   const version = useStore(app, (s) => s.version);
   useEffect(() => {
     void loadCustomers("customers").then(
@@ -499,6 +501,15 @@ export function AiPanel() {
 
   // Before the first question the box sits in the middle with a few ways to start; after it, the
   // conversation takes the space and the box stays at the bottom.
+  if (model.ready === false && items.length === 0) {
+    return (
+      <div className="ai ai-start">
+        <h2>Turn the assistant on</h2>
+        <p>It needs a model to think with. Connect one and it can read your notes and tools, and do the linking work for you.</p>
+        <ConnectModel from="panel" onDone={model.recheck} />
+      </div>
+    );
+  }
   if (items.length === 0) {
     return (
       <div className="ai ai-start">

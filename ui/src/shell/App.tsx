@@ -48,7 +48,7 @@ import { Avatar } from "../features/profile/Profile";
 import { onboarding } from "../features/onboarding/onboarding";
 import { Start } from "../features/onboarding/Start";
 import { NoteSuggestions, NoticedButton, NoticedDrawer } from "../features/noticed/NoticedList";
-import { NewsButton, UpdateCard, WhatsNew } from "../features/updates/UpdateCard";
+import { Misplaced, NewsButton, UpdateCard, WhatsNew } from "../features/updates/UpdateCard";
 import { useMe } from "../features/profile/profiles";
 
 const CustomersList = lazy(() => import("../features/customers/CustomersList"));
@@ -498,6 +498,7 @@ export function App() {
           <Onboarding />
         </Suspense>
       )}
+      <Misplaced />
     </>
   );
 }

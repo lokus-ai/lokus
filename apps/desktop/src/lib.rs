@@ -265,6 +265,8 @@ macro_rules! commands {
             updates::update_restart,
             updates::app_about,
             updates::open_web,
+            updates::app_place,
+            updates::app_quit,
             windows::window_new,
             vault_default,
             $($extra),*
