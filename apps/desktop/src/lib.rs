@@ -5,6 +5,7 @@
 
 mod account;
 mod ai;
+mod background;
 #[cfg(all(debug_assertions, desktop))]
 mod dev_channel;
 mod sync;
@@ -204,6 +205,10 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let close_window = MenuItemBuilder::with_id("close-window", "Close Window")
         .accelerator("CmdOrCtrl+Shift+W")
         .build(app)?;
+    // Our own Quit: while Lokus stays in the menu bar, Command-Q puts it away and keeps it running.
+    let quit = MenuItemBuilder::with_id("quit", "Quit Lokus")
+        .accelerator("CmdOrCtrl+Q")
+        .build(app)?;
     let app_menu = SubmenuBuilder::new(app, "Lokus")
         .about(None)
         .separator()
@@ -213,7 +218,7 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .hide_others()
         .show_all()
         .separator()
-        .quit()
+        .item(&quit)
         .build()?;
     let new_window = MenuItemBuilder::with_id("new-window", "New Window")
         .accelerator("CmdOrCtrl+Shift+N")
@@ -286,6 +291,9 @@ macro_rules! commands {
             vault_default,
             vaults::vault_list,
             vaults::vault_forget,
+            background::background_get,
+            background::background_set,
+            background::background_count,
             $($extra),*
         ]
     };
@@ -300,6 +308,7 @@ pub fn run() {
         .manage(Shell::default())
         .manage(sync::Sync::default())
         .manage(ai::Ai::default())
+        .manage(background::Background::default())
         .register_uri_scheme_protocol("lokus-plugin", |ctx, request| {
             plugin_file(ctx.app_handle(), request.uri().path())
         });
@@ -308,6 +317,7 @@ pub fn run() {
         match event.id().as_ref() {
             "close-tab" => windows::tell_front(app, "menu:close-tab"),
             "close-window" => windows::close_front(app),
+            "quit" => background::quit_or_put_away(app),
             "new-window" => {
                 let app = app.clone();
                 // Off the menu's own thread: a window cannot be made from inside its handler.
@@ -325,13 +335,18 @@ pub fn run() {
         .invoke_handler(commands!(dev_channel::dev_reply))
         .setup(|app| {
             dev_channel::start(app.handle().clone());
+            background::start(app.handle());
             Ok(())
         });
 
     #[cfg(not(all(debug_assertions, desktop)))]
-    let builder = builder.invoke_handler(commands!());
+    let builder = builder.invoke_handler(commands!()).setup(|app| {
+        background::start(app.handle());
+        Ok(())
+    });
 
     builder
-        .run(tauri::generate_context!())
-        .expect("failed to start Lokus");
+        .build(tauri::generate_context!())
+        .expect("failed to start Lokus")
+        .run(|app, event| background::on_event(app, &event));
 }

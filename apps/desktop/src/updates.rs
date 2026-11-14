@@ -201,6 +201,7 @@ pub fn update_restart(app: AppHandle) {
             .stderr(std::process::Stdio::null())
             .spawn();
     }
+    crate::background::allow_exit(&app);
     app.restart();
 }
 
@@ -233,6 +234,5 @@ pub fn app_place() -> Value {
 
 #[tauri::command]
 pub fn app_quit(app: AppHandle) {
-    crate::sync::stop_for(&app);
-    app.exit(0);
+    crate::background::quit(&app);
 }

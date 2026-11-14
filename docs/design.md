@@ -356,6 +356,18 @@ A vault holds pictures, PDFs and CSVs beside its notes, and they sync like any a
 - **Not built.** Pictures made by an image model; looking at a picture already in the vault
   without it being attached; scanned PDFs (no text in them); editing a CSV in place.
 
+### In the menu bar (built; tried in the real app on a Mac)
+
+The assistant's looks run on a timer inside the app, so an app that quits with its window stops
+looking. Lokus therefore stays: closing the window or pressing Cmd+Q hides the window and the
+Dock icon and leaves a mark in the menu bar (`apps/desktop/src/background.rs`). The mark's menu
+opens Lokus, asks for a look now, or quits it for good, which is the only real quit. A number
+beside the mark says how many findings need the person. Once a minute the shell tells the
+hidden window the time has moved, because the system slows a hidden window's own timers; the
+window decides whether a look is due. "Keep Lokus in the menu bar" under Settings, Assistant
+turns all of it off. Not built: a system notification when something is found; starting Lokus
+when the computer starts.
+
 ### Workspaces and the switcher (built; tried in the real app)
 
 A workspace is a folder. A person can have several (one for a team, one for school) and

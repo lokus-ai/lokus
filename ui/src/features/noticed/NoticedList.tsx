@@ -1,4 +1,5 @@
 /** @part-of ui.noticed */
+import { setStaysInMenuBar, staysInMenuBar } from "../../bridge/background";
 import { useEffect, useRef, useState } from "react";
 
 import { openWeb } from "../../bridge/updates";
@@ -7,7 +8,7 @@ import { Logo as ServiceLogo } from "../connections/logos";
 import { Logo as CustomerLogo } from "../customers/parts";
 import { useStore } from "../../shell/store";
 import { app, openNote, renderMarkdown } from "../../shell/workspace";
-import { Row } from "../settings/parts";
+import { Row, Toggle } from "../settings/parts";
 import { act, addToNote, check, exampleWatch, type Noticed, noticed, resolve, setWatchEvery, waiting, watchEvery } from "./noticed";
 
 const ago = (seconds: number) => {
@@ -262,11 +263,25 @@ const EVERY: Record<string, string> = { "0": "Off", "15": "Every 15 min", "30": 
 export function WatchSettings() {
   const [every, setEvery] = useState(String(watchEvery()));
   const vault = useStore(app, (s) => s.vault);
+  const [stays, setStays] = useState<boolean | null>(null);
+  useEffect(() => void staysInMenuBar().then(setStays, () => {}), []);
   return (
     <>
       <h3>Working on its own</h3>
+      {stays !== null && (
+        <Row label="Keep Lokus in the menu bar" hint="Closing the window or pressing ⌘Q keeps Lokus running there, so it can keep looking. Quit it for good from its menu bar icon.">
+          <Toggle
+            on={stays}
+            label="Keep Lokus in the menu bar"
+            onChange={(on) => {
+              setStays(on);
+              void setStaysInMenuBar(on).catch(() => setStays(!on));
+            }}
+          />
+        </Row>
+      )}
       <p className="settings-hint">
-        While Lokus is open, the assistant looks over your customers, tasks and connected tools and leaves what it finds under Noticed. It changes nothing until you say so. Each look uses your model plan or key, like a question would.
+        While Lokus is running, the assistant looks over your customers, tasks and connected tools and leaves what it finds under Noticed. It changes nothing until you say so. Each look uses your model plan or key, like a question would.
       </p>
       <Row label="Look on its own" hint="It also looks when new customer information arrives from your own systems.">
         <div className="segmented">

@@ -98,6 +98,22 @@ fn dispatch(app: &AppHandle, name: &str, args: Value) -> Result<Value, Value> {
         let path = args["path"].as_str().unwrap_or_default();
         return open_vault(app, path);
     }
+    // The menu bar icon's own menu cannot be clicked from a script, so its three choices are here.
+    match name {
+        "background.show" => {
+            crate::background::show(app);
+            return Ok(json!("shown"));
+        }
+        "background.put_away" => {
+            crate::background::put_away(app);
+            return Ok(json!("put away"));
+        }
+        "background.quit" => {
+            crate::background::quit(app);
+            return Ok(json!("quitting"));
+        }
+        _ => {}
+    }
     if name == "window.resize" || name == "window.size" {
         return window_size(app, name == "window.resize", &args);
     }
