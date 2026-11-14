@@ -9,7 +9,7 @@ import { DataDoor } from "../customers/DataDoor";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
-import { type Invite, InviteBox, InvitedList, PendingRows } from "./Invite";
+import { type Invite, InviteDialog, InvitedList, PendingRows } from "./Invite";
 import { HOME, lookForInvites, type Role } from "./invites";
 
 interface Workspace {
@@ -49,6 +49,8 @@ export function TeamSettings() {
   /** The irreversible thing the person has clicked once and must confirm. */
   const [confirming, setConfirming] = useState<"leave" | "delete" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<"members" | "invited">("members");
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
@@ -146,17 +148,39 @@ export function TeamSettings() {
               {current.role ? ` You are ${current.role === "owner" ? "an owner" : current.role === "editor" ? "an editor" : "a viewer"}.` : ""}
             </small>
           </div>
-          <button className="settings-button" onClick={() => void disconnectSync()}>
-            Stop syncing on this computer
+          {owner && token && (
+            <button className="primary team-invite-button" onClick={() => setInviting(true)}>
+              Invite people
+            </button>
+          )}
+        </div>
+        {inviting && owner && token && (
+          <InviteDialog
+            server={server}
+            token={token}
+            base={base}
+            workspace={teamName}
+            onClose={() => setInviting(false)}
+            reload={async () => {
+              await loadTeam();
+              setTab("invited");
+            }}
+          />
+        )}
+
+        <div className="team-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "members"} className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}>
+            Members <span>{members.length}</span>
           </button>
+          {owner && (
+            <button role="tab" aria-selected={tab === "invited"} className={tab === "invited" ? "on" : ""} onClick={() => setTab("invited")}>
+              Invited <span>{invites.length}</span>
+            </button>
+          )}
         </div>
-
-        {owner && token && <InviteBox server={server} token={token} base={base} reload={loadTeam} />}
-
-        <div className="team-table-head">
-          <span>Person</span>
-          <span>Role</span>
-        </div>
+        {tab === "invited" && owner && token ? (
+          <PendingRows server={server} token={token} base={base} invites={invites} reload={loadTeam} />
+        ) : (
         <div className="settings-list team-list">
           {members.map((m) => {
             const me = m.user === current.user;
@@ -193,13 +217,18 @@ export function TeamSettings() {
               </div>
             );
           })}
-          {owner && token && <PendingRows server={server} token={token} base={base} invites={invites} reload={loadTeam} />}
         </div>
+        )}
 
         <InvitedList />
 
         {owner && token && current.workspace && <DataDoor server={server} token={token} workspace={current.workspace} />}
 
+        <Row label="Stop syncing on this computer" hint="This computer keeps its notes and stops sending and receiving changes. You stay in the workspace.">
+          <button className="settings-button" onClick={() => void disconnectSync()}>
+            Stop syncing
+          </button>
+        </Row>
         {current.user && !(owner && owners === 1) && (
           <Row label="Leave this workspace" hint="You stop receiving changes and need a new invite to come back. Your notes stay on this computer.">
             {confirming === "leave" ? (
