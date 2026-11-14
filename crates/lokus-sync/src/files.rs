@@ -261,6 +261,11 @@ impl Engine {
             self.file_entries(manifest).into_iter().collect();
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         for (path, entry) in entries {
+            // A path this device must not write is skipped; see `materialize` for why.
+            if self.vault.resolve(&path).is_err() {
+                self.events.push(Event::Skipped { path: path.clone() });
+                continue;
+            }
             let known = self.known(&path)?;
             if entry.deleted {
                 self.db

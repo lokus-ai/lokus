@@ -3,9 +3,15 @@
   "productName": "Lokus",
   "identifier": "io.lokus.app",
   "build": {
-    "beforeDevCommand": { "script": "pnpm dev:ui", "cwd": "../.." },
+    "beforeDevCommand": {
+      "script": "pnpm dev:ui",
+      "cwd": "../.."
+    },
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": { "script": "pnpm build:ui", "cwd": "../.." },
+    "beforeBuildCommand": {
+      "script": "pnpm build:ui",
+      "cwd": "../.."
+    },
     "frontendDist": "../../ui/dist"
   },
   "app": {
@@ -23,13 +29,29 @@
       }
     ],
     "security": {
-      "assetProtocol": { "enable": true, "scope": [] },
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset: http://asset.localhost; font-src 'self' data:; frame-src lokus-plugin: http://lokus-plugin.localhost; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co https://*.posthog.com"
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      },
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset: http://asset.localhost http://127.0.0.1:*; font-src 'self' data:; frame-src lokus-plugin: http://lokus-plugin.localhost https://www.youtube-nocookie.com https://www.loom.com; media-src 'self' https: blob: http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co https://*.posthog.com"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJCNTJEMDY5MjI5MTFFMkYKUldRdkhwRWlhZEJTdThmMm1JcjlHenhEbWI1aUljSjh4WEFZaUJkczVqNUszQXY3UE9GN3kxV0MK",
+      "endpoints": [],
+      "requireSignedVersion": true
+    }
   }
 }

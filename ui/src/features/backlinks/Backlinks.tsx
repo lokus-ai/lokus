@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 
 import { type Mention, runCore } from "../../bridge/core";
+import { Icon } from "../../shell/Icon";
 
 interface Props {
   path: string;
@@ -29,7 +30,7 @@ export function Backlinks({ path, version, onOpen }: Props) {
   return (
     <section className="backlinks">
       <button className="backlinks-head" onClick={() => setOpen((o) => !o)}>
-        <span className={`tree-caret${open ? " open" : ""}`}>›</span>
+        <span className={`tree-caret${open ? " open" : ""}`}><Icon name="chevron" size={14} /></span>
         Linked mentions
         <span className="backlinks-count">{mentions.length}</span>
       </button>

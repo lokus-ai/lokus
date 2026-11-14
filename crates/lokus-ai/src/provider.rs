@@ -490,7 +490,10 @@ async fn responses(
     if !tools.is_empty() {
         body["tools"] = tools
             .iter()
-            .map(|t| json!({ "type": "function", "name": t.name, "description": t.description, "parameters": t.schema }))
+            // Not strict: in strict mode every field of a tool must be filled in, so the model sent
+            // an empty value for each optional one, and services such as Slack refuse an empty
+            // channel id or cursor (2026-11-13).
+            .map(|t| json!({ "type": "function", "name": t.name, "description": t.description, "parameters": t.schema, "strict": false }))
             .collect();
     }
     let response = send(config, || {
@@ -593,22 +596,44 @@ pub async fn models(http: &Client, config: &Config, key: &str) -> Result<Vec<Str
     })
     .await?;
     let body: Value = response.json().await.map_err(network(config))?;
-    let mut ids: Vec<String> = body["data"]
-        .as_array()
+    Ok(model_ids(&body, config.provider))
+}
+
+/// The usable model names in a provider's answer. A key's models come as `data[].id`; a ChatGPT
+/// plan's come as `models[].slug`, already in the order ChatGPT recommends them.
+fn model_ids(body: &Value, provider: Provider) -> Vec<String> {
+    let (list, name) = match body["models"].as_array() {
+        Some(list) => (Some(list), "slug"),
+        None => (body["data"].as_array(), "id"),
+    };
+    let mut ids: Vec<String> = list
         .into_iter()
         .flatten()
         .filter(|m| m["visibility"].is_null() || m["visibility"] == "list")
-        .filter_map(|m| m["id"].as_str().map(str::to_string))
+        .filter_map(|m| m[name].as_str().map(str::to_string))
         .collect();
-    if config.provider != Provider::Anthropic {
+    if provider == Provider::OpenAi {
         ids.sort();
     }
-    Ok(ids)
+    ids
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_chatgpt_plan_lists_its_models_by_slug_and_hides_the_hidden_ones() {
+        // The shape ChatGPT answered with on 2026-11-13; the first version read only `data[].id` and showed nothing.
+        let body = json!({ "models": [
+            { "slug": "gpt-6.1-sol", "display_name": "GPT-6.1-Sol", "visibility": "list", "priority": 1 },
+            { "slug": "gpt-reserve", "display_name": "GPT-Reserve", "visibility": "hide", "priority": 5 },
+            { "slug": "gpt-6-astra", "display_name": "GPT-6-Astra", "visibility": "list", "priority": 2 },
+        ] });
+        assert_eq!(model_ids(&body, Provider::ChatGpt), ["gpt-6.1-sol", "gpt-6-astra"]);
+        let keyed = json!({ "data": [{ "id": "b" }, { "id": "a" }] });
+        assert_eq!(model_ids(&keyed, Provider::OpenAi), ["a", "b"]);
+    }
 
     #[test]
     fn tool_arguments_must_be_a_json_object() {

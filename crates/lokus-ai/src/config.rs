@@ -123,9 +123,21 @@ impl Config {
     }
 }
 
+/// Scripted flows set `LOKUS_KEYCHAIN` so their stand-in sign-ins go to a keychain of their own.
+/// Without it, a flow's fake ChatGPT session overwrote the person's real one (2026-11-13).
 fn entry(account: &str) -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, account).map_err(|e| AiError::Keychain(e.to_string()))
+    let service = std::env::var("LOKUS_KEYCHAIN")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| SERVICE.to_string());
+    keyring::Entry::new(&service, account).map_err(|e| AiError::Keychain(e.to_string()))
 }
+
+/// What the keychain answered for each account since the app started. The keychain is asked
+/// once per account per run: on macOS every read can put a password prompt on screen, and the
+/// settings page alone used to read four entries each time it opened.
+static ASKED: std::sync::LazyLock<std::sync::Mutex<std::collections::HashMap<String, Option<String>>>> =
+    std::sync::LazyLock::new(Default::default);
 
 /// Store a secret in the OS keychain; an empty value removes it.
 pub fn set_secret(account: &str, secret: &str) -> Result<()> {
@@ -136,17 +148,46 @@ pub fn set_secret(account: &str, secret: &str) -> Result<()> {
             other => other,
         }
     } else {
-        entry.set_password(secret)
+        // Replaced, not changed in place. A keychain entry remembers which app made it and asks
+        // for the login password whenever a different one touches it; an entry that is changed
+        // in place keeps its first maker for ever. Making it afresh hands it to the app as it is
+        // signed today, so a sign-in saved by an older build stops prompting once it is renewed.
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => entry.set_password(secret),
+            Err(_) => entry.set_password(secret),
+        }
     };
-    result.map_err(|e| AiError::Keychain(e.to_string()))
+    result.map_err(|e| AiError::Keychain(e.to_string()))?;
+    if let Ok(mut asked) = ASKED.lock() {
+        asked.insert(account.to_string(), Some(secret.to_string()).filter(|s| !s.is_empty()));
+    }
+    Ok(())
 }
 
 pub fn secret(account: &str) -> Option<String> {
-    entry(account)
-        .ok()?
-        .get_password()
-        .ok()
-        .filter(|s| !s.is_empty())
+    // Held for the whole read. Without it, several parts of the app asking at the same moment
+    // each put their own password prompt on screen for the same entry, one behind another, and
+    // answering the first did not dismiss the rest (2026-11-13).
+    let mut asked = ASKED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(known) = asked.get(account) {
+        return known.clone();
+    }
+    let read = entry(account).map_err(|_| ()).and_then(|e| match e.get_password() {
+        Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        // Refused or dismissed: that says nothing about whether a sign-in is saved.
+        Err(_) => Err(()),
+    });
+    match read {
+        Ok(found) => {
+            asked.insert(account.to_string(), found.clone());
+            found
+        }
+        // Not remembered, so the next time it is needed the keychain is asked again. Remembering
+        // a refusal as "nothing saved" made every connected service look signed out until the
+        // app was restarted (2026-11-13).
+        Err(()) => None,
+    }
 }
 
 pub fn key_account(provider: Provider) -> String {

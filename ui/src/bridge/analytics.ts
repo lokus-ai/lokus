@@ -43,7 +43,7 @@ export async function startAnalytics(): Promise<void> {
 /** Events fired before the library has loaded. */
 const queue: [string, Record<string, string | number | boolean> | undefined][] = [];
 
-export type AnalyticsEvent = "app_opened" | "vault_opened" | "note_opened" | "note_created" | "command_run";
+export type AnalyticsEvent = "app_opened" | "vault_opened" | "note_opened" | "note_created" | "command_run" | "onboarding_done" | "onboarding_skipped";
 
 export function track(event: AnalyticsEvent, props?: Record<string, string | number | boolean>): void {
   if (!analyticsEnabled()) return;

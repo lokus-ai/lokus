@@ -5,9 +5,9 @@ import { tags as t } from "@lezer/highlight";
 
 /** Layout only; every colour comes from the design tokens in tokens.css. */
 const layout = EditorView.theme({
-  "&": { fontSize: "var(--text-body)", color: "var(--fg)", backgroundColor: "transparent" },
+  "&": { fontSize: "var(--text-note)", color: "var(--fg)", backgroundColor: "transparent" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--font-editor)", lineHeight: "1.6", overflow: "visible" },
+  ".cm-scroller": { fontFamily: "var(--font-editor)", lineHeight: "var(--line-note)", overflow: "visible" },
   ".cm-content": { padding: "0 0 48px", minHeight: "40vh", caretColor: "var(--accent)" },
   ".cm-line": { padding: "0" },
   ".cm-cursor": { borderLeftColor: "var(--accent)", borderLeftWidth: "1.5px" },

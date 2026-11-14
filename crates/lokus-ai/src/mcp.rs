@@ -64,7 +64,7 @@ pub async fn connect(server: &McpServer) -> Result<Connection> {
         let text = e.to_string();
         let needs_login = text.contains("401") || text.to_lowercase().contains("auth");
         failed(if needs_login {
-            "it needs you to sign in (Settings, Tool servers, Sign in)".to_string()
+            "it needs you to sign in again (Settings, Connections)".to_string()
         } else {
             text
         })

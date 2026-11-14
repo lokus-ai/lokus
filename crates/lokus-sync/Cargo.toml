@@ -4,6 +4,7 @@ description = "Keeps a vault's files and their CRDT documents in step, and talks
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 lokus-core = { path = "../lokus-core" }

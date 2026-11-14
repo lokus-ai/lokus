@@ -4,6 +4,7 @@ description = "Run any Lokus command from a terminal, against a vault or the run
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "lokus"
@@ -14,4 +15,8 @@ lokus-ai = { path = "../lokus-ai" }
 lokus-core = { path = "../lokus-core" }
 lokus-sync = { path = "../lokus-sync" }
 tokio.workspace = true
+base64.workspace = true
+minisign-verify = "0.2"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+semver = "1"
 serde_json.workspace = true

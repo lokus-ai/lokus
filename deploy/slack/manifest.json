@@ -1,0 +1,44 @@
+{
+  "display_information": {
+    "name": "Lokus",
+    "description": "Lets the Lokus assistant search, read and send in Slack as you, when you ask it to.",
+    "long_description": "Lokus is a notes app for teams with a built-in assistant. Connecting Slack lets the assistant search your channels and messages, read threads, and send or draft messages on your behalf, through Slack's own MCP server. It acts only as the person who connected it, sees only what that person can see, and asks before it sends or changes anything.",
+    "background_color": "#171717"
+  },
+  "oauth_config": {
+    "redirect_urls": ["http://localhost:53683/callback"],
+    "scopes": {
+      "user": [
+        "search:read.public",
+        "search:read.private",
+        "search:read.mpim",
+        "search:read.im",
+        "search:read.files",
+        "search:read.users",
+        "channels:history",
+        "groups:history",
+        "mpim:history",
+        "im:history",
+        "channels:read",
+        "groups:read",
+        "mpim:read",
+        "im:read",
+        "users:read",
+        "users:read.email",
+        "files:read",
+        "emoji:read",
+        "reactions:read",
+        "reactions:write",
+        "chat:write",
+        "canvases:read",
+        "canvases:write"
+      ]
+    },
+    "pkce_enabled": true
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": true
+  }
+}

@@ -4,6 +4,7 @@ description = "Lokus desktop shell: a window around lokus-core."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [lib]
 name = "lokus_desktop_lib"
@@ -23,6 +24,8 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2"
+url = "2"
 tokio.workspace = true
 
 # Dev builds use these to ask the web view for a picture of itself.

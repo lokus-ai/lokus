@@ -4,6 +4,7 @@ description = "The assistant: provider calls with the user's own key, vault tool
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 lokus-core = { path = "../lokus-core" }

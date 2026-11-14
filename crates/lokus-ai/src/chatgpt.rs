@@ -210,6 +210,20 @@ pub async fn access_token() -> Result<String> {
 /// Sign in. `show` is handed the address to open in a browser; this returns
 /// once the browser has come back, or after five minutes.
 pub async fn login(show: impl FnOnce(&str)) -> Result<()> {
+    let outcome = sign_in(show).await;
+    // A sign-in that fails with a remembered client id may be failing because of that id (a
+    // stand-in's id once got saved here and OpenAI turned every later sign-in away). Drop it, so
+    // the next try registers this installation afresh.
+    if outcome.is_err() {
+        let mut session = load();
+        if session.access_token.is_none() && session.client_id.take().is_some() {
+            save(&session);
+        }
+    }
+    outcome
+}
+
+async fn sign_in(show: impl FnOnce(&str)) -> Result<()> {
     let io = |e: std::io::Error| failed(format!("sign-in failed: {e}"));
     let mut session = load();
     if session.host_id.is_empty() {

@@ -6,6 +6,7 @@ members = ["crates/lokus-core", "crates/lokus-cli", "crates/lokus-sync", "crates
 version = "2.0.0-alpha.0"
 edition = "2021"
 rust-version = "1.85"
+license = "FCL-1.0-MIT"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

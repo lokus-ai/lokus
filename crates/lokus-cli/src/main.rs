@@ -4,6 +4,8 @@
 //!
 //! Output is JSON on stdout; errors are JSON on stderr with exit code 1.
 
+mod publish;
+
 use std::process::ExitCode;
 
 use lokus_core::error::ErrorBody;
@@ -19,6 +21,13 @@ const USAGE: &str = "usage:
   lokus ai --vault DIR q=QUESTION [provider=anthropic|openai|chatgpt] [model=ID] [base_url=URL]
            [approve=true] [mcp=URL] [login=true]       (ask the assistant; the key comes from the keychain,
                                           or ANTHROPIC_API_KEY / OPENAI_API_KEY)
+
+  lokus release version=V server=URL darwin-aarch64=URL [more builds…]
+                                          (publish a version people update to; checks every signature first)
+  lokus release.pull version=V server=URL (stop offering a version)
+  lokus release.list server=URL
+  lokus news file=news/NAME.md server=URL (publish or correct a post in What is new)
+  lokus news.remove id=NAME server=URL    (these four need LOKUS_PUBLISH_KEY)
 
 The vault defaults to $LOKUS_VAULT, then the current directory.
 Values are parsed as JSON when possible, otherwise taken as text.";
@@ -40,6 +49,9 @@ fn main() -> ExitCode {
 
     if !in_app && parsed.command == "sync" {
         return sync(&parsed);
+    }
+    if !in_app && matches!(parsed.command.as_str(), "release" | "release.pull" | "release.list" | "news" | "news.remove") {
+        return publish(&parsed);
     }
     if !in_app && parsed.command == "ai" {
         return ai(&parsed);
@@ -64,6 +76,30 @@ fn main() -> ExitCode {
             } else {
                 ExitCode::SUCCESS
             }
+        }
+        Err(body) => fail(body),
+    }
+}
+
+/// Publish the app's own releases and news to a relay.
+fn publish(p: &Parsed) -> ExitCode {
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(e) => return fail(json!({ "code": "io", "message": e.to_string() })),
+    };
+    let outcome = runtime.block_on(async {
+        match p.command.as_str() {
+            "release" => publish::release(&p.args).await,
+            "release.pull" => publish::pull(&p.args).await,
+            "release.list" => publish::list(&p.args).await,
+            "news" => publish::news(&p.args).await,
+            _ => publish::unpost(&p.args).await,
+        }
+    });
+    match outcome {
+        Ok(value) => {
+            println!("{}", serde_json::to_string_pretty(&value).unwrap_or_default());
+            ExitCode::SUCCESS
         }
         Err(body) => fail(body),
     }
@@ -186,7 +222,7 @@ fn sync(p: &Parsed) -> ExitCode {
     let config = lokus_sync::client::Config {
         server,
         workspace,
-        token,
+        token: lokus_sync::client::Token::new(token),
     };
     let outcome = runtime.block_on(lokus_sync::client::run(vault, config, |event| {
         println!("{event}")
@@ -240,6 +276,8 @@ fn ai(p: &Parsed) -> ExitCode {
         messages: vec![json!({ "role": "user", "content": question })],
         core: Some(std::sync::Arc::new(core)),
         extra_servers: Vec::new(),
+        briefing: String::new(),
+        app: None,
     };
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,

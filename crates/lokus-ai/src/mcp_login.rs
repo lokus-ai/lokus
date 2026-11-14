@@ -100,13 +100,37 @@ pub async fn login(server: &McpServer, show: impl FnOnce(&str)) -> Result<()> {
         server: server.name.clone(),
         message: format!("sign-in failed: {e}"),
     };
-    let listener = TcpListener::bind(("127.0.0.1", 0)).await.map_err(io)?;
+    // A service that knows Lokus as a registered app returns to one fixed address it has on
+    // file; any other server is told the address when Lokus introduces itself, so any free
+    // port will do.
+    let app = crate::catalog::app_for(&server.name, &server.url);
+    let listener = TcpListener::bind(("127.0.0.1", app.map_or(0, |a| a.port)))
+        .await
+        .map_err(|e| match (app, e.kind()) {
+            (Some(_), std::io::ErrorKind::AddrInUse) => AiError::Mcp {
+                server: server.name.clone(),
+                message: "sign-in failed: another sign-in is still open; finish or close it and try again".into(),
+            },
+            _ => io(e),
+        })?;
     let port = listener.local_addr().map_err(io)?.port();
-    let redirect = format!("http://127.0.0.1:{port}/callback");
+    // A browser may try `localhost` as ::1 first, so listen there too when the address is fixed.
+    let also = match app {
+        Some(a) => TcpListener::bind(("::1", a.port)).await.ok(),
+        None => None,
+    };
+    let host = if app.is_some() { "localhost" } else { "127.0.0.1" };
+    let redirect = format!("http://{host}:{port}/callback");
 
+    let mut request = AuthorizationRequest::new(redirect).with_client_name("Lokus");
+    if let Some(app) = app {
+        request = request
+            .with_preregistered_client(app.client_id)
+            .with_scopes(app.scopes.iter().copied());
+    }
     let mut state = OAuthState::Unauthorized(manager(server).await?);
     state
-        .start_authorization(AuthorizationRequest::new(redirect).with_client_name("Lokus"))
+        .start_authorization(request)
         .await
         .map_err(failed(server))?;
     let url = state
@@ -117,7 +141,13 @@ pub async fn login(server: &McpServer, show: impl FnOnce(&str)) -> Result<()> {
 
     let came_back = async {
         loop {
-            let (mut stream, _) = listener.accept().await?;
+            let (mut stream, _) = match &also {
+                Some(other) => tokio::select! {
+                    got = listener.accept() => got?,
+                    got = other.accept() => got?,
+                },
+                None => listener.accept().await?,
+            };
             let mut head = vec![0u8; 8192];
             let n = stream.read(&mut head).await?;
             let request = String::from_utf8_lossy(&head[..n]).into_owned();
@@ -150,7 +180,7 @@ pub async fn login(server: &McpServer, show: impl FnOnce(&str)) -> Result<()> {
         })?
         .map_err(io)?;
     state
-        .handle_callback_url(&format!("http://127.0.0.1:{port}{path}"))
+        .handle_callback_url(&format!("http://{host}:{port}{path}"))
         .await
         .map_err(failed(server))
 }

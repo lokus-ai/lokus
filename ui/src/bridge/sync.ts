@@ -12,6 +12,8 @@ const fromB64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeA
 /** What the sync connection reports. */
 export type SyncEvent =
   | { event: "online"; role: "owner" | "editor" | "viewer"; user: string; conn: number }
+  | { event: "role"; role: "owner" | "editor" | "viewer" }
+  | { event: "skipped"; path: string }
   | { event: "offline"; reason: string }
   | { event: "refused"; reason: string }
   | { event: "pulled"; edits: number }
@@ -47,6 +49,11 @@ export function syncConnect(server: string, workspace: string, token: string): P
   return invoke("sync_connect", { server, workspace, token });
 }
 
+/** Hand the running connection a fresh sign-in, so it outlives the one it started with. */
+export function syncToken(token: string): Promise<void> {
+  return invoke("sync_token", { token });
+}
+
 export function syncDisconnect(): Promise<void> {
   return invoke("sync_disconnect");
 }
@@ -70,7 +77,7 @@ export function syncAwareness(id: string, data: Uint8Array): void {
 }
 
 /** One request to the relay's HTTP side. */
-export async function relay<T>(server: string, token: string, method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+export async function relay<T>(server: string, token: string, method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
   try {
     return await invoke<T>("relay_call", { server, token, method, path, body: body ?? null });
   } catch (raw) {

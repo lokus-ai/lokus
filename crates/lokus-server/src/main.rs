@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use lokus_server::auth::Auth;
 use lokus_server::store::Store;
-use lokus_server::{router, App};
+use lokus_server::{router, App, Limits};
 
 #[tokio::main]
 async fn main() {
@@ -38,7 +38,15 @@ async fn main() {
         "lokus relay listening on :{port}, data in {}",
         data.display()
     );
-    let serve = axum::serve(listener, router(App::new(store, auth)));
+    // Releases and news can be published only when a key of 24 characters or more is set.
+    let publish_key = std::env::var("LOKUS_PUBLISH_KEY").ok().filter(|k| !k.is_empty());
+    match publish_key.as_deref().map(str::len) {
+        Some(n) if n < 24 => eprintln!("warning: LOKUS_PUBLISH_KEY is shorter than 24 characters and is ignored"),
+        Some(_) => eprintln!("releases and news can be published with LOKUS_PUBLISH_KEY"),
+        None => {}
+    }
+    let app = App::with_publisher(store, auth, Limits::from_env(), publish_key);
+    let serve = axum::serve(listener, router(app));
     if let Err(e) = serve
         .with_graceful_shutdown(async {
             let _ = tokio::signal::ctrl_c().await;

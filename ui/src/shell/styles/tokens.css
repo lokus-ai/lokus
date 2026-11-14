@@ -13,6 +13,9 @@
   --text-h2: 24px;
   --text-h1: 30px;
   --text-title: 40px;
+  /* Note text: set from Settings, Editor. */
+  --text-note: 16px;
+  --line-note: 1.6;
 
   --radius-xs: 4px;
   --radius-sm: 6px;
@@ -31,12 +34,14 @@
 
   --bg: #ffffff;
   --bg-sidebar: #fafaf9;
+  /* Behind the tabs: a shade off the page, so the open tab reads as part of the page. */
+  --bg-strip: #eeeeea;
   --bg-hover: #f1f1ee;
   --bg-active: #e9e9e5;
   --border: rgba(43, 42, 39, 0.09);
   --fg: #2b2a27;
   --fg-2: #6f6e69;
-  --fg-3: #a3a29d;
+  --fg-3: #8d8c87;
   --accent: #2f6fed;
   --accent-fg: #ffffff;
   --selection: rgba(47, 111, 237, 0.2);
@@ -44,6 +49,7 @@
   --code-bg: #f5f5f2;
   --danger: #d1453b;
   --ok: #2e9e5b;
+  --warn: #c98a1b;
   --syntax-keyword: #a626a4;
   --syntax-string: #2e7d32;
   --syntax-number: #b5651d;
@@ -56,12 +62,13 @@
   :root:not([data-theme="light"]) {
     --bg: #171717;
     --bg-sidebar: #1c1c1c;
+    --bg-strip: #232323;
     --bg-hover: #252525;
     --bg-active: #2d2d2d;
     --border: rgba(255, 255, 255, 0.09);
     --fg: #e6e6e3;
     --fg-2: #a0a09c;
-    --fg-3: #6e6e6a;
+    --fg-3: #85857f;
     --accent: #6b9bff;
     --accent-fg: #10131a;
     --selection: rgba(107, 155, 255, 0.28);
@@ -78,12 +85,13 @@
 :root[data-theme="dark"] {
   --bg: #171717;
   --bg-sidebar: #1c1c1c;
+  --bg-strip: #232323;
   --bg-hover: #252525;
   --bg-active: #2d2d2d;
   --border: rgba(255, 255, 255, 0.09);
   --fg: #e6e6e3;
   --fg-2: #a0a09c;
-  --fg-3: #6e6e6a;
+  --fg-3: #85857f;
   --accent: #6b9bff;
   --accent-fg: #10131a;
   --selection: rgba(107, 155, 255, 0.28);

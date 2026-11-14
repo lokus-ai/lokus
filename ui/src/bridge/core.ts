@@ -85,7 +85,8 @@ export function vaultFileUrl(root: string, relative: string): string {
 
 /** Cmd+W from the app menu. */
 export function onCloseTab(handler: () => void): () => void {
-  const stop = listen("menu:close-tab", handler);
+  // Heard by this window only: with two windows open, Cmd+W closes a tab in the one in front.
+  const stop = getCurrentWindow().listen("menu:close-tab", handler);
   return () => void stop.then((off) => off());
 }
 
@@ -146,4 +147,26 @@ const pluginOrigin = /Windows|Android/i.test(navigator.userAgent) ? "http://loku
 /** The address of a plugin's page; no page means its background page. */
 export function pluginUrl(id: string, page = ""): string {
   return `${pluginOrigin}/${id}/${page}`;
+}
+
+/** Open another window on the same workspace, with its own tabs. */
+export async function newWindow(): Promise<void> {
+  try {
+    await invoke("window_new");
+  } catch (raw) {
+    throw toCoreError(raw);
+  }
+}
+
+/** Whether this is the first window, the one the app opened with. */
+export const isMainWindow = () => getCurrentWindow().label === "main";
+
+/** Where notes go when someone does not pick a folder: Documents, Lokus. */
+export async function defaultVault(open: boolean): Promise<VaultInfo> {
+  try {
+    const found = await invoke<{ root: string; name?: string }>("vault_default", { open });
+    return { name: found.name ?? "Lokus", root: found.root };
+  } catch (raw) {
+    throw toCoreError(raw);
+  }
 }

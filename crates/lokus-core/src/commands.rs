@@ -124,7 +124,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec(
         "props.rows",
         "Notes in a folder with their properties, as database rows",
-        "folder?",
+        "folder? deep?",
         Read,
     ),
     spec(
@@ -196,6 +196,16 @@ pub const COMMANDS: &[CommandSpec] = &[
         "id, enabled",
         Private,
     ),
+    spec(
+        "tasks.record",
+        "Add a task, or update one by its number or title",
+        "task",
+        Write,
+    ),
+    spec("chats.list", "Conversations with the assistant kept on this device", "", Private),
+    spec("chats.save", "Keep a conversation with the assistant", "id, title, updated, body", Private),
+    spec("chats.load", "One kept conversation", "id", Private),
+    spec("chats.delete", "Forget a kept conversation", "id", Private),
     spec("plugins.data.get", "A plugin's stored data", "id", Private),
     spec(
         "plugins.data.set",
@@ -247,6 +257,9 @@ struct SearchArgs {
 struct RowsArgs {
     #[serde(default)]
     folder: String,
+    /// Include notes in subfolders.
+    #[serde(default)]
+    deep: bool,
 }
 
 #[derive(Deserialize)]
@@ -285,7 +298,7 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
         "graph.data" => out(core.index()?.graph()?),
         "props.rows" => {
             let a: RowsArgs = parse(name, args)?;
-            out(core.index()?.rows(&a.folder)?)
+            out(core.index()?.rows_under(&a.folder, a.deep)?)
         }
         "props.set" => {
             let a: SetArgs = parse(name, args)?;
@@ -391,6 +404,26 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             plugins::set_enabled(vault, &a.id, a.enabled)?;
             Ok(json!({ "id": a.id, "enabled": a.enabled }))
         }
+        "tasks.record" => {
+            let a: TaskArgs = parse(name, args)?;
+            let (path, number) = crate::tasks::record(vault, &a.task)?;
+            Ok(json!({ "path": path, "number": number }))
+        }
+        "chats.list" => out(crate::chats::list(vault)?),
+        "chats.save" => {
+            let a: ChatArgs = parse(name, args)?;
+            crate::chats::save(vault, &a.id, &a.title, a.updated, &a.body)?;
+            Ok(Value::Null)
+        }
+        "chats.load" => {
+            let a: IdArgs = parse(name, args)?;
+            crate::chats::load(vault, &a.id)
+        }
+        "chats.delete" => {
+            let a: IdArgs = parse(name, args)?;
+            crate::chats::delete(vault, &a.id)?;
+            Ok(Value::Null)
+        }
         "plugins.data.get" => {
             let a: IdArgs = parse(name, args)?;
             plugins::data(vault, &a.id)
@@ -445,6 +478,22 @@ struct DataArgs {
     id: String,
     #[serde(default)]
     value: Value,
+}
+
+#[derive(Deserialize)]
+struct TaskArgs {
+    task: Value,
+}
+
+#[derive(Deserialize)]
+struct ChatArgs {
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    updated: i64,
+    #[serde(default)]
+    body: Value,
 }
 
 fn parse<T: DeserializeOwned>(command: &str, args: Value) -> Result<T> {

@@ -2,6 +2,7 @@
 import { type MouseEvent, useEffect, useState } from "react";
 
 import type { Entry } from "../../bridge/core";
+import { Icon } from "../../shell/Icon";
 
 interface Props {
   entries: Entry[];
@@ -107,7 +108,7 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
                 onClick={() => toggle(entry.path)}
                 onContextMenu={(e) => showMenu(e, entry)}
               >
-                <span className={`tree-caret${expanded ? " open" : ""}`}>›</span>
+                <span className={`tree-caret${expanded ? " open" : ""}`}><Icon name="chevron" size={14} /></span>
                 <span className="tree-name">{entry.name}</span>
               </button>
               {expanded && rows(entry.children ?? [], depth + 1, entry.path)}
@@ -123,7 +124,7 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
             onClick={() => isNote && onOpen(entry.path)}
             onContextMenu={(e) => showMenu(e, entry)}
           >
-            <span className="tree-caret" />
+            <span className="tree-caret"><Icon name={isNote ? "note" : "file"} size={14} /></span>
             <span className="tree-name">{isNote ? entry.name.replace(/\.md$/i, "") : entry.name}</span>
           </button>
         );

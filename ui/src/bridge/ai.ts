@@ -10,6 +10,16 @@ export interface McpServer {
   enabled: boolean;
 }
 
+/** A service offered by name. `ready` says whether a person can connect it today. */
+export interface Connector {
+  id: string;
+  name: string;
+  about: string;
+  url: string;
+  kind: string;
+  ready: "yes" | "needs_registration" | "not_built";
+}
+
 export interface AiConfig {
   provider: "anthropic" | "openai" | "chatgpt";
   /** Empty means the provider's default. */
@@ -57,14 +67,26 @@ export const setAiSecret = (kind: "provider" | "mcp", name: string, value: strin
 export const aiModels = () => call<string[]>("ai_models");
 export const checkMcp = (server: McpServer) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server });
 /** Sign in to a tool server in the browser; resolves when the browser has come back. */
+export const aiConnectors = () => call<Connector[]>("ai_connectors");
 export const mcpLogin = (server: McpServer) => call<void>("ai_mcp_login", { server });
 export const mcpLogout = (name: string) => call<void>("ai_mcp_logout", { name });
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
-export const aiSend = (chat: string, messages: unknown[]) => call<AiOutcome>("ai_send", { chat, messages });
+/** `briefing` is the conversation's standing context; send the same text for every message of a chat. */
+export const aiSend = (chat: string, messages: unknown[], briefing: string) => call<AiOutcome>("ai_send", { chat, messages, briefing });
+/** Tell the assistant what happened when the window carried out one of its app tools. */
+export const aiActDone = (id: string, ok: boolean, result: string) => call<void>("ai_act_done", { id, ok, result });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });
 export const aiApprove = (id: string, allow: boolean) => call<void>("ai_approve", { id, allow });
+
+/** The assistant asks the window to do something in the app (open a note, show a view). */
+export function onAiAct(handler: (chat: string, id: string, name: string, input: Record<string, unknown>) => void): () => void {
+  const stop = listen<{ chat: string; id: string; name: string; input: Record<string, unknown> }>("ai:act", ({ payload }) =>
+    handler(payload.chat, payload.id, payload.name, payload.input),
+  );
+  return () => void stop.then((off) => off());
+}
 
 export function onAiEvent(handler: (chat: string, event: AiEvent) => void): () => void {
   const stop = listen<{ chat: string; event: AiEvent }>("ai:event", ({ payload }) => handler(payload.chat, payload.event));

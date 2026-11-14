@@ -489,23 +489,29 @@ function foldFrontmatter(state: EditorState): Range<Decoration>[] {
   return [Decoration.replace({ widget, block: true }).range(0, to)];
 }
 
-/** Cmd/Ctrl-click a wiki link to open it. */
-function linkClicks(open: (target: string) => void) {
+/**
+ * A link is followed with a plain click, and opened in a new tab with Cmd or Ctrl held, the way
+ * links work everywhere else. To change a link instead of following it: move the caret into it
+ * with the arrow keys, or hold Option (Alt) and click. While its brackets are showing it is
+ * being edited, so clicks inside it place the caret as usual.
+ */
+function linkClicks(open: (target: string, newTab: boolean) => void) {
   return EditorView.domEventHandlers({
     mousedown(event) {
-      if (!(event.metaKey || event.ctrlKey)) return false;
+      if (event.button !== 0 || event.altKey || event.shiftKey) return false;
       const link = (event.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
       const target = link?.dataset.target;
-      if (!target) return false;
+      if (!link || !target || link.textContent?.includes("[[")) return false;
       event.preventDefault();
-      open(target);
+      open(target, event.metaKey || event.ctrlKey);
       return true;
     },
   });
 }
 
 export interface PreviewHooks {
-  openLink(target: string): void;
+  /** Follow a link to a note; `newTab` when the person asked for it to open beside this one. */
+  openLink(target: string, newTab?: boolean): void;
   resolveImage(src: string): string | null;
   /** Text of the note a link points at, or null if there is none. Leave out to turn embeds off. */
   loadNote?(target: string): Promise<string | null>;

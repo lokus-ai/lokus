@@ -1,0 +1,42 @@
+/* How much room things take (Settings, Appearance, Spacing). Regular is what the rest of the
+   stylesheets say; these two only move away from it. */
+[data-density="compact"] { --row-height: 23px; --text-ui: 13px; --text-small: 12px; --text-caption: 11px; --bar-height: 34px; }
+[data-density="compact"] .custs-table td { height: 32px; padding: 0 10px; }
+[data-density="compact"] .custs-table th { height: 32px; }
+[data-density="compact"] .custs-wait { min-height: 40px; padding-top: 3px; padding-bottom: 3px; }
+[data-density="compact"] .task-board { gap: 8px; padding-top: 10px; }
+[data-density="compact"] .task-col { width: 244px; gap: 4px; padding: 6px; }
+[data-density="compact"] .task-card { gap: 4px; padding: 7px 9px; }
+[data-density="compact"] .task-row { height: 30px; }
+[data-density="compact"] .cust-detail { min-height: 27px; }
+[data-density="compact"] .start-card { min-height: 46px; }
+
+[data-density="roomy"] { --row-height: 34px; --text-ui: 15px; --text-small: 14px; --text-caption: 12.5px; --bar-height: 44px; }
+[data-density="roomy"] .sidebar-actions { gap: 2px; }
+[data-density="roomy"] .tree-row { margin-bottom: 1px; }
+[data-density="roomy"] .custs-table td { height: 58px; padding: 0 18px; }
+[data-density="roomy"] .custs-wait { min-height: 62px; }
+[data-density="roomy"] .task-board { gap: 16px; }
+[data-density="roomy"] .task-col { width: 296px; gap: 8px; padding: 10px; }
+[data-density="roomy"] .task-card { gap: 8px; padding: 13px 14px; }
+[data-density="roomy"] .task-row { height: 46px; }
+[data-density="roomy"] .cust-detail { min-height: 38px; }
+
+/* How much is shown about each thing (Settings, Appearance, Detail). "Everything" hides
+   nothing. Each step down takes away what is least needed to act on the row or card. */
+[data-detail="balanced"] .task-key,
+[data-detail="balanced"] .task-chip.label:not(.risk),
+[data-detail="balanced"] .cust-item-source { display: none; }
+
+[data-detail="essentials"] .task-key,
+[data-detail="essentials"] .task-chip.label:not(.risk),
+[data-detail="essentials"] .task-card .task-chip,
+[data-detail="essentials"] .task-card .task-due,
+[data-detail="essentials"] .task-row .task-chip,
+[data-detail="essentials"] .cust-item-source,
+[data-detail="essentials"] .cust-item-role,
+[data-detail="essentials"] .custs-wait-who small,
+[data-detail="essentials"] .sidebar-actions kbd,
+[data-detail="essentials"] .start-card small,
+[data-detail="essentials"] .start-card kbd { display: none; }
+[data-detail="essentials"] .task-card .task-chip.label.risk { display: inline-block; }

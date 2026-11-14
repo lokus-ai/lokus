@@ -18,6 +18,8 @@ use crate::error::{Error, Result};
 pub struct Identity {
     pub user: String,
     pub email: Option<String>,
+    /// When this sign-in runs out, in seconds since 1970. Development tokens never do.
+    pub expires: Option<i64>,
 }
 
 pub enum Auth {
@@ -35,6 +37,7 @@ pub enum Auth {
 struct Claims {
     sub: String,
     email: Option<String>,
+    exp: Option<i64>,
 }
 
 const KEY_LIFETIME: Duration = Duration::from_secs(600);
@@ -99,6 +102,7 @@ impl Auth {
                     Identity {
                         user: user.to_string(),
                         email,
+                        expires: None,
                     },
                 );
             }
@@ -126,6 +130,7 @@ impl Auth {
                     return Ok(Identity {
                         user: claims.sub,
                         email: claims.email,
+                        expires: claims.exp,
                     });
                 }
                 let kid = header.kid.ok_or(Error::Unauthorized)?;
@@ -159,6 +164,7 @@ impl Auth {
                 Ok(Identity {
                     user: claims.sub,
                     email: claims.email,
+                    expires: claims.exp,
                 })
             }
         }

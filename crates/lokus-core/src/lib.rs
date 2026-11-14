@@ -4,13 +4,16 @@
 //! This crate knows nothing about Tauri, windows or the network. Shells
 //! (desktop app, CLI, later the sync client) call [`commands::run`].
 
+pub mod chats;
 pub mod commands;
 pub mod error;
 pub mod frontmatter;
 pub mod history;
 pub mod index;
+pub mod ingest;
 pub mod plugins;
 pub mod starter;
+pub mod tasks;
 pub mod vault;
 pub mod watch;
 

@@ -3,10 +3,13 @@
 //! everything else to `lokus-core`. No feature logic belongs here.
 //! The same code starts the app on desktop and, through `run`, on phones.
 
+mod account;
 mod ai;
 #[cfg(all(debug_assertions, unix, desktop))]
 mod dev_channel;
 mod sync;
+mod updates;
+mod windows;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -113,6 +116,24 @@ fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
     open_vault(&app, &path)
 }
 
+/// The folder notes are kept in when someone does not want to choose one: Documents, Lokus.
+/// With `open` it is made if need be and opened; without, only its place is told.
+#[tauri::command(async)]
+fn vault_default(app: AppHandle, open: bool) -> Result<Value, Value> {
+    let folder = app
+        .path()
+        .document_dir()
+        .or_else(|_| app.path().home_dir())
+        .map_err(|e| json!({ "code": "io", "message": format!("Could not find your Documents folder: {e}") }))?
+        .join("Lokus");
+    if !open {
+        return Ok(json!({ "root": folder }));
+    }
+    std::fs::create_dir_all(&folder)
+        .map_err(|e| json!({ "code": "io", "message": format!("Could not make {}: {e}", folder.display()) }))?;
+    open_vault(&app, &folder.to_string_lossy())
+}
+
 /// The vault that is open, reopening the last one on first call.
 #[tauri::command(async)]
 fn vault_current(app: AppHandle, shell: State<'_, Shell>) -> Option<Value> {
@@ -178,7 +199,12 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .separator()
         .quit()
         .build()?;
+    let new_window = MenuItemBuilder::with_id("new-window", "New Window")
+        .accelerator("CmdOrCtrl+Shift+N")
+        .build(app)?;
     let file = SubmenuBuilder::new(app, "File")
+        .item(&new_window)
+        .separator()
         .item(&close_tab)
         .close_window()
         .build()?;
@@ -205,6 +231,8 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::default())
         .manage(Shell::default())
         .manage(sync::Sync::default())
         .manage(ai::Ai::default())
@@ -213,8 +241,16 @@ pub fn run() {
         });
     #[cfg(desktop)]
     let builder = builder.menu(menu).on_menu_event(|app, event| {
-        if event.id().as_ref() == "close-tab" {
-            let _ = app.emit("menu:close-tab", ());
+        match event.id().as_ref() {
+            "close-tab" => windows::tell_front(app, "menu:close-tab"),
+            "new-window" => {
+                let app = app.clone();
+                // Off the menu's own thread: a window cannot be made from inside its handler.
+                tauri::async_runtime::spawn(async move {
+                    let _ = windows::open(&app);
+                });
+            }
+            _ => {}
         }
     });
 
@@ -227,15 +263,18 @@ pub fn run() {
             vault_current,
             sync::sync_connect,
             sync::sync_disconnect,
+            sync::sync_token,
             sync::sync_status,
             sync::sync_doc,
             sync::sync_local,
             sync::sync_awareness,
             sync::relay_call,
+            account::account_browser_login,
             ai::ai_settings,
             ai::ai_settings_save,
             ai::ai_secret_set,
             ai::ai_models,
+            ai::ai_connectors,
             ai::ai_mcp_check,
             ai::ai_mcp_login,
             ai::ai_mcp_logout,
@@ -244,6 +283,14 @@ pub fn run() {
             ai::ai_send,
             ai::ai_stop,
             ai::ai_approve,
+            ai::ai_act_done,
+            updates::update_check,
+            updates::update_install,
+            updates::update_restart,
+            updates::app_about,
+            updates::open_web,
+            windows::window_new,
+            vault_default,
             dev_channel::dev_reply
         ])
         .setup(|app| {
@@ -258,11 +305,13 @@ pub fn run() {
         vault_current,
         sync::sync_connect,
         sync::sync_disconnect,
+        sync::sync_token,
         sync::sync_status,
         sync::sync_doc,
         sync::sync_local,
         sync::sync_awareness,
         sync::relay_call,
+        account::account_browser_login,
         ai::ai_settings,
         ai::ai_settings_save,
         ai::ai_secret_set,
@@ -274,7 +323,15 @@ pub fn run() {
         ai::ai_chatgpt_logout,
         ai::ai_send,
         ai::ai_stop,
-        ai::ai_approve
+        ai::ai_approve,
+        ai::ai_act_done,
+        updates::update_check,
+        updates::update_install,
+        updates::update_restart,
+        updates::app_about,
+        updates::open_web,
+        windows::window_new,
+        vault_default
     ]);
 
     builder

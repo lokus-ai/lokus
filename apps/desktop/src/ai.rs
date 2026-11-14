@@ -7,12 +7,15 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use lokus_ai::config::{has_key, key_account, mcp_account, secret, set_secret};
-use lokus_ai::{AiError, Approver, Config, McpServer, Provider, Request};
+use lokus_ai::{AiError, AppRunner, Approver, Config, McpServer, Provider, Request};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::oneshot;
 
 use crate::Shell;
+
+/// Where the window sends what happened when it carried out an app tool.
+type Answer = oneshot::Sender<Result<String, String>>;
 
 #[derive(Default)]
 pub struct Ai {
@@ -20,6 +23,8 @@ pub struct Ai {
     running: Mutex<HashMap<String, tauri::async_runtime::JoinHandle<()>>>,
     /// Tool calls waiting for the person to allow or decline them.
     waiting: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
+    /// Tool calls the window is carrying out (opening a note, showing a view).
+    acting: Arc<Mutex<HashMap<String, Answer>>>,
 }
 
 fn fail(code: &str, message: impl ToString) -> Value {
@@ -122,12 +127,24 @@ pub async fn ai_mcp_check(server: McpServer) -> Result<Vec<Value>, Value> {
 /// Run one request. Progress arrives as `ai:event` messages tagged with the
 /// chat; the reply to this call is the messages to add to the conversation.
 #[tauri::command]
-pub async fn ai_send(app: AppHandle, chat: String, messages: Vec<Value>) -> Result<Value, Value> {
+pub async fn ai_send(app: AppHandle, chat: String, messages: Vec<Value>, briefing: String) -> Result<Value, Value> {
+    // App tools run in the window: it is told what to do and answers through `ai_act_done`.
+    let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
+    let act: AppRunner = Arc::new(move |id: &str, name: &str, input: &Value| {
+        let (answer, wait) = oneshot::channel();
+        if let Ok(mut acting) = acting.lock() {
+            acting.insert(id.to_string(), answer);
+        }
+        let _ = window.emit("ai:act", json!({ "chat": tag, "id": id, "name": name, "input": input }));
+        wait
+    });
     let request = Request {
         config: load(&app)?,
         messages,
         core: app.state::<Shell>().core(),
         extra_servers: plugin_servers(&app),
+        briefing,
+        app: Some(act),
     };
     let waiting = app.state::<Ai>().waiting.clone();
     let approve: Approver = Arc::new(move |id: &str| {
@@ -178,6 +195,22 @@ pub fn ai_approve(app: AppHandle, id: String, allow: bool) {
             let _ = answer.send(allow);
         }
     }
+}
+
+/// The window's answer to an app tool it was asked to carry out.
+#[tauri::command(async)]
+pub fn ai_act_done(app: AppHandle, id: String, ok: bool, result: String) {
+    if let Ok(mut acting) = app.state::<Ai>().acting.lock() {
+        if let Some(answer) = acting.remove(&id) {
+            let _ = answer.send(if ok { Ok(result) } else { Err(result) });
+        }
+    }
+}
+
+/// The services Lokus offers by name, and which of them can be connected today.
+#[tauri::command(async)]
+pub fn ai_connectors() -> Vec<lokus_ai::catalog::Connector> {
+    lokus_ai::catalog::all()
 }
 
 /// Sign in to a tool server in the person's browser.

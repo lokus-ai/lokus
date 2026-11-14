@@ -439,6 +439,11 @@ impl Index {
 
     /// Notes directly inside `folder` (the vault root when empty) with their properties.
     pub fn rows(&self, folder: &str) -> Result<Vec<Row>> {
+        self.rows_under(folder, false)
+    }
+
+    /// Notes inside `folder` with their properties; with `deep`, those in its subfolders too.
+    pub fn rows_under(&self, folder: &str, deep: bool) -> Result<Vec<Row>> {
         let folder = folder.trim_matches('/');
         let mut q = self
             .db
@@ -451,7 +456,10 @@ impl Index {
         for item in found {
             let (path, title) = item.map_err(db_err)?;
             let parent = path.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("");
-            if parent == folder {
+            let inside = deep
+                && (folder.is_empty()
+                    || parent.strip_prefix(folder).is_some_and(|rest| rest.starts_with('/')));
+            if parent == folder || inside {
                 rows.push(Row {
                     path,
                     title,
@@ -665,6 +673,8 @@ mod tests {
         assert_eq!(other.props["status"], serde_json::json!("doing"));
         assert_eq!(other.props["estimate"], serde_json::json!(3));
         assert_eq!(rows.len(), 2, "only notes directly in the folder");
+        assert_eq!(index.rows_under("", true).unwrap().len(), 3, "every note, at any depth");
+        assert_eq!(index.rows_under("wor", true).unwrap().len(), 0, "a folder, not a prefix");
 
         let graph = index.graph().unwrap();
         assert_eq!((graph.nodes.len(), graph.edges.len()), (3, 2));

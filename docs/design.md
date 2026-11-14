@@ -97,39 +97,224 @@ Small things that make it a daily driver, all plain commands over plain files:
   old text is kept in `.lokus/history/`, at most one copy every five minutes and fifty per note.
   "Version history" restores one; what it replaces is kept too. History is per device and does
   not follow a rename.
-- **Settings:** theme, note font, assistant, plugins, privacy.
+- **Settings:** a dialog with pages for appearance (theme), the editor (typeface, text size, line
+  spacing, page width), the assistant, plugins and privacy. The assistant's model is chosen in the
+  chat box.
+
+## 5c. Customers (page, list, people and the push door built; no connectors yet)
+
+For a small team that cannot see, across Slack, Linear, messages and its own admin page, which
+customer needs someone and what that customer's story is.
+
+| Thing | What it is on disk |
+|---|---|
+| A customer | A note with `type: customer`, by default in `customers/`. Every other property is a fact about them; none is a fixed field |
+| Something that happened | A note in the folder named after the customer (`customers/Acme/`), with `kind` (issue, message, event), `source` (slack, linear, admin), `at`, `status`, `from` and `title` |
+| The summary | The customer note's `summary` property |
+| The list | A note with `view: customers` and `source: <folder>` |
+
+- **The customer's page** is a note like any other: the same title, icon and cover, in the same
+  column. Under the title come the details as a list of properties (health first, with the
+  reason in words), then where things stand, open issues, activity by day, and the note's own
+  text under "Notes". All of it is edited in place.
+- **The list** is one table split into "Needs attention" and "Doing fine", ordered by health,
+  then open issues, then silence. A "What is going on" column gives the reason in words (open
+  issues, any date detail coming up within 45 days, silence of 14 days). After the fixed
+  columns come the team's own: "Add column" at the end of the header picks an existing detail or
+  makes a new one with a type; a column's header menu sorts, sets its type, moves it and
+  removes it; a cell in a team column is edited in place.
+- **Conversations.** A message carries `thread`, `channel` and `direction` (`in` from the
+  customer, `out` from us). Messages with the same thread are one conversation: a single line
+  that opens into who said what, in order. When the customer spoke last it is marked "Waiting
+  on us", and that becomes a reason in the list ("Waiting on our reply for 2d").
+- The list has a "Waiting on us" view: every conversation, across customers, where the customer
+  spoke last, the longest wait first. It cannot yet tell a question from a thank-you.
+- Clicking an issue or event opens the rest of it underneath, in place; "Open as a note" is
+  there for when the note itself is wanted.
+- **Pictures.** A page's `icon` may be a picture (a file in the vault or a web address) as well as
+  an emoji. A customer's is its logo and a person's is their face; it shows on the page, its tab,
+  the list and the people rows. Without one, the first letter is shown.
+- An issue is open unless its `status` is done, closed, resolved, fixed or cancelled.
+
+**Details have types, and the team chooses them.** A detail is text, a number, money, a date, a
+person, a label or a link. The type decides how it is shown and sorted (money gets its sign and a
+total under its column; a date reads "Dec 15, 2026, in 32d"). Nothing reads the type from the
+detail's name. The choices live in the list's own note, so the whole team shares them:
+
+| Property on the list note | Holds |
+|---|---|
+| `fields: [seats number, renewal date]` | the type of each detail the team has set |
+| `hidden: [signed_up]` | details kept off the customer's page |
+| `columns: [plan, owner, mrr]` | the list's columns, in order |
+
+A detail the team has not typed starts from a short built-in list (plan, owner, mrr, domain,
+renewal) and otherwise from what its value looks like. Each detail's menu sets its type, hides
+it, and shows its history.
+
+**History of a detail.** When a detail changes, whatever changed it also adds an event note with
+`field: <name>` ("Plan changed from Growth to Scale"). The detail's menu lists those. Editing a
+detail by hand in the app does not record history yet.
+
+**People.** Someone at a customer is a note with `type: person` and `customer: <name>`, by
+default in `people/`. A person is the same person whichever tool names them: an item's `from`
+is theirs when it matches the note's name, `email`, `slack` or anything in `also`. The
+customer's page lists its people (who is waiting on us, who has open requests); a person's page
+shows what they asked for and every conversation they took part in.
+
+**Getting data in: the push door (built; live only on a relay running this build).** A team's
+own systems send facts; Lokus does not ask each team to build an API.
+
+```
+their backend --POST /v1/ingest (key)--> relay inbox --one device takes it--> notes --sync--> everyone
+```
+
+- An owner makes a key in Settings, Team. The key is shown once; the relay keeps only its hash.
+  A workspace has at most 20; removing one stops it at once; making and removing are recorded.
+- A fact names a customer (its domain, the team's own id, or its name) and carries any of:
+  `set` (details; each key becomes a property), `event` (one thing that happened: an issue, a
+  message, a payment), and `person`. Up to 100 facts a request, 32 KB each.
+- The relay checks only the envelope. It never reads or writes a note, so it keeps each fact in
+  an `inbox` table until one signed-in device that may edit takes it, writes it, and says so.
+  A fact is handed to one device at a time; one that was taken and not finished is handed out
+  again after two minutes. At most 10,000 may wait.
+- The writing is `lokus_core::ingest::apply`: it finds or makes the customer's note, sets the
+  details, writes a history event for each detail that changed, and upserts the event and the
+  person. The same fact twice changes nothing, so a sender may retry. A name is only ever a
+  file name, never a path; a detail may not be `type`, `view`, `source` or `summary`; text is
+  kept to one line so it cannot start a second properties block. A fact that makes no sense is
+  reported and dropped, not retried.
+- Settings also gives the owner a request to paste into a terminal and a brief to hand a coding
+  assistant, which is how "the assistant sets it up" works today.
+
+Checked by tests in `crates/lokus-core/src/ingest.rs`, one in `crates/lokus-server/tests/relay.rs`,
+and the flow `checks/flows/push-facts.sh` (a backend, a relay and three devices).
+
+**Not built:** the Slack, Linear and Granola connectors (they would send the same facts),
+a place for facts whose customer is
+ambiguous, the assistant writing the summary, replying to a message from Lokus, opening an item
+in the tool it came from, and limits on how fast one key may push.
+
+## 5d. Tasks (built)
+
+The team's work, kept the way customers are: one note each.
+
+| Thing | What it is on disk |
+|---|---|
+| A task | A note with `type: task` in `tasks/`. Its file name is its title. Properties: `number`, `status` (backlog, todo, doing, review, done, or a word of the team's own), `priority` (urgent, high, medium, low), `assignee`, `customer`, `due`, `labels`, `link` |
+| The board | A note with `view: tasks` |
+
+- Each task gets the next number and is spoken of as `T-12`. `lokus_core::tasks::record` adds a
+  task or updates one named by its number or its title, so recording the same task twice does not
+  make two. The command is `tasks.record`.
+- **The board** has a column per status and cards dragged between them; **the list** is the same
+  tasks grouped the same way. A card shows the number, priority, customer, labels, due date and
+  whose it is. A task's own page shows those as properties, changed in place, above its text.
+- **Tied to customers.** A task with `customer:` shows under Tasks on that customer's page, and
+  one can be added from there. A fact pushed through the data door may carry a `task`.
+- **Kept in step by the assistant.** Its standing instructions tell it that when a customer
+  reports a problem or asks for something it looks at the board first, updates the task that
+  already covers it or adds one tied to that customer, labels it (bug, request, billing,
+  question), and when what was said shows the customer may leave, labels the task `churn-risk`,
+  raises its priority and sets the customer's health to at risk. It does this when asked ("bring
+  the board up to date"), not yet by itself as messages arrive.
+
+**Not built:** the assistant acting on new messages without being asked, sub-tasks, cycles or
+sprints, estimates, a roadmap or timeline view, comments on a task, and reading Lokus 1's
+`.kanban` files.
+
+## 5e. First run, the start page, windows and layout (built)
+
+- **Setup** (`ui/src/features/onboarding/`): shown once, in the first window. One question a
+  screen; a small picture of their Lokus fills in as they answer. The last screen does the work
+  in front of them: makes Documents/Lokus if no folder is open, creates `Customers.md` and
+  `Tasks.md` when asked for, and writes "About this workspace" into `Assistant.md` so the
+  assistant knows what they are here for. `Lokus: run the setup again` replays it.
+- **Start page**: what shows when nothing is open. Cards ordered by what they said they use,
+  their aim, the tools they named but have not connected, and their notes.
+- **Windows** (`apps/desktop/src/windows.rs`): File, New Window (Cmd+Shift+N). Every window
+  shows the same folder; tabs, panels and dialogs are each window's own. The theme and layout
+  preferences follow across windows; Cmd+W goes to the window in front. If one window opens a
+  different folder, all follow, because the core holds one open folder.
+- **Layout** (Settings, Appearance): Spacing (roomy, regular, compact), Detail (essentials,
+  balanced, everything) and what is on screen when Lokus opens. `styles/density.css`.
 
 ## 6. Sync and the server (built, M3)
 
-As built: the relay stores its log in one SQLite file (not Postgres), so it runs as a single
-binary or container with a volume. `lokus-sync` holds the engine and the connection; the app's
-editor binds to a Yjs document and passes updates to the engine, which writes the file. Two
-scripted flows exercise it: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`.
-The paragraphs below are the original plan and still describe the intent.
+Client-server; no peer-to-peer. Three places, each owning one thing:
 
-Client-server; no peer-to-peer.
-
-| Piece | Does | Built on |
+| Piece | Owns | Built on |
 |---|---|---|
-| Accounts | Sign-up, login, sessions | Supabase Auth |
-| Database | Users, workspaces, members, roles, invites; each note's update log and snapshots | Supabase Postgres |
-| Relay | One websocket per device; relays edits, saves them, checks the role | Our own small Rust service (axum + `yrs`) |
-| Attachments | Images, PDFs, other files | Supabase Storage with signed links |
+| Accounts | Who you are: sign-up, sign-in, sessions | Supabase Auth |
+| Relay | Workspaces, members, invites, every note's edit log, attachments, and a record of who changed who may do what | Our own small Rust service (axum + `yrs`), one SQLite file |
+| Device | The notes themselves, as plain files, plus rebuildable sync state in `.lokus/` | `lokus-sync` |
 
-- We write the relay. Existing servers were checked on 2026-11-12: Y-Sweet has stalled, the Rust
-  websocket helper crates lag `yrs`, and the maintained ones are Node, Cloudflare-only or need
-  Redis.
-- A device connects with its Supabase token; the relay verifies it against Supabase's public
-  keys and looks up the workspace role **once per connection**, not per edit.
-- Device and relay exchange state vectors and send only what the other is missing. After that
-  edits are relayed live and appended in batches.
-- Storage: `doc_updates(doc_id, seq, update, user_id, created_at)` plus
-  `doc_snapshots(doc_id, upto_seq, state, state_vector)`, compacted every N updates or when the
-  last device leaves. Version history is periodic markdown snapshots.
-- Cursors and presence pass through memory and are never stored.
-- Roles: owner, editor, viewer per workspace. Per-folder permissions come later.
-- A personal vault is local-only by default. Turning sync on makes it a one-person workspace on
-  the same pipeline.
+The relay runs as a single binary or container with a volume. The hosted one is described in `deploy/relay/README.md`. It never interprets a note: edits
+are opaque CRDT updates. The app's editor binds to a Yjs document and passes updates to the
+engine in `lokus-sync`, which writes the file.
+
+**The relay's tables**
+
+| Table | Holds |
+|---|---|
+| `workspaces` | id, name, who created it and when |
+| `members` | workspace, user, email, role, when they joined |
+| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it |
+| `updates` | the edit log: a running number, workspace, note id, the edit, who made it and when |
+| `blobs` | attachments under the hash of their bytes, with size, who stored them and when |
+| `audit` | who changed who may do what; kept even after a workspace is deleted |
+| `ingest_keys` | keys a team's own systems push customer facts with: a hash, a name, who made it, when it was last used |
+| `inbox` | pushed facts waiting for a device to write them into notes, and which device has taken each |
+
+Once a note has 200 stored edits they are folded into one row. A note's text is whatever its
+edits add up to; that is the cloud copy.
+
+**Who may do what**
+
+- Roles are owner, editor and viewer per workspace. Per-folder permissions come later.
+- An owner invites (one person per code, good for seven days, cancellable), changes roles,
+  removes people and can delete the workspace. Anyone can leave. A workspace always keeps at
+  least one owner.
+- A device signs in with its Supabase token, verified against the project's published keys (or
+  its shared secret). The token is the socket's first message, never part of its address.
+- The role is looked up when the socket opens, not per edit, and looked up again the moment that
+  person's place changes: a removed member's open sockets are closed at once and a changed role
+  applies at once.
+- A socket does not outlive its sign-in. The app hands each fresh account token (about hourly)
+  to the running connection; a socket that is not renewed is closed a minute after its token
+  runs out.
+
+**What the relay refuses**
+
+- Note ids that are not a UUID or `manifest`, edits that are not well-formed updates, presence
+  messages that are not a short string, and workspace names that are not one short line.
+- More than 25 MB in one attachment, more than 5 GB of attachments in one workspace
+  (`LOKUS_WORKSPACE_BYTES`), more than 50 open invites, more than 50 workspaces per owner.
+- A socket that sends more than about 200 edits a second is slowed down, not cut off.
+- Every statement to the database passes its values as parameters.
+
+**What a device refuses**
+
+Another device can only name a place inside the vault. A path that would leave it, follow a link
+out of it, or reach into `.lokus/` is skipped and reported; it never stops the rest of sync.
+
+A vault's sync state belongs to one workspace. Pointed at a different workspace, the device
+drops that state and publishes the vault afresh, so nothing from the old workspace leaks into the
+new one. Only one sync engine runs on a vault at a time: a second one (another window, the
+command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
+
+**Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
+change a role, remove someone, make and cancel invite codes, stop syncing, leave or delete.
+There is no separate team window.
+
+**Not built:** end-to-end encryption (whoever runs the relay can read the notes; see the
+decision log), attachments in a bucket, and limits on ordinary requests per account.
+
+Checked by `crates/lokus-server/tests/relay.rs` against a real relay on a local port, and by two
+scripted flows: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`.
+
+Device and relay exchange only what the other is missing; after that edits are relayed live.
+Cursors and presence pass through memory and are never stored. A personal vault is local-only
+by default; turning sync on makes it a one-person workspace on the same pipeline.
 
 ### Attachments (built)
 
@@ -152,6 +337,15 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
 4. Do not publish local files until the first server sync completes, or stale devices bring
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
+
+### Releases and news (built; tested on macOS with three local releases)
+
+The relay also answers every copy of the app, signed in or not: `GET /v1/app/update/{target}/{arch}/{version}`
+(the newest build for that platform, or 204) and `GET /v1/app/news` (posts, newest first). Tables
+`app_releases (version, platform, url, signature, pulled)` and `app_news (id, body, at)`.
+Publishing needs `LOKUS_PUBLISH_KEY`. The app installs a download only if it carries our
+signature for that version. The window's side is `ui/src/features/updates/`; the steps a person
+goes through, how to publish, and what was tested are in `docs/releasing.md`.
 
 ## 7. Plugins (built)
 
@@ -200,9 +394,16 @@ confirms that everything it must not be able to do is refused.
   OpenAI chat-completions format for OpenAI and any compatible service, and the OpenAI Responses
   API for a ChatGPT plan. Conversations are
   kept in one shape and translated on the way out.
-- **Tools:** the assistant searches, reads, creates and edits notes through the same core
-  commands as everything else. A change to a note, and any tool-server action not marked
-  read-only, waits for the person to allow it unless they switch that off.
+- **Tools, in three groups.** Reading the vault (search, read a note in parts, list one folder,
+  backlinks) never asks. Changing it (create, edit by exact-match replace, move, set a property)
+  waits for the person to allow it unless they switch that off, as does any tool-server action
+  not marked read-only. Acting on the app (open a note at a heading, show the graph) never asks;
+  the window carries these out. Every result is capped, and a cut result says how to see the rest.
+- **Context.** One loop, one conversation, only ever added to. Each conversation starts with a
+  briefing that then never changes: the date, the shape of the vault, and the person's standing
+  instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
+  (open note, selection); the open note's text is attached only when it is new or has changed.
+  Note text and tool results are treated as information, never as instructions.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
@@ -217,7 +418,31 @@ confirms that everything it must not be able to do is refused.
   ships a hosted or paid build, that build needs OpenAI's separate approval.
 
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
-(`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key.
+(`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key. The
+flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
+Not built yet: saving conversations to disk, and compaction of very long ones.
+
+### Connections (the catalog is built; signing in to a real service is untried)
+
+A connector is a tool server (MCP) that a service runs itself. Settings, Connections lists them
+by name: Connect signs the person in with that service in the browser and the assistant gains
+its tools, named `mcp__<id>__<tool>`. Each can be switched off or disconnected. Anything that
+changes something asks first unless the person has turned asking off.
+
+The list is `lokus_ai::catalog`: an id, a name, an address, and whether a person can connect
+today. Checked against the live servers on 2026-11-13:
+
+| Ready now | Waiting for Lokus to be registered with the service | Not built |
+|---|---|---|
+| Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | GitHub, Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+
+A server that is not listed can be added by its address. A plugin can still bring its own.
+
+**Not built:** connectors filling customer pages on their own (today the assistant can read a
+connected service when asked, and only a team's own backend pushes facts); an identity for
+Lokus that services can look up (a client metadata document at a web address), which the newer
+sign-in rules prefer over registering on the fly; choosing which of a connector's tools are
+allowed; and installing connector bundles (a server plus instructions) from a shared catalog.
 
 ## 9. UI and design tokens (building)
 
@@ -252,7 +477,7 @@ is needed.
 | M0 | Skeleton, rules, checks, CI | The empty app builds and the checks pass | built |
 | M1 | Single-player editor, file tree, tabs, quick switcher, login, analytics | A real vault opens and saves byte-identical | built (login and analytics not yet tried against the real services) |
 | M2 | Search, backlinks, graph, slash menu, embeds | Usable as a daily driver | built |
-| M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | built and checked locally; not deployed, and real logins are untested |
+| M3 | Relay, teams, invites, roles, live cursors, offline merge | Two devices editing one note converge | built; checked with real sign-ins on several devices against a local relay; the hosted relay is live and checked with one signed-in device |
 | M4 | iOS and Android | Builds in TestFlight and the Play internal track | skipped for now by the owner. Already in place for later: a phone entry point, a layout that works at phone width, touch-size targets |
 | M5 | Databases and kanban | Query engine with new UI | built: table and board views over a folder's note properties |
 

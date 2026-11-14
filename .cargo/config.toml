@@ -1,0 +1,7 @@
+# Every binary cargo runs on a Mac goes through checks/dev-run.sh, which signs the desktop app
+# for a developer who has asked for it. See that file for why.
+[target.aarch64-apple-darwin]
+runner = "checks/dev-run.sh"
+
+[target.x86_64-apple-darwin]
+runner = "checks/dev-run.sh"

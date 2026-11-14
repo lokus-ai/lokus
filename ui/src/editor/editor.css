@@ -1,8 +1,8 @@
 /* What live preview looks like. Colours and sizes come from tokens.css. */
 .cm-editor .cm-heading { font-weight: 650; letter-spacing: -0.01em; }
-.cm-editor .cm-h1 { font-size: var(--text-h1); line-height: 1.3; padding-top: 18px; letter-spacing: -0.02em; }
-.cm-editor .cm-h2 { font-size: var(--text-h2); line-height: 1.35; padding-top: 14px; }
-.cm-editor .cm-h3 { font-size: var(--text-h3); line-height: 1.4; padding-top: 10px; }
+.cm-editor .cm-h1 { font-size: calc(var(--text-note) * 1.875); line-height: 1.3; padding-top: 18px; letter-spacing: -0.02em; }
+.cm-editor .cm-h2 { font-size: calc(var(--text-note) * 1.5); line-height: 1.35; padding-top: 14px; }
+.cm-editor .cm-h3 { font-size: calc(var(--text-note) * 1.25); line-height: 1.4; padding-top: 10px; }
 .cm-editor .cm-h4, .cm-editor .cm-h5, .cm-editor .cm-h6 { padding-top: 6px; }
 .cm-editor .cm-quote { border-left: 3px solid var(--border); padding-left: 14px; color: var(--fg-2); }
 .cm-editor .cm-inline-code {

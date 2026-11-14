@@ -15,6 +15,8 @@ pub enum Error {
     UnknownDoc(String),
     #[error("connection: {0}")]
     Net(String),
+    #[error("this vault is already syncing in another window or program")]
+    InUse,
     #[error("the relay refused: {0}")]
     Refused(String),
 }

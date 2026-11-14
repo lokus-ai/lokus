@@ -1,7 +1,10 @@
 /** @part-of ui.graph */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { type GraphData, runCore } from "../../bridge/core";
+import { type GraphData, type Note, runCore } from "../../bridge/core";
+import { Icon } from "../../shell/Icon";
+import { type Controller, type Model, mountGraph } from "./canvas";
+import { DEFAULT_FORCES, type Forces } from "./simulation";
 
 interface Props {
   active: string | null;
@@ -9,70 +12,98 @@ interface Props {
   onOpen(path: string): void;
 }
 
-interface Dot {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  r: number;
+/** How the graph is set up on this device. */
+interface Settings {
+  /** Show only notes within `depth` links of the open note. */
+  local: boolean;
+  depth: number;
+  /** Show notes that link to nothing and are linked from nothing. */
+  orphans: boolean;
+  forces: Forces;
 }
 
-/** How many other dots each dot is pushed away from per tick; keeps big vaults smooth. */
-const SAMPLES = 48;
+const KEY = "lokus.graph";
+const DEFAULTS: Settings = { local: false, depth: 2, orphans: true, forces: DEFAULT_FORCES };
+const PREVIEW_WIDTH = 320;
 
-function layout(data: GraphData): Dot[] {
-  const spread = 40 * Math.sqrt(data.nodes.length + 1);
-  return data.nodes.map((node, i) => {
-    const angle = i * 2.399963; // golden angle: an even spiral to start from
-    const radius = spread * Math.sqrt((i + 0.5) / data.nodes.length);
-    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, vx: 0, vy: 0, r: 3 + Math.sqrt(node.degree) * 1.3 };
-  });
+function readSettings(): Settings {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Settings>;
+    return { ...DEFAULTS, ...saved, forces: { ...DEFAULT_FORCES, ...saved.forces } };
+  } catch {
+    return DEFAULTS;
+  }
 }
 
-function step(dots: Dot[], edges: [number, number][], heat: number): void {
-  const n = dots.length;
-  for (let i = 0; i < n; i++) {
-    const a = dots[i];
-    const count = Math.min(SAMPLES, n - 1);
-    const scale = (n - 1) / Math.max(1, count);
-    for (let k = 0; k < count; k++) {
-      const j = count === n - 1 ? (k >= i ? k + 1 : k) : Math.floor(Math.random() * n);
-      if (j === i) continue;
-      const b = dots[j];
-      const dx = a.x - b.x || 0.01;
-      const dy = a.y - b.y || 0.01;
-      const d2 = dx * dx + dy * dy + 25;
-      const push = (900 * scale * heat) / d2;
-      a.vx += dx * push * 0.02;
-      a.vy += dy * push * 0.02;
+/** The part of the whole graph the settings ask for, with links renumbered to match. */
+function narrow(data: GraphData, settings: Settings, root: string | null): Model {
+  const keep = new Set<number>();
+  const start = root ? data.nodes.findIndex((n) => n.path === root) : -1;
+  if (start >= 0) {
+    const near: number[][] = data.nodes.map(() => []);
+    for (const [s, t] of data.edges) {
+      near[s].push(t);
+      near[t].push(s);
     }
-    a.vx -= a.x * 0.0025 * heat;
-    a.vy -= a.y * 0.0025 * heat;
+    let edge = [start];
+    keep.add(start);
+    for (let step = 0; step < settings.depth; step++) {
+      edge = edge.flatMap((i) => near[i]).filter((i) => !keep.has(i) && keep.add(i));
+    }
+  } else {
+    data.nodes.forEach((n, i) => (settings.orphans || n.degree > 0) && keep.add(i));
   }
-  for (const [s, t] of edges) {
-    const a = dots[s];
-    const b = dots[t];
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-    const pull = ((dist - 70) / dist) * 0.02 * heat;
-    a.vx += dx * pull;
-    a.vy += dy * pull;
-    b.vx -= dx * pull;
-    b.vy -= dy * pull;
-  }
-  for (const d of dots) {
-    d.vx *= 0.82;
-    d.vy *= 0.82;
-    d.x += Math.max(-30, Math.min(30, d.vx));
-    d.y += Math.max(-30, Math.min(30, d.vy));
-  }
+  const index = new Map([...keep].map((old, i) => [old, i]));
+  return {
+    nodes: [...keep].map((i) => data.nodes[i]),
+    edges: data.edges.filter(([s, t]) => index.has(s) && index.has(t)).map(([s, t]) => [index.get(s)!, index.get(t)!]),
+  };
 }
 
-/** Every note as a dot, every link as a line. Drag to pan, scroll to zoom, click to open. */
+/** The start of a note as plain reading text: no properties block, no repeat of its own title. */
+function excerpt(text: string, title: string): string {
+  const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trimStart();
+  const lines = body.split(/\r?\n/);
+  if (lines[0]?.replace(/^#\s+/, "").trim() === title) lines.shift();
+  const out = lines.join("\n").trim();
+  return out.length > 900 ? `${out.slice(0, 900).trimEnd()}…` : out;
+}
+
+function Slider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange(v: number): void }) {
+  return (
+    <label className="graph-slider">
+      <span>{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  );
+}
+
+function Toggle({ label, hint, on, onChange }: { label: string; hint?: string; on: boolean; onChange(on: boolean): void }) {
+  return (
+    <div className="graph-toggle">
+      <span>
+        {label}
+        {hint && <small>{hint}</small>}
+      </span>
+      <button role="switch" aria-checked={on} aria-label={label} className={`switch${on ? " on" : ""}`} onClick={() => onChange(!on)} />
+    </div>
+  );
+}
+
+/**
+ * Every note as a dot and every link as a line, laid out by a live force simulation.
+ * Drag a dot and its neighbours follow; click one to read it at the side; double-click or
+ * Cmd-click to open it.
+ */
 export default function GraphView({ active, version, onOpen }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const graph = useRef<Controller | null>(null);
   const [data, setData] = useState<GraphData | null>(null);
+  const [settings, setSettings] = useState(readSettings);
+  const [panel, setPanel] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [text, setText] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -82,158 +113,213 @@ export default function GraphView({ active, version, onOpen }: Props) {
     };
   }, [version]);
 
+  const change = (patch: Partial<Settings>) => {
+    setSettings((s) => {
+      const next = { ...s, ...patch };
+      localStorage.setItem(KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const root = settings.local ? active : null;
+  const model = useMemo(() => (data ? narrow(data, settings, root) : null), [data, settings.local, settings.depth, settings.orphans, root]);
+  const indexOf = useMemo(() => new Map(model?.nodes.map((n, i) => [n.path, i])), [model]);
+
+  // The latest values, for the canvas's callbacks, which outlive a render.
+  const latest = useRef({ model, onOpen, forces: settings.forces, active });
+  latest.current = { model, onOpen, forces: settings.forces, active };
+
   useEffect(() => {
-    const el = canvas.current;
-    if (!el || !data) return;
-    const ctx = el.getContext("2d")!;
-    const dots = layout(data);
-    const near: number[][] = data.nodes.map(() => []);
-    for (const [s, t] of data.edges) {
-      near[s].push(t);
-      near[t].push(s);
-    }
-    const view = { x: 0, y: 0, k: Math.min(1, 14 / Math.sqrt(data.nodes.length + 1)) };
-    let heat = 1;
-    let hover = -1;
-    let frame = 0;
-    let drag: { x: number; y: number; moved: boolean } | null = null;
-
-    const css = (name: string) => getComputedStyle(el).getPropertyValue(name).trim();
-    const toWorld = (px: number, py: number) => {
-      const rect = el.getBoundingClientRect();
-      return { x: (px - rect.left - rect.width / 2 - view.x) / view.k, y: (py - rect.top - rect.height / 2 - view.y) / view.k };
-    };
-    const at = (px: number, py: number) => {
-      const p = toWorld(px, py);
-      let best = -1;
-      let bestD = Infinity;
-      dots.forEach((d, i) => {
-        const dist = Math.hypot(d.x - p.x, d.y - p.y);
-        if (dist < d.r + 6 / view.k && dist < bestD) {
-          best = i;
-          bestD = dist;
-        }
-      });
-      return best;
-    };
-
-    const draw = () => {
-      const ratio = window.devicePixelRatio || 1;
-      const { width, height } = el.getBoundingClientRect();
-      if (el.width !== Math.round(width * ratio) || el.height !== Math.round(height * ratio)) {
-        el.width = Math.round(width * ratio);
-        el.height = Math.round(height * ratio);
-      }
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.clearRect(0, 0, width, height);
-      ctx.translate(width / 2 + view.x, height / 2 + view.y);
-      ctx.scale(view.k, view.k);
-      const lit = hover >= 0 ? new Set([hover, ...near[hover]]) : null;
-
-      ctx.lineWidth = 1 / view.k;
-      ctx.strokeStyle = css("--fg-3");
-      ctx.globalAlpha = lit ? 0.08 : 0.28;
-      ctx.beginPath();
-      for (const [s, t] of data.edges) {
-        ctx.moveTo(dots[s].x, dots[s].y);
-        ctx.lineTo(dots[t].x, dots[t].y);
-      }
-      ctx.stroke();
-      if (lit) {
-        ctx.globalAlpha = 0.9;
-        ctx.strokeStyle = css("--accent");
-        ctx.beginPath();
-        for (const t of near[hover]) {
-          ctx.moveTo(dots[hover].x, dots[hover].y);
-          ctx.lineTo(dots[t].x, dots[t].y);
-        }
-        ctx.stroke();
-      }
-
-      const accent = css("--accent");
-      const plain = css("--fg-2");
-      const text = css("--fg");
-      dots.forEach((d, i) => {
-        const isActive = data.nodes[i].path === active;
-        ctx.globalAlpha = lit && !lit.has(i) ? 0.2 : 1;
-        ctx.fillStyle = isActive || i === hover ? accent : plain;
-        ctx.beginPath();
-        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.font = `${12 / view.k}px ${css("--font-ui")}`;
-      ctx.textAlign = "center";
-      ctx.fillStyle = text;
-      dots.forEach((d, i) => {
-        const node = data.nodes[i];
-        const show = lit ? lit.has(i) : view.k > 0.9 || node.path === active || (node.degree >= 4 && view.k > 0.45);
-        if (!show) return;
-        ctx.globalAlpha = lit && i !== hover ? 0.75 : 1;
-        ctx.fillText(node.title, d.x, d.y + d.r + 14 / view.k);
-      });
-      ctx.globalAlpha = 1;
-    };
-
-    const tick = () => {
-      if (heat > 0.02) {
-        step(dots, data.edges, heat);
-        heat *= 0.985;
-      }
-      draw();
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-
-    const down = (e: PointerEvent) => {
-      drag = { x: e.clientX, y: e.clientY, moved: false };
-      el.setPointerCapture(e.pointerId);
-    };
-    const move = (e: PointerEvent) => {
-      if (drag) {
-        const dx = e.clientX - drag.x;
-        const dy = e.clientY - drag.y;
-        if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
-        view.x += dx;
-        view.y += dy;
-        drag.x = e.clientX;
-        drag.y = e.clientY;
-        return;
-      }
-      hover = at(e.clientX, e.clientY);
-      el.style.cursor = hover >= 0 ? "pointer" : "grab";
-    };
-    const up = (e: PointerEvent) => {
-      const clicked = drag && !drag.moved ? at(e.clientX, e.clientY) : -1;
-      drag = null;
-      if (clicked >= 0) onOpen(data.nodes[clicked].path);
-    };
-    const wheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const before = toWorld(e.clientX, e.clientY);
-      view.k = Math.max(0.05, Math.min(4, view.k * Math.exp(-e.deltaY * 0.0015)));
-      const after = toWorld(e.clientX, e.clientY);
-      view.x += (after.x - before.x) * view.k;
-      view.y += (after.y - before.y) * view.k;
-    };
-    el.addEventListener("pointerdown", down);
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("wheel", wheel, { passive: false });
+    if (!canvas.current || !model) return;
+    const controller = mountGraph(canvas.current, model, latest.current.forces, latest.current.active, {
+      onSelect: (i) => setSelected(i === null ? null : (latest.current.model?.nodes[i].path ?? null)),
+      onOpen: (i) => {
+        const node = latest.current.model?.nodes[i];
+        if (node) latest.current.onOpen(node.path);
+      },
+    });
+    graph.current = controller;
     return () => {
-      cancelAnimationFrame(frame);
-      el.removeEventListener("pointerdown", down);
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
-      el.removeEventListener("wheel", wheel);
+      controller.destroy();
+      graph.current = null;
     };
-  }, [data, active, onOpen]);
+  }, [model]);
+
+  useEffect(() => graph.current?.setForces(settings.forces), [settings.forces]);
+  useEffect(() => graph.current?.setActive(active), [active, model]);
+
+  const found = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || !model) return null;
+    return model.nodes.flatMap((n, i) => (n.title.toLowerCase().includes(q) || n.path.toLowerCase().includes(q) ? [i] : []));
+  }, [query, model]);
+  useEffect(() => graph.current?.setMatches(found ? new Set(found) : null), [found]);
+
+  const index = selected ? indexOf.get(selected) : undefined;
+  useEffect(() => {
+    graph.current?.setInset(index === undefined ? 0 : PREVIEW_WIDTH);
+    graph.current?.select(index ?? null);
+  }, [index, model]);
+  const show = (path: string) => {
+    const i = indexOf.get(path);
+    if (i === undefined) return;
+    setSelected(path);
+    graph.current?.setInset(PREVIEW_WIDTH);
+    graph.current?.select(i, true);
+  };
+
+  useEffect(() => {
+    setText(null);
+    if (!selected) return;
+    let current = true;
+    void runCore<Note>("note.read", { path: selected })
+      .then((note) => current && setText(note.text))
+      .catch(() => current && setText(""));
+    return () => {
+      current = false;
+    };
+  }, [selected, version]);
+
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (panel) setPanel(false);
+      else if (selected) setSelected(null);
+      else if (query) setQuery("");
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [panel, selected, query]);
+
+  const node = index === undefined ? null : model!.nodes[index];
+  const linksTo = node ? model!.edges.filter(([s]) => s === index).map(([, t]) => model!.nodes[t]) : [];
+  const linkedFrom = node ? model!.edges.filter(([, t]) => t === index).map(([s]) => model!.nodes[s]) : [];
+  const body = node && text !== null ? excerpt(text, node.title) : null;
+  const folder = node?.path.includes("/") ? node.path.slice(0, node.path.lastIndexOf("/")) : null;
 
   return (
     <div className="graph">
       <canvas ref={canvas} />
-      {data && (
+      {model && model.nodes.length === 0 && (
+        <div className="graph-empty">
+          <p>{settings.local ? "The open note has no links yet" : "No notes to show"}</p>
+          <span>{settings.local ? "Link it to another note with [[ and it will appear here." : "Notes appear here as dots, joined by their links."}</span>
+        </div>
+      )}
+
+      <div className="graph-bar">
+        <label className="graph-search">
+          <Icon name="search" size={14} />
+          <input
+            placeholder="Find a note in the graph"
+            value={query}
+            spellCheck={false}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && found?.length) show(model!.nodes[found[0]].path);
+            }}
+          />
+          {found && <span className="graph-found">{found.length}</span>}
+        </label>
+        <button className={`graph-button${panel ? " on" : ""}`} title="Graph settings" onClick={() => setPanel((p) => !p)}>
+          <Icon name="sliders" />
+        </button>
+      </div>
+
+      {panel && (
+        <div className="graph-settings">
+          <Toggle
+            label="Only around the open note"
+            hint={active ? undefined : "Open a note to use this"}
+            on={settings.local}
+            onChange={(local) => change({ local })}
+          />
+          {settings.local && (
+            <div className="graph-toggle">
+              <span>Links away</span>
+              <div className="segmented">
+                {[1, 2, 3].map((d) => (
+                  <button key={d} className={settings.depth === d ? "active" : ""} onClick={() => change({ depth: d })}>
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {!settings.local && <Toggle label="Notes with no links" on={settings.orphans} onChange={(orphans) => change({ orphans })} />}
+          <hr />
+          <Slider label="Push apart" min={40} max={500} step={10} value={settings.forces.repel} onChange={(repel) => change({ forces: { ...settings.forces, repel } })} />
+          <Slider label="Link length" min={20} max={220} step={5} value={settings.forces.linkDistance} onChange={(linkDistance) => change({ forces: { ...settings.forces, linkDistance } })} />
+          <Slider label="Link pull" min={0.05} max={1} step={0.05} value={settings.forces.linkStrength} onChange={(linkStrength) => change({ forces: { ...settings.forces, linkStrength } })} />
+          <Slider label="Pull to the middle" min={0} max={0.3} step={0.01} value={settings.forces.center} onChange={(center) => change({ forces: { ...settings.forces, center } })} />
+          <button className="link" onClick={() => change({ forces: DEFAULT_FORCES })}>
+            Reset the forces
+          </button>
+        </div>
+      )}
+
+      <div className="graph-zoom" style={{ right: node ? PREVIEW_WIDTH + 28 : 16 }}>
+        {active && indexOf.has(active) && (
+          <button title="Go to the open note" onClick={() => show(active)}>
+            <Icon name="locate" />
+          </button>
+        )}
+        <button title="Zoom in" onClick={() => graph.current?.zoomBy(1.3)}>
+          <Icon name="plus" />
+        </button>
+        <button title="Zoom out" onClick={() => graph.current?.zoomBy(1 / 1.3)}>
+          <Icon name="minus" />
+        </button>
+        <button title="Fit everything" onClick={() => graph.current?.fit()}>
+          <Icon name="fit" />
+        </button>
+      </div>
+
+      {node && (
+        <aside className="graph-preview" style={{ width: PREVIEW_WIDTH }}>
+          <header>
+            <div>
+              <h2>{node.title}</h2>
+              {folder && <small>{folder}</small>}
+            </div>
+            <button className="panel-close" title="Close (Esc)" onClick={() => setSelected(null)}>
+              <Icon name="close" size={14} />
+            </button>
+          </header>
+          <div className="graph-preview-scroll">
+            {body === null ? null : body ? <p className="graph-excerpt">{body}</p> : <p className="graph-excerpt muted">This note is empty.</p>}
+            {[
+              { title: "Links to", list: linksTo },
+              { title: "Linked from", list: linkedFrom },
+            ].map(
+              ({ title, list }) =>
+                list.length > 0 && (
+                  <section key={title}>
+                    <h3>
+                      {title} <span>{list.length}</span>
+                    </h3>
+                    {list.map((n, i) => (
+                      <button key={`${n.path}${i}`} className="graph-link" onClick={() => show(n.path)}>
+                        <Icon name="note" size={14} />
+                        <span className="tree-name">{n.title}</span>
+                      </button>
+                    ))}
+                  </section>
+                ),
+            )}
+          </div>
+          <footer>
+            <button className="primary" onClick={() => onOpen(node.path)}>
+              Open note
+            </button>
+            <span>or double-click its dot</span>
+          </footer>
+        </aside>
+      )}
+
+      {model && model.nodes.length > 0 && (
         <p className="graph-count">
-          {data.nodes.length} notes · {data.edges.length} links
+          {model.nodes.length} notes, {model.edges.length} links
         </p>
       )}
     </div>

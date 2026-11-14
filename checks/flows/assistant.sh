@@ -4,7 +4,10 @@
 # scripts the model: search, read, edit a note, call the tool server, answer.
 # Usage: checks/flows/assistant.sh        (from the repo root, after `cargo build -p lokus-cli`)
 set -u; PORT=8798; U=http://127.0.0.1:$PORT; V=$(mktemp -d)
-python3 checks/flows/mock-ai.py $PORT & MOCK=$!; trap "kill $MOCK" EXIT; sleep 1
+# The stand-in sign-ins this flow makes go to their own keychain, never the app's real one.
+export LOKUS_KEYCHAIN=io.lokus.flow-test
+python3 checks/flows/mock-ai.py $PORT & MOCK=$!
+trap 'kill $MOCK; while security delete-generic-password -s $LOKUS_KEYCHAIN >/dev/null 2>&1; do :; done' EXIT; sleep 1
 reset() { printf '# Plan\r\n\r\nLaunch: TBD\r\nOwner: Sam\r\n' > $V/Plan.md; }
 ask() { target/debug/lokus ai --vault $V q="when is launch?" base_url=$U mcp=$U/mcp "$@"; }
 steps() { jq -c 'select(.type=="tool_done") | [.id, (if .ok then "ok" else .result end)]' | tr '\n' ' '; }

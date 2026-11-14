@@ -5,7 +5,7 @@
 use std::sync::Mutex;
 
 use base64::Engine as _;
-use lokus_sync::client::{link, serve, Config, Link, Nudge};
+use lokus_sync::client::{link, serve, Config, Link, Nudge, Token};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -16,6 +16,9 @@ const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STA
 #[derive(Default)]
 pub struct Sync {
     running: Mutex<Option<Running>>,
+    /// Connections told to stop that may not have finished yet. A vault has one sync engine
+    /// at a time, so the next connection waits for these before it opens its own.
+    ending: Mutex<Vec<tauri::async_runtime::JoinHandle<()>>>,
 }
 
 struct Running {
@@ -23,6 +26,7 @@ struct Running {
     task: tauri::async_runtime::JoinHandle<()>,
     server: String,
     workspace: String,
+    token: Token,
 }
 
 fn fail(code: &str, message: impl ToString) -> Value {
@@ -41,33 +45,47 @@ impl Sync {
         }
     }
 
+    /// Tell the running connection to stop. It ends at its next pause; whoever connects next
+    /// waits for that.
     pub fn stop(&self) {
-        if let Ok(mut running) = self.running.lock() {
-            if let Some(old) = running.take() {
-                old.task.abort();
+        let old = self.running.lock().ok().and_then(|mut running| running.take());
+        if let Some(old) = old {
+            old.task.abort();
+            if let Ok(mut ending) = self.ending.lock() {
+                ending.push(old.task);
             }
         }
     }
 }
 
-#[tauri::command(async)]
-pub fn sync_connect(
+#[tauri::command]
+pub async fn sync_connect(
     app: AppHandle,
-    shell: State<'_, Shell>,
-    sync: State<'_, Sync>,
     server: String,
     workspace: String,
     token: String,
 ) -> Result<Value, Value> {
-    let core = shell
+    let core = app
+        .state::<Shell>()
         .core()
         .ok_or_else(|| fail("no_vault", "no vault is open"))?;
-    sync.stop();
+    // Stop whatever is running and wait until it has really ended before opening the engine.
+    let ending = {
+        let sync = app.state::<Sync>();
+        sync.stop();
+        let mut ending = sync.ending.lock().map_err(|_| fail("sync", "sync stopped"))?;
+        std::mem::take(&mut *ending)
+    };
+    for task in ending {
+        let _ = task.await;
+    }
+    let sync = app.state::<Sync>();
     let (link, nudges) = link(&core.vault).map_err(|e| fail("sync", e))?;
+    let token = Token::new(token);
     let config = Config {
         server: server.clone(),
         workspace: workspace.clone(),
-        token,
+        token: token.clone(),
     };
     let (reporter, done) = (app.clone(), app.clone());
     let serving = link.clone();
@@ -89,9 +107,21 @@ pub fn sync_connect(
             task,
             server,
             workspace,
+            token,
         });
     }
     Ok(json!({ "connecting": true }))
+}
+
+/// A fresh sign-in for the running connection. Account sign-ins last about an hour; the window
+/// hands each new one over so sync carries on without reconnecting.
+#[tauri::command(async)]
+pub fn sync_token(sync: State<'_, Sync>, token: String) {
+    if let Ok(running) = sync.running.lock() {
+        if let Some(running) = running.as_ref() {
+            running.token.set(token);
+        }
+    }
 }
 
 #[tauri::command(async)]

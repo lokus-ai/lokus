@@ -24,9 +24,11 @@
     "@supabase/supabase-js": "^2.50.0",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.0",
+    "lucide-react": "^1.72.0",
     "posthog-js": "^1.250.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
+    "simple-icons": "^16.37.0",
     "y-codemirror.next": "^0.3.6",
     "y-protocols": "^1.0.7",
     "yjs": "^13.6.33"
@@ -37,5 +39,6 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.8.0",
     "vite": "^7.0.0"
-  }
+  },
+  "license": "FCL-1.0-MIT"
 }

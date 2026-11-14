@@ -2,6 +2,7 @@
 import { type PointerEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { runCore } from "../../bridge/core";
+import { Icon } from "../../shell/Icon";
 
 type Scalar = string | number | boolean | null;
 type Cell = Scalar | Scalar[];
@@ -29,7 +30,7 @@ export interface DatabaseProps {
 }
 
 /** Properties that describe the page or the view, not the row. */
-const HIDDEN = new Set(["icon", "cover", "view", "source", "group", "order"]);
+const HIDDEN = new Set(["icon", "cover", "cover_layout", "view", "source", "group", "order"]);
 
 const show = (value: Cell | undefined): string =>
   value === null || value === undefined ? "" : Array.isArray(value) ? value.join(", ") : String(value);
@@ -111,7 +112,7 @@ function Table({ rows, set, add, onOpen }: ViewProps) {
   const head = (key: string, label: string) => (
     <th key={key} onClick={() => setSort((s) => (s?.key === key ? (s.down ? null : { key, down: true }) : { key, down: false }))}>
       {label}
-      {sort?.key === key && <span className="db-sort">{sort.down ? "↓" : "↑"}</span>}
+      {sort?.key === key && <span className="db-sort"><Icon name={sort.down ? "sortDown" : "sortUp"} size={12} /></span>}
     </th>
   );
 

@@ -18,7 +18,7 @@ import { editorTheme } from "./theme";
 
 export interface EditorHooks {
   onChange(text: string): void;
-  onOpenLink(target: string): void;
+  onOpenLink(target: string, newTab?: boolean): void;
   /** Turn an image path from a note into something the window can load. */
   resolveImage(src: string): string | null;
   /** Text of the note a link points at, for `![[embeds]]`. */
@@ -32,6 +32,35 @@ export interface EditorHooks {
 }
 
 /** One editing surface. Each open note keeps its own state (and undo history). */
+function readOnlyView(parent: HTMLElement, text: string, hooks: Pick<EditorHooks, "onOpenLink" | "resolveImage">): EditorView {
+  return new EditorView({
+    parent,
+    state: EditorState.create({
+      doc: text,
+      extensions: [
+        EditorView.lineWrapping,
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+        yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
+        livePreview({
+          openLink: (target, newTab) => hooks.onOpenLink(target, newTab),
+          resolveImage: (src) => hooks.resolveImage(src),
+        }),
+        editorTheme,
+      ],
+    }),
+  });
+}
+
+/**
+ * Show some markdown read-only, rendered like a note, with no note open and no editor needed.
+ * An assistant's answer is drawn with this. Returns how to remove it.
+ */
+export function previewMarkdown(parent: HTMLElement, text: string, hooks: Pick<EditorHooks, "onOpenLink" | "resolveImage">): () => void {
+  const view = readOnlyView(parent, text, hooks);
+  return () => view.destroy();
+}
+
 export class Editor {
   readonly view: EditorView;
   private hooks: EditorHooks;
@@ -72,7 +101,7 @@ export class Editor {
         completions(() => this.hooks.notePaths(), () => this.hooks.snippets()),
         yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
         livePreview({
-          openLink: (target) => this.hooks.onOpenLink(target),
+          openLink: (target, newTab) => this.hooks.onOpenLink(target, newTab),
           resolveImage: (src) => this.hooks.resolveImage(src),
           loadNote: (target) => this.hooks.loadNote(target),
           mountEmbed: (parent, text) => this.mountEmbed(parent, text),
@@ -103,29 +132,12 @@ export class Editor {
 
   /** A read-only preview of some markdown; embeds inside it are not expanded again. */
   private mountEmbed(parent: HTMLElement, text: string): EditorView {
-    return new EditorView({
-      parent,
-      state: EditorState.create({
-        doc: text,
-        extensions: [
-          EditorView.lineWrapping,
-          EditorState.readOnly.of(true),
-          EditorView.editable.of(false),
-          yamlFrontmatter({ content: markdown({ base: markdownLanguage, addKeymap: false }) }),
-          livePreview({
-            openLink: (target) => this.hooks.onOpenLink(target),
-            resolveImage: (src) => this.hooks.resolveImage(src),
-          }),
-          editorTheme,
-        ],
-      }),
-    });
+    return readOnlyView(parent, text, this.hooks);
   }
 
   /** Show some markdown read-only, rendered like a note. Returns how to remove it. */
   preview(parent: HTMLElement, text: string): () => void {
-    const view = this.mountEmbed(parent, text);
-    return () => view.destroy();
+    return previewMarkdown(parent, text, this.hooks);
   }
 
   /** Pasted or dropped files are saved into the vault and linked where they landed. */
@@ -193,6 +205,12 @@ export class Editor {
 
   get text(): string {
     return this.view.state.doc.toString();
+  }
+
+  /** The text the person has selected, or an empty string. */
+  get selection(): string {
+    const { from, to } = this.view.state.selection.main;
+    return this.view.state.sliceDoc(from, to);
   }
 
   /** Swap in another note's state; returns the state being replaced. */

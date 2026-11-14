@@ -27,6 +27,12 @@
     { "id": "ui.ai", "description": "Assistant panel: the conversation, tool activity, and allowing or declining changes.", "paths": ["ui/src/features/ai/"] },
     { "id": "ui.settings", "description": "Settings page: appearance, assistant, plugins, privacy. Loaded only when opened.", "paths": ["ui/src/features/settings/"] },
     { "id": "ui.teams", "description": "Team workspaces: connect, create, join, members, invites.", "paths": ["ui/src/features/teams/"] },
+    { "id": "ui.connections", "description": "Connections: the services the assistant can reach, picked by name and signed in to.", "paths": ["ui/src/features/connections/"] },
+    { "id": "ui.onboarding", "description": "Onboarding: the first-run setup and the start page shown when nothing is open.", "paths": ["ui/src/features/onboarding/"] },
+    { "id": "ui.updates", "description": "Updates: the update pop-up, What's new and news pushed from the server.", "paths": ["ui/src/features/updates/"] },
+    { "id": "ui.profile", "description": "Profile: the name and picture each person on the team goes by.", "paths": ["ui/src/features/profile/"] },
+    { "id": "ui.tasks", "description": "Tasks: the team's board and list of work, and a task's own page.", "paths": ["ui/src/features/tasks/"] },
+    { "id": "ui.customers", "description": "Customers: the list of who needs attention and each customer's page, built from note properties.", "paths": ["ui/src/features/customers/"] },
     { "id": "ui.auth", "description": "Login screen and session state.", "paths": ["ui/src/features/auth/"] },
     { "id": "ui.analytics", "description": "Product analytics events and the opt-out. Never sends note content.", "paths": ["ui/src/features/analytics/"] },
     { "id": "checks", "description": "Scripts that enforce the hard rules.", "paths": ["checks/"] }

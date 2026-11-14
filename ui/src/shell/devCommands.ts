@@ -1,5 +1,7 @@
 /** @part-of ui.shell */
 import { type Command, registerCommands } from "./commands";
+import { readAddress } from "../bridge/dev";
+import { resolveImage } from "./workspace";
 
 /**
  * Dev builds only. These let `lokus app ui.*` poke the real window the way a
@@ -22,13 +24,15 @@ function find(args: Record<string, unknown>): HTMLElement {
   return el;
 }
 
-const centre = (el: HTMLElement) => {
+/** The middle of an element, or the exact point given as `x` and `y` (for a canvas, where the target is drawn). */
+const centre = (el: HTMLElement, args: Record<string, unknown> = {}) => {
   const r = el.getBoundingClientRect();
+  if (args.x !== undefined && args.y !== undefined) return { x: Number(args.x), y: Number(args.y) };
   return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
 };
 
-function fire(target: EventTarget, type: string, x: number, y: number, buttons = 1): void {
-  const init = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, buttons, pointerId: 1 };
+function fire(target: EventTarget, type: string, x: number, y: number, buttons = 1, meta = false): void {
+  const init = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, buttons, pointerId: 1, metaKey: meta };
   target.dispatchEvent(type.startsWith("pointer") ? new PointerEvent(type, init) : new MouseEvent(type, init));
 }
 
@@ -46,8 +50,9 @@ const commands: Command[] = [
     hidden: true,
     run(args) {
       const el = find(args);
-      const { x, y } = centre(el);
-      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) fire(el, type, x, y);
+      const { x, y } = centre(el, args);
+      // `meta=true` holds Cmd, which is how a link is opened in a new tab.
+      for (const type of ["pointerdown", "mousedown", "pointerup", "mouseup", "click"]) fire(el, type, x, y, 1, Boolean(args.meta));
       return rect(el);
     },
   },
@@ -57,7 +62,7 @@ const commands: Command[] = [
     hidden: true,
     run(args) {
       const el = find(args);
-      const { x, y } = centre(el);
+      const { x, y } = centre(el, args);
       el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }));
       return rect(el);
     },
@@ -70,7 +75,7 @@ const commands: Command[] = [
       const key = String(args.key ?? "");
       const focused = document.activeElement;
       const target = focused && focused !== document.body ? focused : (document.querySelector(".cm-content") ?? document.body);
-      const init = { key, bubbles: true, cancelable: true, metaKey: Boolean(args.meta), shiftKey: Boolean(args.shift) };
+      const init = { key, bubbles: true, cancelable: true, metaKey: Boolean(args.meta), ctrlKey: Boolean(args.ctrl), shiftKey: Boolean(args.shift) };
       target.dispatchEvent(new KeyboardEvent("keydown", init));
       target.dispatchEvent(new KeyboardEvent("keyup", init));
       return { key, target: target.tagName.toLowerCase() };
@@ -82,11 +87,12 @@ const commands: Command[] = [
     hidden: true,
     run(args) {
       const el = typeof args.selector === "string" ? document.querySelector(args.selector) : document.activeElement;
-      if (!(el instanceof HTMLInputElement)) throw Object.assign(new Error("no text box there"), { code: "not_found" });
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement)) throw Object.assign(new Error("no text box there"), { code: "not_found" });
       el.focus();
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!.set!;
       set.call(el, String(args.text ?? ""));
-      el.dispatchEvent(new Event("input", { bubbles: true }));
+      // A text box reports typing; a drop-down reports a choice.
+      el.dispatchEvent(new Event(el instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
       return { value: el.value };
     },
   },
@@ -96,9 +102,28 @@ const commands: Command[] = [
     hidden: true,
     run(args) {
       const el = find(args);
-      const { x, y } = centre(el);
+      const { x, y } = centre(el, args);
       for (const type of ["pointerover", "mouseover", "pointermove", "mousemove"]) fire(el, type, x, y, 0);
       return rect(el);
+    },
+  },
+  {
+    id: "ui.attach",
+    title: "Give a file chooser a picture from the vault",
+    hidden: true,
+    // A script cannot work the system's file dialog, so this hands the chooser a file directly.
+    async run(args) {
+      const input = find(args);
+      if (!(input instanceof HTMLInputElement) || input.type !== "file") throw new Error("that is not a file chooser");
+      const address = resolveImage(String(args.vault ?? ""));
+      if (!address) throw new Error("no such picture in the vault");
+      const blob = await readAddress(address);
+      const name = String(args.vault).split("/").pop() ?? "picture";
+      const files = new DataTransfer();
+      files.items.add(new File([blob], name, { type: blob.type || "image/jpeg" }));
+      input.files = files.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return { name, bytes: blob.size };
     },
   },
   {
@@ -107,7 +132,7 @@ const commands: Command[] = [
     hidden: true,
     async run(args) {
       const el = find(args);
-      const { x, y } = centre(el);
+      const { x, y } = centre(el, args);
       const toX = x + Number(args.dx ?? 0);
       const toY = y + Number(args.dy ?? 0);
       fire(el, "pointerdown", x, y);
@@ -117,6 +142,19 @@ const commands: Command[] = [
       }
       fire(window, "pointerup", toX, toY, 0);
       return { from: { x, y }, to: { x: toX, y: toY } };
+    },
+  },
+  {
+    // Put the update pop-up or "What's new" into any state, to look at it without a real release.
+    id: "updates.pretend",
+    title: "Show an update state",
+    hidden: true,
+    async run(args) {
+      const { updates } = await import("../features/updates/updates");
+      const { posts, ...rest } = args as Record<string, unknown>;
+      updates.set({ ...rest, ...(Array.isArray(posts) ? { posts } : {}) });
+      const { posts: all, ...state } = updates.get();
+      return { ...state, posts: all.map((p) => p.id) };
     },
   },
   {

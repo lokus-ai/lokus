@@ -19,16 +19,44 @@ use lokus_core::Vault;
 use crate::engine::Engine;
 use crate::error::{Error, Result};
 
+/// The sign-in a connection presents. It can be replaced while the connection runs: account
+/// sign-ins last about an hour, and a fresh one is handed over before the old one runs out.
+#[derive(Clone)]
+pub struct Token(Arc<std::sync::RwLock<String>>);
+
+impl Token {
+    pub fn new(token: impl Into<String>) -> Self {
+        Self(Arc::new(std::sync::RwLock::new(token.into())))
+    }
+    pub fn get(&self) -> String {
+        self.0.read().map(|t| t.clone()).unwrap_or_default()
+    }
+    pub fn set(&self, token: impl Into<String>) {
+        if let Ok(mut held) = self.0.write() {
+            *held = token.into();
+        }
+    }
+}
+
+// Never printed: a sign-in must not end up in a log.
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Token(..)")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     /// `http://host:port` or `https://host`.
     pub server: String,
     pub workspace: String,
-    pub token: String,
+    pub token: Token,
 }
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 const RETRY: Duration = Duration::from_secs(3);
+/// How often an open connection checks whether it has been handed a newer sign-in.
+const RENEW_CHECK: Duration = Duration::from_secs(20);
 
 /// What the app can ask a running connection to do.
 pub enum Nudge {
@@ -79,10 +107,18 @@ pub async fn serve(
     report: impl Fn(Value) + Send + Sync + 'static,
 ) -> Result<()> {
     let engine = link.engine.clone();
+    // What this vault remembers about syncing belongs to one workspace only.
+    if with(&engine, |e| e.bind(&config.workspace))? {
+        report(json!({ "event": "rebound", "workspace": config.workspace }));
+    }
     let moved = Notify::new();
+    let arrived = Notify::new();
     let connection = async {
         loop {
-            match session(&engine, &config, &mut changes, &report, &moved).await {
+            let presented = config.token.get();
+            match session(&engine, &config, &mut changes, &report, &moved, &arrived).await {
+                // Refused with a sign-in that has since been replaced: try the new one.
+                Err(Error::Refused(_)) if config.token.get() != presented => continue,
                 Err(Error::Refused(reason)) => return Err(Error::Refused(reason)),
                 Err(e) => report(json!({ "event": "offline", "reason": e.to_string() })),
                 Ok(()) => report(json!({ "event": "offline", "reason": "connection closed" })),
@@ -95,6 +131,73 @@ pub async fn serve(
     tokio::select! {
         outcome = connection => outcome,
         () = attachments(&engine, &config, &moved) => Ok(()),
+        () = facts(&link, &config, &arrived, &report) => Ok(()),
+    }
+}
+
+/// How long to wait before asking again when nothing said there was anything to take.
+const FACTS_EVERY: Duration = Duration::from_secs(60);
+
+/// Take the facts a team's own systems pushed to the relay and write them into the customer
+/// notes, beside the live connection. The relay hands each fact to one device at a time; this
+/// device says so once the notes are written, and the edits then sync like any other.
+async fn facts(link: &Link, config: &Config, arrived: &Notify, report: &(impl Fn(Value) + Send + Sync)) {
+    let device = uuid::Uuid::new_v4().simple().to_string();
+    let base = format!("/v1/workspaces/{}/inbox", config.workspace);
+    loop {
+        let _ = tokio::time::timeout(FACTS_EVERY, arrived.notified()).await;
+        loop {
+            let claim = crate::api::call(
+                &config.server,
+                &config.token.get(),
+                "POST",
+                &format!("{base}/claim"),
+                Some(json!({ "device": device })),
+            )
+            .await;
+            // A viewer may not take facts, and an older relay has no inbox: both just wait.
+            let Ok(taken) = claim else { break };
+            let items = taken["items"].as_array().cloned().unwrap_or_default();
+            if items.is_empty() {
+                break;
+            }
+            let Ok(vault) = with(&link.engine, |e| Ok(e.vault.clone())) else { break };
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let mut done = Vec::new();
+            for item in &items {
+                let seq = item["seq"].as_i64().unwrap_or(0);
+                match lokus_core::ingest::apply(&vault, &item["fact"], now) {
+                    Ok(paths) => {
+                        for path in paths {
+                            report(json!({ "event": "fact", "path": path }));
+                        }
+                        done.push(seq);
+                    }
+                    // A fact that makes no sense will never make sense: say so and let it go.
+                    Err(lokus_core::CoreError::BadArgs { message, .. }) => {
+                        report(json!({ "event": "fact_refused", "reason": message }));
+                        done.push(seq);
+                    }
+                    // Anything else (a note changed underneath us, a full disk) is tried again.
+                    Err(e) => report(json!({ "event": "fact_waiting", "reason": e.to_string() })),
+                }
+            }
+            link.nudge(Nudge::Changed);
+            let acked = crate::api::call(
+                &config.server,
+                &config.token.get(),
+                "POST",
+                &format!("{base}/ack"),
+                Some(json!({ "device": device, "seqs": done })),
+            )
+            .await;
+            if acked.is_err() || done.len() < items.len() {
+                break;
+            }
+        }
     }
 }
 
@@ -123,7 +226,7 @@ async fn attachments(engine: &Arc<Mutex<Engine>>, config: &Config, moved: &Notif
                     Ok(Some(bytes)) => {
                         let sent = http
                             .put(&url)
-                            .bearer_auth(&config.token)
+                            .bearer_auth(config.token.get())
                             .body(bytes)
                             .send()
                             .await;
@@ -134,7 +237,7 @@ async fn attachments(engine: &Arc<Mutex<Engine>>, config: &Config, moved: &Notif
                     Err(_) => false,
                 }
             } else {
-                match http.get(&url).bearer_auth(&config.token).send().await {
+                match http.get(&url).bearer_auth(config.token.get()).send().await {
                     Ok(response) if response.status().is_success() => {
                         match response.bytes().await {
                             Ok(bytes) => {
@@ -177,10 +280,8 @@ fn socket_url(config: &Config) -> String {
         .strip_prefix("http")
         .map(|rest| format!("ws{rest}"))
         .unwrap_or_else(|| base.to_string());
-    format!(
-        "{base}/v1/ws?workspace={}&token={}",
-        config.workspace, config.token
-    )
+    // The sign-in is never part of the address; it goes in the first message.
+    format!("{base}/v1/ws")
 }
 
 async fn session(
@@ -189,21 +290,45 @@ async fn session(
     changes: &mut mpsc::UnboundedReceiver<Nudge>,
     report: &(impl Fn(Value) + Send + Sync),
     moved: &Notify,
+    arrived: &Notify,
 ) -> Result<()> {
     let (socket, _) = tokio_tungstenite::connect_async(socket_url(config))
         .await
-        .map_err(|e| match &e {
-            tokio_tungstenite::tungstenite::Error::Http(response)
-                if matches!(response.status().as_u16(), 401 | 403) =>
-            {
-                Error::Refused(format!("the relay answered {}", response.status()))
-            }
-            _ => Error::Net(e.to_string()),
-        })?;
+        .map_err(|e| Error::Net(e.to_string()))?;
     let (mut out, mut inbox) = socket.split();
+    // Say who we are before anything else; the relay answers `hello` or refuses.
+    let mut presented = config.token.get();
+    let hello = json!({ "t": "auth", "token": presented, "workspace": config.workspace });
+    out.send(Message::Text(hello.to_string().into()))
+        .await
+        .map_err(|e| Error::Net(e.to_string()))?;
+    // Nothing else is sent until the relay has answered: a refusal closes the connection, and
+    // writing to a closed connection would look like being offline, to be retried for ever.
+    let answer = match inbox.next().await {
+        Some(Ok(Message::Text(text))) => {
+            serde_json::from_str::<Value>(&text).map_err(|e| Error::Net(e.to_string()))?
+        }
+        Some(Err(e)) => return Err(Error::Net(e.to_string())),
+        _ => return Err(Error::Net("the relay closed the connection".into())),
+    };
+    if answer["t"] != "hello" {
+        let text = answer["message"]
+            .as_str()
+            .unwrap_or("the relay refused the connection")
+            .to_string();
+        return Err(match answer["code"].as_str() {
+            Some("forbidden") | Some("unauthorized") => Error::Refused(text),
+            _ => Error::Net(text),
+        });
+    }
+    report(json!({ "event": "online", "role": answer["role"], "user": answer["user"], "conn": answer["conn"] }));
+    let mut renew = tokio::time::interval(RENEW_CHECK);
+    renew.tick().await;
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
-    let mut can_edit = true;
+    let mut can_edit = answer["role"] != "viewer";
+    // Facts may have been pushed while this device was away.
+    arrived.notify_one();
     // Where to pull from again if the relay says we fell behind its live feed.
     let mut safe = with(engine, |e| e.cursor())?;
     out.send(Message::Text(
@@ -245,9 +370,10 @@ async fn session(
                 };
                 let value: Value = serde_json::from_str(&message).map_err(|e| Error::Net(e.to_string()))?;
                 match value["t"].as_str().unwrap_or_default() {
-                    "hello" => {
+                    // An owner changed what we may do while we were connected.
+                    "role" => {
                         can_edit = value["role"] != "viewer";
-                        report(json!({ "event": "online", "role": value["role"], "user": value["user"], "conn": value["conn"] }));
+                        report(json!({ "event": "role", "role": value["role"] }));
                     }
                     "updates" => {
                         let items = value["items"].as_array().cloned().unwrap_or_default();
@@ -278,6 +404,8 @@ async fn session(
                         report(json!({ "event": "remote", "doc": value["doc"], "data": value["data"] }));
                     }
                     "aw" | "bye" => report(json!({ "event": "presence", "message": value })),
+                    // A team's own systems pushed something about a customer.
+                    "inbox" => arrived.notify_one(),
                     "ack" => {
                         let n = value["id"].as_i64().unwrap_or(0);
                         in_flight.remove(&n);
@@ -301,14 +429,37 @@ async fn session(
                     _ => {}
                 }
             }
+            _ = renew.tick() => {
+                // A newer sign-in arrived: hand it to the relay so this connection outlives the old one.
+                let latest = config.token.get();
+                if latest != presented {
+                    let message = json!({ "t": "auth", "token": latest });
+                    out.send(Message::Text(message.to_string().into())).await.map_err(|e| Error::Net(e.to_string()))?;
+                    presented = latest;
+                }
+            }
             Some(nudge) = changes.recv() => match nudge {
                 Nudge::Awareness { doc, data } => {
                     let message = json!({ "t": "aw", "doc": doc, "data": data });
                     out.send(Message::Text(message.to_string().into())).await.map_err(|e| Error::Net(e.to_string()))?;
                 }
                 Nudge::Changed => {
-                    // A burst of file events is one scan.
+                    // A burst of file events, or of keystrokes, is one scan: wait a moment, then
+                    // take everything that queued up meanwhile. Handling them one at a time made
+                    // fast typing fall many seconds behind on the other person's screen.
                     tokio::time::sleep(Duration::from_millis(60)).await;
+                    let mut cursors: Vec<(String, Value)> = Vec::new();
+                    while let Ok(more) = changes.try_recv() {
+                        if let Nudge::Awareness { doc, data } = more {
+                            // Only the newest cursor position for a note is worth sending.
+                            cursors.retain(|(d, _)| *d != doc);
+                            cursors.push((doc, data));
+                        }
+                    }
+                    for (doc, data) in cursors {
+                        let message = json!({ "t": "aw", "doc": doc, "data": data });
+                        out.send(Message::Text(message.to_string().into())).await.map_err(|e| Error::Net(e.to_string()))?;
+                    }
                     with(engine, |e| e.scan())?;
                 }
             }

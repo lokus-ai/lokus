@@ -5,8 +5,10 @@
 use lokus_core::{commands, Core};
 use serde_json::{json, Value};
 
-/// Notes longer than this are not handed to the model in one piece.
-const MAX_NOTE: usize = 400_000;
+/// How much of a note one read returns; the rest is read with `from_line`.
+const READ_CHARS: usize = 32_000;
+/// How many entries one folder listing returns.
+const LIST_ENTRIES: usize = 200;
 
 pub struct Tool {
     pub name: String,
@@ -36,8 +38,23 @@ pub fn vault_tools() -> Vec<Tool> {
             &["query"],
             false,
         ),
-        tool("read_note", "Read one note's full Markdown text.", json!({ "path": path }), &["path"], false),
-        tool("list_notes", "List the path of every note in the vault.", json!({}), &[], false),
+        tool(
+            "read_note",
+            "Read a note's Markdown text. A long note comes back in parts: the result says which lines it holds and \
+             which line to continue from. Pass from_line to read the next part.",
+            json!({ "path": path, "from_line": { "type": "integer", "description": "First line to return, counting from 1. Leave out to start at the top." } }),
+            &["path"],
+            false,
+        ),
+        tool(
+            "list_folder",
+            "List what is directly inside one folder: its sub-folders, with how many notes each holds, and its notes. \
+             Leave path out for the top of the vault. Use this to find your way around; use search_notes to find a \
+             note by what it says.",
+            json!({ "path": { "type": "string", "description": "Folder inside the vault, e.g. Projects/2026. Leave out for the top." } }),
+            &[],
+            false,
+        ),
         tool(
             "get_backlinks",
             "List the notes that link to a note, with the line that links.",
@@ -61,13 +78,322 @@ pub fn vault_tools() -> Vec<Tool> {
             true,
         ),
         tool(
+            "move_note",
+            "Rename a note or move it to another folder. Links to it keep working.",
+            json!({ "path": path, "to": { "type": "string", "description": "The new path, e.g. Archive/Plan.md" } }),
+            &["path", "to"],
+            true,
+        ),
+        tool(
             "set_property",
             "Set one property in a note's frontmatter. A null value removes it.",
             json!({ "path": path, "key": { "type": "string" }, "value": {} }),
             &["path", "key", "value"],
             true,
         ),
+        tool(
+            "list_tasks",
+            "The team's tasks: each one's number (T-12), title, where it stands, priority, whose it is, the \
+             customer it is for, when it is due and its labels. Call this before adding a task, so that you update \
+             the one that already covers something instead of making a second. Finished tasks are left out unless \
+             you ask for them.",
+            json!({ "include_done": { "type": "boolean", "description": "Also list finished tasks. Leave out normally." } }),
+            &[],
+            false,
+        ),
+        tool(
+            "record_task",
+            "Add a task to the team's board, or update one. This is the only right way to track work to be done: \
+             never write a to-do list in a note instead. To update a task give its key (T-12); to add one give a \
+             title. status is backlog, todo, doing, review or done. priority is urgent, high, medium or low. Give \
+             customer when the work is for a customer, so it shows on that customer's page. labels are short \
+             words such as bug, request, churn-risk, billing. text is what the task is about and why, with a \
+             link to where it came from.",
+            json!({
+                "key": { "type": "string", "description": "The number of an existing task to update, like T-12. Leave out to add a task." },
+                "title": { "type": "string", "description": "What is to be done, as a short imperative line." },
+                "status": { "type": "string" },
+                "priority": { "type": "string" },
+                "assignee": { "type": "string", "description": "Whose it is: a person's name." },
+                "customer": { "type": "string", "description": "The customer it is for, by the name list_customers shows." },
+                "due": { "type": "string", "description": "YYYY-MM-DD" },
+                "labels": { "type": "array", "items": { "type": "string" } },
+                "link": { "type": "string" },
+                "text": { "type": "string", "description": "What it is about and why. Used when the task is first added." },
+            }),
+            &[],
+            true,
+        ),
+        tool(
+            "remember",
+            "Keep something for later conversations. It is added to the note Assistant.md, which you are shown at \
+             the start of every conversation and which the user can read and edit. Use it when the user tells you \
+             something that should still hold next time: how they like things done, who someone is, a decision, a \
+             name for something, a standing instruction. One plain sentence that will make sense on its own months \
+             from now. Do not use it for passing details of the task at hand, or for anything already written there.",
+            json!({ "fact": { "type": "string", "description": "One sentence to remember." } }),
+            &["fact"],
+            false,
+        ),
+        tool(
+            "list_customers",
+            "The customers this team keeps in Lokus: each one's details (health, plan, owner and whatever else the \
+             team tracks), how many issues are open, and when anything last happened. Call this first for any \
+             question or task about customers, so you know who already exists and which details are in use.",
+            json!({}),
+            &[],
+            false,
+        ),
+        tool(
+            "record_customer",
+            "Add or update a customer in Lokus, and what is known about them. This is the only right way to add a \
+             customer, something that happened with one, or a person at one: it files everything where the \
+             Customers list and the customer's page expect it. Never build a customer by hand with create_note, \
+             and never make a table of customers in a note. Calling it again with the same thing changes \
+             nothing, so it is safe to repeat. One call records one customer: any of its details, the things \
+             that happened (one in event, or many in events), and at most one person. Call it again for each \
+             further person. Keep what people actually said: record a conversation message by message with \
+             the full text of each, not as one summary.",
+            json!({
+                "customer": { "type": "string", "description": "Who it is about: their domain (acme.com) if known, otherwise their name. Use the same one every time for the same customer." },
+                "name": { "type": "string", "description": "What to call them, used the first time they are seen. Optional." },
+                "source": { "type": "string", "description": "Where this comes from: slack, linear, notion, granola, stripe, email. Optional." },
+                "set": { "type": "object", "description": "Details to set on the customer, e.g. {\"plan\": \"Scale\", \"mrr\": 2400, \"owner\": \"Pratham\", \"health\": \"at risk\", \"renewal\": \"2027-02-01\"}. health is good, watch or at risk. Dates are YYYY-MM-DD. Text, numbers and true/false only. Use the detail names list_customers shows before inventing new ones." },
+                "event": {
+                    "type": "object",
+                    "description": "One thing that happened. Fields: kind (issue, message, meeting or event), title, id (the source's own id, so sending it again updates it instead of duplicating), from (who said or raised it), at (2026-11-13T21:40:05Z), status (for an issue; done, closed, resolved, fixed or cancelled mean it is closed), text (the full message or description), link. For a message also: thread (an id shared by the messages of one conversation), channel, and direction (in when the customer said it, out when we did).",
+                },
+                "events": {
+                    "type": "array",
+                    "items": { "type": "object" },
+                    "description": "Several things that happened, each shaped like event. Use this for a conversation: one entry per message, in order, all with the same thread, each with its own id, from, at, direction and its full text. Up to 50 in one call.",
+                },
+                "person": { "type": "object", "description": "Someone at the customer: name, and any of email, slack, role, phone." },
+            }),
+            &["customer"],
+            true,
+        ),
     ]
+}
+
+/// Things the assistant can do in the app's window rather than in the files. Nothing here
+/// changes a note, so the person is not asked first.
+pub fn app_tools() -> Vec<Tool> {
+    vec![
+        tool(
+            "open_note",
+            "Open a note in the app so the user is looking at it. Use this when they ask to open, show or go to a \
+             note. To jump to a part of the note, give the heading's text.",
+            json!({
+                "path": { "type": "string", "description": "Path inside the vault, e.g. Projects/Plan.md" },
+                "heading": { "type": "string", "description": "A heading in the note to scroll to. Optional." },
+            }),
+            &["path"],
+            false,
+        ),
+        tool(
+            "show_graph",
+            "Show the graph of notes and their links in the app.",
+            json!({}),
+            &[],
+            false,
+        ),
+        tool(
+            "ask_user",
+            "Ask the user one question and wait for their answer. Use it when a choice is theirs and you cannot \
+             tell which they want: which of several matching notes, customers or records they mean, or which of a \
+             few sensible ways to do what they asked. Give 2 to 5 short options; the user can also type their own \
+             answer. Never use it for something you can find out yourself with another tool, and never to ask \
+             permission to change something: that is asked for you.",
+            json!({
+                "question": { "type": "string", "description": "The question, in one sentence." },
+                "options": { "type": "array", "items": { "type": "string" }, "description": "2 to 5 short answers to choose from." },
+                "multiple": { "type": "boolean", "description": "True when more than one option may be chosen. Leave out for one." },
+            }),
+            &["question", "options"],
+            false,
+        ),
+    ]
+}
+
+/// How many notes are inside a folder of the tree, at any depth.
+fn notes_inside(entry: &Value) -> usize {
+    entry["children"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| match c["kind"].as_str() {
+            Some("folder") => notes_inside(c),
+            Some("note") => 1,
+            _ => 0,
+        })
+        .sum()
+}
+
+/// One folder's direct contents as short lines: folders first, then notes.
+fn list_folder(tree: &Value, path: &str) -> Result<String, String> {
+    let mut here = tree.as_array().cloned().unwrap_or_default();
+    for part in path.split('/').filter(|p| !p.is_empty()) {
+        let next = here
+            .iter()
+            .find(|e| e["kind"] == "folder" && e["name"] == part)
+            .ok_or_else(|| format!("there is no folder {path}; list its parent to see what exists"))?;
+        here = next["children"].as_array().cloned().unwrap_or_default();
+    }
+    let mut lines: Vec<String> = Vec::new();
+    for entry in here.iter().filter(|e| e["kind"] == "folder") {
+        let name = entry["path"].as_str().unwrap_or_default();
+        lines.push(format!("{name}/  ({} notes)", notes_inside(entry)));
+    }
+    for entry in here.iter().filter(|e| e["kind"] == "note") {
+        lines.push(entry["path"].as_str().unwrap_or_default().to_string());
+    }
+    if lines.is_empty() {
+        return Ok("This folder has no notes or folders in it.".into());
+    }
+    let total = lines.len();
+    lines.truncate(LIST_ENTRIES);
+    if total > LIST_ENTRIES {
+        lines.push(format!(
+            "[{} more not shown. Use search_notes to find a note here by what it says.]",
+            total - LIST_ENTRIES
+        ));
+    }
+    Ok(lines.join("\n"))
+}
+
+/// A note's text from `from_line`, cut at a line end once it is long enough, with a line
+/// saying what was returned and where to continue.
+fn read_part(body: &str, from_line: usize) -> Result<String, String> {
+    let lines: Vec<&str> = body.split_inclusive('\n').collect();
+    let start = from_line.max(1) - 1;
+    if start > 0 && start >= lines.len() {
+        return Err(format!("the note has {} lines; from_line is past the end", lines.len()));
+    }
+    let mut out = String::new();
+    let mut end = start;
+    while end < lines.len() && (out.is_empty() || out.len() + lines[end].len() <= READ_CHARS) {
+        out.push_str(lines[end]);
+        end += 1;
+    }
+    if start == 0 && end == lines.len() {
+        return Ok(out);
+    }
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out.push_str(&if end < lines.len() {
+        format!("[Lines {}-{end} of {}. Read on with from_line={}.]", start + 1, lines.len(), end + 1)
+    } else {
+        format!("[Lines {}-{end} of {}. This is the end of the note.]", start + 1, lines.len())
+    });
+    Ok(out)
+}
+
+/// The tasks as a short list the model can read, the most pressing first.
+fn tasks(rows: &[Value], include_done: bool) -> String {
+    let word = |props: &Value, key: &str| props[key].as_str().unwrap_or_default().to_string();
+    let weight = |p: &str| lokus_core::tasks::PRIORITIES.iter().position(|x| *x == p).unwrap_or(9);
+    let mut listed: Vec<(usize, i64, String)> = Vec::new();
+    let mut done = 0;
+    for row in rows {
+        let props = &row["props"];
+        if props["type"] != "task" {
+            continue;
+        }
+        let status = word(props, "status");
+        if !include_done && matches!(status.as_str(), "done" | "closed" | "cancelled" | "canceled") {
+            done += 1;
+            continue;
+        }
+        let number = props["number"].as_i64().unwrap_or(0);
+        let path = row["path"].as_str().unwrap_or_default();
+        let title = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md");
+        let mut parts = vec![format!("T-{number} {title}"), format!("status {}", if status.is_empty() { "none" } else { &status })];
+        for key in ["priority", "assignee", "customer", "due"] {
+            let value = word(props, key);
+            if !value.is_empty() {
+                parts.push(format!("{key} {value}"));
+            }
+        }
+        if let Some(labels) = props["labels"].as_array() {
+            let labels: Vec<&str> = labels.iter().filter_map(Value::as_str).collect();
+            if !labels.is_empty() {
+                parts.push(format!("labels {}", labels.join(", ")));
+            }
+        }
+        listed.push((weight(&word(props, "priority")), number, format!("- {}. ({path})", parts.join("; "))));
+    }
+    listed.sort();
+    if listed.is_empty() {
+        return format!("There are no open tasks.{}", if done > 0 { format!(" {done} are finished.") } else { String::new() });
+    }
+    format!(
+        "{} tasks{}.\n{}",
+        listed.len(),
+        if done > 0 { format!(" ({done} finished ones not shown)") } else { String::new() },
+        listed.into_iter().map(|(_, _, line)| line).collect::<Vec<_>>().join("\n"),
+    )
+}
+
+/// Where the assistant's standing instructions and its own memory live, and the heading it adds under.
+const MEMORY: &str = "Assistant.md";
+const REMEMBERED: &str = "## Remembered";
+
+/// The customers as a short list the model can read: one line each, then what the team tracks.
+fn customers(rows: &[Value]) -> String {
+    let prefix = format!("{}/", lokus_core::ingest::CUSTOMERS);
+    let closed = ["done", "closed", "resolved", "fixed", "canceled", "cancelled"];
+    let mut lines = Vec::new();
+    let mut details = std::collections::BTreeSet::new();
+    for row in rows {
+        let path = row["path"].as_str().unwrap_or_default();
+        let rest = path.strip_prefix(&prefix).unwrap_or(path);
+        if rest.contains('/') || row["props"]["type"] != "customer" {
+            continue;
+        }
+        let name = rest.trim_end_matches(".md");
+        let folder = format!("{prefix}{name}/");
+        let (mut open, mut messages, mut last) = (0, 0, String::new());
+        for item in rows.iter().filter(|r| r["path"].as_str().is_some_and(|p| p.starts_with(&folder))) {
+            let props = &item["props"];
+            let status = props["status"].as_str().unwrap_or_default().to_lowercase();
+            if props["kind"] == "issue" && !closed.contains(&status.as_str()) {
+                open += 1;
+            }
+            if props["kind"] == "message" {
+                messages += 1;
+            }
+            let at = props["at"].as_str().unwrap_or_default();
+            if at > last.as_str() {
+                last = at.to_string();
+            }
+        }
+        let mut known = Vec::new();
+        if let Some(props) = row["props"].as_object() {
+            for (key, value) in props {
+                if matches!(key.as_str(), "type" | "summary" | "icon" | "cover" | "cover_layout") || value.is_null() {
+                    continue;
+                }
+                details.insert(key.clone());
+                known.push(format!("{key}: {}", value.as_str().map(str::to_string).unwrap_or_else(|| value.to_string())));
+            }
+        }
+        lines.push(format!(
+            "- {name} ({path}). {}. {open} open issues, {messages} messages, last activity {}.",
+            if known.is_empty() { "no details yet".to_string() } else { known.join("; ") },
+            if last.is_empty() { "never" } else { last.get(..10).unwrap_or(&last) },
+        ));
+    }
+    if lines.is_empty() {
+        return "There are no customers yet. Add one with record_customer.".to_string();
+    }
+    format!(
+        "{} customers.\n{}\n\nDetails in use: {}. A customer's page is its note; what happened with it is the notes in the folder of the same name.",
+        lines.len(),
+        lines.join("\n"),
+        details.into_iter().collect::<Vec<_>>().join(", "),
+    )
 }
 
 fn text(input: &Value, key: &str) -> Result<String, String> {
@@ -89,20 +415,17 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             json!({ "q": text(input, "query")?, "limit": 20 }),
         )
         .map(shown),
-        "list_notes" => call("vault.notes", Value::Null).map(shown),
+        "list_folder" => list_folder(
+            &call("vault.tree", Value::Null)?,
+            input["path"].as_str().unwrap_or_default(),
+        ),
         "get_backlinks" => {
             call("links.backlinks", json!({ "path": text(input, "path")? })).map(shown)
         }
         "read_note" => {
             let note = call("note.read", json!({ "path": text(input, "path")? }))?;
-            let body = note["text"].as_str().unwrap_or_default();
-            if body.len() > MAX_NOTE {
-                return Err(format!(
-                    "this note is {} characters, too long to read in one piece; search it instead",
-                    body.len()
-                ));
-            }
-            Ok(body.to_string())
+            let from_line = input["from_line"].as_u64().unwrap_or(1) as usize;
+            read_part(note["text"].as_str().unwrap_or_default(), from_line)
         }
         "create_note" => {
             let path = text(input, "path")?;
@@ -145,6 +468,82 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             )?;
             Ok(format!("edited {path}"))
         }
+        "move_note" => {
+            let (path, to) = (text(input, "path")?, text(input, "to")?);
+            call("note.rename", json!({ "from": path, "to": to }))?;
+            Ok(format!("moved {path} to {to}"))
+        }
+        "list_tasks" => {
+            if let Ok(mut index) = core.index() {
+                let _ = index.refresh();
+            }
+            let rows = call("props.rows", json!({ "folder": lokus_core::tasks::TASKS }))?;
+            Ok(tasks(rows.as_array().map(Vec::as_slice).unwrap_or_default(), input["include_done"] == true))
+        }
+        "record_task" => {
+            let (path, number) = lokus_core::tasks::record(&core.vault, input).map_err(|e| e.to_string())?;
+            Ok(format!("T-{number} is at {path}"))
+        }
+        "remember" => {
+            let fact = text(input, "fact")?.split_whitespace().collect::<Vec<_>>().join(" ");
+            if fact.is_empty() || fact.chars().count() > 400 {
+                return Err("a thing to remember is one sentence of up to 400 characters".into());
+            }
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let line = format!("- {fact} ({})", &lokus_core::ingest::iso(now)[..10]);
+            match call("note.read", json!({ "path": MEMORY })) {
+                Ok(note) => {
+                    let body = note["text"].as_str().unwrap_or_default();
+                    if body.contains(&fact) {
+                        return Ok("already remembered".into());
+                    }
+                    let gap = if body.ends_with('\n') || body.is_empty() { "" } else { "\n" };
+                    let heading = if body.contains(REMEMBERED) { String::new() } else { format!("\n{REMEMBERED}\n\n") };
+                    call(
+                        "note.write",
+                        json!({ "path": MEMORY, "text": format!("{body}{gap}{heading}{line}\n"), "eol": "lf", "expected_hash": note["hash"] }),
+                    )?;
+                }
+                Err(_) => {
+                    let start = format!("# Assistant\n\nWhat the assistant should know and how it should work here. Edit this freely.\n\n{REMEMBERED}\n\n{line}\n");
+                    call("note.create", json!({ "path": MEMORY, "text": start }))?;
+                }
+            }
+            Ok(format!("remembered in {MEMORY}"))
+        }
+        "list_customers" => {
+            // Read what is on disk now: a customer recorded a moment ago must be in the list.
+            if let Ok(mut index) = core.index() {
+                let _ = index.refresh();
+            }
+            let rows = call("props.rows", json!({ "folder": lokus_core::ingest::CUSTOMERS, "deep": true }))?;
+            Ok(customers(rows.as_array().map(Vec::as_slice).unwrap_or_default()))
+        }
+        "record_customer" => {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0);
+            let mut wrote = lokus_core::ingest::apply(&core.vault, input, now).map_err(|e| e.to_string())?;
+            // A conversation arrives as many events; each is filed like a single one would be.
+            let many = input["events"].as_array().cloned().unwrap_or_default();
+            if many.len() > 50 {
+                return Err("at most 50 events in one call; send the rest in another".into());
+            }
+            for event in many {
+                let fact = json!({ "customer": input["customer"], "name": input["name"], "source": input["source"], "event": event });
+                wrote.extend(lokus_core::ingest::apply(&core.vault, &fact, now).map_err(|e| e.to_string())?);
+            }
+            wrote.dedup();
+            Ok(if wrote.is_empty() {
+                "nothing changed: this was already recorded".to_string()
+            } else {
+                format!("recorded in: {}", wrote.join(", "))
+            })
+        }
         "set_property" => {
             let path = text(input, "path")?;
             call(
@@ -160,6 +559,55 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_customer_is_recorded_once_and_then_listed_with_what_is_known() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = Core::open(dir.path()).unwrap();
+        assert!(run(&core, "list_customers", &json!({})).unwrap().contains("no customers yet"));
+
+        let fact = json!({
+            "customer": "acme.com", "name": "Acme", "source": "slack",
+            "set": { "plan": "Scale", "health": "at risk" },
+            "event": { "id": "m1", "kind": "issue", "title": "Export fails", "status": "todo", "from": "Dana" },
+            "person": { "name": "Dana Whitlock", "role": "Head of Ops" },
+        });
+        let wrote = run(&core, "record_customer", &fact).unwrap();
+        assert!(wrote.contains("customers/Acme.md") && wrote.contains("people/Dana Whitlock.md"), "{wrote}");
+        assert!(run(&core, "record_customer", &fact).unwrap().contains("nothing changed"));
+        // A whole conversation in one call: every message is kept, in the customer's folder.
+        let talk = json!({ "customer": "acme.com", "source": "slack", "events": [
+            { "id": "t1", "kind": "message", "thread": "export", "direction": "in", "from": "Dana", "text": "Any update on the export?" },
+            { "id": "t2", "kind": "message", "thread": "export", "direction": "out", "from": "Pratham", "text": "Shipping Friday." },
+        ] });
+        let kept = run(&core, "record_customer", &talk).unwrap();
+        assert!(kept.contains("slack-t1.md") && kept.contains("slack-t2.md"), "{kept}");
+        // A fact that makes no sense comes back as something the model can act on.
+        assert!(run(&core, "record_customer", &json!({ "set": {} })).is_err());
+
+        // Work is tracked as tasks, numbered, tied to the customer, and updated rather than repeated.
+        assert!(run(&core, "list_tasks", &json!({})).unwrap().contains("no open tasks"));
+        let made = run(&core, "record_task", &json!({ "title": "Fix the export", "priority": "high", "customer": "Acme", "labels": ["bug", "churn-risk"] })).unwrap();
+        assert_eq!(made, "T-1 is at tasks/Fix the export.md");
+        run(&core, "record_task", &json!({ "title": "Write the audit log", "priority": "low" })).unwrap();
+        run(&core, "record_task", &json!({ "key": "T-2", "status": "done" })).unwrap();
+        let board = run(&core, "list_tasks", &json!({})).unwrap();
+        assert!(board.starts_with("1 tasks (1 finished ones not shown)."), "{board}");
+        assert!(board.contains("T-1 Fix the export; status todo; priority high; customer Acme; labels bug, churn-risk"), "{board}");
+
+        // What it is told to remember is kept once, in a note the person can read.
+        run(&core, "remember", &json!({ "fact": "Pratham owns the  Acme account." })).unwrap();
+        run(&core, "remember", &json!({ "fact": "Replies to customers are drafted, never sent." })).unwrap();
+        assert_eq!(run(&core, "remember", &json!({ "fact": "Pratham owns the Acme account." })).unwrap(), "already remembered");
+        let memory = std::fs::read_to_string(dir.path().join("Assistant.md")).unwrap();
+        assert_eq!(memory.matches("## Remembered").count(), 1, "{memory}");
+        assert_eq!(memory.matches("\n- ").count(), 2, "{memory}");
+
+        let listed = run(&core, "list_customers", &json!({})).unwrap();
+        assert!(listed.starts_with("1 customers."), "{listed}");
+        assert!(listed.contains("Acme (customers/Acme.md)") && listed.contains("plan: Scale"), "{listed}");
+        assert!(listed.contains("1 open issues") && listed.contains("Details in use: domain, health, plan"), "{listed}");
+    }
 
     #[test]
     fn edit_needs_one_exact_match_and_keeps_the_rest() {
@@ -183,5 +631,42 @@ mod tests {
         assert!(run(&core, "search_notes", &json!({ "query": "end" }))
             .unwrap()
             .contains("A.md"));
+    }
+
+    #[test]
+    fn a_long_note_is_read_in_parts_that_join_back_exactly() {
+        let body: String = (1..=4000).map(|n| format!("line {n} of a long note\n")).collect();
+        let first = read_part(&body, 1).unwrap();
+        assert!(first.len() <= READ_CHARS + 80);
+        let next: usize = first.rsplit("from_line=").next().unwrap().trim_end_matches(".]").parse().unwrap();
+        let mut joined: String = first.rsplit_once("[Lines").unwrap().0.to_string();
+        let mut from = next;
+        loop {
+            let part = read_part(&body, from).unwrap();
+            let (text, note) = part.rsplit_once("[Lines").unwrap();
+            joined.push_str(text);
+            match note.rsplit_once("from_line=") {
+                Some((_, n)) => from = n.trim_end_matches(".]").parse().unwrap(),
+                None => break,
+            }
+        }
+        assert_eq!(joined, body);
+        assert_eq!(read_part("short\n", 1).unwrap(), "short\n");
+        assert!(read_part("short\n", 9).is_err());
+    }
+
+    #[test]
+    fn a_folder_lists_only_what_is_directly_inside_it() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("work/old")).unwrap();
+        std::fs::write(dir.path().join("Home.md"), "x").unwrap();
+        std::fs::write(dir.path().join("work/Plan.md"), "x").unwrap();
+        std::fs::write(dir.path().join("work/old/Then.md"), "x").unwrap();
+        let core = Core::open(dir.path()).unwrap();
+        let top = run(&core, "list_folder", &json!({})).unwrap();
+        assert_eq!(top, "work/  (2 notes)\nHome.md");
+        let work = run(&core, "list_folder", &json!({ "path": "work" })).unwrap();
+        assert_eq!(work, "work/old/  (1 notes)\nwork/Plan.md");
+        assert!(run(&core, "list_folder", &json!({ "path": "nope" })).is_err());
     }
 }

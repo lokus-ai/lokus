@@ -2,7 +2,7 @@
 import type { EditorState } from "@codemirror/state";
 
 import { identify, track } from "../bridge/analytics";
-import { accessToken, type Account, currentAccount } from "../bridge/auth";
+import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
 import {
   closeWindow,
   CoreError,
@@ -14,22 +14,26 @@ import {
   onCloseTab,
   onIndexReady,
   onVaultChanged,
+  onVaultOpened,
   openVault,
   pickFolder,
   runCore,
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
-import { onSyncEvent, syncConnect, syncDisconnect } from "../bridge/sync";
-import { Editor } from "../editor/editor";
+import { onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
+import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
+import { preferences } from "./preferences";
 
 export interface SyncState {
   status: "off" | "connecting" | "online" | "offline" | "refused";
   server?: string;
   workspace?: string;
   role?: "owner" | "editor" | "viewer";
+  /** Who this device is signed in as on the relay. */
+  user?: string;
   reason?: string;
 }
 
@@ -47,7 +51,10 @@ export interface AppState {
   conflict: string | null;
   palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | "history" | null;
   /** What the main area shows. */
-  view: "note" | "graph" | "settings";
+  /** Which tab is showing: a note, or the graph (which sits in `tabs` as `GRAPH_TAB`). */
+  view: "note" | "graph";
+  /** The settings dialog, and which of its pages is showing; null when it is closed. */
+  settings: string | null;
   /** What the panel on the right shows, if it is open. */
   panel: { kind: "ai" } | { kind: "plugin"; plugin: string; view: string; title: string; page: string } | null;
   plugins: InstalledPlugin[];
@@ -55,16 +62,20 @@ export interface AppState {
   version: number;
   sidebar: boolean;
   sidebarWidth: number;
+  /** Width of the panel on the right. */
+  panelWidth: number;
   /** The window is too narrow to keep the sidebar beside the note. */
   narrow: boolean;
   account: Account | null;
   accountDialog: boolean;
-  teamsDialog: boolean;
   sync: SyncState;
   /** Other people with the active note open. */
   peers: Peer[];
   notice: string | null;
 }
+
+/** The graph's place in the tab strip, beside the notes. It is not a file. */
+export const GRAPH_TAB = "lokus:graph";
 
 export const app = createStore<AppState>({
   ready: false,
@@ -77,15 +88,16 @@ export const app = createStore<AppState>({
   conflict: null,
   palette: null,
   view: "note",
+  settings: null,
   panel: null,
   plugins: [],
   version: 0,
   sidebar: true,
   sidebarWidth: Number(localStorage.getItem("lokus.sidebarWidth")) || 248,
+  panelWidth: Number(localStorage.getItem("lokus.panelWidth")) || 360,
   narrow: false,
   account: null,
   accountDialog: false,
-  teamsDialog: false,
   sync: { status: "off" },
   peers: [],
   notice: null,
@@ -112,7 +124,7 @@ export function getEditor(): Editor | null {
 
 const toEditor = (text: string) => text.replace(/\r\n?/g, "\n");
 
-function allFiles(entries: Entry[] = app.get().tree, out: string[] = []): string[] {
+export function allFiles(entries: Entry[] = app.get().tree, out: string[] = []): string[] {
   for (const e of entries) {
     if (e.kind === "folder") allFiles(e.children ?? [], out);
     else out.push(e.path);
@@ -121,7 +133,7 @@ function allFiles(entries: Entry[] = app.get().tree, out: string[] = []): string
 }
 
 /** Web images load as they are; vault images are looked up beside the note, then anywhere. */
-function resolveImage(src: string): string | null {
+export function resolveImage(src: string): string | null {
   if (/^(https?:|data:)/i.test(src)) return src;
   const { vault, active } = app.get();
   if (!vault || /^[a-z]+:/i.test(src)) return null;
@@ -154,7 +166,7 @@ function toBase64(file: File): Promise<string> {
 }
 
 /** Save a pasted or dropped file in an `attachments` folder beside the open note. */
-async function saveFile(file: File): Promise<string | null> {
+export async function saveFile(file: File): Promise<string | null> {
   const { active } = app.get();
   if (!active) return null;
   if (file.size > MAX_ATTACHMENT) {
@@ -189,6 +201,11 @@ function report(e: unknown): void {
   notify(e instanceof Error ? e.message : String(e));
 }
 
+/** Draw markdown read-only, the way a note looks, whether or not a note is open. */
+export function renderMarkdown(parent: HTMLElement, text: string): () => void {
+  return previewMarkdown(parent, text, { onOpenLink: (target, newTab) => void openLink(target, newTab), resolveImage });
+}
+
 export function attachEditor(parent: HTMLElement): void {
   if (editor) return;
   editor = new Editor(parent, {
@@ -205,7 +222,7 @@ export function attachEditor(parent: HTMLElement): void {
       syncProperties();
       if (text !== session.saved) scheduleSave(path);
     },
-    onOpenLink: (target) => void openLink(target),
+    onOpenLink: (target, newTab) => void openLink(target, newTab),
     resolveImage,
     loadNote,
     notePaths: () => allNotes(),
@@ -267,6 +284,12 @@ export const SIDEBAR_MIN = 200;
 export const SIDEBAR_MAX = 420;
 const NARROW = "(max-width: 760px)";
 
+export function setPanelWidth(width: number): void {
+  const clamped = Math.round(Math.min(760, Math.max(300, width)));
+  localStorage.setItem("lokus.panelWidth", String(clamped));
+  app.set({ panelWidth: clamped });
+}
+
 export function setSidebarWidth(width: number): void {
   const clamped = Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width)));
   localStorage.setItem("lokus.sidebarWidth", String(clamped));
@@ -318,6 +341,12 @@ async function unshareAll(): Promise<void> {
 const syncKey = () => `lokus.sync:${app.get().vault?.root ?? ""}`;
 
 /** Start syncing this vault with a team workspace. */
+/** The sign-in the connection was last given, and how to stop feeding it fresh ones. */
+let syncSignIn: string | null = null;
+let stopSignIns: (() => void) | null = null;
+/** Whether a refusal has already been answered with one fresh sign-in. */
+let retriedSignIn = false;
+
 export async function connectSync(server: string, workspace: string, token: string | null): Promise<void> {
   const useToken = token ?? (await accessToken());
   if (!useToken) {
@@ -328,11 +357,24 @@ export async function connectSync(server: string, workspace: string, token: stri
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
   localStorage.setItem(syncKey(), JSON.stringify({ server, workspace, token }));
   app.set({ sync: { status: "connecting", server, workspace } });
+  syncSignIn = useToken;
+  stopSignIns?.();
+  stopSignIns = null;
+  // An account sign-in lasts about an hour. Each new one is handed to the connection as it arrives.
+  if (token === null) {
+    stopSignIns = await onAccessToken((fresh) => {
+      if (fresh === syncSignIn) return;
+      syncSignIn = fresh;
+      void syncToken(fresh);
+    });
+  }
   await syncConnect(server, workspace, useToken).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
 }
 
 export async function disconnectSync(): Promise<void> {
   localStorage.removeItem(syncKey());
+  stopSignIns?.();
+  stopSignIns = null;
   await syncDisconnect();
   await unshareAll();
   app.set({ sync: { status: "off" } });
@@ -344,25 +386,45 @@ function watchSync(): void {
     const { sync } = app.get();
     if (event.event === "online") {
       if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
-      app.set({ sync: { ...sync, status: "online", role: event.role, reason: undefined } });
-    }
+      retriedSignIn = false;
+      app.set({ sync: { ...sync, status: "online", role: event.role, user: event.user, reason: undefined } });
+    } else if (event.event === "role") {
+      notify(event.role === "viewer" ? "An owner made you a viewer here. Changes you make now stay on this device." : `You are now ${event.role === "owner" ? "an owner" : "an editor"} of this workspace.`);
+      app.set({ sync: { ...sync, role: event.role } });
+    } else if (event.event === "skipped") notify(`Did not write “${event.path}”: another device named a place outside this vault.`);
     else if (event.event === "offline" && sync.status !== "off") app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
     else if (event.event === "refused") {
-      void unshareAll();
-      app.set({ sync: { status: "refused", reason: event.reason } });
+      void (async () => {
+        // A sign-in that ran out while the computer slept is answered once with a fresh one.
+        const saved = savedSync();
+        const fresh = saved?.token === null && !retriedSignIn ? await accessToken().catch(() => null) : null;
+        if (saved && fresh && fresh !== syncSignIn) {
+          retriedSignIn = true;
+          await connectSync(saved.server, saved.workspace, null);
+          return;
+        }
+        void unshareAll();
+        app.set({ sync: { status: "refused", reason: event.reason } });
+      })();
     } else if (event.event === "pulled") for (const path of sessions.keys()) void share(path);
     else if (event.event === "published" || event.event === "wrote") void share(event.path);
     else if (event.event === "kept_both") notify(`Kept your copy as “${event.moved_to}”`);
   });
 }
 
-async function resumeSync(): Promise<void> {
+/** The connection this vault was last told to keep; a null token means "use the account's". */
+function savedSync(): { server: string; workspace: string; token: string | null } | null {
   try {
-    const saved = JSON.parse(localStorage.getItem(syncKey()) ?? "null") as { server: string; workspace: string; token: string | null } | null;
-    if (saved) await connectSync(saved.server, saved.workspace, saved.token);
+    return JSON.parse(localStorage.getItem(syncKey()) ?? "null");
   } catch {
     // a broken saved entry just means sync stays off
+    return null;
   }
+}
+
+async function resumeSync(): Promise<void> {
+  const saved = savedSync();
+  if (saved) await connectSync(saved.server, saved.workspace, saved.token);
 }
 
 export async function boot(): Promise<void> {
@@ -371,14 +433,29 @@ export async function boot(): Promise<void> {
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
   onCloseTab(() => {
-    const { active } = app.get();
-    if (active) void closeTab(active);
+    const { active, view } = app.get();
+    if (view === "graph") closeGraph();
+    else if (active) void closeTab(active);
     else closeWindow();
+  });
+  // Every window shows the same folder: when another window opens a different one, follow it.
+  onVaultOpened((vault) => {
+    if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);
+  });
+  // Signing in or out in another window is noticed when this one is next looked at.
+  window.addEventListener("focus", () => {
+    void currentAccount().then((account) => {
+      if ((account?.id ?? null) === (app.get().account?.id ?? null)) return;
+      identify(account?.id ?? null);
+      setIdentity(account?.email ?? "You");
+      app.set({ account });
+    }, () => {});
   });
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);
   setIdentity(account?.email ?? "You");
   app.set({ vault, account, ready: true });
+  applyLayout();
   track("app_opened");
   if (vault) {
     await refreshTree();
@@ -386,15 +463,34 @@ export async function boot(): Promise<void> {
   }
 }
 
-export async function setVault(path: string): Promise<void> {
-  await saveAll();
-  const vault = await openVault(path);
+/** Put on screen what the chosen layout says should be there: the sidebar, the assistant. */
+export function applyLayout(): void {
+  const { layout } = preferences.get();
+  if (app.get().narrow) return;
+  const { panel } = app.get();
+  app.set({ sidebar: layout !== "focused", panel: layout === "everything" ? (panel ?? { kind: "ai" }) : panel?.kind === "ai" && layout === "focused" ? null : panel });
+}
+
+/** This window is the one changing folder, so it does not also follow its own change. */
+let switching = false;
+
+async function enterVault(vault: VaultInfo): Promise<void> {
   for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
   sessions.clear();
-  app.set({ vault, tabs: [], active: null, dirty: {}, properties: {}, conflict: null, sync: { status: "off" }, peers: [] });
-  track("vault_opened");
+  app.set({ vault, tabs: [], view: "note", active: null, dirty: {}, properties: {}, conflict: null, sync: { status: "off" }, peers: [] });
   await refreshTree();
   await resumeSync();
+}
+
+export async function setVault(path: string): Promise<void> {
+  await saveAll();
+  switching = true;
+  try {
+    await enterVault(await openVault(path));
+    track("vault_opened");
+  } finally {
+    switching = false;
+  }
 }
 
 export async function chooseVault(): Promise<void> {
@@ -466,7 +562,28 @@ export async function closeTab(path: string): Promise<void> {
   }
   const next = rest[Math.min(index, rest.length - 1)] ?? null;
   app.set({ tabs: rest, active: null, properties: {} });
-  if (next) show(next);
+  if (next === GRAPH_TAB) showGraph();
+  else if (next) show(next);
+}
+
+/** Go to the tab after the one showing (or before it), wrapping round at the ends. */
+export function stepTab(by: 1 | -1): void {
+  const { tabs, active, view } = app.get();
+  if (tabs.length < 2) return;
+  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : (active ?? ""));
+  const next = tabs[(at + by + tabs.length) % tabs.length];
+  if (next === GRAPH_TAB) showGraph();
+  else void openNote(next);
+}
+
+/** Open the graph as a tab, or bring its tab forward. */
+export function showGraph(): void {
+  app.set((s) => ({ view: "graph", tabs: s.tabs.includes(GRAPH_TAB) ? s.tabs : [...s.tabs, GRAPH_TAB] }));
+}
+
+/** Close the graph's tab; the note that was open underneath shows again. */
+export function closeGraph(): void {
+  app.set((s) => ({ view: "note", tabs: s.tabs.filter((t) => t !== GRAPH_TAB) }));
 }
 
 function uniquePath(folder: string, base: string): string {
@@ -486,6 +603,34 @@ export async function createNote(name?: string): Promise<void> {
     await runCore("note.create", { path, text: "" });
     track("note_created");
     await refreshTree();
+    await openNote(path);
+  } catch (e) {
+    report(e);
+  }
+}
+
+/** Open the customers list, making its note the first time. */
+export async function openCustomers(): Promise<void> {
+  const path = "Customers.md";
+  try {
+    if (!allFiles().includes(path)) {
+      await runCore("note.create", { path, text: "---\nview: customers\nsource: customers\n---\n" });
+      await refreshTree();
+    }
+    await openNote(path);
+  } catch (e) {
+    report(e);
+  }
+}
+
+/** Open the task board, making its note the first time. */
+export async function openTasks(): Promise<void> {
+  const path = "Tasks.md";
+  try {
+    if (!allFiles().includes(path)) {
+      await runCore("note.create", { path, text: "---\nview: tasks\n---\n" });
+      await refreshTree();
+    }
     await openNote(path);
   } catch (e) {
     report(e);
@@ -583,11 +728,26 @@ function resolveNote(target: string): string | null {
 }
 
 /** Follow a `[[wiki link]]`; a link to a note that does not exist creates it. */
-export async function openLink(target: string): Promise<void> {
+/**
+ * Follow a link to a note. It takes the place of the note being read, as a link does in a
+ * browser; with `newTab` it opens beside it instead. A note that is already open in another tab
+ * is simply brought forward.
+ */
+export async function openLink(target: string, newTab = false): Promise<void> {
   const match = resolveNote(target);
   const ref = /[#^].*$/.exec(target)?.[0];
   if (!match) return createNote(target.replace(/[#^].*$/, "").trim());
+  const { active: from, tabs, view } = app.get();
+  const replaces = !newTab && view === "note" && from !== null && from !== match && !tabs.includes(match);
   await openNote(match);
+  if (replaces && from && app.get().active === match) {
+    // The note that was being read gives its place in the tab strip to the one it linked to.
+    await save(from);
+    const closing = sessions.get(from)?.shared;
+    if (closing) closeShared(closing);
+    sessions.delete(from);
+    app.set((s) => ({ tabs: s.tabs.filter((t) => t !== match).map((t) => (t === from ? match : t)) }));
+  }
   if (ref && app.get().active === match) editor?.reveal(ref);
 }
 

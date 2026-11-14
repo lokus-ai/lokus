@@ -38,11 +38,13 @@ export async function runCommand(id: string, args: Record<string, unknown> = {})
   return command.run(args);
 }
 
-const isMac = navigator.platform.toLowerCase().includes("mac");
+export const isMac = navigator.platform.toLowerCase().includes("mac");
 
 function chord(e: KeyboardEvent): string {
   const parts: string[] = [];
   if (isMac ? e.metaKey : e.ctrlKey) parts.push("Mod");
+  // On a Mac, Control is its own key; elsewhere it is the main modifier above.
+  if (isMac && e.ctrlKey) parts.push("Ctrl");
   if (e.altKey) parts.push("Alt");
   if (e.shiftKey) parts.push("Shift");
   parts.push(e.key.length === 1 ? e.key.toLowerCase() : e.key);
@@ -52,7 +54,7 @@ function chord(e: KeyboardEvent): string {
 export function formatKeys(keys: string): string {
   return keys
     .split("-")
-    .map((k) => (k === "Mod" ? (isMac ? "⌘" : "Ctrl") : k === "Shift" ? "⇧" : k === "Alt" ? "⌥" : k.toUpperCase()))
+    .map((k) => (k === "Mod" ? (isMac ? "⌘" : "Ctrl") : k === "Ctrl" ? "⌃" : k === "Shift" ? "⇧" : k === "Alt" ? "⌥" : k.toUpperCase()))
     .join(isMac ? "" : "+");
 }
 

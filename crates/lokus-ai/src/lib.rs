@@ -3,6 +3,7 @@
 //! here, in Rust, with the person's own key from the OS keychain, so the UI
 //! and plugins never hold a key.
 
+pub mod catalog;
 pub mod chat;
 pub mod chatgpt;
 pub mod config;
@@ -12,6 +13,6 @@ pub mod mcp_login;
 pub mod provider;
 pub mod tools;
 
-pub use chat::{send, Approver, Event, Outcome, Request};
+pub use chat::{send, AppRunner, Approver, Event, Outcome, Request};
 pub use config::{Config, McpServer, Provider};
 pub use error::{AiError, Result};

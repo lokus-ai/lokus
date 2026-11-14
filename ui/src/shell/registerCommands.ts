@@ -1,15 +1,18 @@
 /** @part-of ui.shell */
+import { newWindow } from "../bridge/core";
 import { aiSettings, saveAiConfig } from "../bridge/ai";
 import { identify } from "../bridge/analytics";
 import { runCore } from "../bridge/core";
 import { accountsAvailable, signOut } from "../bridge/auth";
-import { answer, ask, chat, newChat } from "../features/ai/chat";
+import { answer, answerAll, ask, chat, newChat } from "../features/ai/chat";
 import { analyticsCommands } from "../features/analytics/commands";
-import { COVERS, ICONS } from "../features/page-header/PageHeader";
-import { type Command, registerCommands } from "./commands";
+import { COVERS } from "../features/page-header/Cover";
+import { ICONS } from "../features/page-header/PageHeader";
+import { type Command, isMac, registerCommands } from "./commands";
 import {
   app,
   chooseVault,
+  closeGraph,
   closeTab,
   connectSync,
   createNote,
@@ -17,12 +20,16 @@ import {
   disconnectSync,
   getEditor,
   notify,
+  openCustomers,
   openDailyNote,
+  openTasks,
   openLink,
   openNote,
   refreshTree,
   save,
   setVault,
+  showGraph,
+  stepTab,
 } from "./workspace";
 
 const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
@@ -68,13 +75,15 @@ export function registerAllCommands(): void {
       id: "graph.toggle",
       title: "Show or hide the graph",
       keys: "Mod-g",
-      run: () => app.set((s) => ({ view: s.view === "graph" ? "note" : "graph" })),
+      run: () => (app.get().view === "graph" ? closeGraph() : showGraph()),
     },
+    { id: "tab.next", title: "Next tab", keys: isMac ? "Ctrl-Tab" : "Mod-Tab", run: () => stepTab(1) },
+    { id: "tab.previous", title: "Previous tab", keys: isMac ? "Ctrl-Shift-Tab" : "Mod-Shift-Tab", run: () => stepTab(-1) },
     {
       id: "settings.open",
       title: "Settings",
       keys: "Mod-,",
-      run: () => app.set((s) => ({ view: s.view === "settings" ? "note" : "settings" })),
+      run: (a) => app.set((s) => ({ settings: typeof a.page === "string" ? a.page : s.settings ? null : "appearance" })),
     },
     {
       id: "ai.open",
@@ -83,7 +92,11 @@ export function registerAllCommands(): void {
       run: () => app.set((s) => ({ panel: s.panel?.kind === "ai" ? null : { kind: "ai" } })),
     },
     { id: "ai.new", title: "Assistant: new chat", run: newChat },
-    { id: "teams.open", title: "Team sync…", run: () => app.set({ teamsDialog: true }) },
+    { id: "teams.open", title: "Team sync…", run: () => app.set({ settings: "team" }) },
+    { id: "window.new", title: "New window", keys: "Mod-Shift-n", run: () => newWindow().catch((e) => notify(e instanceof Error ? e.message : String(e))) },
+    { id: "onboarding.open", title: "Lokus: run the setup again", run: () => void import("../features/onboarding/onboarding").then((o) => o.onboarding.set({ open: true })) },
+    { id: "updates.check", title: "Lokus: check for updates", run: () => void import("../features/updates/updates").then((u) => u.check(true)) },
+    { id: "news.open", title: "Lokus: what’s new", run: () => void import("../features/updates/updates").then((u) => u.readNews("all")) },
     {
       id: "vault.examples",
       title: "Add example notes to this vault",
@@ -158,6 +171,10 @@ export function registerAllCommands(): void {
       },
     },
     { id: "database.off", title: "Database: hide the view", run: () => editor().setProperty("view", null) },
+    { id: "customers.open", title: "Customers: open the list", keys: "Mod-Shift-c", run: () => openCustomers() },
+    { id: "tasks.open", title: "Tasks: open the board", keys: "Mod-Shift-t", run: () => openTasks() },
+    { id: "profile.open", title: "Your profile: name and picture", run: () => app.set({ settings: "profile" }) },
+    { id: "customers.mark", title: "Customers: make this note a customer", run: () => editor().setProperty("type", "customer") },
     ...analyticsCommands(notify),
     ...(accountsAvailable
       ? [
@@ -182,7 +199,10 @@ export function registerAllCommands(): void {
       } },
     { id: "ai.answer", title: "Allow or decline a change", hidden: true, run: (a) => {
         const waiting = chat.get().items.find((i) => i.kind === "tool" && i.status === "asking");
-        if (waiting?.kind === "tool") answer(waiting.id, a.allow !== false);
+        if (waiting?.kind === "tool") {
+          if (a.all === true) answerAll(waiting.id);
+          else answer(waiting.id, a.allow !== false);
+        }
         return Boolean(waiting);
       } },
     { id: "ai.configure", title: "Change assistant settings", hidden: true, run: async (a) => {
@@ -219,6 +239,11 @@ export function registerAllCommands(): void {
     { id: "editor.select", title: "Set selection", hidden: true, run(a) {
         const anchor = Number(a.anchor ?? 0);
         editor().select(anchor, a.head === undefined ? anchor : Number(a.head));
+        return editorState();
+      } },
+    { id: "editor.delete", title: "Delete the selection", hidden: true, run() {
+        const e = editor();
+        e.view.dispatch(e.view.state.replaceSelection(""));
         return editorState();
       } },
     { id: "editor.setText", title: "Replace all text", hidden: true, run(a) {

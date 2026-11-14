@@ -1,0 +1,7 @@
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, -f, crates/lokus-server/Dockerfile, -t, us-central1-docker.pkg.dev/lokus-relay/relay/lokus-relay:v1, .]
+images: [us-central1-docker.pkg.dev/lokus-relay/relay/lokus-relay:v1]
+timeout: 2400s
+options:
+  machineType: E2_HIGHCPU_8

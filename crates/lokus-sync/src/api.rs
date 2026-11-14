@@ -21,6 +21,8 @@ pub async fn call(
     let request = match method {
         "GET" => client.get(url),
         "POST" => client.post(url).json(&body.unwrap_or(Value::Null)),
+        "PATCH" => client.patch(url).json(&body.unwrap_or(Value::Null)),
+        "DELETE" => client.delete(url),
         other => return Err(Error::Net(format!("unsupported method {other}"))),
     };
     let response = request

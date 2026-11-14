@@ -46,6 +46,10 @@ pub enum Event {
     Trashed {
         path: String,
     },
+    /// Another device named a path this one will not write: outside the vault, or app state.
+    Skipped {
+        path: String,
+    },
     Published {
         path: String,
     },
@@ -85,6 +89,17 @@ impl Engine {
         let dir = vault.root().join(META_DIR);
         fs::create_dir_all(&dir)?;
         let db = Connection::open(dir.join("sync.sqlite"))?;
+        // One engine per vault, across windows and programs. Two at once each decide a file is
+        // new and register it, so the same note is published twice and other devices get
+        // neither copy. The lock is held for as long as this engine lives.
+        db.busy_timeout(std::time::Duration::from_millis(1500))?;
+        db.execute_batch("PRAGMA locking_mode = EXCLUSIVE; BEGIN IMMEDIATE; COMMIT;")
+            .map_err(|e| match e.sqlite_error_code() {
+                Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+                    Error::InUse
+                }
+                _ => Error::Store(e),
+            })?;
         db.execute_batch(
             "PRAGMA journal_mode = WAL;
              CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -123,6 +138,32 @@ impl Engine {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    /// Tie this vault's sync state to one workspace. Everything kept here (which notes were
+    /// published, how far into the relay's log this device has read) is only true of the
+    /// workspace it was learned from. Pointed at another one, the vault starts clean: without
+    /// this, a vault moved to a new workspace published nothing, and read nothing below its
+    /// old position. Returns whether state was dropped. The files themselves are never touched.
+    pub fn bind(&mut self, workspace: &str) -> Result<bool> {
+        let known = self.meta("workspace")?;
+        if known.as_deref() == Some(workspace) {
+            return Ok(false);
+        }
+        let used: i64 = self.db.query_row(
+            "SELECT (SELECT COUNT(*) FROM docs) + (SELECT COUNT(*) FROM outbox) + (SELECT COUNT(*) FROM files)",
+            [],
+            |r| r.get(0),
+        )?;
+        let dropped = known.is_some() || used > 0 || self.cursor()? > 0;
+        if dropped {
+            self.db.execute_batch(
+                "DELETE FROM docs; DELETE FROM outbox; DELETE FROM files; DELETE FROM transfers;
+                 DELETE FROM meta WHERE key IN ('cursor', 'pulled');",
+            )?;
+        }
+        self.set_meta("workspace", workspace)?;
+        Ok(dropped)
     }
 
     /// Position in the relay's log this device has seen.
@@ -547,6 +588,15 @@ impl Engine {
         let mut entries: Vec<(String, Entry)> = self.entries(manifest).into_iter().collect();
         entries.sort_by(|a, b| a.0.cmp(&b.0));
         for (id, entry) in entries {
+            // A path this device must not write (it would leave the vault, or reach into
+            // `.lokus/`) is skipped, not fatal. Failing here would stop sync for good on every
+            // device, and any member could cause it with one entry.
+            if !entry.deleted && self.vault.resolve(&entry.path).is_err() {
+                self.events.push(Event::Skipped {
+                    path: entry.path.clone(),
+                });
+                continue;
+            }
             let Some(row) = self.row(&id)? else { continue };
             let doc = self.new_doc();
             apply(&doc, &row.state)?;
@@ -724,6 +774,80 @@ mod tests {
                 b.engine.sent(out.n).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn a_path_that_leaves_the_vault_is_refused_and_sync_carries_on() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Plan.md", "the plan\n");
+        a.write("Other.md", "other\n");
+        exchange(&mut a, &mut b);
+        // A hostile or broken device moves two notes to places no device may write.
+        for (note, bad) in [("Plan.md", "../evil.md"), ("Other.md", ".lokus/plugins/evil/main.js")] {
+            let id = a.engine.doc_id(note).unwrap().unwrap();
+            let manifest = a.engine.load(MANIFEST).unwrap();
+            let entry = Entry {
+                path: bad.to_string(),
+                deleted: false,
+            };
+            a.engine.set_entry(&manifest, &id, &entry).unwrap();
+        }
+        for out in a.engine.outbox().unwrap() {
+            b.engine.apply_remote(&out.doc, &out.data).unwrap();
+        }
+        let outside = b.vault.root().parent().unwrap().join("evil.md");
+        assert!(!outside.exists());
+        assert!(!b.vault.root().join(".lokus/plugins/evil/main.js").exists());
+        assert_eq!(b.read("Plan.md").as_deref(), Some("the plan\n"));
+        assert!(b.engine.events.iter().any(|e| matches!(e, Event::Skipped { path } if path == "../evil.md")));
+        // And the next ordinary change still arrives.
+        a.write("Later.md", "still syncing\n");
+        a.engine.scan().unwrap();
+        for out in a.engine.outbox().unwrap() {
+            b.engine.apply_remote(&out.doc, &out.data).unwrap();
+        }
+        assert_eq!(b.read("Later.md").as_deref(), Some("still syncing\n"));
+    }
+
+    #[test]
+    fn a_vault_moved_to_another_workspace_starts_clean_and_publishes_everything() {
+        let (mut a, mut b) = (device(), device());
+        a.engine.bind("first").unwrap();
+        a.write("Plan.md", "the plan\n");
+        a.write("img/photo.png", "bytes");
+        exchange(&mut a, &mut b);
+        a.engine.set_cursor(95).unwrap();
+        assert!(a.engine.outbox().unwrap().is_empty());
+        // The same workspace again changes nothing.
+        assert!(!a.engine.bind("first").unwrap());
+        assert_eq!(a.engine.cursor().unwrap(), 95);
+
+        // A different workspace: nothing carried over, so everything is offered afresh.
+        assert!(a.engine.bind("second").unwrap());
+        assert_eq!(a.engine.cursor().unwrap(), 0);
+        // Nothing is published before the first pull from the new workspace, as for any device.
+        a.engine.scan().unwrap();
+        assert!(a.engine.outbox().unwrap().is_empty());
+        a.engine.mark_pulled().unwrap();
+        let mut c = device();
+        exchange(&mut a, &mut c);
+        assert_eq!(c.read("Plan.md").as_deref(), Some("the plan\n"));
+        assert_eq!(a.read("Plan.md").as_deref(), Some("the plan\n"));
+        // A vault that has never synced is bound without losing anything.
+        let mut fresh = device();
+        assert!(!fresh.engine.bind("second").unwrap());
+    }
+
+    #[test]
+    fn a_vault_has_one_sync_engine_at_a_time() {
+        let a = device();
+        // A second engine on the same vault is turned away while the first lives...
+        assert!(matches!(Engine::open(&a.vault), Err(Error::InUse)));
+        // ...and welcome once it is gone.
+        let vault = a.vault.clone();
+        let _keep = a._dir;
+        drop(a.engine);
+        assert!(Engine::open(&vault).is_ok());
     }
 
     #[test]

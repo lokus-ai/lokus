@@ -1,0 +1,43 @@
+#cloud-config
+write_files:
+  - path: /etc/systemd/system/relay-disk.service
+    content: |
+      [Unit]
+      Description=Mount the relay data disk
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/bin/bash -c 'D=/dev/disk/by-id/google-relay-data; blkid $D || mkfs.ext4 -F $D; mkdir -p /mnt/disks/data; mountpoint -q /mnt/disks/data || mount -o discard,defaults $D /mnt/disks/data; mkdir -p /mnt/disks/data/relay /mnt/disks/data/caddy'
+      ExecStart=/sbin/iptables -w -A INPUT -p tcp --dport 80 -j ACCEPT
+      ExecStart=/sbin/iptables -w -A INPUT -p tcp --dport 443 -j ACCEPT
+  - path: /etc/systemd/system/relay.service
+    content: |
+      [Unit]
+      Description=Lokus relay
+      Requires=relay-disk.service docker.service
+      After=relay-disk.service docker.service
+      [Service]
+      Environment=HOME=/var/lib/relay-home
+      ExecStartPre=/bin/mkdir -p /var/lib/relay-home
+      ExecStartPre=/usr/bin/docker-credential-gcr configure-docker --registries us-central1-docker.pkg.dev
+      ExecStartPre=-/usr/bin/docker rm -f relay
+      ExecStartPre=/bin/sh -c "touch /mnt/disks/data/relay/relay.env; chmod 600 /mnt/disks/data/relay/relay.env"
+      ExecStart=/usr/bin/docker run --rm --name relay --network host -v /mnt/disks/data/relay:/data --env-file /mnt/disks/data/relay/relay.env -e SUPABASE_URL=https://pauprjaxfxhkxnwzafif.supabase.co -e LOKUS_DATA=/data/relay.sqlite -e PORT=8787 us-central1-docker.pkg.dev/lokus-relay/relay/lokus-relay:v1
+      ExecStop=/usr/bin/docker stop relay
+      Restart=always
+      RestartSec=5
+  - path: /etc/systemd/system/caddy.service
+    content: |
+      [Unit]
+      Description=TLS in front of the relay
+      Requires=relay-disk.service docker.service
+      After=relay-disk.service docker.service
+      [Service]
+      ExecStartPre=-/usr/bin/docker rm -f caddy
+      ExecStart=/usr/bin/docker run --rm --name caddy --network host -v /mnt/disks/data/caddy:/data caddy:2 caddy reverse-proxy --from 136-115-217-146.sslip.io --to 127.0.0.1:8787
+      ExecStop=/usr/bin/docker stop caddy
+      Restart=always
+      RestartSec=5
+runcmd:
+  - systemctl daemon-reload
+  - systemctl start relay-disk.service relay.service caddy.service

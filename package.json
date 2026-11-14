@@ -14,5 +14,6 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0"
-  }
+  },
+  "license": "FCL-1.0-MIT"
 }

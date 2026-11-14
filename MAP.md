@@ -32,6 +32,12 @@
 | Assistant panel: the conversation, tool activity, and allowing or declining changes. | `ui/src/features/ai/` | `ui.ai` |
 | Settings page: appearance, assistant, plugins, privacy. Loaded only when opened. | `ui/src/features/settings/` | `ui.settings` |
 | Team workspaces: connect, create, join, members, invites. | `ui/src/features/teams/` | `ui.teams` |
+| Connections: the services the assistant can reach, picked by name and signed in to. | `ui/src/features/connections/` | `ui.connections` |
+| Onboarding: the first-run setup and the start page shown when nothing is open. | `ui/src/features/onboarding/` | `ui.onboarding` |
+| Updates: the update pop-up, What's new and news pushed from the server. | `ui/src/features/updates/` | `ui.updates` |
+| Profile: the name and picture each person on the team goes by. | `ui/src/features/profile/` | `ui.profile` |
+| Tasks: the team's board and list of work, and a task's own page. | `ui/src/features/tasks/` | `ui.tasks` |
+| Customers: the list of who needs attention and each customer's page, built from note properties. | `ui/src/features/customers/` | `ui.customers` |
 | Login screen and session state. | `ui/src/features/auth/` | `ui.auth` |
 | Product analytics events and the opt-out. Never sends note content. | `ui/src/features/analytics/` | `ui.analytics` |
 | Scripts that enforce the hard rules. | `checks/` | `checks` |
