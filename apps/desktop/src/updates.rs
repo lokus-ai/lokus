@@ -222,3 +222,17 @@ pub fn open_web(url: String) -> Result<(), Value> {
     }
     open::that(&url).map_err(|e| fail("no_browser", format!("Could not open your browser: {e}")))
 }
+
+/// Where this copy is running from, when that is somewhere it should not stay: the disk image
+/// it was downloaded in, for one. The window says so as soon as it opens, because from there
+/// it cannot update itself and vanishes when the disk is ejected.
+#[tauri::command]
+pub fn app_place() -> Value {
+    json!({ "misplaced": stuck() })
+}
+
+#[tauri::command]
+pub fn app_quit(app: AppHandle) {
+    crate::sync::stop_for(&app);
+    app.exit(0);
+}

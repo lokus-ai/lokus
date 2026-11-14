@@ -6,6 +6,8 @@
 pub mod auth;
 pub mod error;
 mod inbox;
+mod invites;
+pub mod mail;
 mod releases;
 pub mod store;
 mod ws;
@@ -24,13 +26,10 @@ use tokio::sync::broadcast;
 
 use auth::{Auth, Identity};
 use error::{Error, Result};
-use store::{now, Role, Store};
+use store::{Role, Store};
 
 /// The largest attachment the relay stores.
 pub const MAX_BLOB: usize = 25 * 1024 * 1024;
-
-/// How long an invite can be used for.
-const INVITE_LIFE: i64 = 7 * 24 * 60 * 60;
 
 /// The relay's adjustable limits.
 #[derive(Debug, Clone, Copy)]
@@ -85,6 +84,8 @@ pub struct App {
     pub limits: Limits,
     /// What a publisher of releases and news must present. `None`: nothing can be published.
     pub(crate) publish_key: Option<String>,
+    /// What sends invitations by email. `None`: invites are handed over as links.
+    pub(crate) mailer: Option<mail::Mailer>,
     pub(crate) changes: broadcast::Sender<Changed>,
     rooms: Mutex<HashMap<String, broadcast::Sender<Fanout>>>,
     next_conn: std::sync::atomic::AtomicU64,
@@ -102,11 +103,23 @@ impl App {
         limits: Limits,
         publish_key: Option<String>,
     ) -> Arc<Self> {
+        Self::build(store, auth, limits, publish_key, None)
+    }
+
+    /// The whole relay: with a publish key for releases and news, and a mailer for invitations.
+    pub fn build(
+        store: Store,
+        auth: Auth,
+        limits: Limits,
+        publish_key: Option<String>,
+        mailer: Option<mail::Mailer>,
+    ) -> Arc<Self> {
         Arc::new(Self {
             store,
             auth,
             limits,
             publish_key: publish_key.filter(|k| k.len() >= 24),
+            mailer,
             changes: broadcast::channel(256).0,
             rooms: Mutex::new(HashMap::new()),
             next_conn: 1.into(),
@@ -126,7 +139,7 @@ impl App {
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
-    async fn caller(&self, headers: &HeaderMap) -> Result<Identity> {
+    pub(crate) async fn caller(&self, headers: &HeaderMap) -> Result<Identity> {
         let token = headers
             .get("authorization")
             .and_then(|v| v.to_str().ok())
@@ -139,7 +152,7 @@ impl App {
         self.store.role(workspace, user)?.ok_or(Error::Forbidden)
     }
 
-    fn require_owner(&self, workspace: &str, user: &str) -> Result<()> {
+    pub(crate) fn require_owner(&self, workspace: &str, user: &str) -> Result<()> {
         match self.require(workspace, user)? {
             Role::Owner => Ok(()),
             _ => Err(Error::Forbidden),
@@ -170,11 +183,22 @@ pub fn router(app: Arc<App>) -> Router {
         )
         .route(
             "/v1/workspaces/{id}/invites",
-            get(list_invites).post(create_invite),
+            get(invites::list).post(invites::create),
         )
-        .route("/v1/workspaces/{id}/invites/{code}", delete(revoke_invite))
+        .route(
+            "/v1/workspaces/{id}/invites/{code}",
+            delete(invites::revoke),
+        )
+        .route(
+            "/v1/workspaces/{id}/invites/{code}/send",
+            post(invites::resend),
+        )
+        .route("/v1/invites/mine", get(invites::mine))
+        .route("/join/{code}", get(invites::page))
+        .route("/brand/lokus.png", get(invites::logo))
+        .route("/brand/invitation.jpg", get(invites::picture))
         .route("/v1/workspaces/{id}/audit", get(list_audit))
-        .route("/v1/invites/{code}/accept", post(accept_invite))
+        .route("/v1/invites/{code}/accept", post(invites::accept))
         .route(
             "/v1/workspaces/{id}/blobs/{hash}",
             get(get_blob)
@@ -250,70 +274,6 @@ async fn list_members(
     let me = app.caller(&headers).await?;
     app.require(&id, &me.user)?;
     Ok(Json(json!(app.store.members(&id)?)))
-}
-
-#[derive(Deserialize)]
-struct NewInvite {
-    role: String,
-}
-
-async fn create_invite(
-    State(app): State<Arc<App>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-    Json(body): Json<NewInvite>,
-) -> Result<Json<Value>> {
-    let me = app.caller(&headers).await?;
-    app.require_owner(&id, &me.user)?;
-    let role = match Role::parse(&body.role) {
-        Some(Role::Editor) => Role::Editor,
-        Some(Role::Viewer) => Role::Viewer,
-        _ => {
-            return Err(Error::BadRequest(
-                "an invite is for an editor or a viewer".into(),
-            ))
-        }
-    };
-    let code = uuid::Uuid::new_v4().simple().to_string();
-    let expires_at = now() + INVITE_LIFE;
-    app.store
-        .create_invite(&code, &id, role, &me.user, expires_at)?;
-    Ok(Json(
-        json!({ "code": code, "role": role.name(), "expires_at": expires_at }),
-    ))
-}
-
-async fn accept_invite(
-    State(app): State<Arc<App>>,
-    headers: HeaderMap,
-    Path(code): Path<String>,
-) -> Result<Json<Value>> {
-    let me = app.caller(&headers).await?;
-    let workspace = app
-        .store
-        .accept_invite(&code, &me.user, me.email.as_deref())?;
-    Ok(Json(json!({ "workspace": workspace })))
-}
-
-async fn list_invites(
-    State(app): State<Arc<App>>,
-    headers: HeaderMap,
-    Path(id): Path<String>,
-) -> Result<Json<Value>> {
-    let me = app.caller(&headers).await?;
-    app.require_owner(&id, &me.user)?;
-    Ok(Json(json!(app.store.invites(&id)?)))
-}
-
-async fn revoke_invite(
-    State(app): State<Arc<App>>,
-    headers: HeaderMap,
-    Path((id, code)): Path<(String, String)>,
-) -> Result<Json<Value>> {
-    let me = app.caller(&headers).await?;
-    app.require_owner(&id, &me.user)?;
-    app.store.revoke_invite(&id, &code, &me.user)?;
-    Ok(Json(json!({ "cancelled": true })))
 }
 
 #[derive(Deserialize)]

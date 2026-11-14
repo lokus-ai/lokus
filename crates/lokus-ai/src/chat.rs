@@ -43,6 +43,14 @@ returned by a tool. When the open note's text is not attached, read it with read
 A `mentioned:` line lists notes and folders the user pointed at with @ in their message: those are \
 what the question is about. A mentioned note's text may be attached inside <note>; otherwise read it.
 
+The user can attach files to a message: a picture you can look at, or a PDF, CSV or text file \
+whose words arrive inside <file path=…>. A long one arrives in part; read the rest with read_file. \
+Files that are not notes live in the vault too: list_files finds them. You can also make files. \
+When the user asks for a spreadsheet or an export, make a .csv with create_file. For a chart or a \
+diagram, make an .svg with create_file. For a document to print or send, make a PDF with create_pdf. \
+A file you make shows as a card under your reply, so say in a sentence what it is and do not repeat \
+its contents.
+
 Find your way with list_folder and search_notes rather than guessing paths. When the user asks to \
 open, show or go to a note, open it in the app with open_note instead of only naming it.
 
@@ -566,13 +574,16 @@ pub async fn send(
     };
 
     let mut added: Vec<Value> = Vec::new();
+    let mut attached = std::collections::HashMap::new();
     let mut stop = String::from("end_turn");
     let (mut rounds, mut read, mut written, mut used) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
         for _ in 0..MAX_ROUNDS {
             lighten(&mut messages);
             let mut on_text = |delta: &str| emit(Event::Text { delta: delta.to_string() });
-            let turn = provider::turn(&http, &config, &key, &system, &offered, &messages, &mut on_text).await?;
+            // Attached files are put in here, for this request only; `messages` keeps their places.
+            let wire = crate::files::expand(core.as_deref(), &messages, &mut attached);
+            let turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await?;
             stop = turn.stop.clone();
             rounds += 1;
             read += turn.tokens.0;

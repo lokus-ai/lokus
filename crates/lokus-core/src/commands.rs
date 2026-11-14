@@ -137,8 +137,26 @@ pub const COMMANDS: &[CommandSpec] = &[
     spec("folder.create", "Create a folder", "path", Write),
     spec(
         "file.write",
-        "Save a file that is not a note (an image, a PDF); fails if it exists",
-        "path, base64",
+        "Save a file that is not a note (an image, a PDF, a CSV), from base64 or from text; fails if it exists",
+        "path, base64?, text?",
+        Write,
+    ),
+    spec(
+        "file.read",
+        "A file that is not a note, whole: its base64, size and kind",
+        "path",
+        Read,
+    ),
+    spec(
+        "file.text",
+        "The words in a file (a CSV, a PDF, a text file), in parts",
+        "path, from_line?=1, max_chars?=32000",
+        Read,
+    ),
+    spec(
+        "file.pdf",
+        "Write a PDF from text with # headings, - lists and | tables; fails if it exists",
+        "path, title?, text",
         Write,
     ),
     spec(
@@ -365,14 +383,43 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
             if crate::vault::is_note(Path::new(&a.path)) {
                 return Err(bad("use note.create for notes"));
             }
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(a.base64.as_bytes())
-                .map_err(|_| bad("base64 is not valid"))?;
+            let bytes = match (&a.text, a.base64.is_empty()) {
+                (Some(text), true) => text.clone().into_bytes(),
+                _ => base64::engine::general_purpose::STANDARD
+                    .decode(a.base64.as_bytes())
+                    .map_err(|_| bad("base64 is not valid"))?,
+            };
+            if bytes.is_empty() {
+                return Err(bad("give base64 or text"));
+            }
             if vault.resolve(&a.path)?.exists() {
                 return Err(CoreError::AlreadyExists(a.path));
             }
             vault.write_file(&a.path, &bytes)?;
             Ok(json!({ "path": a.path, "size": bytes.len() }))
+        }
+        "file.read" => {
+            let a: PathArgs = parse(name, args)?;
+            crate::files::read(vault, &a.path)
+        }
+        "file.text" => {
+            let a: FileTextArgs = parse(name, args)?;
+            crate::files::text(
+                vault,
+                &a.path,
+                a.from_line.unwrap_or(1),
+                a.max_chars.unwrap_or(32_000).clamp(200, 200_000),
+            )
+        }
+        "file.pdf" => {
+            let a: FilePdfArgs = parse(name, args)?;
+            let title = a.title.unwrap_or_else(|| {
+                Path::new(&a.path)
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            });
+            crate::files::write_pdf(vault, &a.path, &title, &a.text)
         }
         "history.list" => {
             let a: PathArgs = parse(name, args)?;
@@ -482,7 +529,23 @@ const MAX_FILE_BASE64: usize = 25 * 1024 * 1024 / 3 * 4 + 4;
 #[derive(Deserialize)]
 struct FileArgs {
     path: String,
+    #[serde(default)]
     base64: String,
+    text: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct FileTextArgs {
+    path: String,
+    from_line: Option<usize>,
+    max_chars: Option<usize>,
+}
+
+#[derive(Deserialize)]
+struct FilePdfArgs {
+    path: String,
+    title: Option<String>,
+    text: String,
 }
 
 #[derive(Deserialize)]

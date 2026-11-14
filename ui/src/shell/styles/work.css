@@ -283,6 +283,7 @@ img.cust-logo { object-fit: cover; background: var(--bg-hover); }
 .ai-start { padding: 0 4px 10vh; }
 .ai-start h2 { margin: 0 16px 6px; font-size: var(--text-h3); letter-spacing: -0.015em; }
 .ai-start > p { margin: 0 16px 16px; color: var(--fg-2); }
+.ai-start .ai-connect { width: auto; max-width: 300px; margin: 6px 16px 0; }
 .ai-starters { flex-direction: column; flex-wrap: nowrap; gap: 0; margin: 4px 12px 0; }
 .ai-starters button { height: 34px; padding: 0 10px; border-radius: var(--radius-sm); box-shadow: none; text-align: left; color: var(--fg-2); font-size: var(--text-small); }
 .ai-starters button:hover { background: var(--bg-hover); color: var(--fg); }
@@ -324,10 +325,10 @@ img.conn-logo.picture.slack { box-shadow: none; transform: scale(1.14); }
 .custs-table tbody tr:hover .cust-more, .custs-actions .cust-more[aria-expanded="true"] { opacity: 1; }
 .custs-actions .cust-menu { top: 28px; width: 200px; text-align: left; font-weight: 400; }
 .custs-confirm { display: inline-flex; align-items: center; gap: 10px; white-space: nowrap; color: var(--fg-2); font-size: var(--text-small); }
-.custs-head { gap: 8px; min-width: 0; }
+.custs-head { gap: 8px; min-width: 0; height: auto; min-height: 56px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
 .custs-head h1, .custs-new, .custs-head .segmented button { white-space: nowrap; flex: none; }
-.custs-head .segmented { flex: 0 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.custs-search { flex: 0 1 220px; min-width: 120px; }
+.custs-head .segmented { flex: 0 1 auto; min-width: 0; max-width: 100%; margin-right: auto; overflow-x: auto; scrollbar-width: none; }
+.custs-search { flex: 1 1 160px; max-width: 260px; min-width: 140px; margin-left: 0; }
 
 /* Customers: ticking several to act on them at once */
 .custs-tick { flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); opacity: 0; cursor: pointer; }
@@ -491,3 +492,63 @@ body:has(.task-card.carried) { cursor: grabbing; }
 .conn-own.api { flex-wrap: wrap; }
 .conn-own.api textarea { flex: 1 1 100%; min-height: 62px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; font-size: var(--text-small); line-height: 1.45; resize: vertical; outline: 0; }
 .conn-own.api textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--selection); }
+
+.update-card.misplaced { z-index: 70; width: 380px; }
+.update-card.misplaced ol { margin: 2px 0; padding-left: 18px; color: var(--fg); font-size: var(--text-small); line-height: 1.6; }
+.ai-connect { display: flex; flex-direction: column; align-items: stretch; gap: 8px; width: min(300px, 100%); margin-top: 6px; }
+.ai-connect .primary { height: 38px; }
+.ai-connect small { color: var(--fg-3); font-size: var(--text-caption); text-align: center; margin-bottom: 6px; }
+.ai-connect .settings-button { height: 34px; }
+.ai-connect-problem { margin: 4px 0 0; color: var(--danger); font-size: var(--text-small); line-height: 1.45; }
+.ob .ai-connect { margin-top: 24px; width: min(340px, 100%); }
+.ob .ai-connect small { text-align: left; }
+
+/* Files that are not notes: the viewer in the main area. */
+.file-view { position: absolute; inset: var(--bar-height) 0 0; display: flex; flex-direction: column; background: var(--bg); }
+.file-head { flex: none; display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 16px 0 24px; border-bottom: 1px solid var(--border); }
+.file-head strong { font-size: var(--text-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-tag { flex: none; padding: 1px 6px; border-radius: 5px; background: var(--bg-active); color: var(--fg-2); font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; }
+.file-space { flex: 1; }
+.file-head .settings-button { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.file-body { flex: 1; min-height: 0; overflow: auto; }
+.file-body.image { display: grid; place-items: center; padding: 28px; background: var(--bg-sidebar); }
+.file-body.image img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-sm); box-shadow: 0 0 0 1px var(--border), 0 8px 30px rgba(0, 0, 0, 0.12); background: #fff; }
+.file-body.pdf { overflow: hidden; }
+.file-body.pdf iframe { width: 100%; height: 100%; border: 0; background: var(--bg-sidebar); }
+.file-table table { border-collapse: collapse; font-size: var(--text-small); min-width: 100%; }
+.file-table th, .file-table td { padding: 7px 14px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.file-table th:first-child, .file-table td:first-child { padding-left: 24px; }
+.file-table th { position: sticky; top: 0; z-index: 1; background: var(--bg); color: var(--fg-2); font-weight: 550; box-shadow: 0 1px 0 var(--border); }
+.file-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.file-table tbody tr:hover { background: var(--bg-hover); }
+.file-text { margin: 0; padding: 20px 24px; font-family: var(--font-mono); font-size: var(--text-caption); line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+.file-note { margin: 0; padding: 20px 24px; color: var(--fg-3); font-size: var(--text-small); }
+
+/* Files in the conversation: attached by the person, or made by the assistant. */
+.ai-attach { width: 26px; height: 26px; flex: none; display: grid; place-items: center; margin-left: -4px; border-radius: 50%; color: var(--fg-2); transition: background var(--fast), color var(--fast); }
+.ai-attach:hover { background: var(--bg-hover); color: var(--fg); }
+.ai-compose.over { box-shadow: 0 0 0 2px var(--accent), 0 2px 10px rgba(0, 0, 0, 0.1); }
+.ai-files { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px; cursor: default; }
+.ai-sent-files, .ai-made { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.ai-user-turn { align-self: flex-end; max-width: 86%; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.ai-user-turn .ai-user { max-width: 100%; }
+.ai-sent-files { justify-content: flex-end; }
+.ai-steps-block { display: flex; flex-direction: column; gap: 8px; }
+.ai-made { margin: 0 12px 2px; }
+.ai-file { position: relative; display: inline-flex; max-width: 100%; }
+.ai-file-open { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 8px 12px 8px 8px; border-radius: 12px; background: var(--bg); box-shadow: 0 0 0 1px var(--border); text-align: left; transition: background var(--fast); }
+.ai-file-open:hover { background: var(--bg-hover); }
+.ai-file-tile { flex: none; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px; background: var(--bg-active); color: var(--fg-2); }
+.ai-file-tile.pdf { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.ai-file-tile.table { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
+.ai-file-text { min-width: 0; display: flex; flex-direction: column; }
+.ai-file-text strong { max-width: 220px; font-size: var(--text-small); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-file-text small { color: var(--fg-3); font-size: var(--text-caption); }
+.ai-file.picture .ai-file-open { padding: 0; overflow: hidden; background: #fff; }
+.ai-file.picture img { display: block; width: 280px; max-width: 100%; height: auto; max-height: 240px; object-fit: contain; }
+.ai-file.small .ai-file-open { padding: 5px 10px 5px 5px; border-radius: 10px; }
+.ai-file.small .ai-file-tile { width: 28px; height: 28px; border-radius: 7px; }
+.ai-file.small .ai-file-text strong { max-width: 150px; }
+.ai-file.small.picture .ai-file-open { padding: 0; }
+.ai-file.small.picture img { width: 56px; height: 56px; object-fit: cover; }
+.ai-file-remove { position: absolute; top: -5px; right: -5px; width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%; background: var(--fg); color: var(--bg); box-shadow: 0 0 0 2px var(--bg); }

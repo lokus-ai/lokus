@@ -419,7 +419,7 @@ fn an_invite_past_its_date_is_as_good_as_no_invite() {
     let store = Store::open(&dir.path().join("relay.sqlite")).unwrap();
     store.create_workspace("w", "Team", "alice", None).unwrap();
     store
-        .create_invite("old", "w", Role::Editor, "alice", now() - 1)
+        .create_invite("old", "w", Role::Editor, "alice", now() - 1, None, None)
         .unwrap();
     assert!(store.accept_invite("old", "bob", None).is_err());
     assert!(store.invites("w").unwrap().is_empty());

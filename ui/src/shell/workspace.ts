@@ -9,6 +9,7 @@ import {
   currentVault,
   type Entry,
   type InstalledPlugin,
+  isMainWindow,
   type Eol,
   type Note,
   onCloseTab,
@@ -52,7 +53,9 @@ export interface AppState {
   palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | "history" | null;
   /** What the main area shows. */
   /** Which tab is showing: a note, or the graph (which sits in `tabs` as `GRAPH_TAB`). */
-  view: "note" | "graph";
+  view: "note" | "graph" | "file";
+  /** The file showing when `view` is "file": a picture, a PDF, a CSV. It sits in `tabs` by its path. */
+  file: string | null;
   /** The settings dialog, and which of its pages is showing; null when it is closed. */
   settings: string | null;
   /** What the panel on the right shows, if it is open. */
@@ -88,6 +91,7 @@ export const app = createStore<AppState>({
   conflict: null,
   palette: null,
   view: "note",
+  file: null,
   settings: null,
   panel: null,
   plugins: [],
@@ -448,10 +452,13 @@ export async function boot(): Promise<void> {
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
   onCloseTab(() => {
-    const { active, view } = app.get();
+    // Cmd+W closes the tab showing and nothing more. With no tab left it closes an extra
+    // window, but never the last one: that would quit Lokus, which is what Cmd+Q is for.
+    const { active, view, file } = app.get();
     if (view === "graph") closeGraph();
+    else if (view === "file" && file) void closeTab(file);
     else if (active) void closeTab(active);
-    else closeWindow();
+    else if (!isMainWindow()) closeWindow();
   });
   // Every window shows the same folder: when another window opens a different one, follow it.
   onVaultOpened((vault) => {
@@ -544,7 +551,24 @@ function syncPeers(): void {
   if (JSON.stringify(next) !== JSON.stringify(app.get().peers)) app.set({ peers: next });
 }
 
+/** Whether a path is a note; anything else in a vault is a file to look at, not to edit. */
+export const isNotePath = (path: string) => /\.md$/i.test(path);
+
+/** Show a file that is not a note (a picture, a PDF, a CSV) in its own tab. */
+export function openFile(path: string): void {
+  app.set((s) => ({ view: "file", file: path, tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
+  track("page_opened", { kind: "file" });
+}
+
+/** Bring a tab forward, whatever it holds. */
+function go(tab: string): void {
+  if (tab === GRAPH_TAB) showGraph();
+  else if (isNotePath(tab)) show(tab);
+  else openFile(tab);
+}
+
 export async function openNote(path: string): Promise<void> {
+  if (!isNotePath(path)) return openFile(path);
   // The editor mounts with the first render after a vault opens.
   for (let i = 0; !editor && i < 50; i++) await new Promise((r) => window.setTimeout(r, 20));
   if (!editor) return;
@@ -565,6 +589,16 @@ export async function openNote(path: string): Promise<void> {
 }
 
 export async function closeTab(path: string): Promise<void> {
+  if (!isNotePath(path)) {
+    const { tabs, file, view, active } = app.get();
+    const rest = tabs.filter((t) => t !== path);
+    if (view !== "file" || file !== path) return app.set({ tabs: rest });
+    const next = rest[Math.min(tabs.indexOf(path), rest.length - 1)];
+    app.set({ tabs: rest, file: null, view: "note" });
+    // The note underneath is still loaded; any other tab is brought forward.
+    if (next && next !== active) go(next);
+    return;
+  }
   await save(path);
   const { tabs, active } = app.get();
   const index = tabs.indexOf(path);
@@ -578,15 +612,14 @@ export async function closeTab(path: string): Promise<void> {
   }
   const next = rest[Math.min(index, rest.length - 1)] ?? null;
   app.set({ tabs: rest, active: null, properties: {} });
-  if (next === GRAPH_TAB) showGraph();
-  else if (next) show(next);
+  if (next) go(next);
 }
 
 /** Go to the tab after the one showing (or before it), wrapping round at the ends. */
 export function stepTab(by: 1 | -1): void {
   const { tabs, active, view } = app.get();
   if (tabs.length < 2) return;
-  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : (active ?? ""));
+  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : view === "file" ? (app.get().file ?? "") : (active ?? ""));
   const next = tabs[(at + by + tabs.length) % tabs.length];
   if (next === GRAPH_TAB) showGraph();
   else void openNote(next);

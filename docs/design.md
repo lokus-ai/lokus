@@ -276,7 +276,7 @@ engine in `lokus-sync`, which writes the file.
 |---|---|
 | `workspaces` | id, name, who created it and when |
 | `members` | workspace, user, email, role, when they joined |
-| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it |
+| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often |
 | `updates` | the edit log: a running number, workspace, note id, the edit, who made it and when |
 | `blobs` | attachments under the hash of their bytes, with size, who stored them and when |
 | `audit` | who changed who may do what; kept even after a workspace is deleted |
@@ -321,7 +321,7 @@ new one. Only one sync engine runs on a vault at a time: a second one (another w
 command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
 
 **Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
-change a role, remove someone, make and cancel invite codes, stop syncing, leave or delete.
+change a role, remove someone, invite by email and cancel invitations, stop syncing, leave or delete.
 There is no separate team window.
 
 **Not built:** end-to-end encryption (whoever runs the relay can read the notes; see the
@@ -333,6 +333,70 @@ scripted flows: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`
 Device and relay exchange only what the other is missing; after that edits are relayed live.
 Cursors and presence pass through memory and are never stored. A personal vault is local-only
 by default; turning sync on makes it a one-person workspace on the same pipeline.
+
+### Files that are not notes (built; tried in the real app with a ChatGPT-plan model)
+
+A vault holds pictures, PDFs and CSVs beside its notes, and they sync like any attachment.
+
+- **Looking at one.** Clicking a file in the sidebar opens it in a tab: a picture as a picture,
+  a PDF in the system's own PDF view, a CSV as a table (first 1,000 rows), a text file as text.
+  Nothing is edited there. `file.read` hands a file over whole and `file.text` gives its words
+  (a PDF's text through `pdf-extract`), in parts for a long one.
+- **Attaching to the assistant.** The + in the message box, a drop or a paste puts a file with
+  the next message; "Ask about this" on an open file does the same. A file from outside is
+  first kept in `attachments/`, so the conversation can be reopened and a teammate has it too.
+  The conversation stores only the file's place (`{type: "attachment", path}`); what the model
+  is sent is made for each request in `lokus-ai/src/files.rs`: a picture as a picture (all
+  three providers), anything with words as up to 24,000 characters of them, the rest read with
+  `read_file`. A picture over 4.5 MB is named and left out.
+- **Files the assistant makes.** `create_file` writes a CSV, an SVG chart or a text file;
+  `create_pdf` writes a PDF from text laid out like a note (`file.pdf`, Latin letters only, since
+  it uses the fonts every reader has). Both ask first. What was made shows as a card under the
+  reply, a picture as itself, and opens in a tab.
+- **Not built.** Pictures made by an image model; looking at a picture already in the vault
+  without it being attached; scanned PDFs (no text in them); editing a CSV in place.
+
+### Workspaces and the switcher (built; tried in the real app)
+
+A workspace is a folder. A person can have several (one for a team, one for school) and
+nothing is shared between them. The shell keeps the list of every folder opened in Lokus
+(`vaults.json` beside `last-vault`; a folder that is gone drops out). The workspace's name at
+the top of the sidebar opens the switcher, after Notion's: the open workspace with Settings
+and Invite people, the others with "Team" on the shared ones, invitations waiting with a Join
+button, and "Add workspace", which makes a folder of that name in Documents. A new workspace
+is private; sharing it is one step under Settings, Team. Every window still shows the same
+workspace: switching in one switches them all.
+
+### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
+
+An owner types an address under Settings, Team. The relay emails that person from
+`noreply@lokusmd.com`; they sign in to Lokus with that address and the invitation is waiting.
+Nobody copies or pastes a code.
+
+- **Sending.** `POST /v1/workspaces/{id}/invites` with an `email` makes the invite and sends
+  it through Resend's HTTP API (`crates/lokus-server/src/mail.rs`). The relay needs
+  `LOKUS_MAIL_KEY` and `LOKUS_PUBLIC_URL`; without them it sends nothing and says so, and
+  invites go out as links as before. A reply to the email goes to the owner who invited.
+- **The email** (`assets/invitation.html`) says who invited whom to what, as what, with one
+  button and the three steps after it. It is the app's own colours, light and dark.
+- **The link** opens `/join/{code}` on the relay: the same facts, the installers for the newest
+  build, which address to sign in with, and the code for someone who signs in under another.
+- **Waiting.** `GET /v1/invites/mine` gives the invitations addressed to the signed-in
+  person's email. The app asks on sign-in and when the window is returned to. In first-run
+  setup it is the step after signing in, and joining skips the questions about pages (those
+  are the team's). Afterwards it is a card, and stays under Settings, Team if put away.
+- **Where the workspace lands.** A folder that holds the person's own notes is never merged
+  into a team silently: the card offers a new folder in Documents named after the workspace
+  (the default) or the open folder, saying how many notes would become the team's.
+- **Limits.** One live invitation per address per workspace (a new one replaces the old); not
+  to someone already inside; 60 emails a day per account; the same one again after a minute.
+  A person's name is not printed if it looks like a link or an address, and everything typed
+  by a person is escaped.
+- **What it rests on.** "Waiting for you" trusts the address in the sign-in, so email
+  confirmation must stay on in Supabase. The code in the link still works for whoever holds
+  it, once, as before.
+- **Not built.** A `lokus://` link that opens the app from the email (the app has no link
+  scheme yet); telling the owner when an invitation is declined.
 
 ### Attachments (built)
 

@@ -1,16 +1,18 @@
 /** @part-of ui.ai */
+import { ConnectModel, useModel } from "./Connect";
 import lokusMark from "./lokus.svg";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type { Entry } from "../../bridge/core";
+import { type Entry, vaultFileUrl } from "../../bridge/core";
 
 import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
-import { allFiles, app, getEditor, notify, renderMarkdown } from "../../shell/workspace";
+import { allFiles, app, getEditor, notify, openNote, renderMarkdown } from "../../shell/workspace";
 import { aiSettings } from "../../bridge/ai";
 import { Logo } from "../connections/logos";
 import { type Customer, loadCustomers, show as shown, threads, tone } from "../customers/data";
-import { answer, answerAll, ask, chat, forgetChat, type Item, type Kept, keptChats, openChat, reply, stop } from "./chat";
+import { fileName, fileTag, kindOf } from "../files/files";
+import { answer, answerAll, ask, attached, attachFile, chat, detach, forgetChat, type Item, type Kept, keptChats, openChat, reply, stop } from "./chat";
 import { ModelPicker } from "./ModelPicker";
 
 const TOOLS: Record<string, (input: Record<string, unknown>) => string> = {
@@ -22,6 +24,10 @@ const TOOLS: Record<string, (input: Record<string, unknown>) => string> = {
   show_graph: () => "Showing the graph",
   get_backlinks: (i) => `Finding links to ${String(i.path ?? "a note")}`,
   create_note: (i) => `Create ${String(i.path ?? "a note")}`,
+  read_file: (i) => `Reading ${String(i.path ?? "a file")}`,
+  list_files: (i) => `Looking at the files in ${String(i.folder || "the vault")}`,
+  create_file: (i) => `Create ${String(i.path ?? "a file")}`,
+  create_pdf: (i) => `Create ${String(i.path ?? "a PDF")}`,
   edit_note: (i) => `Edit ${String(i.path ?? "a note")}`,
   set_property: (i) => `Set ${String(i.key ?? "a property")} on ${String(i.path ?? "a note")}`,
   list_customers: () => "Looking at your customers",
@@ -57,7 +63,7 @@ function describe(name: string, input: Record<string, unknown>): string {
 /** What a change would do, shown before the person allows it. */
 function detail(name: string, input: Record<string, unknown>): string {
   if (name === "edit_note") return input.old_text ? `− ${String(input.old_text)}\n+ ${String(input.new_text ?? "")}` : `+ ${String(input.new_text ?? "")}`;
-  if (name === "create_note") return String(input.text ?? "");
+  if (name === "create_note" || name === "create_file" || name === "create_pdf") return String(input.text ?? "");
   if (name === "set_property") return `${String(input.key)}: ${JSON.stringify(input.value)}`;
   return JSON.stringify(input, null, 2);
 }
@@ -259,6 +265,44 @@ function Earlier() {
   );
 }
 
+/**
+ * A file in the conversation: one the person attached, or one the assistant made. A picture
+ * shows itself; anything else is a card with its name and kind. Clicking opens it in a tab.
+ */
+function FileCard({ path, onRemove, small }: { path: string; onRemove?: () => void; small?: boolean }) {
+  const root = useStore(app, (s) => s.vault?.root);
+  const picture = kindOf(path) === "image" && root;
+  return (
+    <span className={`ai-file${picture ? " picture" : ""}${small ? " small" : ""}`} title={path}>
+      <button className="ai-file-open" onClick={() => void openNote(path)}>
+        {picture ? (
+          <img src={vaultFileUrl(root, path)} alt={fileName(path)} />
+        ) : (
+          <>
+            <span className={`ai-file-tile ${kindOf(path)}`}>
+              <Icon name="file" size={14} />
+            </span>
+            <span className="ai-file-text">
+              <strong>{fileName(path)}</strong>
+              <small>{fileTag(path)}</small>
+            </span>
+          </>
+        )}
+      </button>
+      {onRemove && (
+        <button className="ai-file-remove" aria-label={`Remove ${fileName(path)}`} onClick={onRemove}>
+          <Icon name="close" size={10} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** The files a run of steps made, read from what the steps said they created. */
+function made(steps: Step[]): string[] {
+  return steps.flatMap((s) => ((s.name === "create_file" || s.name === "create_pdf") && s.status === "ok" && typeof s.input.path === "string" ? [s.input.path] : []));
+}
+
 /** Items as they are drawn: a run of finished or running steps becomes one block. */
 type Block = { kind: "steps"; steps: Step[]; live: boolean } | { kind: "item"; item: Item };
 
@@ -317,6 +361,7 @@ export function AiPanel() {
   const input = useRef<HTMLTextAreaElement>(null);
   /** Things worth doing right now, read from the customers; offered before the first question. */
   const [nudges, setNudges] = useState<string[]>([]);
+  const model = useModel();
   const version = useStore(app, (s) => s.version);
   useEffect(() => {
     void loadCustomers("customers").then(
@@ -368,10 +413,17 @@ export function AiPanel() {
     return [...starts, ...holds].slice(0, 8);
   }, [picking, targets]);
 
+  const files = useStore(attached, (s) => s.files);
+  const picker = useRef<HTMLInputElement>(null);
+  const [over, setOver] = useState(false);
+  const take = (list: FileList | File[] | null | undefined) => {
+    for (const file of Array.from(list ?? [])) void attachFile(file);
+  };
   const send = () => {
-    if (!draft.trim() || busy) return;
+    if ((!draft.trim() && !files.length) || busy) return;
     // Only what is still written in the message counts as pointed at.
-    void ask(draft, mentions.filter((m) => draft.includes(`@${m.name}`)).map((m) => m.path));
+    void ask(draft, mentions.filter((m) => draft.includes(`@${m.name}`)).map((m) => m.path), files);
+    attached.set({ files: [] });
     setDraft("");
     setMentions([]);
     setPicking(null);
@@ -425,7 +477,29 @@ export function AiPanel() {
   const pointed = mentions.filter((m) => draft.includes(`@${m.name}`));
 
   const compose = (
-    <div className="ai-compose" onClick={() => input.current?.focus()}>
+    <div
+      className={`ai-compose${over ? " over" : ""}`}
+      onClick={() => input.current?.focus()}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes("Files")) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setOver(false);
+        take(e.dataTransfer.files);
+      }}
+    >
+      {files.length > 0 && (
+        <div className="ai-files" onClick={(e) => e.stopPropagation()}>
+          {files.map((path) => (
+            <FileCard key={path} path={path} small onRemove={() => detach(path)} />
+          ))}
+        </div>
+      )}
       {picking && options.length > 0 && (
         <div className="ai-mentions" onMouseDown={(e) => e.preventDefault()}>
           {options.map((t, i) => (
@@ -459,7 +533,7 @@ export function AiPanel() {
         ref={input}
         rows={1}
         value={draft}
-        placeholder="Ask about your notes, @ to point at one"
+        placeholder="Ask about your notes, @ to point at one, + to attach a file"
         onChange={(e) => {
           setDraft(e.target.value);
           track(e.target.value, e.target.selectionStart);
@@ -467,8 +541,28 @@ export function AiPanel() {
         onKeyDown={onKey}
         onClick={(e) => track(e.currentTarget.value, e.currentTarget.selectionStart)}
         onBlur={() => setPicking(null)}
+        onPaste={(e) => {
+          // A screenshot or a copied file is attached; copied words are pasted as words.
+          if (!e.clipboardData.files.length) return;
+          e.preventDefault();
+          take(e.clipboardData.files);
+        }}
       />
       <div className="ai-compose-row" onClick={(e) => e.stopPropagation()}>
+        <button className="ai-attach" title="Attach a picture, a PDF or a CSV" aria-label="Attach a file" onClick={() => picker.current?.click()}>
+          <Icon name="plus" size={15} />
+        </button>
+        <input
+          ref={picker}
+          type="file"
+          multiple
+          hidden
+          accept="image/*,.pdf,.csv,.tsv,.txt,.json,.md"
+          onChange={(e) => {
+            take(e.target.files);
+            e.target.value = "";
+          }}
+        />
         <ModelPicker />
         <button className="ai-services" title={services.length ? `Connected: ${services.map(titled).join(", ")}` : "Connect the tools you use"} onClick={() => app.set({ settings: "connections" })}>
           {services.slice(0, 4).map((id) => (
@@ -487,7 +581,7 @@ export function AiPanel() {
             <Icon name="stop" size={11} />
           </button>
         ) : (
-          <button className="ai-send" title="Send (Enter)" onClick={send} disabled={!draft.trim()}>
+          <button className="ai-send" title="Send (Enter)" onClick={send} disabled={!draft.trim() && !files.length}>
             <Icon name="send" size={15} />
           </button>
         )}
@@ -499,6 +593,15 @@ export function AiPanel() {
 
   // Before the first question the box sits in the middle with a few ways to start; after it, the
   // conversation takes the space and the box stays at the bottom.
+  if (model.ready === false && items.length === 0) {
+    return (
+      <div className="ai ai-start">
+        <h2>Turn the assistant on</h2>
+        <p>It needs a model to think with. Connect one and it can read your notes and tools, and do the linking work for you.</p>
+        <ConnectModel from="panel" onDone={model.recheck} />
+      </div>
+    );
+  }
   if (items.length === 0) {
     return (
       <div className="ai ai-start">
@@ -530,11 +633,32 @@ export function AiPanel() {
     <div className="ai">
       <div className="ai-scroll" ref={scroll}>
         {blocks(items, busy).map((block, i) => {
-          if (block.kind === "steps") return <Steps key={i} steps={block.steps} live={block.live} />;
+          if (block.kind === "steps") {
+            const files = made(block.steps);
+            return (
+              <div key={i} className="ai-steps-block">
+                <Steps steps={block.steps} live={block.live} />
+                {files.length > 0 && (
+                  <div className="ai-made">
+                    {files.map((path) => (
+                      <FileCard key={path} path={path} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          }
           const item = block.item;
           return item.kind === "user" ? (
-            <div key={i} className="ai-user">
-              {item.text}
+            <div key={i} className="ai-user-turn">
+              {item.files && item.files.length > 0 && (
+                <div className="ai-sent-files">
+                  {item.files.map((path) => (
+                    <FileCard key={path} path={path} small />
+                  ))}
+                </div>
+              )}
+              {item.text && <div className="ai-user">{item.text}</div>}
             </div>
           ) : item.kind === "assistant" ? (
             // A reply that is only white space (some models send one before using a tool) is not shown.

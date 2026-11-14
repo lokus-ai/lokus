@@ -57,6 +57,16 @@ export function onVaultChanged(handler: (paths: string[]) => void): () => void {
   return () => void stop.then((off) => off());
 }
 
+/** Every workspace on this computer: the folders this person has opened in Lokus. */
+export function listVaults(): Promise<VaultInfo[]> {
+  return invoke<VaultInfo[]>("vault_list");
+}
+
+/** Take a workspace off the list. Its folder stays where it is. */
+export function forgetVault(root: string): Promise<void> {
+  return invoke("vault_forget", { root });
+}
+
 export function onVaultOpened(handler: (vault: VaultInfo) => void): () => void {
   const stop = listen<VaultInfo>("vault:opened", (e) => handler(e.payload));
   return () => void stop.then((off) => off());
@@ -161,11 +171,14 @@ export async function newWindow(): Promise<void> {
 /** Whether this is the first window, the one the app opened with. */
 export const isMainWindow = () => getCurrentWindow().label === "main";
 
-/** Where notes go when someone does not pick a folder: Documents, Lokus. */
-export async function defaultVault(open: boolean): Promise<VaultInfo> {
+/**
+ * Where notes go when someone does not pick a folder: Documents, Lokus. With a `name`, a folder
+ * of that name in Documents instead, which is where a team's workspace is put.
+ */
+export async function defaultVault(open: boolean, name?: string): Promise<VaultInfo> {
   try {
-    const found = await invoke<{ root: string; name?: string }>("vault_default", { open });
-    return { name: found.name ?? "Lokus", root: found.root };
+    const found = await invoke<{ root: string; name?: string }>("vault_default", { open, name: name ?? null });
+    return { name: found.name ?? name ?? "Lokus", root: found.root };
   } catch (raw) {
     throw toCoreError(raw);
   }

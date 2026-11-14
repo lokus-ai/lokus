@@ -1,7 +1,7 @@
 /** @part-of ui.updates */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { DOWNLOAD_PAGE, openWeb, type Post, UPDATE_SERVER } from "../../bridge/updates";
+import { DOWNLOAD_PAGE, misplaced, openWeb, type Post, quitApp, UPDATE_SERVER } from "../../bridge/updates";
 import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { renderMarkdown } from "../../shell/workspace";
@@ -108,6 +108,38 @@ export function UpdateCard() {
           </div>
         </>
       )}
+    </aside>
+  );
+}
+
+/**
+ * Shown when Lokus was opened straight from the disk it was downloaded in, or from anywhere
+ * else it cannot stay. People do this all the time: they double-click the download and start
+ * working. From there it cannot update, and it disappears when the disk is ejected.
+ */
+export function Misplaced() {
+  const [why, setWhy] = useState<string | null>(null);
+  const [later, setLater] = useState(false);
+  useEffect(() => void misplaced().then(setWhy, () => {}), []);
+  if (!why || later) return null;
+  return (
+    <aside className="update-card misplaced" role="alert">
+      <h3>Move Lokus into Applications first</h3>
+      <p>You opened Lokus from the download itself. It works, but it cannot update from here and it will vanish when that disk is ejected.</p>
+      <ol>
+        <li>Quit Lokus (the button below).</li>
+        <li>In the window that opened when you downloaded it, drag the Lokus icon onto the Applications folder.</li>
+        <li>Open Lokus from Applications or Launchpad.</li>
+      </ol>
+      <p className="update-note">Your notes and settings are not on that disk. Nothing is lost.</p>
+      <div className="update-actions">
+        <button className="primary" onClick={quitApp}>
+          Quit Lokus
+        </button>
+        <button className="link" onClick={() => setLater(true)}>
+          Not now
+        </button>
+      </div>
     </aside>
   );
 }

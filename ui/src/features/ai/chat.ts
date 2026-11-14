@@ -7,13 +7,56 @@ import { allFiles, app, getEditor, notify, openNote, refreshTree, showGraph } fr
 
 /** One thing shown in the conversation. */
 export type Item =
-  | { kind: "user"; text: string; note?: string }
+  | { kind: "user"; text: string; note?: string; files?: string[] }
   | { kind: "assistant"; text: string; live: boolean }
   | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; status: "asking" | "running" | "ok" | "failed"; result?: string }
   | { kind: "question"; id: string; question: string; options: string[]; multiple: boolean; answer?: string }
   | { kind: "notice"; text: string; error?: boolean; code?: string };
 
 export const chat = createStore<{ items: Item[]; busy: boolean; history: boolean }>({ items: [], busy: false, history: false });
+
+/** Files waiting in the message box to go with the next message, by their place in the vault. */
+export const attached = createStore<{ files: string[] }>({ files: [] });
+
+/** The largest file that can be attached; the same limit the vault puts on any file. */
+const MAX_ATTACHMENT = 25 * 1024 * 1024;
+
+/** Put a file already in the vault with the next message, and show the assistant. */
+export function attachToChat(path: string): void {
+  attached.set((s) => ({ files: s.files.includes(path) ? s.files : [...s.files, path] }));
+  if (app.get().panel?.kind !== "ai") app.set({ panel: { kind: "ai" } });
+}
+
+export function detach(path: string): void {
+  attached.set((s) => ({ files: s.files.filter((f) => f !== path) }));
+}
+
+/**
+ * Take a file from the person's computer (picked, dropped or pasted), keep it in the vault's
+ * attachments folder, and put it with the next message. Kept in the vault so the conversation
+ * can be reopened later, and so a teammate carrying it on has the file too.
+ */
+export async function attachFile(file: File): Promise<void> {
+  if (file.size > MAX_ATTACHMENT) return notify(`${file.name} is larger than 25 MB`);
+  const taken = new Set(allFiles().map((p) => p.toLowerCase()));
+  const dot = file.name.lastIndexOf(".");
+  const [stem, ext] = dot > 0 ? [file.name.slice(0, dot), file.name.slice(dot)] : [file.name || "Pasted", ""];
+  let path = `attachments/${stem}${ext || ".png"}`;
+  for (let n = 2; taken.has(path.toLowerCase()); n++) path = `attachments/${stem} ${n}${ext || ".png"}`;
+  const base64 = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+  try {
+    await runCore("file.write", { path, base64 });
+    await refreshTree().catch(() => {});
+    attachToChat(path);
+  } catch (e) {
+    notify(e instanceof Error ? e.message : String(e));
+  }
+}
 
 /** A conversation kept on this device, as the list shows it. */
 export interface Kept {
@@ -240,8 +283,9 @@ function traced(id: string, began: number, question: string, outcome: AiOutcome 
 }
 
 /** Ask a question. `mentions` are the paths of notes (or folders, ending in "/") picked with @. */
-export async function ask(text: string, mentions: string[] = []): Promise<void> {
-  const question = text.trim();
+export async function ask(text: string, mentions: string[] = [], files: string[] = []): Promise<void> {
+  // A file sent with no words is still a question: what is this?
+  const question = text.trim() || (files.length ? (files.length === 1 ? "Take a look at this file." : "Take a look at these files.") : "");
   if (!question || chat.get().busy) return;
   if (!listening) {
     listening = true;
@@ -256,14 +300,16 @@ export async function ask(text: string, mentions: string[] = []): Promise<void> 
   }
   const note = app.get().active;
   allowed.clear();
-  chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: question, note: note ?? undefined }] }));
+  chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: text.trim(), note: note ?? undefined, files: files.length ? files : undefined }] }));
   const sending = chatId;
-  let pending: { role: string; content: string } | null = null;
+  let pending: { role: string; content: unknown } | null = null;
   let began = 0;
-  track("assistant_asked", { mentions: mentions.length, turn: chat.get().items.filter((i) => i.kind === "user").length });
+  track("assistant_asked", { files: files.length, mentions: mentions.length, turn: chat.get().items.filter((i) => i.kind === "user").length });
   try {
     const state = await appState(mentions);
-    const message = { role: "user", content: state.text + question };
+    // A file goes as its place in the vault; what it holds is put in when the request is made.
+    const said = state.text + question;
+    const message = { role: "user", content: files.length ? [{ type: "text", text: said }, ...files.map((path) => ({ type: "attachment", path }))] : said };
     pending = message;
     unanswered = message;
     // Kept at once, before the first step: a reply cut off early is still found again.
@@ -317,7 +363,7 @@ function keep(): void {
 }
 
 /** The request being answered right now; null between replies. */
-let unanswered: { role: string; content: string } | null = null;
+let unanswered: { role: string; content: unknown } | null = null;
 let keeping = 0;
 
 /** Save as it goes, a moment after each step, so little is lost if the app closes mid-reply. */

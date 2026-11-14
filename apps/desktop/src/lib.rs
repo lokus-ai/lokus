@@ -5,10 +5,11 @@
 
 mod account;
 mod ai;
-#[cfg(all(debug_assertions, unix, desktop))]
+#[cfg(all(debug_assertions, desktop))]
 mod dev_channel;
 mod sync;
 mod updates;
+mod vaults;
 mod windows;
 
 use std::path::PathBuf;
@@ -88,6 +89,7 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
         }
         let _ = std::fs::write(file, vault.root().to_string_lossy().as_bytes());
     }
+    vaults::remember(app, vault.root());
     let shell = app.state::<Shell>();
     if let Ok(mut open) = shell.open.lock() {
         *open = Some(OpenVault {
@@ -118,14 +120,22 @@ fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
 
 /// The folder notes are kept in when someone does not want to choose one: Documents, Lokus.
 /// With `open` it is made if need be and opened; without, only its place is told.
+/// A `name` asks for a folder of that name instead, for a team's workspace joined by invitation.
 #[tauri::command(async)]
-fn vault_default(app: AppHandle, open: bool) -> Result<Value, Value> {
+fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Value, Value> {
+    // A workspace's name is whatever its owner typed; only what is safe as a folder is kept.
+    let named: String = name
+        .unwrap_or_default()
+        .chars()
+        .filter(|c| !c.is_control() && !"/\\:".contains(*c))
+        .collect();
+    let named = named.trim().trim_start_matches('.').trim();
     let folder = app
         .path()
         .document_dir()
         .or_else(|_| app.path().home_dir())
         .map_err(|e| json!({ "code": "io", "message": format!("Could not find your Documents folder: {e}") }))?
-        .join("Lokus");
+        .join(if named.is_empty() { "Lokus" } else { named });
     if !open {
         return Ok(json!({ "root": folder }));
     }
@@ -189,6 +199,11 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let close_tab = MenuItemBuilder::with_id("close-tab", "Close Tab")
         .accelerator("CmdOrCtrl+W")
         .build(app)?;
+    // The system's own "Close Window" also answers to Cmd+W, and it won: Cmd+W closed the
+    // window, and with it the app, instead of the tab. Ours takes Cmd+Shift+W.
+    let close_window = MenuItemBuilder::with_id("close-window", "Close Window")
+        .accelerator("CmdOrCtrl+Shift+W")
+        .build(app)?;
     let app_menu = SubmenuBuilder::new(app, "Lokus")
         .about(None)
         .separator()
@@ -207,7 +222,7 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .item(&new_window)
         .separator()
         .item(&close_tab)
-        .close_window()
+        .item(&close_window)
         .build()?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .undo()
@@ -228,37 +243,12 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .build()
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(updates::Updates::default())
-        .manage(Shell::default())
-        .manage(sync::Sync::default())
-        .manage(ai::Ai::default())
-        .register_uri_scheme_protocol("lokus-plugin", |ctx, request| {
-            plugin_file(ctx.app_handle(), request.uri().path())
-        });
-    #[cfg(desktop)]
-    let builder = builder.menu(menu).on_menu_event(|app, event| {
-        match event.id().as_ref() {
-            "close-tab" => windows::tell_front(app, "menu:close-tab"),
-            "new-window" => {
-                let app = app.clone();
-                // Off the menu's own thread: a window cannot be made from inside its handler.
-                tauri::async_runtime::spawn(async move {
-                    let _ = windows::open(&app);
-                });
-            }
-            _ => {}
-        }
-    });
-
-    #[cfg(all(debug_assertions, unix, desktop))]
-    let builder = builder
-        .manage(dev_channel::Pending::default())
-        .invoke_handler(tauri::generate_handler![
+/// Every command the window may call, written once. A development build adds the one that
+/// answers the terminal. There used to be two lists, and a command added to only the
+/// development one (the list of services to connect) was missing from the released app.
+macro_rules! commands {
+    ($($extra:path),*) => {
+        tauri::generate_handler![
             core_run,
             vault_open,
             vault_current,
@@ -290,50 +280,56 @@ pub fn run() {
             updates::update_restart,
             updates::app_about,
             updates::open_web,
+            updates::app_place,
+            updates::app_quit,
             windows::window_new,
             vault_default,
-            dev_channel::dev_reply
-        ])
+            vaults::vault_list,
+            vaults::vault_forget,
+            $($extra),*
+        ]
+    };
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::default())
+        .manage(Shell::default())
+        .manage(sync::Sync::default())
+        .manage(ai::Ai::default())
+        .register_uri_scheme_protocol("lokus-plugin", |ctx, request| {
+            plugin_file(ctx.app_handle(), request.uri().path())
+        });
+    #[cfg(desktop)]
+    let builder = builder.menu(menu).on_menu_event(|app, event| {
+        match event.id().as_ref() {
+            "close-tab" => windows::tell_front(app, "menu:close-tab"),
+            "close-window" => windows::close_front(app),
+            "new-window" => {
+                let app = app.clone();
+                // Off the menu's own thread: a window cannot be made from inside its handler.
+                tauri::async_runtime::spawn(async move {
+                    let _ = windows::open(&app);
+                });
+            }
+            _ => {}
+        }
+    });
+
+    #[cfg(all(debug_assertions, desktop))]
+    let builder = builder
+        .manage(dev_channel::Pending::default())
+        .invoke_handler(commands!(dev_channel::dev_reply))
         .setup(|app| {
             dev_channel::start(app.handle().clone());
             Ok(())
         });
 
-    #[cfg(not(all(debug_assertions, unix, desktop)))]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        core_run,
-        vault_open,
-        vault_current,
-        sync::sync_connect,
-        sync::sync_disconnect,
-        sync::sync_token,
-        sync::sync_status,
-        sync::sync_doc,
-        sync::sync_local,
-        sync::sync_awareness,
-        sync::relay_call,
-        account::account_browser_login,
-        ai::ai_settings,
-        ai::ai_settings_save,
-        ai::ai_secret_set,
-        ai::ai_models,
-        ai::ai_mcp_check,
-        ai::ai_mcp_login,
-        ai::ai_mcp_logout,
-        ai::ai_chatgpt_login,
-        ai::ai_chatgpt_logout,
-        ai::ai_send,
-        ai::ai_stop,
-        ai::ai_approve,
-        ai::ai_act_done,
-        updates::update_check,
-        updates::update_install,
-        updates::update_restart,
-        updates::app_about,
-        updates::open_web,
-        windows::window_new,
-        vault_default
-    ]);
+    #[cfg(not(all(debug_assertions, desktop)))]
+    let builder = builder.invoke_handler(commands!());
 
     builder
         .run(tauri::generate_context!())

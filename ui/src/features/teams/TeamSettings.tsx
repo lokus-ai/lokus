@@ -4,13 +4,12 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
-import { app, connectSync, disconnectSync, notify } from "../../shell/workspace";
-import { DataDoor } from "../customers/DataDoor";
+import { app, connectSync, disconnectSync } from "../../shell/workspace";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
-
-type Role = "owner" | "editor" | "viewer";
+import { type Invite, InviteDialog, InvitedList, PendingRows } from "./Invite";
+import { HOME, lookForInvites, type Role } from "./invites";
 
 interface Workspace {
   id: string;
@@ -24,31 +23,12 @@ interface Member {
   role: Role;
 }
 
-/** An invite nobody has used yet. */
-interface Invite {
-  code: string;
-  role: Role;
-  expires_at: number;
-}
-
 const ROLES: Record<Role, string> = { owner: "Owner", editor: "Editor", viewer: "Viewer" };
-const CAN: Record<Role, string> = { owner: "Can edit, invite and remove people", editor: "Can edit notes", viewer: "Can read notes" };
 const STATUS: Record<string, string> = {
   connecting: "Connecting…",
   online: "Up to date.",
   offline: "Offline. Your edits are kept and sent when the connection returns.",
 };
-/** The relay this build syncs through; empty when the build has none. */
-const HOME = (import.meta.env.VITE_LOKUS_RELAY as string | undefined) ?? "";
-
-/** "6 days", "3 hours": how long an invite still works. */
-function until(seconds: number): string {
-  const left = seconds - Date.now() / 1000;
-  if (left >= 36 * 3600) return `${Math.round(left / 86400)} days`;
-  if (left >= 5400) return `${Math.round(left / 3600)} hours`;
-  return `${Math.max(1, Math.round(left / 60))} minutes`;
-}
-
 /** Settings, Team: sync this vault with other people, and say who they are and what they may do. */
 export function TeamSettings() {
   const current = useStore(app, (s) => s.sync);
@@ -63,12 +43,14 @@ export function TeamSettings() {
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
-  const [name, setName] = useState("");
+  // A private workspace is shared under its own name unless another is typed.
+  const [name, setName] = useState(vault?.name ?? "");
   const [code, setCode] = useState("");
-  const [fresh, setFresh] = useState<{ code: string; role: string } | null>(null);
   /** The irreversible thing the person has clicked once and must confirm. */
   const [confirming, setConfirming] = useState<"leave" | "delete" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [tab, setTab] = useState<"members" | "invited">("members");
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
@@ -113,6 +95,8 @@ export function TeamSettings() {
   useEffect(() => {
     void loadTeam();
   }, [loadTeam]);
+  // Opening this page is a good moment to ask again whether anyone has invited this person.
+  useEffect(() => void lookForInvites(), []);
 
   const connect = (workspace: string) => void connectSync(server, workspace, accountToken ? null : token);
   const create = async (e: FormEvent) => {
@@ -140,10 +124,6 @@ export function TeamSettings() {
     await loadTeam();
     return done;
   };
-  const invite = async (role: "editor" | "viewer") => {
-    const made = await change("POST", "/invites", { role });
-    if (made?.code) setFresh({ code: made.code, role });
-  };
   const leave = async () => {
     if (current.user && (await change("DELETE", `/members/${encodeURIComponent(current.user)}`))) await disconnectSync();
     setConfirming(null);
@@ -154,26 +134,52 @@ export function TeamSettings() {
     setConfirming(null);
   };
   const owners = members.filter((m) => m.role === "owner").length;
+  const teamName = here?.name ?? "Workspace";
 
   if (connected) {
     return (
-      <Section title="Team" hint="This vault is shared. Everyone in the workspace keeps a full copy and can work offline.">
-        <Row
-          label={here?.name ?? "Workspace"}
-          hint={
-            <>
+      <Section title="Team">
+        <div className="team-head">
+          <div className="team-head-main">
+            <strong>{teamName}</strong>
+            <small>
               <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]}
-              {current.role ? ` You are ${current.role === "owner" ? "an owner" : current.role === "editor" ? "an editor" : "a viewer"}.` : ""}
-            </>
-          }
-        >
-          <button className="settings-button" onClick={() => void disconnectSync()}>
-            Stop syncing on this computer
-          </button>
-        </Row>
+              </small>
+          </div>
+          {owner && token && (
+            <button className="primary team-invite-button" onClick={() => setInviting(true)}>
+              Invite people
+            </button>
+          )}
+        </div>
+        {inviting && owner && token && (
+          <InviteDialog
+            server={server}
+            token={token}
+            base={base}
+            workspace={teamName}
+            onClose={() => setInviting(false)}
+            reload={async () => {
+              await loadTeam();
+              setTab("invited");
+            }}
+          />
+        )}
 
-        <h3>People</h3>
-        <div className="settings-list">
+        <div className="team-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === "members"} className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}>
+            Members <span>{members.length}</span>
+          </button>
+          {owner && (
+            <button role="tab" aria-selected={tab === "invited"} className={tab === "invited" ? "on" : ""} onClick={() => setTab("invited")}>
+              Invited <span>{invites.length}</span>
+            </button>
+          )}
+        </div>
+        {tab === "invited" && owner && token ? (
+          <PendingRows server={server} token={token} base={base} invites={invites} reload={loadTeam} />
+        ) : (
+        <div className="settings-list team-list">
           {members.map((m) => {
             const me = m.user === current.user;
             // The only owner cannot be made less, or the workspace would have nobody in charge.
@@ -187,11 +193,11 @@ export function TeamSettings() {
                     {me && <span className="settings-version"> you</span>}
                   </strong>
                   <small>
-                    {[profiles[(m.email ?? "").toLowerCase()]?.role, m.email, CAN[m.role]].filter(Boolean).join(" · ")}
+                    {[profiles[(m.email ?? "").toLowerCase()]?.role, m.email].filter(Boolean).join(", ")}
                   </small>
                 </div>
                 {fixed ? (
-                  <span className="team-role">{ROLES[m.role]}</span>
+                  <span className={`team-pill ${m.role}`}>{ROLES[m.role]}</span>
                 ) : (
                   <select value={m.role} aria-label={`Role of ${m.email ?? m.user}`} onChange={(e) => void change("PATCH", `/members/${encodeURIComponent(m.user)}`, { role: e.target.value })}>
                     {(Object.keys(ROLES) as Role[]).map((r) => (
@@ -210,56 +216,18 @@ export function TeamSettings() {
             );
           })}
         </div>
-
-        {owner && (
-          <>
-            <h3>Invite someone</h3>
-            <Row label="Invite codes" hint="A code works once and for 7 days. Send it to one person; they paste it under Team in their own Lokus.">
-              <button className="settings-button" onClick={() => void invite("editor")}>
-                Invite an editor
-              </button>
-              <button className="settings-button" onClick={() => void invite("viewer")}>
-                Invite a viewer
-              </button>
-            </Row>
-            {fresh && (
-              <div className="team-code-row">
-                <code className="team-code">{fresh.code}</code>
-                <button className="settings-button" onClick={() => void navigator.clipboard.writeText(fresh.code).then(() => notify("Invite code copied"))}>
-                  Copy
-                </button>
-              </div>
-            )}
-            {invites.length > 0 && (
-              <div className="settings-list">
-                {invites.map((i) => (
-                  <div key={i.code} className="settings-item">
-                    <div className="settings-item-main">
-                      <strong>Invite for {i.role === "editor" ? "an editor" : "a viewer"}</strong>
-                      <small>
-                        Not used yet. Works for {until(i.expires_at)}. Code ends in {i.code.slice(-6)}
-                      </small>
-                    </div>
-                    <button
-                      className="link"
-                      onClick={() => {
-                        if (fresh?.code === i.code) setFresh(null);
-                        void change("DELETE", `/invites/${i.code}`);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
         )}
 
-        {owner && token && current.workspace && <DataDoor server={server} token={token} workspace={current.workspace} />}
+        <InvitedList />
 
+
+        <Row label="Stop syncing on this computer">
+          <button className="settings-button" onClick={() => void disconnectSync()}>
+            Stop syncing
+          </button>
+        </Row>
         {current.user && !(owner && owners === 1) && (
-          <Row label="Leave this workspace" hint="You stop receiving changes and need a new invite to come back. Your notes stay on this computer.">
+          <Row label="Leave this workspace">
             {confirming === "leave" ? (
               <>
                 <button className="settings-button danger" onClick={() => void leave()}>
@@ -277,7 +245,7 @@ export function TeamSettings() {
           </Row>
         )}
         {owner && (
-          <Row label="Delete this workspace" hint="Removes the shared copy and its history for everyone. Each person keeps the notes already on their own computer.">
+          <Row label="Delete this workspace" hint="For everyone. Notes already on each computer stay.">
             {confirming === "delete" ? (
               <>
                 <button className="settings-button danger" onClick={() => void remove()}>
@@ -302,6 +270,7 @@ export function TeamSettings() {
   return (
     <Section title="Team" hint={`Share ${vault ? `“${vault.name}”` : "this vault"} with other people. Everyone keeps a full copy and can work offline.`}>
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
+      <InvitedList />
       {!token && !ownServer ? (
         <Row label="Sign in first" hint="A team needs to know who you are.">
           <button className="settings-button" onClick={() => app.set({ settings: null, accountDialog: true })}>
@@ -330,15 +299,15 @@ export function TeamSettings() {
             </>
           )}
           <form onSubmit={create}>
-            <Row label="Start a new workspace" hint="You become its owner and can invite people.">
+            <Row label="Share this workspace with a team">
               <input value={name} placeholder="Workspace name" onChange={(e) => setName(e.target.value)} />
-              <button className="settings-button" disabled={!token || !name.trim()}>
-                Create
+              <button className="primary" disabled={!token || !name.trim()}>
+                Share
               </button>
             </Row>
           </form>
           <form onSubmit={join}>
-            <Row label="Join with an invite" hint="Paste the code someone sent you.">
+            <Row label="Join with a code" hint="For an invite that came as a link. One sent to your email shows up here by itself.">
               <input value={code} placeholder="Invite code" spellCheck={false} onChange={(e) => setCode(e.target.value)} />
               <button className="settings-button" disabled={!token || !code.trim()}>
                 Join
