@@ -11,8 +11,8 @@ previous app (Lokus 1) is kept at the tag `v1-legacy`.
 ## Get it
 
 Early builds for Macs, for people who do not mind rough edges:
-[Apple Silicon](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.3/Lokus_2.0.0-alpha.3_aarch64.dmg)
-or [Intel](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.3/Lokus_2.0.0-alpha.3_x86_64.dmg).
+[Apple Silicon](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.4/Lokus_2.0.0-alpha.4_aarch64.dmg)
+or [Intel](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.4/Lokus_2.0.0-alpha.4_x86_64.dmg).
 Open the download and drag Lokus into Applications. It updates itself from then on.
 
 ## What it does
