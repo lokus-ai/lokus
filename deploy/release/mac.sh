@@ -28,24 +28,44 @@ export APPLE_SIGNING_IDENTITY="$IDENTITY"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$(pwd)/target/release-build}"
 ARCH=$(uname -m | sed 's/arm64/aarch64/')
 
-pnpm tauri build --bundles app,dmg --config apps/desktop/release.conf.json --config "{\"version\":\"$VERSION\"}"
+# Only the app is built here. Tauri's own disk-image step mounts a temporary disk and has to
+# unmount it again, which fails on a Mac where something (Spotlight, a file-sync tool) grabs
+# every disk that appears; the image is made below in a way that never mounts anything.
+pnpm tauri build --bundles app --config apps/desktop/release.conf.json --config "{\"version\":\"$VERSION\"}"
 
 OUT="$CARGO_TARGET_DIR/release/bundle"
 APP=$(ls -d "$OUT"/macos/*.app | head -1)
-DMG=$(ls "$OUT"/dmg/*.dmg | head -1)
-[ -d "$APP" ] && [ -f "$DMG" ] && [ -f "$APP.tar.gz.sig" ] || { echo "the build did not leave an app, a disk image and a signed update file in $OUT"; exit 1; }
+[ -d "$APP" ] && [ -f "$APP.tar.gz.sig" ] || { echo "the build did not leave an app and a signed update file in $OUT"; exit 1; }
 codesign --verify --deep --strict "$APP" && echo "signed: $APP"
+DMG="$OUT/Lokus_${VERSION}_$ARCH.dmg"
 
 if xcrun notarytool history --keychain-profile lokus >/dev/null 2>&1; then
-  xcrun notarytool submit "$DMG" --keychain-profile lokus --wait
-  xcrun stapler staple "$DMG"
+  # Apple checks a copy of the app; the ticket it gives back is attached to the app itself.
+  ZIP="$OUT/notarize.zip"
+  ditto -c -k --keepParent "$APP" "$ZIP"
+  xcrun notarytool submit "$ZIP" --keychain-profile lokus --wait
+  rm -f "$ZIP"
   xcrun stapler staple "$APP"
-  # The update file was packed before the ticket was stapled; pack and sign it again.
+  # The update file was packed before the ticket was attached; pack and sign it again.
   tar -czf "$APP.tar.gz" -C "$(dirname "$APP")" "$(basename "$APP")"
   pnpm -s tauri signer sign "$APP.tar.gz" >/dev/null
+  NOTARIZED=yes
   echo "notarized"
 else
+  NOTARIZED=no
   echo "NOT NOTARIZED: no stored credentials. A downloaded copy will be blocked by macOS until this is done."
+fi
+
+# The disk image people download: the app and a shortcut to Applications to drag it onto.
+STAGE="$OUT/dmg-stage"
+mkdir -p "$STAGE/Lokus.app"
+rsync -a --delete "$APP/" "$STAGE/Lokus.app/"
+[ -L "$STAGE/Applications" ] || ln -s /Applications "$STAGE/Applications"
+hdiutil create -volname "Lokus" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+codesign --sign "$IDENTITY" "$DMG"
+if [ "$NOTARIZED" = yes ]; then
+  xcrun notarytool submit "$DMG" --keychain-profile lokus --wait
+  xcrun stapler staple "$DMG"
 fi
 
 DIST="dist-release/$VERSION"
