@@ -27,6 +27,16 @@ export interface AiConfig {
   base_url: string;
   auto_approve: boolean;
   mcp: McpServer[];
+  /** The team's own systems, called as they are. */
+  apis?: OwnApi[];
+}
+
+/** A team's own API: its address, and a few words for the assistant on where to start. */
+export interface OwnApi {
+  name: string;
+  url: string;
+  about: string;
+  enabled: boolean;
 }
 
 /** Settings as the window sees them. Keys stay in the keychain; only whether one exists is known here. */
@@ -38,6 +48,8 @@ export interface AiSettings {
   /** Names of tool servers the person has signed in to. */
   signed_in: string[];
   plugin_servers: McpServer[];
+  /** Which of the team's own systems have a key saved. */
+  api_keys?: string[];
 }
 
 export type AiEvent =
@@ -71,7 +83,7 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 export const aiSettings = () => call<AiSettings>("ai_settings");
 export const saveAiConfig = (config: AiConfig) => call<void>("ai_settings_save", { config });
 /** Store a provider key or tool-server token in the keychain; an empty value removes it. */
-export const setAiSecret = (kind: "provider" | "mcp", name: string, value: string) => call<void>("ai_secret_set", { kind, name, value });
+export const setAiSecret = (kind: "provider" | "mcp" | "api", name: string, value: string) => call<void>("ai_secret_set", { kind, name, value });
 export const aiModels = () => call<string[]>("ai_models");
 export const checkMcp = (server: McpServer) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server });
 /** Sign in to a tool server in the browser; resolves when the browser has come back. */

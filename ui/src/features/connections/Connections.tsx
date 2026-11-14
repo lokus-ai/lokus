@@ -31,6 +31,8 @@ export function Connections() {
   const [kind, setKind] = useState("");
   const [own, setOwn] = useState({ name: "", url: "", token: "" });
   const [adding, setAdding] = useState(false);
+  const [api, setApi] = useState({ name: "", url: "", key: "", about: "" });
+  const [addingApi, setAddingApi] = useState(false);
 
   const reload = useCallback(() => aiSettings().then(setSettings, (e) => setNote(message(e))), []);
   useEffect(() => {
@@ -80,6 +82,26 @@ export function Connections() {
     await mcpLogout(name).catch(() => {});
     await setAiSecret("mcp", name, "").catch(() => {});
     await save({ mcp: config.mcp.filter((s) => s.name !== name) });
+    await reload();
+  };
+  const apis = config.apis ?? [];
+  const addApi = async () => {
+    const name = api.name.trim().toLowerCase().replace(/\s+/g, "-");
+    const url = api.url.trim().replace(/\/+$/, "");
+    if (!/^[a-z0-9-]+$/.test(name) || !/^https:\/\/|^http:\/\/(localhost|127\.0\.0\.1)/.test(url) || apis.some((a) => a.name === name)) {
+      setNote("It needs a short name that is not taken (letters, digits and dashes) and an address starting with https://.");
+      return;
+    }
+    if (api.key.trim()) await setAiSecret("api", name, api.key).catch((e) => setNote(message(e)));
+    await save({ apis: [...apis, { name, url, about: api.about.trim(), enabled: true }] });
+    track("connection_added", { service: "own_api", from: "settings" });
+    setApi({ name: "", url: "", key: "", about: "" });
+    setAddingApi(false);
+    await reload();
+  };
+  const removeApi = async (name: string) => {
+    await setAiSecret("api", name, "").catch(() => {});
+    await save({ apis: apis.filter((a) => a.name !== name) });
     await reload();
   };
   const addOwn = async () => {
@@ -257,6 +279,56 @@ export function Connections() {
 
       <section>
         <div className="conn-list">
+          {apis.map((a) => (
+            <div key={a.name} className="conn-row linked">
+              <div className="conn-line">
+                <span className="conn-logo plain">{a.name.slice(0, 1).toUpperCase()}</span>
+                <div className="conn-main">
+                  <strong>{a.name}</strong>
+                  <small>
+                    <span className={`conn-state${a.enabled ? "" : " off"}`}>{a.enabled ? "Connected" : "Switched off"}</span>
+                    {a.url}
+                    {settings.api_keys?.includes(a.name) ? "" : " · no key saved"}
+                  </small>
+                </div>
+                <button role="switch" aria-checked={a.enabled} aria-label={`Use ${a.name}`} className={`switch${a.enabled ? " on" : ""}`} onClick={() => void save({ apis: apis.map((x) => (x.name === a.name ? { ...x, enabled: !x.enabled } : x)) })} />
+                <button className="link" onClick={() => void removeApi(a.name)}>
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+          <div className="conn-row">
+            <div className="conn-line">
+              <span className="conn-logo plain">
+                <Icon name="globe" size={16} />
+              </span>
+              <div className="conn-main">
+                <strong>Your own product’s API</strong>
+                <small>If your product has an admin or staff API, the assistant can read from it and, when you allow it, act in it. Nothing to build on your side.</small>
+              </div>
+              {!addingApi && (
+                <button className="settings-button" onClick={() => setAddingApi(true)}>
+                  <Icon name="plus" size={13} />
+                  Add
+                </button>
+              )}
+            </div>
+            {addingApi && (
+              <div className="conn-own api">
+                <input autoFocus value={api.name} placeholder="Name, like clean" onChange={(e) => setApi({ ...api, name: e.target.value })} />
+                <input value={api.url} placeholder="https://app.yourproduct.com" onChange={(e) => setApi({ ...api, url: e.target.value })} />
+                <input type="password" value={api.key} placeholder="Key (sent as a Bearer token)" autoComplete="off" onChange={(e) => setApi({ ...api, key: e.target.value })} />
+                <textarea value={api.about} rows={3} placeholder="Where should the assistant start? For example: Start with GET /v1/admin. It lists every route and what each answers." onChange={(e) => setApi({ ...api, about: e.target.value })} />
+                <button className="settings-button" onClick={() => void addApi()}>
+                  Add
+                </button>
+                <button className="link" onClick={() => setAddingApi(false)}>
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
           <div className="conn-row">
             <div className="conn-line">
               <span className="conn-logo plain">

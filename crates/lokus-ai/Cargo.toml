@@ -12,6 +12,7 @@ async-trait = "0.1"
 base64.workspace = true
 futures-util.workspace = true
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+url = "2"
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream", "form"] }
 rmcp = { version = "3", default-features = false, features = ["auth", "client", "reqwest", "transport-streamable-http-client-reqwest"] }
 serde.workspace = true

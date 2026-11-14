@@ -482,3 +482,8 @@ body:has(.task-card.carried) { cursor: grabbing; }
 .news-row small { color: var(--fg-2); font-size: var(--text-small); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .news-row em { display: flex; gap: 10px; color: var(--fg-3); font-size: var(--text-caption); font-style: normal; }
 @media (prefers-reduced-motion: reduce) { .update-card, .news { animation: none; } .update-bar.busy span { animation: none; } }
+
+/* Connections: a team's own API */
+.conn-own.api { flex-wrap: wrap; }
+.conn-own.api textarea { flex: 1 1 100%; min-height: 62px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; font-size: var(--text-small); line-height: 1.45; resize: vertical; outline: 0; }
+.conn-own.api textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--selection); }

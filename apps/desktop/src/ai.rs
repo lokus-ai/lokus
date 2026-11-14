@@ -72,6 +72,7 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
         "config": config,
         "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi), "chatgpt": has_key(Provider::ChatGpt) },
         "tokens": tokens,
+        "api_keys": config.apis.iter().filter(|a| secret(&lokus_ai::config::api_account(&a.name)).is_some()).map(|a| a.name.as_str()).collect::<Vec<_>>(),
         "signed_in": config.mcp.iter().filter(|s| lokus_ai::mcp_login::signed_in(&s.name)).map(|s| s.name.as_str()).collect::<Vec<_>>(),
         "plugin_servers": plugin_servers(&app),
     }))
@@ -89,6 +90,7 @@ pub fn ai_secret_set(kind: String, name: String, value: String) -> Result<(), Va
         ("provider", "anthropic") => key_account(Provider::Anthropic),
         ("provider", "openai") => key_account(Provider::OpenAi),
         ("mcp", server) if !server.is_empty() => mcp_account(server),
+        ("api", name) if !name.is_empty() => lokus_ai::config::api_account(name),
         _ => return Err(fail("bad_args", "unknown secret")),
     };
     set_secret(&account, value.trim()).map_err(|e| e.body())

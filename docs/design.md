@@ -460,6 +460,14 @@ every look is shown. Not built: looking while the app is closed, system notifica
 team's own admin API as a connection (it works today only if that API is offered as an MCP
 server), GitHub.
 
+### A team's own API (built; tried on Clean's real staff API)
+
+Settings, Connections, "Your own product's API": a name, an address, a key (kept in the
+keychain, sent as a Bearer token) and a few words on where to start. `crates/lokus-ai/src/own_api.rs`
+offers the assistant `api_get` and `api_send` whenever one is switched on, and tells it each
+system's name, address and starting point. The path is joined to the address and checked to
+still lead there; redirects are not followed; plain http is allowed only for this computer.
+
 ### What a request is made of
 
 Every request carries the instructions, a briefing about this workspace, the conversation, and

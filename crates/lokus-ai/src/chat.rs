@@ -219,6 +219,8 @@ enum Source {
     Server(usize, String),
     /// The tool that brings a connected service's tools off the shelf.
     Loader,
+    /// A call to one of the team's own systems; `true` when it may change something.
+    Api(bool),
 }
 
 /// Connected services describe their tools at length: four of them came to 437,000 characters,
@@ -391,6 +393,16 @@ pub async fn send(
             offered.push(tool);
         }
     }
+    // The team's own systems: two tools however many systems there are, and a few lines on each.
+    if let Some(told) = crate::own_api::briefing(&config) {
+        system.push_str("\n\n");
+        system.push_str(&told);
+        for tool in crate::own_api::tools() {
+            sources.push(Source::Api(tool.writes));
+            offered.push(tool);
+        }
+    }
+
     let mut shelf: Vec<(Tool, Source)> = Vec::new();
     for (index, connection) in connections.iter().enumerate() {
         for tool in &connection.tools {
@@ -439,6 +451,7 @@ pub async fn send(
                 Source::App => "app".to_string(),
                 Source::Server(index, _) => connections[*index].server.clone(),
                 Source::Loader => "loader".to_string(),
+                Source::Api(_) => "own_api".to_string(),
             };
             let entry = by_source.entry(from).or_default();
             entry.0 += 1;
@@ -514,6 +527,7 @@ pub async fn send(
                                     Ok(format!("Ready to use: {}. Not found (check the name): {}.", loaded.join(", "), missing.join(", ")))
                                 }
                             }
+                            Some(Source::Api(write)) => crate::own_api::call(&config, *write, &input).await,
                             Some(Source::Vault) => match &core {
                                 Some(core) => tools::run(core, &name, &input),
                                 None => Err("no vault is open".into()),

@@ -85,7 +85,24 @@ pub struct Config {
     pub auto_approve: bool,
     #[serde(default)]
     pub mcp: Vec<McpServer>,
+    /// The team's own systems, called as they are: an address, and where to start.
+    #[serde(default)]
+    pub apis: Vec<OwnApi>,
 }
+
+/// A team's own API: its product's admin or staff API. The key is kept in the keychain.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct OwnApi {
+    pub name: String,
+    pub url: String,
+    /// A few words for the assistant: what this system is and which route to read first.
+    #[serde(default)]
+    pub about: String,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+}
+
+
 
 impl Config {
     pub fn load(dir: &Path) -> Self {
@@ -192,6 +209,10 @@ pub fn secret(account: &str) -> Option<String> {
 
 pub fn key_account(provider: Provider) -> String {
     format!("ai:{}", provider.id())
+}
+
+pub fn api_account(name: &str) -> String {
+    format!("api:{name}")
 }
 
 pub fn mcp_account(server: &str) -> String {

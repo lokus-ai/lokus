@@ -270,6 +270,7 @@ fn ai(p: &Parsed) -> ExitCode {
             })
             .into_iter()
             .collect(),
+        apis: Vec::new(),
     };
     let request = lokus_ai::Request {
         config,
