@@ -181,6 +181,7 @@ function onEvent(event: AiEvent): void {
         }
         return [...settle(items), { kind: "tool", id: event.id, name: event.name, input: event.input, status: event.asks ? "asking" : "running" }];
       case "tool_done":
+        keepSoon();
         return items.map((i) => (i.kind === "tool" && i.id === event.id ? { ...i, status: event.ok ? "ok" : "failed", result: event.result } : i));
       case "notice":
         return [...items, { kind: "notice", text: event.message }];
@@ -195,6 +196,7 @@ const settle = (items: Item[]): Item[] =>
 const STOPPED: Record<string, string> = {
   refusal: "The model declined to answer this.",
   max_tokens: "The answer was cut off because it reached the length limit.",
+  step_limit: "Paused after 120 steps, so a long job cannot run away. Nothing is lost: say “keep going” and it carries on from here.",
 };
 
 /** A request's parts as flat numbers: characters of instructions, briefing, conversation and each tool source. */
@@ -263,6 +265,9 @@ export async function ask(text: string, mentions: string[] = []): Promise<void> 
     const state = await appState(mentions);
     const message = { role: "user", content: state.text + question };
     pending = message;
+    unanswered = message;
+    // Kept at once, before the first step: a reply cut off early is still found again.
+    keep();
     briefing ??= (await brief()) + (carried ? `\n\nThe user is carrying on a conversation that was shared with their workspace. What was said in it, for you to build on:\n<shared_conversation>\n${carried}\n</shared_conversation>` : "");
     if (sending !== chatId) return;
     began = Date.now();
@@ -290,6 +295,8 @@ export async function ask(text: string, mentions: string[] = []): Promise<void> 
     update((items) => [...settle(items), { kind: "notice", text: err.code === "stopped" ? "Stopped." : (err.message ?? String(e)), error: err.code !== "stopped", code: err.code }]);
   } finally {
     if (sending === chatId) {
+      window.clearTimeout(keeping);
+      unanswered = null;
       chat.set({ busy: false });
       keep();
     }
@@ -304,7 +311,19 @@ function keep(): void {
   const items = settle(chat.get().items);
   const first = items.find((i) => i.kind === "user");
   if (!first || first.kind !== "user") return;
-  void runCore("chats.save", { id: chatId, title: first.text, updated: Date.now(), body: { items, history } }).catch(() => {});
+  // While a reply is still being worked on, the request it answers is kept beside it, so a
+  // conversation cut off by the app closing can be told apart from a finished one and resumed.
+  void runCore("chats.save", { id: chatId, title: first.text, updated: Date.now(), body: { items, history, ...(unanswered ? { unanswered } : {}) } }).catch(() => {});
+}
+
+/** The request being answered right now; null between replies. */
+let unanswered: { role: string; content: string } | null = null;
+let keeping = 0;
+
+/** Save as it goes, a moment after each step, so little is lost if the app closes mid-reply. */
+function keepSoon(): void {
+  window.clearTimeout(keeping);
+  keeping = window.setTimeout(keep, 500);
 }
 
 export const keptChats = () => runCore<Kept[]>("chats.list").catch(() => [] as Kept[]);
@@ -313,14 +332,25 @@ export const keptChats = () => runCore<Kept[]>("chats.list").catch(() => [] as K
 export async function openChat(id: string): Promise<void> {
   track("action", { feature: "assistant", action: "chat_reopened" });
   if (chat.get().busy) stop();
-  const kept = await runCore<{ body: { items?: Item[]; history?: unknown[] } }>("chats.load", { id });
+  const kept = await runCore<{ body: { items?: Item[]; history?: unknown[]; unanswered?: { role: string; content: string } } }>("chats.load", { id });
   asked.clear();
   chatId = id;
   history = kept.body.history ?? [];
+  let items = kept.body.items ?? [];
+  const cut = kept.body.unanswered;
+  if (cut) {
+    // Lokus closed while this was being answered. Tell the model what had been asked and how
+    // far it got, and tell the person, so "keep going" picks up where it left off.
+    const since = items.slice(items.map((i) => i.kind).lastIndexOf("user") + 1);
+    const steps = since.flatMap((i) => (i.kind === "tool" && i.status === "ok" ? [i.name] : []));
+    const said = since.map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
+    history = [...history, cut, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(The app closed before this reply was finished. Steps that had completed: ${steps.length ? steps.join(", ") : "none"}. Check what is already done before doing it again. The request above still stands.)` }] }];
+    items = [...items.map((i) => (i.kind === "tool" && (i.status === "running" || i.status === "asking") ? { ...i, status: "failed" as const, result: "Lokus closed before this finished" } : i)), { kind: "notice", text: "This reply was cut off when Lokus closed. Say “keep going” and it carries on from here." }];
+  }
   briefing = null;
   carried = null;
   seen = null;
-  chat.set({ items: kept.body.items ?? [], busy: false, history: false });
+  chat.set({ items, busy: false, history: false });
 }
 
 export async function forgetChat(id: string): Promise<void> {

@@ -125,6 +125,20 @@ pub fn vault_tools() -> Vec<Tool> {
             true,
         ),
         tool(
+            "timeline",
+            "Everything Lokus has on record about one customer or one thing, in the order it happened: messages \
+             in and out, issues and their status, changes to their details, events, and the tasks open for them. \
+             Use it before drawing a conclusion about a customer: what happened is only clear in order. It shows \
+             what is filed in Lokus; for what is true this minute, also ask the connected services and the team's \
+             own systems.",
+            json!({
+                "about": { "type": "string", "description": "A customer's name as it is in Lokus, or a thing's folder path like data/order/A-1042." },
+                "days": { "type": "integer", "description": "How far back. 30 unless said." }
+            }),
+            &["about"],
+            false,
+        ),
+        tool(
             "search_logs",
             "Search the log lines the team's own systems have sent to Lokus (the last two weeks, on this device). \
              Use it when working out why something went wrong for a customer or a thing: look for errors around \
@@ -157,16 +171,18 @@ pub fn vault_tools() -> Vec<Tool> {
                 "key": { "type": "string", "description": "A stable name for this exact situation, so noticing it again updates the same card: e.g. 'waiting quivly export-thread' or 'contradiction status-page uptime'." },
                 "title": { "type": "string", "description": "A plain statement with a verb, at most 60 characters, starting with who or what it is about." },
                 "summary": { "type": "string", "description": "One sentence, at most 140 characters: why it matters now." },
-                "evidence": { "type": "array", "description": "Up to 3 facts this rests on, each at most 100 characters, with where it came from.", "items": { "type": "object", "properties": { "text": { "type": "string" }, "source": { "type": "string", "description": "slack, linear, a note path, …" }, "link": { "type": "string" } }, "required": ["text", "source"] } },
+                "evidence": { "type": "array", "description": "Up to 5 facts this rests on, in the order they happened, each at most 100 characters and starting with its date when it has one ('Nov 11: …'), with where it came from.", "items": { "type": "object", "properties": { "text": { "type": "string" }, "source": { "type": "string", "description": "slack, linear, a note path, …" }, "link": { "type": "string" } }, "required": ["text", "source"] } },
                 "metric": { "type": "string", "description": "The one number that makes this matter, at most 16 characters: '7 days', '53 leads', '$2,400 a month', 'renews Nov 23'. Leave out if there is none or the title already says it." },
                 "recommend": { "type": "string", "description": "What you would do, in plain words: at most 90 characters, starting with a verb a person would use (send, tell, assign, fix, move, ask)." },
                 "action": { "type": "string", "description": "What you would do if the user says go, written as an instruction to yourself with every name, id and link needed to do it without looking anything up again." },
                 "situation": { "type": "string", "description": "The kind of situation this is, with no names in it, so the user's choice can be applied next time: e.g. 'a customer reports a bug that a deploy has already fixed'." },
                 "follows": { "type": "string", "description": "If this recommendation follows something under 'How we handle things', quote that line. Otherwise leave out." },
                 "customer": { "type": "string", "description": "The customer's name as it is in Lokus, when this is about one." },
-                "urgency": { "type": "string", "enum": ["now", "soon", "fyi"] }
+                "urgency": { "type": "string", "enum": ["now", "soon", "fyi"], "description": "now: someone is harmed or lost if this waits a day. soon: this week. fyi: worth knowing, nothing breaks." },
+                "confidence": { "type": "string", "enum": ["read", "likely", "guess"], "description": "read: every link in the chain is something you read just now. likely: one link is inferred. guess: more than one is. A guess is not reported; go and read what is missing, or leave it." },
+                "if_ignored": { "type": "string", "description": "What happens if nobody does anything, in at most 90 characters. If the honest answer is 'nothing much', do not report this." }
             }),
-            &["key", "title", "summary", "recommend", "situation", "urgency"],
+            &["key", "title", "summary", "recommend", "situation", "urgency", "confidence", "if_ignored"],
             false,
         ),
         tool(
@@ -544,6 +560,63 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             let (path, number) = lokus_core::tasks::record(&core.vault, input).map_err(|e| e.to_string())?;
             Ok(format!("T-{number} is at {path}"))
         }
+        "timeline" => {
+            let about = text(input, "about")?;
+            let days = input["days"].as_i64().unwrap_or(30).clamp(1, 365);
+            if let Ok(mut index) = core.index() {
+                let _ = index.refresh();
+            }
+            let folder = if about.contains('/') { about.trim_end_matches(".md").to_string() } else { format!("{}/{}", lokus_core::ingest::CUSTOMERS, about) };
+            let rows = call("props.rows", json!({ "folder": folder, "deep": true }))?;
+            let since = lokus_core::ingest::iso(
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) - days * 86_400,
+            );
+            let word = |row: &Value, key: &str| row["props"][key].as_str().unwrap_or_default().to_string();
+            let mut lines: Vec<(String, String)> = rows
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|row| !word(row, "at").is_empty() && word(row, "at").as_str() >= &since[..10])
+                .map(|row| {
+                    let at = word(row, "at");
+                    let who = match (word(row, "direction").as_str(), word(row, "from")) {
+                        ("out", from) => format!("us{}", if from.is_empty() { String::new() } else { format!(" ({from})") }),
+                        (_, from) if !from.is_empty() => from,
+                        _ => String::new(),
+                    };
+                    let status = word(row, "status");
+                    let mut line = format!("{} · {} {}", &at[..at.len().min(16)].replace('T', " "), word(row, "source"), word(row, "kind"));
+                    if !who.is_empty() {
+                        line.push_str(&format!(" · {who}"));
+                    }
+                    line.push_str(&format!(" · {}", word(row, "title").chars().take(160).collect::<String>()));
+                    if !status.is_empty() {
+                        line.push_str(&format!(" [{status}]"));
+                    }
+                    (at, line)
+                })
+                .collect();
+            lines.sort();
+            let total = lines.len();
+            let shown: Vec<String> = lines.into_iter().rev().take(120).rev().map(|(_, line)| line).collect();
+            let mut out = format!("{about}: {total} things on record in the last {days} days, oldest first{}.\n", if total > 120 { " (the latest 120 shown)" } else { "" });
+            out.push_str(&shown.join("\n"));
+            if !about.contains('/') {
+                let tasks = call("props.rows", json!({ "folder": lokus_core::tasks::TASKS }))?;
+                let open: Vec<String> = tasks
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|t| t["props"]["customer"].as_str().is_some_and(|c| c.eq_ignore_ascii_case(&about)) && !matches!(t["props"]["status"].as_str(), Some("done" | "closed" | "cancelled")))
+                    .map(|t| format!("T-{} [{}] {} · {}", t["props"]["number"], t["props"]["status"].as_str().unwrap_or("todo"), t["props"]["priority"].as_str().unwrap_or("no priority"), t["props"]["assignee"].as_str().unwrap_or("nobody's")))
+                    .collect();
+                out.push_str(&format!("\n\nOpen tasks for them: {}", if open.is_empty() { "none".to_string() } else { format!("\n{}", open.join("\n")) }));
+            }
+            if total == 0 {
+                out.push_str("\nNothing is filed. That does not mean nothing happened: look in the connected services.");
+            }
+            Ok(out)
+        }
         "search_logs" => call("logs.search", input.clone()).map(shown),
         "report_finding" => {
             let key = text(input, "key")?;
@@ -556,8 +629,31 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                 .map(|(field, most)| format!("{field} (at most {} characters)", if *field == "metric" { 22 } else { *most }))
                 .collect();
             let evidence = input["evidence"].as_array().cloned().unwrap_or_default();
-            if evidence.len() > 3 || evidence.iter().any(|e| e["text"].as_str().is_some_and(|t| t.chars().count() > 115)) {
-                too_long.push("evidence (at most 3, each at most 100 characters)".into());
+            if evidence.len() > 5 || evidence.iter().any(|e| e["text"].as_str().is_some_and(|t| t.chars().count() > 115)) {
+                too_long.push("evidence (at most 5, each at most 100 characters)".into());
+            }
+            // Five at a time, at most. More than that is a pile, and a pile does not get read.
+            let waiting = call("noticed.list", json!({}))?;
+            let recent = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) - 600;
+            let id = lokus_core::noticed::id_of(&format!("finding {key}"));
+            let just_now = waiting
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|i| i["kind"] == "finding" && i["state"] == "new" && i["created"].as_i64().unwrap_or(0) >= recent && i["id"] != id.as_str())
+                .count();
+            if just_now >= 5 {
+                return Err("Not reported: you have already left 5 things in the last few minutes, which is the most the user will read. Stop reporting. If this one matters more than one you left, say so in your reply instead.".into());
+            }
+            // Speaking up when there was no need is how an assistant like this stops being read.
+            if input["confidence"] == "guess" {
+                return Err("Not reported: more than one link in this is a guess. Read what is missing and report it then, or leave it.".into());
+            }
+            if input["urgency"] == "now" && input["confidence"] != "read" {
+                return Err("Not reported as 'now': something that interrupts the user must rest only on what you read. Read the missing link, or report it as 'soon'.".into());
+            }
+            if long("if_ignored", 102) {
+                too_long.push("if_ignored (at most 90 characters)".into());
             }
             if !too_long.is_empty() {
                 return Err(format!("Too long to read at a glance. Shorten and send again: {}.", too_long.join("; ")));

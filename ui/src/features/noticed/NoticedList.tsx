@@ -92,6 +92,12 @@ export function FindingRow({ item, open, onToggle }: { item: Noticed; open?: boo
               ))}
             </ul>
           )}
+          {item.if_ignored && (
+            <p className="nt-follows">
+              If left: {item.if_ignored}
+              {item.confidence === "likely" ? " (partly inferred)" : ""}
+            </p>
+          )}
           {item.follows && <p className="nt-follows">You chose this before: {item.follows.replace(/^- /, "")}</p>}
           <div className="nt-actions">
             <span>

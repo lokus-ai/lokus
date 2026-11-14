@@ -27,6 +27,8 @@ const FALLBACK_MODELS: &[&str] = &[
 ];
 const MAX_TOKENS: u32 = 32_000;
 const ATTEMPTS: u32 = 3;
+/// How long a reply may go without sending anything before it is given up on.
+const QUIET: Duration = Duration::from_secs(120);
 
 /// One reply from the model.
 pub struct Turn {
@@ -94,7 +96,18 @@ async fn events(
 ) -> Result<()> {
     let mut stream = response.bytes_stream();
     let mut buffer: Vec<u8> = Vec::new();
-    while let Some(chunk) = stream.next().await {
+    loop {
+        // A reply that stops arriving must end, not leave the app showing "working" for ever.
+        let chunk = match tokio::time::timeout(QUIET, stream.next()).await {
+            Ok(Some(chunk)) => chunk,
+            Ok(None) => break,
+            Err(_) => {
+                return Err(AiError::Provider(format!(
+                    "The model stopped answering part-way (nothing for {} seconds). What it had done so far is kept; say \"keep going\" to carry on.",
+                    QUIET.as_secs()
+                )))
+            }
+        };
         buffer.extend_from_slice(&chunk.map_err(network(config))?);
         loop {
             let end = buffer

@@ -41,6 +41,10 @@ export interface Noticed {
   follows?: string;
   customer?: string;
   urgency?: "now" | "soon" | "fyi";
+  /** read: everything was read; likely: one link is inferred. */
+  confidence?: "read" | "likely";
+  /** What happens if nobody acts. */
+  if_ignored?: string;
   // A suggestion for a note
   path?: string;
   text?: string;
@@ -110,7 +114,7 @@ async function watchesDue(now: number): Promise<Watch[]> {
 }
 
 function request(since: string, known: Noticed[], watches: Watch[], reason: string): string {
-  const already = known.slice(0, 40).map((i) => `- ${i.kind === "finding" ? i.title : `suggestion for ${i.path}`} [${i.state}]`);
+  const already = known.slice(0, 40).map((i) => `- ${i.kind === "finding" ? i.title : `suggestion for ${i.path}`} [${i.state}]${i.kind === "finding" && i.state === "new" ? ` (key: ${i.id.replace(/^finding-/, "")})` : ""}`);
   return [
     "You have woken up on your own; nobody asked you anything. Look over the workspace and the connected services for things the user would want to know, and leave each one with report_finding (use suggest_note_change for a note that is missing something or says something no longer true).",
     "",
@@ -127,9 +131,15 @@ function request(since: string, known: Noticed[], watches: Watch[], reason: stri
     "",
     "Follow what is written under \"How we handle things\" in your notes: if the user chose something for this kind of situation before, recommend the same and quote that line in `follows`.",
     "",
-    already.length ? `Already on the user's list, with what they did about it. Do not report these again:\n${already.join("\n")}` : "Nothing is on the user's list yet.",
+    already.length
+      ? `Already on the user's list, with what they did about it. Never report the same situation a second time under new words. If one that is still [new] has moved on (got worse, got fixed, something new was said), report it again with exactly the key shown, which updates it in place; if it is now resolved, say so in your reply and leave it.\n${already.join("\n")}`
+      : "Nothing is on the user's list yet.",
     "",
     `You last looked ${since}. ${reason}`,
+    "",
+    "Staying silent is usually right. Every thing you report costs the user's attention, and an assistant that cries wolf stops being read. Before reporting, ask: would a busy owner thank me for this today, or sigh? Report only when not knowing would cost them something, and you can say what. Things marked [dismissed] above were false alarms to this user: hold anything like them to a higher bar.",
+    "",
+    "Gather first, conclude second: for anything that looks wrong, use timeline and the services to line the events up in order, and follow the chain back to its cause before you report. One finding about the cause beats three about its symptoms.",
     "",
     "Report at most 5 things, the most important first, and only what you read evidence for just now. Finding nothing is a fine result: then report nothing. When you are done, reply with one line saying how many things you left.",
   ].join("\n");
@@ -176,7 +186,8 @@ export async function check(reason = "This is a routine look."): Promise<void> {
   const fresh = waiting(noticed.get().items).filter((i) => !before.has(i.id));
   noticed.set({ checking: false, checked: problem ? state.checked : now, problem });
   track("action", { feature: "watch", action: problem ? "failed" : "looked", found: fresh.length, watches: watches.length });
-  if (fresh.length && !noticed.get().open) notify(fresh.length === 1 ? `Noticed: ${fresh[0].title ?? "a suggestion for a note"}` : `The assistant noticed ${fresh.length} things`);
+  const pressing = fresh.filter((i) => i.urgency === "now");
+  if (pressing.length && !noticed.get().open) notify(pressing.length === 1 ? `Noticed: ${pressing[0].title ?? ""}` : `${pressing.length} things need you now`);
 }
 
 /** "Do it": hand what the finding proposed to the assistant, in the open, where each change is asked about. */

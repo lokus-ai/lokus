@@ -16,7 +16,10 @@ use crate::mcp::{self, Connection};
 use crate::provider;
 use crate::tools::{self, Tool};
 
-const MAX_ROUNDS: usize = 24;
+/// How many times the model may be asked in one reply. A guard against running away, set
+/// high enough for real bulk work (filing dozens of people takes dozens of steps). Reaching it
+/// is said out loud, never silent.
+const MAX_ROUNDS: usize = 120;
 /// How much of a tool's result the UI is shown; the model always gets all of it.
 const PREVIEW: usize = 600;
 
@@ -102,6 +105,25 @@ Learn how this team works. Your notes may have a section \"How we handle things\
 chose when a situation came up before. When the same kind of situation comes up again, with anyone, \
 do or recommend what they chose then, and say that is why. When the user decides how something \
 should be handled from now on, keep it with remember.
+
+Think in chains of events, not single facts. A team's truth is scattered: a customer says something \
+in one place, someone answers in another, an issue is opened, code ships, a setting changes, a job \
+stops. No one of these means much alone. For a customer or a thing you are looking into, line up \
+what happened in order (timeline gives you what is filed; the connected services and the team's own \
+systems give you the rest and what is true this minute), then ask what the sequence means:
+- What was the last thing each side said, and has the other side answered it?
+- Was something promised, fixed or shipped, and did the step after it actually happen (were they \
+told, did they start again, did the thing begin running)?
+- Is something that should be happening not happening, and what does it depend on that is down, \
+disconnected, paused or expired?
+- Did something get reported and then sink under newer things with nobody owning it?
+- Does what a person said match what the system shows?
+A chain that does not close is the finding. Say the chain in order, say what you conclude from it, \
+and say what you would do. Say when a link in the chain is your guess rather than something you \
+read. Do not stop at the first thing that looks wrong: the cause is usually one step further back.
+
+For a task with many parts, say the plan in a few lines first, then work through all of it \
+without stopping to ask at each step; say what is done and what is left at the end.
 
 Notice things. Whenever you come across something the user would want to know beyond what they \
 asked (a customer waiting with no reply, a complaint about something that has already been fixed, \
@@ -291,6 +313,42 @@ fn already_wanted(messages: &[Value]) -> std::collections::HashSet<String> {
     names
 }
 
+/// How heavy a conversation may get before old tool results are shortened, and how many of
+/// the newest results are always left whole.
+const HEAVY: usize = 320_000;
+const KEEP_WHOLE: usize = 8;
+const STUB: usize = 500;
+
+/// A long job reads far more than it needs to keep. Once the conversation is heavy, results
+/// from steps long past are cut to their opening lines: the model has already drawn what it
+/// needed from them, and can ask again. Without this a long job ends by running out of room.
+fn lighten(messages: &mut [Value]) -> usize {
+    let weight: usize = messages.iter().map(|m| m.to_string().len()).sum();
+    if weight <= HEAVY {
+        return 0;
+    }
+    let mut results: Vec<(usize, usize)> = Vec::new();
+    for (m, message) in messages.iter().enumerate() {
+        for (b, block) in message["content"].as_array().into_iter().flatten().enumerate() {
+            if block["type"] == "tool_result" {
+                results.push((m, b));
+            }
+        }
+    }
+    let old = results.len().saturating_sub(KEEP_WHOLE);
+    let mut cut = 0;
+    for (m, b) in results.into_iter().take(old) {
+        let block = &mut messages[m]["content"][b];
+        let Some(text) = block["content"].as_str() else { continue };
+        if text.chars().count() > STUB + 200 {
+            let head: String = text.chars().take(STUB).collect();
+            block["content"] = json!(format!("{head}\n[The rest of this result was put away to make room. Run the step again if you need it.]"));
+            cut += 1;
+        }
+    }
+    cut
+}
+
 /// A tool result short enough to hand to the model.
 /// A call to an outside service with its empty optional fields left out. Some models fill in
 /// every field a tool has, with "" or null for the ones they have no value for, and a service
@@ -370,8 +428,10 @@ pub async fn send(
         .iter()
         .filter(|s| s.enabled)
         .chain(extra_servers.iter());
-    for server in servers {
-        match mcp::connect(server).await {
+    // All at once: four services one after another was several seconds before the first word.
+    let servers: Vec<&McpServer> = servers.collect();
+    for result in futures_util::future::join_all(servers.iter().map(|server| mcp::connect_soon(server))).await {
+        match result {
             Ok(connection) => connections.push(connection),
             Err(e) => emit(Event::Notice {
                 message: e.to_string(),
@@ -471,6 +531,7 @@ pub async fn send(
     let (mut rounds, mut read, mut written, mut used) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
         for _ in 0..MAX_ROUNDS {
+            lighten(&mut messages);
             let mut on_text = |delta: &str| emit(Event::Text { delta: delta.to_string() });
             let turn = provider::turn(&http, &config, &key, &system, &offered, &messages, &mut on_text).await?;
             stop = turn.stop.clone();
@@ -563,6 +624,10 @@ pub async fn send(
         Ok(())
     }
     .await;
+    // The loop ran out while the model still wanted to go on: say so, so the person can.
+    if result.is_ok() && stop == "tool_use" {
+        stop = "step_limit".into();
+    }
     for connection in connections {
         connection.close().await;
     }
@@ -590,6 +655,20 @@ pub async fn send(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A long job's old results are cut down; the newest stay whole, and a light conversation is left alone.
+    #[test]
+    fn a_heavy_conversation_sheds_old_results() {
+        let result = |n: usize| json!({ "role": "user", "content": [{ "type": "tool_result", "tool_use_id": format!("t{n}"), "content": "x".repeat(40_000) }] });
+        let mut light: Vec<Value> = (0..3).map(result).collect();
+        assert_eq!(lighten(&mut light), 0);
+        let mut heavy: Vec<Value> = (0..12).map(result).collect();
+        assert_eq!(lighten(&mut heavy), 4);
+        let len = |m: &Value| m["content"][0]["content"].as_str().unwrap().len();
+        assert!(len(&heavy[0]) < 700 && len(&heavy[3]) < 700);
+        assert_eq!((len(&heavy[4]), len(&heavy[11])), (40_000, 40_000));
+        assert!(heavy[0]["content"][0]["content"].as_str().unwrap().contains("put away"));
+    }
 
     fn service_tool(name: &str, words: usize) -> (Tool, Source) {
         let tool = Tool { name: name.into(), description: format!("Does {name}.\n{}", "more ".repeat(words)), schema: json!({ "type": "object" }), writes: false };
