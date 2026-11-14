@@ -228,37 +228,12 @@ fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
         .build()
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(updates::Updates::default())
-        .manage(Shell::default())
-        .manage(sync::Sync::default())
-        .manage(ai::Ai::default())
-        .register_uri_scheme_protocol("lokus-plugin", |ctx, request| {
-            plugin_file(ctx.app_handle(), request.uri().path())
-        });
-    #[cfg(desktop)]
-    let builder = builder.menu(menu).on_menu_event(|app, event| {
-        match event.id().as_ref() {
-            "close-tab" => windows::tell_front(app, "menu:close-tab"),
-            "new-window" => {
-                let app = app.clone();
-                // Off the menu's own thread: a window cannot be made from inside its handler.
-                tauri::async_runtime::spawn(async move {
-                    let _ = windows::open(&app);
-                });
-            }
-            _ => {}
-        }
-    });
-
-    #[cfg(all(debug_assertions, unix, desktop))]
-    let builder = builder
-        .manage(dev_channel::Pending::default())
-        .invoke_handler(tauri::generate_handler![
+/// Every command the window may call, written once. A development build adds the one that
+/// answers the terminal. There used to be two lists, and a command added to only the
+/// development one (the list of services to connect) was missing from the released app.
+macro_rules! commands {
+    ($($extra:path),*) => {
+        tauri::generate_handler![
             core_run,
             vault_open,
             vault_current,
@@ -292,48 +267,49 @@ pub fn run() {
             updates::open_web,
             windows::window_new,
             vault_default,
-            dev_channel::dev_reply
-        ])
+            $($extra),*
+        ]
+    };
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .manage(updates::Updates::default())
+        .manage(Shell::default())
+        .manage(sync::Sync::default())
+        .manage(ai::Ai::default())
+        .register_uri_scheme_protocol("lokus-plugin", |ctx, request| {
+            plugin_file(ctx.app_handle(), request.uri().path())
+        });
+    #[cfg(desktop)]
+    let builder = builder.menu(menu).on_menu_event(|app, event| {
+        match event.id().as_ref() {
+            "close-tab" => windows::tell_front(app, "menu:close-tab"),
+            "new-window" => {
+                let app = app.clone();
+                // Off the menu's own thread: a window cannot be made from inside its handler.
+                tauri::async_runtime::spawn(async move {
+                    let _ = windows::open(&app);
+                });
+            }
+            _ => {}
+        }
+    });
+
+    #[cfg(all(debug_assertions, unix, desktop))]
+    let builder = builder
+        .manage(dev_channel::Pending::default())
+        .invoke_handler(commands!(dev_channel::dev_reply))
         .setup(|app| {
             dev_channel::start(app.handle().clone());
             Ok(())
         });
 
     #[cfg(not(all(debug_assertions, unix, desktop)))]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        core_run,
-        vault_open,
-        vault_current,
-        sync::sync_connect,
-        sync::sync_disconnect,
-        sync::sync_token,
-        sync::sync_status,
-        sync::sync_doc,
-        sync::sync_local,
-        sync::sync_awareness,
-        sync::relay_call,
-        account::account_browser_login,
-        ai::ai_settings,
-        ai::ai_settings_save,
-        ai::ai_secret_set,
-        ai::ai_models,
-        ai::ai_mcp_check,
-        ai::ai_mcp_login,
-        ai::ai_mcp_logout,
-        ai::ai_chatgpt_login,
-        ai::ai_chatgpt_logout,
-        ai::ai_send,
-        ai::ai_stop,
-        ai::ai_approve,
-        ai::ai_act_done,
-        updates::update_check,
-        updates::update_install,
-        updates::update_restart,
-        updates::app_about,
-        updates::open_web,
-        windows::window_new,
-        vault_default
-    ]);
+    let builder = builder.invoke_handler(commands!());
 
     builder
         .run(tauri::generate_context!())
