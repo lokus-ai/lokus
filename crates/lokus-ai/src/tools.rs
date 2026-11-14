@@ -585,7 +585,7 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
                         _ => String::new(),
                     };
                     let status = word(row, "status");
-                    let mut line = format!("{} · {} {}", &at[..at.len().min(16)].replace('T', " "), word(row, "source"), word(row, "kind"));
+                    let mut line = format!("{} · {} {}", at[..at.len().min(16)].replace('T', " "), word(row, "source"), word(row, "kind"));
                     if !who.is_empty() {
                         line.push_str(&format!(" · {who}"));
                     }
