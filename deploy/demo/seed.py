@@ -261,9 +261,10 @@ for key, item in [
             {"text": f"{said(4)}: Dana reported **three failed exports**", "source": "slack"},
             {"text": f"{said(4)}: ENG-412 opened, still **in progress**", "source": "linear"},
             {"text": f"{said(1)}: Dana asked for an update, **no reply yet**", "source": "slack"},
+            {"text": f"{said(3)}: a fix shipped, switched **off** for Kestrel", "source": "northstar admin"},
         ],
-        "metric": "4 days", "recommend": "Tell Dana the fix ships this week and who is on it",
-        "action": "Reply to Dana Whitlock in the export thread: the streaming export is in testing and ships within two days; Raj owns it.",
+        "metric": "4 days", "recommend": "Turn the export fix on for Kestrel, retry it, and tell Dana",
+        "action": "Use the northstar API. Read GET /v1/admin/deploys and GET /v1/admin/exports?workspace=kestrel-bank&status=failed. The streaming export shipped behind the switch streaming_export, which is off for Kestrel: turn it on with POST /v1/admin/flags {workspace: kestrel-bank, flag: streaming_export, on: true}, then retry the newest failed export with POST /v1/admin/exports/{id}/retry. If it succeeds, set the task 'Fix the CSV export for large workspaces' to review and write Dana Whitlock a short reply saying the export works now.",
         "situation": "a customer near renewal is waiting on a bug that is already being fixed",
         "customer": "Kestrel Bank", "urgency": "now", "confidence": "read",
         "if_ignored": "A $4,800 a month account walks into renewal with an open complaint"}),
@@ -275,8 +276,8 @@ for key, item in [
             {"text": f"{said(2)}: yearly discount set at **15%**", "source": "Weekly sync"},
             {"text": "Pricing v2 works it out: **$29,988** a year", "source": "Pricing v2"},
         ],
-        "metric": "9 days", "recommend": "Send Priya the $29,988 yearly quote today",
-        "action": "Email priya@brightline.co a quote for 70 Team seats paid yearly: $29,988, from Pricing v2.",
+        "metric": "9 days", "recommend": "Make the $29,988 yearly quote as a PDF for Priya",
+        "action": "Make a one-page PDF quote for Brightline Clinics with create_pdf, saved as quotes/Brightline quote.pdf: 70 Team seats, paid yearly, $42 a seat a month less 15%, $29,988 a year, taken from the note Pricing v2, addressed to Priya Nair. Then set the task 'Send Brightline a quote for 70 seats' to review.",
         "situation": "a customer asked for a price that has since been decided",
         "customer": "Brightline Clinics", "urgency": "now", "confidence": "read",
         "if_ignored": "An expansion worth about $1,000 a month more goes cold before renewal"}),
@@ -287,7 +288,8 @@ for key, item in [
             {"text": f"{said(7)}: reminders went out **an hour late** twice", "source": "email"},
             {"text": f"{said(2)}: 'nobody owns it yet'", "source": "Weekly sync"},
         ],
-        "metric": "7 days", "recommend": "Assign the reminder task to Raj after the export fix",
+        "metric": "7 days", "recommend": "Assign the reminder task to Raj, due this week",
+        "action": "Update the task 'Find why text reminders run late' with record_task: assignee Raj, priority high, status todo, and add to its text what GET /v1/admin/reminders/queue on the northstar API says about the 08:00 batch.",
         "situation": "a customer bug has a task but no owner",
         "customer": "Harbor Vet Group", "urgency": "soon", "confidence": "read",
         "if_ignored": "Clients keep arriving at the wrong time and Harbor Vet stays on watch"}),
@@ -300,6 +302,8 @@ for key, item in [
         "customer": "Orbit Robotics", "urgency": "fyi", "confidence": "read",
         "if_ignored": "A warm offer from the biggest account is forgotten"}),
 ]:
+    # Written fresh each run, so a card someone acted on while rehearsing is whole again.
+    subprocess.run([LOKUS, "noticed.remove", "--vault", VAULT, "--json", json.dumps({"id": key.replace(" ", "-")})], capture_output=True)
     run("noticed.report", {"key": key, "item": {"kind": "finding", **item}})
 
 print("Done. Open it in Lokus: workspace name at the top of the sidebar, Open a folder as a workspace.")
