@@ -1,7 +1,7 @@
 # The hosted relay
 
 One small VM in Google Cloud project `lokus-relay` (us-central1-a), reached at
-`https://136-115-217-146.sslip.io`. Caddy gets the certificate and passes traffic to the relay;
+`https://relay.lokusmd.com` (and, from before it had a name, `https://136-115-217-146.sslip.io`). Caddy gets the certificate and passes traffic to the relay;
 the data file lives on its own disk (`relay-data`), which survives the VM being deleted.
 
 Ship a new relay (needs the owner's go-ahead), from the repo root:

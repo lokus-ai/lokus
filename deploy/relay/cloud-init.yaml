@@ -26,6 +26,13 @@ write_files:
       ExecStop=/usr/bin/docker stop relay
       Restart=always
       RestartSec=5
+  # Which names the relay answers on. The first is the one the app is built with; the second is
+  # the address it had before it had a name, kept so nothing made earlier stops working.
+  - path: /mnt/disks/data/caddy/Caddyfile
+    content: |
+      relay.lokusmd.com, 136-115-217-146.sslip.io {
+        reverse_proxy 127.0.0.1:8787
+      }
   - path: /etc/systemd/system/caddy.service
     content: |
       [Unit]
@@ -34,7 +41,7 @@ write_files:
       After=relay-disk.service docker.service
       [Service]
       ExecStartPre=-/usr/bin/docker rm -f caddy
-      ExecStart=/usr/bin/docker run --rm --name caddy --network host -v /mnt/disks/data/caddy:/data caddy:2 caddy reverse-proxy --from 136-115-217-146.sslip.io --to 127.0.0.1:8787
+      ExecStart=/usr/bin/docker run --rm --name caddy --network host -v /mnt/disks/data/caddy:/data caddy:2 caddy run --config /data/Caddyfile --adapter caddyfile
       ExecStop=/usr/bin/docker stop caddy
       Restart=always
       RestartSec=5
