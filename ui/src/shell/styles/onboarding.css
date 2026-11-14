@@ -150,13 +150,14 @@
 
 /* The page shown when nothing is open: somewhere to start from, not a blank. */
 .start { position: absolute; inset: var(--bar-height) 0 0; overflow-y: auto; display: flex; justify-content: center; padding: 11vh 32px 40px; }
-.start-inner { width: min(640px, 100%); display: flex; flex-direction: column; }
+.start-inner { width: min(640px, 100%); height: max-content; display: flex; flex-direction: column; }
+.start-inner > * { flex-shrink: 0; }
 .start h1 { margin: 0; font-size: var(--text-h1); font-weight: 680; letter-spacing: -0.025em; }
 .start-sub { margin: 6px 0 0; color: var(--fg-2); font-size: var(--text-ui); }
 .start-aim { align-self: flex-start; margin-top: 14px; padding: 5px 10px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 9%, var(--bg)); color: var(--fg); font-size: var(--text-small); }
 .start-aim b { color: var(--accent); font-weight: 600; margin-right: 6px; }
-.start-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 26px; }
-.start-card { display: flex; align-items: center; gap: 12px; min-height: 58px; padding: 10px 12px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--border); text-align: left; transition: background var(--fast); }
+.start-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; margin-top: 26px; }
+.start-card { display: flex; align-items: center; gap: 12px; min-height: 58px; height: auto; padding: 10px 12px; border-radius: var(--radius-md); box-shadow: inset 0 0 0 1px var(--border); text-align: left; transition: background var(--fast); }
 .start-card:hover { background: var(--bg-hover); }
 .start-card > span:first-child { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--bg-active); color: var(--fg-2); }
 .start-card > span:nth-child(2) { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
@@ -168,8 +169,8 @@
 .start-notes button { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 8px; margin: 0 -8px; border-radius: var(--radius-sm); text-align: left; color: var(--fg-2); font-size: var(--text-small); }
 .start-notes button:hover { background: var(--bg-hover); color: var(--fg); }
 .start-notes .icon { color: var(--fg-3); }
-.start-tools { display: flex; align-items: center; gap: 10px; margin-top: 26px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-sidebar); font-size: var(--text-small); }
-.start-tools > span:not(.conn-logo) { flex: 1; min-width: 0; color: var(--fg-2); }
+.start-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 26px; padding: 12px 14px; border-radius: var(--radius-md); background: var(--bg-sidebar); font-size: var(--text-small); }
+.start-tools > span:not(.conn-logo) { flex: 1 1 200px; min-width: 0; color: var(--fg-2); }
 .start-tools .conn-logo { flex: none; border-radius: 50%; margin-right: -4px; box-shadow: 0 0 0 2px var(--bg-sidebar); }
 
 /* Noticed: what the assistant found on its own. Rows to be read at a glance: what it is, the
