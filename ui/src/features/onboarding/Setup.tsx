@@ -8,12 +8,15 @@ import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { app } from "../../shell/workspace";
 import { Logo } from "../connections/logos";
+import { identify } from "../../bridge/analytics";
+import { type Account, accountsAvailable, signInWithGoogle } from "../../bridge/auth";
 import { ConnectModel, useModel } from "../ai/Connect";
+import { AccountDialog } from "../auth/AccountDialog";
 import { useMe } from "../profile/profiles";
 import { AIMS, aimInWords, type Answers, connectService, EMPTY, finish, HEARD, type Job, jobs, leaveOnboarding, LOOKS, type Option, TEAMS, USES, wear } from "./onboarding";
 import { chime, done as doneSound, muteSounds, pop, soundsMuted, sweep, tick, wakeSounds } from "./sounds";
 
-type Step = "hello" | "uses" | "aim" | "team" | "look" | "assistant" | "tools" | "heard" | "folder" | "building";
+type Step = "hello" | "account" | "uses" | "aim" | "team" | "look" | "assistant" | "tools" | "heard" | "folder" | "building";
 
 /** `--i` is a thing's place in line: the stylesheet turns it into when it arrives. */
 const nth = (i: number) => ({ "--i": i }) as CSSProperties;
@@ -206,6 +209,28 @@ export default function Onboarding() {
   const [linked, setLinked] = useState<Record<string, "busy" | "done" | string>>({});
   const [muted, setMuted] = useState(soundsMuted());
   // Whether a folder was open when setup began decides if the folder question is asked at all.
+  const account = useStore(app, (s) => s.account);
+  // Asked only of someone who was not signed in when setup began, and only where accounts exist.
+  const needsAccount = useRef(accountsAvailable && !app.get().account);
+  const [signing, setSigning] = useState(false);
+  const [byEmail, setByEmail] = useState(false);
+  const [signProblem, setSignProblem] = useState("");
+  const signedIn = (who: Account) => {
+    identify(who.id);
+    app.set({ account: who });
+    setByEmail(false);
+    track("action", { feature: "account", action: "signed_in", from: "setup" });
+  };
+  const google = async () => {
+    setSignProblem("");
+    setSigning(true);
+    try {
+      signedIn(await signInWithGoogle());
+    } catch (e) {
+      setSignProblem(e instanceof Error ? e.message : String(e));
+    }
+    setSigning(false);
+  };
   const model = useModel();
   // Asked only of someone with no model connected when setup began.
   const [needsModel, setNeedsModel] = useState(false);
@@ -213,13 +238,13 @@ export default function Onboarding() {
     if (model.ready === false) setNeedsModel(true);
   }, [model.ready]);
   const hadVault = useRef(Boolean(vault));
-  const order = useMemo<Step[]>(() => ["hello", "uses", "aim", "team", "look", ...(needsModel ? (["assistant"] as Step[]) : []), "tools", "heard", ...(hadVault.current ? [] : (["folder"] as Step[])), "building"], [needsModel]);
+  const order = useMemo<Step[]>(() => ["hello", ...(needsAccount.current ? (["account"] as Step[]) : []), "uses", "aim", "team", "look", ...(needsModel ? (["assistant"] as Step[]) : []), "tools", "heard", ...(hadVault.current ? [] : (["folder"] as Step[])), "building"], [needsModel]);
   const index = order.indexOf(step);
   const set = (patch: Partial<Answers>) => setAnswers((a) => ({ ...a, ...patch }));
 
   useEffect(() => void aiConnectors().then(setCatalog, () => {}), []);
 
-  const optionCount = { hello: 0, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, assistant: 0, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
+  const optionCount = { hello: 0, account: 0, uses: USES.length, aim: AIMS.length, team: TEAMS.length, look: LOOKS.length, assistant: 0, tools: catalog.length, heard: HEARD.length, folder: 2, building: 0 }[step];
   useEffect(() => {
     track("onboarding_step", { step });
     if (step !== "hello") sweep();
@@ -297,6 +322,30 @@ export default function Onboarding() {
         <button className="primary ob-go" style={nth(19)} autoFocus onClick={() => go(1)}>
           Set it up
         </button>
+      </section>
+    );
+  } else if (step === "account") {
+    ask = (
+      <section className="ob-ask">
+        <h1>
+          <Said text={account ? `Good to meet you, ${name || "there"}.` : "First, sign in"} />
+        </h1>
+        <p className="ob-sub">
+          {account ? `You are signed in as ${account.email}.` : "An account is how your team finds you, and how your work follows you to another computer. Your notes stay on this computer either way."}
+        </p>
+        {!account && (
+          <div className="ai-connect">
+            <button className="primary" disabled={signing} onClick={() => void google()}>
+              {signing ? "Waiting for your browser…" : "Continue with Google"}
+            </button>
+            <small>Opens your browser. Come back here when it says you are signed in.</small>
+            <button className="settings-button" onClick={() => setByEmail(true)}>
+              Use an email and password
+            </button>
+            {signProblem && <p className="ai-connect-problem">{signProblem}</p>}
+          </div>
+        )}
+        {byEmail && <AccountDialog onClose={() => setByEmail(false)} onDone={signedIn} />}
       </section>
     );
   } else if (step === "uses") {
@@ -524,6 +573,11 @@ export default function Onboarding() {
           {(step === "tools" || step === "heard") && !(step === "tools" ? answers.tools.length : answers.heard) && (
             <button className="link" onClick={() => go(index + 1)}>
               {step === "tools" ? "None of these" : "Skip this one"}
+            </button>
+          )}
+          {step === "account" && !account && (
+            <button className="link" onClick={() => go(index + 1)}>
+              Not now
             </button>
           )}
           {step === "assistant" && !model.ready && (

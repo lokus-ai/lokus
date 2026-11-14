@@ -232,3 +232,6 @@ button.nt-source:hover { color: var(--fg); }
 .nt-suggestion .nt-kind { color: var(--accent); }
 .nt-proposed { padding: 2px 0 2px 12px; border-left: 2px solid var(--accent); font-size: var(--text-ui); line-height: 1.55; user-select: text; -webkit-user-select: text; }
 .nt-why { display: flex; align-items: baseline; gap: 8px; margin: 0; color: var(--fg-2); font-size: var(--text-small); line-height: 1.45; }
+
+/* A dialog opened from inside the setup sits above it. */
+.ob .overlay { z-index: 80; }
