@@ -35,7 +35,7 @@ function span(seconds: number): string {
  * Settings, Team, for an owner: write to someone by email. An invite can still go out as a
  * link, for a person the owner would sooner message themselves.
  */
-export function InviteBox({ server, token, base, workspace, reload }: { server: string; token: string; base: string; workspace: string; reload(): Promise<void> }) {
+export function InviteBox({ server, token, base, reload }: { server: string; token: string; base: string; reload(): Promise<void> }) {
   const me = useMe();
   const [to, setTo] = useState("");
   const [role, setRole] = useState<"editor" | "viewer">("editor");
@@ -89,34 +89,23 @@ export function InviteBox({ server, token, base, workspace, reload }: { server: 
 
   return (
     <form onSubmit={send}>
-      <div className="invite-card">
-        <div className="invite-card-body">
-          <strong>Invite people</strong>
-          <p>They get an email from Lokus, sign in with that address and join {workspace} in one click.</p>
-          <div className="invite-fields">
-            <label className="invite-field grow">
-              <span>Email address</span>
-              <input type="text" inputMode="email" autoComplete="off" spellCheck={false} value={to} placeholder="jane@company.com" onChange={(e) => setTo(e.target.value)} />
-            </label>
-            <label className="invite-field">
-              <span>Role</span>
-              <select value={role} onChange={(e) => setRole(e.target.value as "editor" | "viewer")}>
-                <option value="editor">Editor, can change things</option>
-                <option value="viewer">Viewer, can only read</option>
-              </select>
-            </label>
-          </div>
-          {problem && <p className="invite-problem">{problem}</p>}
-        </div>
-        <div className="invite-card-foot">
-          <button type="button" className="invite-link" onClick={() => void link()}>
-            <Icon name="share" size={14} /> Copy an invite link instead
-          </button>
-          <button className="primary" disabled={busy || !to.trim()}>
-            {busy ? "Sending…" : "Send invite"}
-          </button>
-        </div>
+      <div className="team-invite">
+        <input type="text" inputMode="email" autoComplete="off" spellCheck={false} value={to} placeholder="Enter an email address to invite" aria-label="Email address to invite" onChange={(e) => setTo(e.target.value)} />
+        <select value={role} aria-label="Their role" onChange={(e) => setRole(e.target.value as "editor" | "viewer")}>
+          <option value="editor">Editor</option>
+          <option value="viewer">Viewer</option>
+        </select>
+        <button className="primary" disabled={busy || !to.trim()}>
+          <Icon name="person" size={14} /> {busy ? "Sending…" : "Invite to team"}
+        </button>
       </div>
+      <p className="team-invite-hint">
+        They get an email from Lokus and join in one click.{" "}
+        <button type="button" className="link" onClick={() => void link()}>
+          Copy an invite link instead
+        </button>
+      </p>
+      {problem && <p className="settings-hint error">{problem}</p>}
     </form>
   );
 }
@@ -138,33 +127,32 @@ export function PendingRows({ server, token, base, invites, reload }: { server: 
     await relay(server, token, "DELETE", `${base}/invites/${i.code}`).catch((err) => notify(said(err)));
     await reload();
   };
-  if (!invites.length) return <p className="team-empty">Nobody is waiting on an invitation.</p>;
   return (
-    <div className="settings-list team-list">
+    <>
       {invites.map((i) => (
         <div key={i.code} className="settings-item">
           <span className="team-avatar waiting">{i.email ? i.email.slice(0, 1).toUpperCase() : <Icon name="share" size={13} />}</span>
           <div className="settings-item-main">
             <strong>{i.email ?? "Invite link"}</strong>
             <small>
-              {i.email ? (i.sent_at ? `Invited ${span(now - i.sent_at)} ago` : "The email could not be sent") : "Not used yet"}, works for {span(i.expires_at - now)}
+              {i.email ? (i.sent_at ? `Invited ${span(now - i.sent_at)} ago` : "The email could not be sent") : "Not used yet"} as {i.role === "editor" ? "an editor" : "a viewer"}
             </small>
           </div>
-          <span className="team-role">{i.role === "editor" ? "Editor" : "Viewer"}</span>
+          <span className="team-pill pending">Pending</span>
           {i.email && (
             <button className="settings-button" disabled={Boolean(i.sent_at && now - i.sent_at < 60)} onClick={() => void again(i)}>
-              Send again
+              Resend
             </button>
           )}
           <button className="settings-button" onClick={() => copy(i.code)}>
             Copy link
           </button>
           <button className="link danger" onClick={() => void cancel(i)}>
-            Cancel
+            Revoke
           </button>
         </div>
       ))}
-    </div>
+    </>
   );
 }
 

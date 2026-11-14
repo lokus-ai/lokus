@@ -49,7 +49,6 @@ export function TeamSettings() {
   /** The irreversible thing the person has clicked once and must confirm. */
   const [confirming, setConfirming] = useState<"leave" | "delete" | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [tab, setTab] = useState<"members" | "invited">("members");
 
   useEffect(() => {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
@@ -139,7 +138,7 @@ export function TeamSettings() {
     return (
       <Section title="Team" hint="This vault is shared. Everyone in the workspace keeps a full copy and can work offline.">
         <div className="team-head">
-          <span className="team-tile">{(teamName.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpperCase()}</span>
+          <span className="vault-badge team-badge">{(teamName.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpperCase()}</span>
           <div className="team-head-main">
             <strong>{teamName}</strong>
             <small>
@@ -152,24 +151,12 @@ export function TeamSettings() {
           </button>
         </div>
 
-        {owner && token && <InviteBox server={server} token={token} base={base} workspace={teamName} reload={async () => {
-          await loadTeam();
-          setTab("invited");
-        }} />}
+        {owner && token && <InviteBox server={server} token={token} base={base} reload={loadTeam} />}
 
-        <div className="team-tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "members"} className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}>
-            Members <span>{members.length}</span>
-          </button>
-          {owner && (
-            <button role="tab" aria-selected={tab === "invited"} className={tab === "invited" ? "on" : ""} onClick={() => setTab("invited")}>
-              Invited <span>{invites.length}</span>
-            </button>
-          )}
+        <div className="team-table-head">
+          <span>Person</span>
+          <span>Role</span>
         </div>
-        {tab === "invited" && owner && token ? (
-          <PendingRows server={server} token={token} base={base} invites={invites} reload={loadTeam} />
-        ) : (
         <div className="settings-list team-list">
           {members.map((m) => {
             const me = m.user === current.user;
@@ -188,7 +175,7 @@ export function TeamSettings() {
                   </small>
                 </div>
                 {fixed ? (
-                  <span className="team-role">{ROLES[m.role]}</span>
+                  <span className={`team-pill ${m.role}`}>{ROLES[m.role]}</span>
                 ) : (
                   <select value={m.role} aria-label={`Role of ${m.email ?? m.user}`} onChange={(e) => void change("PATCH", `/members/${encodeURIComponent(m.user)}`, { role: e.target.value })}>
                     {(Object.keys(ROLES) as Role[]).map((r) => (
@@ -206,8 +193,8 @@ export function TeamSettings() {
               </div>
             );
           })}
+          {owner && token && <PendingRows server={server} token={token} base={base} invites={invites} reload={loadTeam} />}
         </div>
-        )}
 
         <InvitedList />
 
