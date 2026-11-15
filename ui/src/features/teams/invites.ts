@@ -4,7 +4,7 @@ import { accessToken } from "../../bridge/auth";
 import { defaultVault, listVaults } from "../../bridge/core";
 import { relay } from "../../bridge/sync";
 import { createStore } from "../../shell/store";
-import { allNotes, app, connectSync, notify, resumeSync, setVault, stoppedSync, syncedWith } from "../../shell/workspace";
+import { allNotes, app, connectSync, notify, resumeSync, saveAll, setVault, stoppedSync, syncedWith } from "../../shell/workspace";
 
 /**
  * Invitations, from both ends.
@@ -139,6 +139,8 @@ export async function bringTeams(): Promise<void> {
           at = await defaultVault(false, (name = `${w.name} ${n}`));
         }
         const had = syncedWith(at.root) === w.id;
+        // The folder on screen is about to change: what was typed there is written first.
+        await saveAll();
         await setVault((await defaultVault(true, name)).root);
         if (!had) await connectSync(HOME, w.id, null);
         track("action", { feature: "team", action: "team_brought" });
