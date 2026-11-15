@@ -25,6 +25,17 @@ export function ModelPicker() {
     setModels(null);
     void aiSettings().then(setSettings, () => setSettings(null));
   }, [settingsOpen]);
+  // A provider with no model of its own to fall back on gets the first one it lists; nobody is asked.
+  useEffect(() => {
+    if (!settings || !settings.keys[settings.config.provider] || settings.config.model || DEFAULT_MODEL[settings.config.provider]) return;
+    void aiModels().then((list) => {
+      setModels(list);
+      if (!list[0]) return;
+      const config = { ...settings.config, model: list[0] };
+      setSettings({ ...settings, config });
+      void saveAiConfig(config);
+    }, () => undefined);
+  }, [settings]);
   useEffect(() => {
     if (!open) return;
     const close = () => setOpen(false);
