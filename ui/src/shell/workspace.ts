@@ -521,7 +521,9 @@ export async function chooseVault(): Promise<void> {
 }
 
 export async function refreshTree(): Promise<void> {
-  app.set({ tree: await runCore<Entry[]>("vault.tree") });
+  // What the assistant noticed is kept in a folder of its own; it is shown under Noticed, not as files.
+  const tree = await runCore<Entry[]>("vault.tree");
+  app.set({ tree: tree.filter((e) => !(e.kind === "folder" && e.path === "noticed")) });
 }
 
 export function allNotes(entries: Entry[] = app.get().tree, out: string[] = []): string[] {

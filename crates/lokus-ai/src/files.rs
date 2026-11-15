@@ -175,6 +175,8 @@ fn collect(entries: &Value, under: &str, out: &mut Vec<String>) {
         let path = entry["path"].as_str().unwrap_or_default();
         match entry["kind"].as_str() {
             Some("folder") => collect(&entry["children"], under, out),
+            // What the assistant noticed is kept as files too; it is not the user's material.
+            Some("file") if path.starts_with("noticed/") => {}
             Some("file") if under.is_empty() || path.starts_with(&format!("{under}/")) => {
                 out.push(format!("{path}  ({})", files::kind(path)));
             }
