@@ -441,7 +441,9 @@ safe:
 - A folder that already synced with this team here is used again, so asking twice makes
   nothing twice.
 - What was being typed is written to its own folder before the team's folder takes the
-  screen. A team that cannot be given a folder does not hold up the others.
+  screen. When a note there cannot be written (it changed on disk meanwhile), the folder
+  stays on screen and the teams wait for the next look. A team that cannot be given a
+  folder does not hold up the others.
 - A team whose syncing was stopped on this computer (Settings, Team, Stop syncing) is not
   started again. "Sync this vault here" starts it.
 - One connection is open at a time, the open folder's. With several teams the first is left

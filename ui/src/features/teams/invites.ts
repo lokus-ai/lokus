@@ -143,6 +143,8 @@ export async function bringTeams(): Promise<void> {
         const had = syncedWith(at.root) === w.id;
         // The folder on screen is about to change: what was typed there is written first.
         await saveAll();
+        // A note that could not be written keeps its folder on screen; the teams wait for the next look.
+        if (Object.values(app.get().dirty).some(Boolean)) return;
         const { root } = await defaultVault(true, name);
         await setVault(root);
         if (!had) await connectSync(HOME, w.id, null, root);
