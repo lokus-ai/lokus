@@ -1,43 +1,65 @@
 name: Release
 
-# Builds Lokus for both kinds of Mac, signed and notarized, and puts it out: the files on a
-# GitHub pre-release, the news post, and the word to every installed copy that there is a new
-# version. The same script a person runs on their own Mac (deploy/release/mac.sh) does the
-# building; this only puts the keys in place around it.
+# A version goes out when a pull request is merged into main, and at no other time.
 #
-#   Actions, Release, Run workflow: choose the branch, type the version.
-#   Or: gh workflow run release.yml --ref next -f version=2.0.0-alpha.7
+# To release: in the pull request, change the one line in the file VERSION (and, if you like,
+# add news/<version with dashes>.md). When it is merged, this builds Lokus for both kinds of
+# Mac, signed and notarized, and puts it out: the files on a GitHub pre-release, the news
+# post, and the word to every installed copy that there is a new version. A merge that leaves
+# VERSION alone releases nothing.
 #
-# With "publish" off it builds and keeps the files as a download on the run, and tells nobody.
+# Who can release is therefore who can merge into main. The keys live in the "release"
+# environment, which only a run on main may use: a workflow on any other branch, or in a pull
+# request from a fork, cannot read them, whatever it is edited to say.
 #
 # It stays a PRE-release and never writes `latest.json`: Lokus 1 updates itself from this
 # repository's "latest" release, and would move every Lokus 1 user onto Lokus 2.
 #
-# Secrets it uses (Settings, Secrets and variables, Actions):
-#   LOKUS_UPDATER_KEY         signs update files; installed copies trust only this key
-#   LOKUS_PUBLISH_KEY         lets `lokus release` and `lokus news` tell the relay
-#   APPLE_CERTIFICATE (+ _PASSWORD)   the Developer ID certificate, as a base64 .p12
-#   LOKUS_APPLE_API_KEY_P8, LOKUS_APPLE_API_KEY_ID, LOKUS_APPLE_API_ISSUER   notarization
-#   VITE_POSTHOG_KEY, VITE_POSTHOG_HOST   usage counting, as in builds made by hand
-# Variables: LOKUS_RELAY, LOKUS_SUPABASE_URL, LOKUS_SUPABASE_KEY (all public values).
+# The building is done by the script a person can also run on their own Mac
+# (deploy/release/mac.sh); this only puts the keys in place around it.
+#
+# In the "release" environment: LOKUS_UPDATER_KEY (signs update files; installed copies trust
+# only this key), LOKUS_PUBLISH_KEY (lets the relay be told), LOKUS_APPLE_API_KEY_P8,
+# LOKUS_APPLE_API_KEY_ID, LOKUS_APPLE_API_ISSUER (notarization). Repository secrets:
+# APPLE_CERTIFICATE and its password (the Developer ID certificate, a base64 .p12),
+# VITE_POSTHOG_KEY, VITE_POSTHOG_HOST. Variables: LOKUS_RELAY, LOKUS_SUPABASE_URL,
+# LOKUS_SUPABASE_KEY (all public values).
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Version, like 2.0.0-alpha.7"
-        required: true
-      publish:
-        description: "Put it out: GitHub pre-release, news, and tell installed copies to update"
-        type: boolean
-        default: true
+  push:
+    branches: [main]
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
+  decide:
+    name: Is there a version to put out?
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      release: ${{ steps.read.outputs.release }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=$(tr -d ' \n\r' < VERSION)
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "VERSION holds \"$VERSION\", which is not a version like 2.0.1"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          # Out already: this merge changed something else, and there is nothing to release.
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"; echo "v$VERSION is already out; nothing to do"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"; echo "releasing v$VERSION"
+          fi
+
   mac:
     name: Mac (${{ matrix.arch }})
+    needs: decide
+    if: needs.decide.outputs.release == 'true'
+    environment: release
     strategy:
       fail-fast: true
       matrix:
@@ -93,28 +115,28 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.LOKUS_SUPABASE_KEY }}
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
-        run: sh deploy/release/mac.sh "${{ inputs.version }}" "${{ vars.LOKUS_RELAY }}" "${{ matrix.arch }}"
+        run: sh deploy/release/mac.sh "${{ needs.decide.outputs.version }}" "${{ vars.LOKUS_RELAY }}" "${{ matrix.arch }}"
       - name: Check what was built
         run: |
           set -e
-          cd "dist-release/${{ inputs.version }}"
+          cd "dist-release/${{ needs.decide.outputs.version }}"
           ls -la
-          spctl -a -t open --context context:primary-signature -vv "Lokus_${{ inputs.version }}_${{ matrix.arch }}.dmg"
+          spctl -a -t open --context context:primary-signature -vv "Lokus_${{ needs.decide.outputs.version }}_${{ matrix.arch }}.dmg"
       - uses: actions/upload-artifact@v4
         with:
-          name: lokus-${{ inputs.version }}-${{ matrix.arch }}
-          path: dist-release/${{ inputs.version }}/Lokus_*
+          name: lokus-${{ needs.decide.outputs.version }}-${{ matrix.arch }}
+          path: dist-release/${{ needs.decide.outputs.version }}/Lokus_*
           if-no-files-found: error
 
   publish:
     name: Put it out
-    needs: mac
-    if: inputs.publish
+    needs: [decide, mac]
+    environment: release
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.decide.outputs.version }}
       RELAY: ${{ vars.LOKUS_RELAY }}
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       LOKUS_PUBLISH_KEY: ${{ secrets.LOKUS_PUBLISH_KEY }}

@@ -43,25 +43,31 @@ password manager and in the CI secrets, nowhere else.
 
 ## Publishing a version
 
+**A version goes out when a pull request is merged into `main`.** Nobody runs anything.
+
+1. In the pull request, change the one line in the file `VERSION` (say to `2.0.1`).
+2. Add `news/2-0-1.md` if there is something to tell people (see below).
+3. Merge it. `.github/workflows/release.yml` builds both kinds of Mac, signs and notarizes
+   them, puts the files on a GitHub pre-release, posts the news, and tells installed copies.
+
+A merge that leaves `VERSION` alone releases nothing. Who can release is who can merge into
+`main`. The keys are in the repository's `release` environment, which only a run on `main` can
+use, so a workflow on another branch or in a fork's pull request cannot read them.
+
+It is always a PRE-release, never "latest": Lokus 1 updates itself from this repository's
+"latest" release.
+
+### By hand, from a Mac (if the pipeline is down)
+
 ```sh
-# 1. Build on a Mac: signed, notarized, with the installer window and the update file.
 #    Once per Mac: xcrun notarytool store-credentials lokus --key … --key-id … --issuer …
 sh deploy/release/mac.sh 2.0.1 https://relay.lokusmd.com            # Apple Silicon
 sh deploy/release/mac.sh 2.0.1 https://relay.lokusmd.com x86_64     # Intel
-#    What comes out is in dist-release/2.0.1/. Eject any open "Lokus" disk first.
-
-# 2. Put the files on GitHub as a PRE-release (never "latest": Lokus 1 updates from "latest")
-gh release create v2.0.1 --prerelease --latest=false --target main dist-release/2.0.1/*
-
-# 3. Write what is new (see below) and publish it first, so the pop-up can show it
-lokus news file=news/2-0-1.md server=https://relay…
-
-# 4. Publish the version
-lokus release version=2.0.1 server=https://relay… \
-  darwin-aarch64=https://…/Lokus.app.tar.gz \
-  darwin-x86_64=https://…/Lokus_x64.app.tar.gz \
-  windows-x86_64=https://…/Lokus_2.0.1_x64-setup.exe \
-  linux-x86_64=https://…/Lokus_2.0.1_amd64.AppImage
+gh release create v2.0.1 --prerelease --latest=false --target main dist-release/2.0.1/Lokus_*
+lokus news file=news/2-0-1.md server=https://relay.lokusmd.com
+lokus release version=2.0.1 server=https://relay.lokusmd.com \
+  darwin-aarch64=https://…/Lokus_aarch64.app.tar.gz \
+  darwin-x86_64=https://…/Lokus_x86_64.app.tar.gz
 ```
 
 `lokus release` refuses to publish when:
