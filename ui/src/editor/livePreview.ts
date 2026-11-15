@@ -387,7 +387,7 @@ class Table extends WidgetType {
     });
     wrap.addEventListener("keydown", (e) => {
       const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
-      if (!cell || e.isComposing) return;
+      if (!cell || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
       const { row, col } = place(cell);
       const rows = grid(wrap.widget.source);
       const width = rows[0].length;
@@ -488,7 +488,8 @@ class Table extends WidgetType {
     while (start < next.length && start < this.source.length && next[start] === this.source[start]) start++;
     let end = 0;
     while (end < next.length - start && end < this.source.length - start && next.at(-1 - end) === this.source.at(-1 - end)) end++;
-    if (next === this.source) return;
+    // A table that is no longer what this was drawn from (another note, a teammate) is left alone.
+    if (next === this.source || view.state.sliceDoc(this.from, this.from + this.source.length) !== this.source) return;
     view.dispatch({
       changes: { from: this.from + start, to: this.from + this.source.length - end, insert: next.slice(start, next.length - end) },
       userEvent: "input.type",
