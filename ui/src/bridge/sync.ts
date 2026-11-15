@@ -45,8 +45,8 @@ export function onSyncEvent(handler: (event: SyncEvent) => void): () => void {
   return () => void stop.then((off) => off());
 }
 
-export function syncConnect(server: string, workspace: string, token: string): Promise<void> {
-  return invoke("sync_connect", { server, workspace, token });
+export function syncConnect(server: string, workspace: string, token: string, root: string): Promise<void> {
+  return invoke("sync_connect", { server, workspace, token, root });
 }
 
 /** Hand the running connection a fresh sign-in, so it outlives the one it started with. */

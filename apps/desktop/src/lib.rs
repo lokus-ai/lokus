@@ -97,6 +97,8 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
             core: core.clone(),
             _watch: handle,
         });
+        // A connection asked for the last folder may have started while this one opened.
+        sync::stop_for(app);
     }
     let _ = app.emit("vault:opened", &info);
     Ok(info)
@@ -120,8 +122,9 @@ fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
 }
 
 /// The folder notes are kept in when someone does not want to choose one: Documents, Lokus.
-/// With `open` it is made if need be and opened; without, only its place is told.
-/// A `name` asks for a folder of that name instead, for a team's workspace joined by invitation.
+/// With `open` it is made if need be and opened; without, only its place is told, and whether
+/// it is `free`: not there yet, or holding nothing. A `name` asks for a folder of that name
+/// instead, for a team's workspace.
 #[tauri::command(async)]
 fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Value, Value> {
     // A workspace's name is whatever its owner typed; only what is safe as a folder is kept.
@@ -138,7 +141,16 @@ fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Val
         .map_err(|e| json!({ "code": "io", "message": format!("Could not find your Documents folder: {e}") }))?
         .join(if named.is_empty() { "Lokus" } else { named });
     if !open {
-        return Ok(json!({ "root": folder }));
+        let free = match std::fs::read_dir(&folder) {
+            Ok(inside) => !inside
+                .flatten()
+                .any(|entry| !entry.file_name().to_string_lossy().starts_with('.')),
+            Err(_) => !folder.exists(),
+        };
+        // As the disk spells it, which is how a folder's sync is remembered: "sales" and "Sales"
+        // are one folder on a Mac.
+        let root = folder.canonicalize().unwrap_or(folder);
+        return Ok(json!({ "root": root, "free": free }));
     }
     std::fs::create_dir_all(&folder).map_err(
         |e| json!({ "code": "io", "message": format!("Could not make {}: {e}", folder.display()) }),

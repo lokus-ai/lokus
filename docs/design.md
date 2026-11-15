@@ -423,6 +423,33 @@ button, and "Add workspace", which makes a folder of that name in Documents. A n
 is private; sharing it is one step under Settings, Team. Every window still shows the same
 workspace: switching in one switches them all.
 
+**A team comes by itself.** Being in a team is enough to have it on a computer.
+On sign-in, when the app starts and when its window is returned to, the app asks the relay
+which teams the person is in (`GET /v1/workspaces`); each one with no folder on this computer
+gets a folder in Documents named after it, is opened and starts syncing
+(`bringTeams` in `ui/src/features/teams/invites.ts`). Nobody is asked. The rules that keep it
+safe:
+
+- It never lands in a folder holding files, nor in one that syncs with another team, nor
+  where a plain file has the name: each is passed over for "name 2", "name 3". A person's
+  own notes cannot reach a team this way, nor one team's notes another. Folders are told
+  apart as the disk spells them, so teams "sales" and "Sales" get "sales" and "Sales 2".
+- A connection is asked for one folder by name (`sync_connect`'s `root`) and refused when
+  another is open by then, so a folder opened in the same instant is not taken for the team's.
+  It is looked at again at the moment the connection starts, and opening a folder ends any
+  connection begun for the last one: none runs behind a folder it was not asked for.
+- A folder that already synced with this team here is used again, so asking twice makes
+  nothing twice.
+- What was being typed is written to its own folder before the team's folder takes the
+  screen. A team that cannot be given a folder does not hold up the others.
+- A team whose syncing was stopped on this computer (Settings, Team, Stop syncing) is not
+  started again. "Sync this vault here" starts it.
+- One connection is open at a time, the open folder's. With several teams the first is left
+  on screen; the others sync when their folder is opened from the switcher.
+- First-run setup chooses the first folder itself; teams are brought when it closes. With
+  no relay or no sign-in nothing is made and nothing is said; it is asked again later.
+- A team folder opened while signed out starts syncing when the person signs in.
+
 ### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
 
 An owner types an address under Settings, Team. The relay emails that person from

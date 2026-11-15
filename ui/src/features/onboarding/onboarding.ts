@@ -6,7 +6,7 @@ import type { IconName } from "../../shell/Icon";
 import { type Preferences, setPreference } from "../../shell/preferences";
 import { createStore } from "../../shell/store";
 import { app, applyLayout, openCustomers, openTasks, refreshTree, setVault } from "../../shell/workspace";
-import { join, type Waiting } from "../teams/invites";
+import { bringTeams, join, type Waiting } from "../teams/invites";
 
 /**
  * The first-run setup: a few questions, and a workspace made from the answers.
@@ -114,6 +114,7 @@ export function leaveOnboarding(skipped: boolean, at = ""): void {
   localStorage.setItem(DONE, new Date().toISOString());
   if (skipped) track("onboarding_skipped", { at });
   onboarding.set({ open: false });
+  void bringTeams();
 }
 
 /** Sign in to a service in the browser and keep it among the assistant's connections. */

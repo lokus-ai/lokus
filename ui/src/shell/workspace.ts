@@ -358,6 +358,26 @@ async function unshareAll(): Promise<void> {
 
 const syncKey = () => `lokus.sync:${app.get().vault?.root ?? ""}`;
 
+/** The team workspace a folder syncs with, if it does. */
+export function syncedWith(root: string): string | null {
+  try {
+    return (JSON.parse(localStorage.getItem(`lokus.sync:${root}`) ?? "null") as { workspace?: string } | null)?.workspace ?? null;
+  } catch {
+    return null;
+  }
+}
+
+const STOPPED = "lokus.sync.stopped";
+
+/** The teams whose syncing this person stopped on this computer. Those are not started again for them. */
+export function stoppedSync(): string[] {
+  try {
+    return (JSON.parse(localStorage.getItem(STOPPED) ?? "null") as string[] | null) ?? [];
+  } catch {
+    return [];
+  }
+}
+
 /** Start syncing this vault with a team workspace. */
 /** The sign-in the connection was last given, and how to stop feeding it fresh ones. */
 let syncSignIn: string | null = null;
@@ -367,7 +387,7 @@ let retriedSignIn = false;
 /** The latest request to connect, so a retry for an older one does nothing. */
 let lastAsk = "";
 
-export async function connectSync(server: string, workspace: string, token: string | null): Promise<void> {
+export async function connectSync(server: string, workspace: string, token: string | null, root = app.get().vault?.root ?? ""): Promise<void> {
   const useToken = token ?? (await accessToken());
   if (!useToken) {
     app.set({ sync: { status: "refused", reason: "Sign in first" } });
@@ -375,7 +395,10 @@ export async function connectSync(server: string, workspace: string, token: stri
   }
   await saveAll();
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
-  localStorage.setItem(syncKey(), JSON.stringify({ server, workspace, token }));
+  localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
+  localStorage.setItem(STOPPED, JSON.stringify(stoppedSync().filter((w) => w !== workspace)));
+  // Another folder was opened while this waited: this one starts when it is opened again.
+  if ((app.get().vault?.root ?? "") !== root) return;
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -398,12 +421,17 @@ export async function connectSync(server: string, workspace: string, token: stri
   window.setTimeout(() => {
     if (lastAsk !== asking || app.get().sync.status !== "connecting") return;
     reportError(new Error("sync stayed at connecting for 30 seconds"), "sync");
-    void connectSync(server, workspace, token);
+    void connectSync(server, workspace, token, root);
   }, 30_000);
-  await syncConnect(server, workspace, useToken).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
+  await syncConnect(server, workspace, useToken, root).catch((e) => {
+    // Refused because another folder was opened meanwhile: that folder is not the one to say so.
+    if ((app.get().vault?.root ?? "") === root) app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } });
+  });
 }
 
 export async function disconnectSync(): Promise<void> {
+  const was = savedSync()?.workspace;
+  if (was) localStorage.setItem(STOPPED, JSON.stringify([...stoppedSync().filter((w) => w !== was), was]));
   localStorage.removeItem(syncKey());
   stopSignIns?.();
   stopSignIns = null;
@@ -436,10 +464,11 @@ function watchSync(): void {
       void (async () => {
         // A sign-in that ran out while the computer slept is answered once with a fresh one.
         const saved = savedSync();
+        const root = app.get().vault?.root;
         const fresh = saved?.token === null && !retriedSignIn ? await accessToken().catch(() => null) : null;
         if (saved && fresh && fresh !== syncSignIn) {
           retriedSignIn = true;
-          await connectSync(saved.server, saved.workspace, null);
+          await connectSync(saved.server, saved.workspace, null, root);
           return;
         }
         void unshareAll();
@@ -466,7 +495,8 @@ function savedSync(): { server: string; workspace: string; token: string | null 
   }
 }
 
-async function resumeSync(): Promise<void> {
+/** Connect the open folder to the team it was last told to keep, if it has one. */
+export async function resumeSync(): Promise<void> {
   const saved = savedSync();
   if (saved) await connectSync(saved.server, saved.workspace, saved.token);
 }

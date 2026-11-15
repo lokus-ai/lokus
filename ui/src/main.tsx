@@ -16,7 +16,7 @@ import { describe, startAnalytics, watchErrors } from "./bridge/analytics";
 import { DEV_CHANNEL, serveDevCommands } from "./bridge/dev";
 import { isMainWindow } from "./bridge/core";
 import { followNoticed, startWatching } from "./features/noticed/noticed";
-import { startOnboarding } from "./features/onboarding/onboarding";
+import { onboarding, startOnboarding } from "./features/onboarding/onboarding";
 import { watchInvites } from "./features/teams/invites";
 import { startPlugins } from "./features/plugins/host";
 import { startUpdates } from "./features/updates/updates";
@@ -43,7 +43,7 @@ document.documentElement.dataset.platform = /Mac/i.test(navigator.userAgent) ? "
 void boot().then(() => {
   if (!isMainWindow()) return;
   startOnboarding();
-  watchInvites();
+  watchInvites(() => onboarding.get().open);
 });
 if (isMainWindow()) startUpdates();
 // One window does the looking; every window shows what was found.
