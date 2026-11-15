@@ -475,6 +475,13 @@ impl Engine {
         if base == disk && row.path.as_deref() == Some(path) {
             return Ok(());
         }
+        // This note's own file is still where this device keeps it, so the file at `path` is
+        // another note's: the manifest names a move that has not been made here yet.
+        if let Some(own) = row.path.as_deref().filter(|own| *own != path) {
+            if self.vault.resolve(own)?.exists() {
+                return Ok(());
+            }
+        }
         let before = doc.transact().state_vector();
         if base != disk {
             let mut txn = doc.transact_mut();
@@ -651,9 +658,23 @@ impl Engine {
                 });
                 return Ok(path.to_string());
             }
+            // The note here is on its way to another name (two notes swapped names). It waits
+            // beside this one until its own turn, so neither file is written over.
+            let aside = self.beside(path)?;
+            if self.vault.resolve(path)?.exists() {
+                self.vault.rename(path, &aside)?;
+            }
+            let doc = self.load(other)?;
+            let synced = self.row(other)?.and_then(|r| r.synced);
+            self.save(other, &doc, synced.as_deref(), Some(&aside))?;
+            self.events.push(Event::Renamed {
+                from: path.to_string(),
+                to: aside,
+            });
+            return Ok(path.to_string());
         }
         let exists = self.vault.resolve(path)?.exists();
-        if exists && taken_by_other.is_none() {
+        if exists {
             let ours: Option<String> = self
                 .db
                 .query_row("SELECT path FROM docs WHERE id = ?1", [id], |r| r.get(0))
@@ -675,9 +696,14 @@ impl Engine {
 
     /// Bring files in line with the manifest: create, rename and trash.
     fn materialize(&mut self, manifest: &Doc) -> Result<()> {
-        let mut ids: Vec<String> = self.entries(manifest).into_keys().collect();
+        // Notes that are gone leave first, so a note given the name of one finds it free.
+        let mut ids: Vec<(bool, String)> = self
+            .entries(manifest)
+            .into_iter()
+            .map(|(id, entry)| (!entry.deleted, id))
+            .collect();
         ids.sort();
-        for id in ids {
+        for (_, id) in ids {
             // Read now, not before the loop: placing an earlier note may have renamed this one.
             let Some(entry) = self.entry(manifest, &id) else {
                 continue;
@@ -1124,6 +1150,60 @@ mod tests {
         }
         assert_eq!(a.read("Same.md"), b.read("Same.md"));
         assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn two_notes_that_swapped_names_arrive_as_one_change() {
+        let (mut a, mut b) = (device(), device());
+        a.write("One.md", "one\n");
+        a.write("Two.md", "two\n");
+        exchange(&mut a, &mut b);
+        a.engine.rename("One.md", "Tmp.md").unwrap();
+        a.engine.rename("Two.md", "One.md").unwrap();
+        a.engine.rename("Tmp.md", "Two.md").unwrap();
+        // The relay hands a device that was away the three renames as one change.
+        let out = a.engine.outbox().unwrap();
+        let parts: Vec<&[u8]> = out.iter().map(|o| o.data.as_slice()).collect();
+        let merged = yrs::merge_updates_v1(&parts).unwrap();
+        b.engine.apply_remote(MANIFEST, &merged).unwrap();
+        for o in &out {
+            a.engine.sent(o.n).unwrap();
+        }
+        exchange(&mut a, &mut b);
+        for d in [&a, &b] {
+            assert_eq!(d.read("One.md").as_deref(), Some("two\n"));
+            assert_eq!(d.read("Two.md").as_deref(), Some("one\n"));
+            assert_eq!(d.read("One (local copy).md"), None);
+            assert_eq!(d.read("Two (local copy).md"), None);
+        }
+        assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_note_given_the_name_of_a_deleted_one_arrives_as_one_change() {
+        // Which of the two notes is placed first goes by their ids, so try a few pairs.
+        for _ in 0..8 {
+            let (mut a, mut b) = (device(), device());
+            a.write("Old.md", "old\n");
+            a.write("Kept.md", "kept\n");
+            exchange(&mut a, &mut b);
+            fs::remove_file(a.vault.root().join("Old.md")).unwrap();
+            a.engine.scan().unwrap();
+            a.engine.rename("Kept.md", "Old.md").unwrap();
+            let out = a.engine.outbox().unwrap();
+            let parts: Vec<&[u8]> = out.iter().map(|o| o.data.as_slice()).collect();
+            let merged = yrs::merge_updates_v1(&parts).unwrap();
+            b.engine.apply_remote(MANIFEST, &merged).unwrap();
+            for o in &out {
+                a.engine.sent(o.n).unwrap();
+            }
+            exchange(&mut a, &mut b);
+            for d in [&a, &b] {
+                assert_eq!(d.read("Old.md").as_deref(), Some("kept\n"));
+                assert_eq!(d.read("Kept.md"), None);
+                assert_eq!(d.read("Old (local copy).md"), None);
+            }
+        }
     }
 
     #[test]
