@@ -77,7 +77,7 @@ pub struct Engine {
     client_id: u64,
     pub events: Vec<Event>,
     /// False on a viewer's device: nothing it writes is sent, so it decides nothing for the team.
-    pub can_publish: bool,
+    can_publish: bool,
 }
 
 struct Row {
@@ -600,6 +600,18 @@ impl Engine {
                 data: encode(&update),
             });
             self.queue(id, update)?;
+        }
+        Ok(())
+    }
+
+    /// Say whether this device may publish (a viewer may not). One that has just been allowed
+    /// to places any note that was waiting for an editor to name it.
+    pub fn allow_publishing(&mut self, yes: bool) -> Result<()> {
+        let waited = yes && !self.can_publish;
+        self.can_publish = yes;
+        if waited {
+            let manifest = self.load(MANIFEST)?;
+            self.materialize(&manifest)?;
         }
         Ok(())
     }
@@ -1210,7 +1222,7 @@ mod tests {
         // Which note keeps the name, and whose write wins, go by random ids: try a few.
         for round in 0..12 {
             let (mut a, mut b, mut viewer) = (device(), device(), device());
-            viewer.engine.can_publish = false;
+            viewer.engine.allow_publishing(false).unwrap();
             a.write("One.md", "one\n");
             a.write("Two.md", "two\n");
             settle(&mut a, &mut b, &mut viewer);
@@ -1235,6 +1247,30 @@ mod tests {
             assert_eq!(files(&viewer), files(&a));
             assert!(viewer.engine.outbox().unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn a_viewer_made_an_editor_places_the_note_that_was_waiting() {
+        let (mut a, mut b, mut viewer) = (device(), device(), device());
+        viewer.engine.allow_publishing(false).unwrap();
+        a.write("Untitled.md", "written on a\n");
+        b.write("Untitled.md", "written on b\n");
+        a.engine.scan().unwrap();
+        b.engine.scan().unwrap();
+        // The viewer hears of both notes before any editor's device has named them apart.
+        for d in [&a, &b] {
+            for out in d.engine.outbox().unwrap() {
+                viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+            }
+        }
+        assert_eq!(viewer.vault.notes().unwrap().len(), 1);
+        viewer.engine.allow_publishing(true).unwrap();
+        let mut texts = [
+            viewer.read("Untitled.md").unwrap(),
+            viewer.read("Untitled (local copy).md").unwrap(),
+        ];
+        texts.sort();
+        assert_eq!(texts, ["written on a\n", "written on b\n"]);
     }
 
     #[test]

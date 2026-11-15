@@ -360,10 +360,7 @@ async fn session(
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
     let mut can_edit = answer["role"] != "viewer";
-    with(engine, |e| {
-        e.can_publish = can_edit;
-        Ok(())
-    })?;
+    with(engine, |e| e.allow_publishing(can_edit))?;
     // Facts may have been pushed while this device was away.
     arrived.notify_one();
     // Where to pull from again if the relay says we fell behind its live feed.
@@ -411,10 +408,7 @@ async fn session(
                     // An owner changed what we may do while we were connected.
                     "role" => {
                         can_edit = value["role"] != "viewer";
-                        with(engine, |e| {
-                            e.can_publish = can_edit;
-                            Ok(())
-                        })?;
+                        with(engine, |e| e.allow_publishing(can_edit))?;
                         report(json!({ "event": "role", "role": value["role"] }));
                     }
                     "updates" => {
