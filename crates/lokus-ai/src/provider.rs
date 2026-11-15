@@ -1,6 +1,6 @@
 //! @part-of ai
-//! The two wire formats: Anthropic's Messages API for Claude, and the OpenAI
-//! chat-completions format for everything else. Conversations are kept in the
+//! The wire formats: Anthropic's Messages API for Claude, the OpenAI Responses API for OpenAI
+//! itself, and the OpenAI chat-completions format for everything else. Conversations are kept in the
 //! Anthropic shape (a list of messages whose content is a list of blocks) and
 //! translated on the way out for the other format.
 
@@ -536,7 +536,8 @@ fn to_responses(messages: &[Value]) -> Vec<Value> {
     out
 }
 
-/// The OpenAI Responses API, which is what a ChatGPT plan is served through.
+/// The OpenAI Responses API: what a ChatGPT plan is served through, and what OpenAI's own
+/// address is asked with a key.
 async fn responses(
     http: &Client,
     config: &Config,
@@ -641,6 +642,16 @@ async fn responses(
     })
 }
 
+/// Whether this goes to OpenAI itself. With a key, its newer models refuse tools on
+/// chat-completions and name the Responses API instead (2026-11-15); any other address is a
+/// compatible service, and chat-completions is the format those speak.
+fn at_openai(config: &Config) -> bool {
+    config.provider == Provider::OpenAi
+        && config
+            .url()
+            .eq_ignore_ascii_case(Provider::OpenAi.default_url())
+}
+
 /// Ask the model for its next turn, streaming text to `on_text` as it comes.
 pub async fn turn(
     http: &Client,
@@ -653,10 +664,28 @@ pub async fn turn(
 ) -> Result<Turn> {
     match config.provider {
         Provider::Anthropic => anthropic(http, config, key, system, tools, messages, on_text).await,
-        Provider::OpenAi => openai(http, config, key, system, tools, messages, on_text).await,
-        Provider::ChatGpt => responses(http, config, key, system, tools, messages, on_text).await,
+        Provider::OpenAi if !at_openai(config) => {
+            openai(http, config, key, system, tools, messages, on_text).await
+        }
+        _ => responses(http, config, key, system, tools, messages, on_text).await,
     }
 }
+
+/// Names that mark a model for speech, pictures, search indexes or the pre-chat era.
+const NOT_CHAT: &[&str] = &[
+    "embed",
+    "tts",
+    "whisper",
+    "dall-e",
+    "image",
+    "moderation",
+    "audio",
+    "realtime",
+    "transcribe",
+    "babbage",
+    "davinci",
+    "sora",
+];
 
 /// The models the key can use, newest first where the provider says so.
 pub async fn models(http: &Client, config: &Config, key: &str) -> Result<Vec<String>> {
@@ -671,26 +700,38 @@ pub async fn models(http: &Client, config: &Config, key: &str) -> Result<Vec<Str
     })
     .await?;
     let body: Value = response.json().await.map_err(network(config))?;
-    Ok(model_ids(&body, config.provider))
+    Ok(model_ids(&body, config.provider, at_openai(config)))
 }
 
 /// The usable model names in a provider's answer. A key's models come as `data[].id`; a ChatGPT
 /// plan's come as `models[].slug`, already in the order ChatGPT recommends them.
-fn model_ids(body: &Value, provider: Provider) -> Vec<String> {
+fn model_ids(body: &Value, provider: Provider, openai_itself: bool) -> Vec<String> {
     let (list, name) = match body["models"].as_array() {
         Some(list) => (Some(list), "slug"),
         None => (body["data"].as_array(), "id"),
     };
-    let mut ids: Vec<String> = list
+    let mut models: Vec<(i64, String)> = list
         .into_iter()
         .flatten()
         .filter(|m| m["visibility"].is_null() || m["visibility"] == "list")
-        .filter_map(|m| m[name].as_str().map(str::to_string))
+        .filter_map(|m| {
+            Some((
+                m["created"].as_i64().unwrap_or(0),
+                m[name].as_str()?.to_string(),
+            ))
+        })
         .collect();
-    if provider == Provider::OpenAi {
-        ids.sort();
+    match (provider, openai_itself) {
+        // A key for OpenAI lists everything it can reach, in no order: the newest come first, and
+        // what cannot hold a conversation is left out (its name can still be typed).
+        (Provider::OpenAi, true) => {
+            models.retain(|(_, id)| !NOT_CHAT.iter().any(|word| id.contains(word)));
+            models.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        }
+        (Provider::OpenAi, false) => models.sort_by(|a, b| a.1.cmp(&b.1)),
+        _ => {}
     }
-    ids
+    models.into_iter().map(|(_, id)| id).collect()
 }
 
 #[cfg(test)]
@@ -706,11 +747,41 @@ mod tests {
             { "slug": "gpt-6-astra", "display_name": "GPT-6-Astra", "visibility": "list", "priority": 2 },
         ] });
         assert_eq!(
-            model_ids(&body, Provider::ChatGpt),
+            model_ids(&body, Provider::ChatGpt, false),
             ["gpt-6.1-sol", "gpt-6-astra"]
         );
-        let keyed = json!({ "data": [{ "id": "b" }, { "id": "a" }] });
-        assert_eq!(model_ids(&keyed, Provider::OpenAi), ["a", "b"]);
+        // A key's list opened with babbage-002 and dall-e-2 (2026-11-15): newest first, chat only.
+        let keyed = json!({ "data": [
+            { "id": "babbage-002", "created": 1 },
+            { "id": "gpt-old", "created": 2 },
+            { "id": "text-embedding-3", "created": 9 },
+            { "id": "gpt-new-mini", "created": 5 },
+            { "id": "gpt-new", "created": 5 },
+        ] });
+        assert_eq!(
+            model_ids(&keyed, Provider::OpenAi, true),
+            ["gpt-new", "gpt-new-mini", "gpt-old"]
+        );
+        // Another service keeps every name, in alphabetical order: "image" in a name there says
+        // nothing about what the model can do.
+        let other =
+            json!({ "data": [{ "id": "b", "created": 1 }, { "id": "a-image", "created": 2 }] });
+        assert_eq!(model_ids(&other, Provider::OpenAi, false), ["a-image", "b"]);
+    }
+
+    #[test]
+    fn a_key_for_openai_itself_is_asked_through_responses() {
+        // 2026-11-15: gpt-6.1-sol with a key answered "Function tools with reasoning_effort are
+        // not supported ... in /v1/chat/completions. To use function tools, use /v1/responses".
+        let mut config = Config {
+            provider: Provider::OpenAi,
+            ..Config::default()
+        };
+        assert!(at_openai(&config));
+        config.base_url = "https://API.OpenAI.com/v1/".into();
+        assert!(at_openai(&config));
+        config.base_url = "http://localhost:11434/v1".into();
+        assert!(!at_openai(&config));
     }
 
     #[test]

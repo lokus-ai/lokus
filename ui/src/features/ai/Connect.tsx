@@ -19,7 +19,7 @@ export function useModel(): { ready: boolean | null; recheck(): void } {
       async (s) => {
         if (s.keys[s.config.provider]) return setReady(true);
         if (s.keys.chatgpt) {
-          await saveAiConfig({ ...s.config, provider: "chatgpt", model: "" }).catch(() => {});
+          await saveAiConfig({ ...s.config, provider: "chatgpt", model: "", base_url: "" }).catch(() => {});
           return setReady(true);
         }
         setReady(false);
@@ -42,7 +42,7 @@ export function ConnectModel({ onDone, from }: { onDone(): void; from: "panel" |
     try {
       await chatgptLogin();
       const { config } = await aiSettings();
-      await saveAiConfig({ ...config, provider: "chatgpt", model: "" });
+      await saveAiConfig({ ...config, provider: "chatgpt", model: "", base_url: "" });
       track("connection_added", { service: "chatgpt", from });
       onDone();
     } catch (e) {
