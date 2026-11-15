@@ -398,7 +398,7 @@ export async function connectSync(server: string, workspace: string, token: stri
   localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
   localStorage.setItem(STOPPED, JSON.stringify(stoppedSync().filter((w) => w !== workspace)));
   // Another folder was opened while this waited: this one starts when it is opened again.
-  if (app.get().vault?.root !== root) return;
+  if ((app.get().vault?.root ?? "") !== root) return;
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -461,10 +461,11 @@ function watchSync(): void {
       void (async () => {
         // A sign-in that ran out while the computer slept is answered once with a fresh one.
         const saved = savedSync();
+        const root = app.get().vault?.root;
         const fresh = saved?.token === null && !retriedSignIn ? await accessToken().catch(() => null) : null;
         if (saved && fresh && fresh !== syncSignIn) {
           retriedSignIn = true;
-          await connectSync(saved.server, saved.workspace, null);
+          await connectSync(saved.server, saved.workspace, null, root);
           return;
         }
         void unshareAll();

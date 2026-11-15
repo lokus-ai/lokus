@@ -94,13 +94,15 @@ export function sharedAlready(): boolean {
  * Documents named after the workspace.
  */
 export async function join(w: Waiting, where: "here" | "new"): Promise<void> {
+  // The folder open when it was pressed, not one opened while the relay answered.
+  let root = where === "here" ? app.get().vault?.root : undefined;
   const token = await accessToken();
   if (!token) throw new Error("Sign in first");
   invited.set({ joining: w.code });
   try {
     await relay<{ workspace: string }>(HOME, token, "POST", `/v1/invites/${w.code}/accept`);
-    if (where === "new" || !app.get().vault) await setVault((await defaultVault(true, w.name)).root);
-    await connectSync(HOME, w.workspace, null);
+    if (!root) await setVault((root = (await defaultVault(true, w.name)).root));
+    await connectSync(HOME, w.workspace, null, root);
     track("action", { feature: "team", action: "invite_accepted", where, role: w.role });
     notify(`You joined ${w.name}`);
     invited.set((s) => ({ waiting: s.waiting.filter((x) => x.code !== w.code) }));
@@ -141,8 +143,9 @@ export async function bringTeams(): Promise<void> {
         const had = syncedWith(at.root) === w.id;
         // The folder on screen is about to change: what was typed there is written first.
         await saveAll();
-        await setVault((await defaultVault(true, name)).root);
-        if (!had) await connectSync(HOME, w.id, null);
+        const { root } = await defaultVault(true, name);
+        await setVault(root);
+        if (!had) await connectSync(HOME, w.id, null, root);
         track("action", { feature: "team", action: "team_brought" });
         notify(`${w.name} is on this computer now`);
       } catch {
