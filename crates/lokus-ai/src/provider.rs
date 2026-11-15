@@ -646,7 +646,10 @@ async fn responses(
 /// chat-completions and name the Responses API instead (2026-11-15); any other address is a
 /// compatible service, and chat-completions is the format those speak.
 fn at_openai(config: &Config) -> bool {
-    config.provider != Provider::Anthropic && config.url() == Provider::OpenAi.default_url()
+    config.provider == Provider::OpenAi
+        && config
+            .url()
+            .eq_ignore_ascii_case(Provider::OpenAi.default_url())
 }
 
 /// Ask the model for its next turn, streaming text to `on_text` as it comes.
@@ -697,12 +700,12 @@ pub async fn models(http: &Client, config: &Config, key: &str) -> Result<Vec<Str
     })
     .await?;
     let body: Value = response.json().await.map_err(network(config))?;
-    Ok(model_ids(&body, config.provider))
+    Ok(model_ids(&body, config.provider, at_openai(config)))
 }
 
 /// The usable model names in a provider's answer. A key's models come as `data[].id`; a ChatGPT
 /// plan's come as `models[].slug`, already in the order ChatGPT recommends them.
-fn model_ids(body: &Value, provider: Provider) -> Vec<String> {
+fn model_ids(body: &Value, provider: Provider, openai_itself: bool) -> Vec<String> {
     let (list, name) = match body["models"].as_array() {
         Some(list) => (Some(list), "slug"),
         None => (body["data"].as_array(), "id"),
@@ -718,11 +721,15 @@ fn model_ids(body: &Value, provider: Provider) -> Vec<String> {
             ))
         })
         .collect();
-    if provider == Provider::OpenAi {
-        // A key lists everything it can reach, in no order: the newest come first, and what
-        // cannot hold a conversation is left out (its name can still be typed).
-        models.retain(|(_, id)| !NOT_CHAT.iter().any(|word| id.contains(word)));
-        models.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    match (provider, openai_itself) {
+        // A key for OpenAI lists everything it can reach, in no order: the newest come first, and
+        // what cannot hold a conversation is left out (its name can still be typed).
+        (Provider::OpenAi, true) => {
+            models.retain(|(_, id)| !NOT_CHAT.iter().any(|word| id.contains(word)));
+            models.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        }
+        (Provider::OpenAi, false) => models.sort_by(|a, b| a.1.cmp(&b.1)),
+        _ => {}
     }
     models.into_iter().map(|(_, id)| id).collect()
 }
@@ -740,7 +747,7 @@ mod tests {
             { "slug": "gpt-6-astra", "display_name": "GPT-6-Astra", "visibility": "list", "priority": 2 },
         ] });
         assert_eq!(
-            model_ids(&body, Provider::ChatGpt),
+            model_ids(&body, Provider::ChatGpt, false),
             ["gpt-6.1-sol", "gpt-6-astra"]
         );
         // A key's list opened with babbage-002 and dall-e-2 (2026-11-15): newest first, chat only.
@@ -752,11 +759,14 @@ mod tests {
             { "id": "gpt-new", "created": 5 },
         ] });
         assert_eq!(
-            model_ids(&keyed, Provider::OpenAi),
+            model_ids(&keyed, Provider::OpenAi, true),
             ["gpt-new", "gpt-new-mini", "gpt-old"]
         );
-        let undated = json!({ "data": [{ "id": "b" }, { "id": "a" }] });
-        assert_eq!(model_ids(&undated, Provider::OpenAi), ["a", "b"]);
+        // Another service keeps every name, in alphabetical order: "image" in a name there says
+        // nothing about what the model can do.
+        let other =
+            json!({ "data": [{ "id": "b", "created": 1 }, { "id": "a-image", "created": 2 }] });
+        assert_eq!(model_ids(&other, Provider::OpenAi, false), ["a-image", "b"]);
     }
 
     #[test]
@@ -768,7 +778,7 @@ mod tests {
             ..Config::default()
         };
         assert!(at_openai(&config));
-        config.base_url = "https://api.openai.com/v1/".into();
+        config.base_url = "https://API.OpenAI.com/v1/".into();
         assert!(at_openai(&config));
         config.base_url = "http://localhost:11434/v1".into();
         assert!(!at_openai(&config));

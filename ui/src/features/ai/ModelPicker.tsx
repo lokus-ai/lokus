@@ -25,10 +25,10 @@ export function ModelPicker() {
     setModels(null);
     void aiSettings().then(setSettings, () => setSettings(null));
   }, [settingsOpen]);
-  // A provider with no model of its own takes the first one it lists. Listing them is what
+  // A ChatGPT plan with no model takes the first one the plan recommends. Listing them is what
   // chooses and saves it (in Rust); here it is only read back and shown.
   useEffect(() => {
-    if (!settings || !settings.keys[settings.config.provider] || settings.config.model || DEFAULT_MODEL[settings.config.provider]) return;
+    if (!settings || settings.config.provider !== "chatgpt" || !settings.keys.chatgpt || settings.config.model) return;
     let stale = false;
     void aiModels()
       .then(async (list) => ({ list, now: await aiSettings() }))

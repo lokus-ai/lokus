@@ -462,11 +462,12 @@ pub async fn send(
     };
     let key = credential(config.provider).await?;
     let http = reqwest::Client::new();
-    // A provider with no model of its own is asked for its list and given the first.
-    if config.model().is_err() {
+    // A ChatGPT plan with no model is given the first one the plan recommends.
+    if config.provider == Provider::ChatGpt && config.model().is_err() {
         let listed = provider::models(&http, &config, &key).await?;
-        config.model = listed.into_iter().next().ok_or(AiError::NoModel)?;
+        config.model = listed.into_iter().next().unwrap_or_default();
     }
+    config.model()?;
 
     // Tool servers that cannot be reached are skipped, not fatal.
     let mut connections: Vec<Connection> = Vec::new();

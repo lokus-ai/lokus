@@ -131,12 +131,12 @@ impl Config {
         fs::rename(tmp, dir.join(FILE)).map_err(failed)
     }
 
-    /// A provider with no model of its own takes the first one it lists; nobody is asked. The
-    /// saved settings are read again: they may have changed while the provider was answering, and
-    /// a list asked for one provider says nothing about another.
+    /// A ChatGPT plan with no model takes the first one the plan recommends; nobody is asked. A
+    /// key's list is in no such order, so a key is never given a model nobody chose. The saved
+    /// settings are read again: they may have changed while the provider was answering.
     pub fn adopt_model(dir: &Path, asked: &Config, listed: &[String]) -> Result<()> {
         let mut now = Self::load(dir);
-        let same = now.provider == asked.provider && now.url() == asked.url();
+        let same = asked.provider == Provider::ChatGpt && now.provider == asked.provider;
         match listed.first() {
             Some(first) if same && now.model().is_err() => {
                 now.model = first.clone();
@@ -324,12 +324,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_first_listed_model_is_taken_only_by_the_provider_that_listed_it() {
+    fn the_first_listed_model_is_taken_only_by_the_chatgpt_plan_that_listed_it() {
         // Review of 2026-11-15: the list came back after the provider was changed, and the old
         // provider was written over the new one.
         let dir = tempfile::tempdir().unwrap();
         let asked = Config {
-            provider: Provider::OpenAi,
+            provider: Provider::ChatGpt,
             ..Config::default()
         };
         let listed = ["gpt-new".to_string(), "gpt-old".to_string()];
@@ -342,7 +342,16 @@ mod tests {
         Config::adopt_model(dir.path(), &asked, &["other".to_string()]).unwrap();
         assert_eq!(Config::load(dir.path()).model, "gpt-new");
 
-        // Changed to Claude while OpenAI was answering: nothing of OpenAI's is written.
+        // A key's list is in no recommended order: nothing is chosen for it.
+        let keyed = Config {
+            provider: Provider::OpenAi,
+            ..Config::default()
+        };
+        keyed.save(dir.path()).unwrap();
+        Config::adopt_model(dir.path(), &keyed, &listed).unwrap();
+        assert_eq!(Config::load(dir.path()).model, "");
+
+        // Changed to Claude while ChatGPT was answering: nothing of ChatGPT's is written.
         Config::default().save(dir.path()).unwrap();
         Config::adopt_model(dir.path(), &asked, &listed).unwrap();
         let now = Config::load(dir.path());
