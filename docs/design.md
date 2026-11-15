@@ -291,6 +291,10 @@ the local file is kept beside it as "name (local copy)" and synced too. The one 
 local file that already holds exactly the arriving text (the starter notes every new vault
 begins with): it is the same note, so it stays where it is and nothing is kept twice.
 
+Two people who each make a note of the same name while apart (two "Untitled" notes written
+offline), or who each rename a different note to the same name, have two notes, and both are kept. Every device gives the name to the same one of
+them and names the other beside it, "name (local copy)", so no text is merged or lost.
+
 **Who may do what**
 
 - Roles are owner, editor and viewer per workspace. Per-folder permissions come later.

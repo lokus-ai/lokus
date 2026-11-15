@@ -280,6 +280,12 @@ impl Engine {
             .collect()
     }
 
+    fn entry(&self, manifest: &Doc, id: &str) -> Option<Entry> {
+        let map = manifest.get_or_insert_map("notes");
+        let txn = manifest.transact();
+        serde_json::from_str(&map.get(&txn, id)?.to_string(&txn)).ok()
+    }
+
     /// Change the manifest and queue the change for the relay.
     fn set_entry(&self, manifest: &Doc, id: &str, entry: &Entry) -> Result<()> {
         let before = manifest.transact().state_vector();
@@ -551,8 +557,8 @@ impl Engine {
         if path.is_none() {
             // The manifest may already say where this note lives.
             let manifest = self.load(MANIFEST)?;
-            if let Some(entry) = self.entries(&manifest).get(id).filter(|e| !e.deleted) {
-                path = Some(self.claim_path(id, &entry.path, Some(&text))?);
+            if let Some(entry) = self.entry(&manifest, id).filter(|e| !e.deleted) {
+                path = Some(self.claim_path(&manifest, id, &entry.path, Some(&text))?);
             }
         }
         if let Some(p) = &path {
@@ -577,11 +583,34 @@ impl Engine {
         Ok(())
     }
 
-    /// Make sure `path` is free for note `id`. An unrelated local file that
-    /// sits there is moved aside, never overwritten. One that already holds
-    /// exactly `text` is the same note made twice (a starter note every vault
-    /// begins with), so it stays and becomes this note's file.
-    fn claim_path(&mut self, id: &str, path: &str, text: Option<&str>) -> Result<String> {
+    /// A name beside `path` that no file on this device has.
+    fn beside(&self, path: &str) -> Result<String> {
+        let stem = path.strip_suffix(".md").unwrap_or(path);
+        let mut n = 1;
+        loop {
+            let candidate = if n == 1 {
+                format!("{stem} (local copy).md")
+            } else {
+                format!("{stem} (local copy {n}).md")
+            };
+            if !self.vault.resolve(&candidate)?.exists() {
+                return Ok(candidate);
+            }
+            n += 1;
+        }
+    }
+
+    /// Where note `id`, which the manifest puts at `path`, goes on this device. An unrelated
+    /// local file that sits there is moved aside, never overwritten. One that already holds
+    /// exactly `text` is the same note made twice (a starter note every vault begins with), so
+    /// it stays and becomes this note's file.
+    fn claim_path(
+        &mut self,
+        manifest: &Doc,
+        id: &str,
+        path: &str,
+        text: Option<&str>,
+    ) -> Result<String> {
         let taken_by_other: Option<String> = self
             .db
             .query_row(
@@ -590,6 +619,39 @@ impl Engine {
                 |r| r.get(0),
             )
             .optional()?;
+        if let Some(other) = &taken_by_other {
+            let stays = self
+                .entry(manifest, other)
+                .is_some_and(|e| !e.deleted && e.path == path);
+            if stays {
+                // Two notes made apart under one name. Both are kept: the one with the smaller
+                // id has the name, on every device, and the other is named beside it.
+                let aside = self.beside(path)?;
+                let moved = if other.as_str() > id { other } else { id };
+                self.set_entry(
+                    manifest,
+                    moved,
+                    &Entry {
+                        path: aside.clone(),
+                        deleted: false,
+                    },
+                )?;
+                if moved == id {
+                    return Ok(aside);
+                }
+                if self.vault.resolve(path)?.exists() {
+                    self.vault.rename(path, &aside)?;
+                }
+                let doc = self.load(other)?;
+                let synced = self.row(other)?.and_then(|r| r.synced);
+                self.save(other, &doc, synced.as_deref(), Some(&aside))?;
+                self.events.push(Event::KeptBoth {
+                    path: path.to_string(),
+                    moved_to: aside,
+                });
+                return Ok(path.to_string());
+            }
+        }
         let exists = self.vault.resolve(path)?.exists();
         if exists && taken_by_other.is_none() {
             let ours: Option<String> = self
@@ -600,19 +662,7 @@ impl Engine {
             let same =
                 text.is_some() && self.read_disk(path).map(|(disk, _)| disk).as_deref() == text;
             if ours.as_deref() != Some(path) && !same {
-                let stem = path.strip_suffix(".md").unwrap_or(path);
-                let mut n = 1;
-                let aside = loop {
-                    let candidate = if n == 1 {
-                        format!("{stem} (local copy).md")
-                    } else {
-                        format!("{stem} (local copy {n}).md")
-                    };
-                    if !self.vault.resolve(&candidate)?.exists() {
-                        break candidate;
-                    }
-                    n += 1;
-                };
+                let aside = self.beside(path)?;
                 self.vault.rename(path, &aside)?;
                 self.events.push(Event::KeptBoth {
                     path: path.to_string(),
@@ -625,9 +675,13 @@ impl Engine {
 
     /// Bring files in line with the manifest: create, rename and trash.
     fn materialize(&mut self, manifest: &Doc) -> Result<()> {
-        let mut entries: Vec<(String, Entry)> = self.entries(manifest).into_iter().collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        for (id, entry) in entries {
+        let mut ids: Vec<String> = self.entries(manifest).into_keys().collect();
+        ids.sort();
+        for id in ids {
+            // Read now, not before the loop: placing an earlier note may have renamed this one.
+            let Some(entry) = self.entry(manifest, &id) else {
+                continue;
+            };
             // A path this device must not write (it would leave the vault, or reach into
             // `.lokus/`) is skipped, not fatal. Failing here would stop sync for good on every
             // device, and any member could cause it with one entry.
@@ -657,7 +711,7 @@ impl Engine {
                     self.save(&id, &doc, row.synced.as_deref(), None)?;
                 }
                 (Some(old), false) if *old != entry.path => {
-                    let target = self.claim_path(&id, &entry.path, None)?;
+                    let target = self.claim_path(manifest, &id, &entry.path, None)?;
                     if self.vault.resolve(old)?.exists() {
                         self.vault.rename(old, &target)?;
                         self.events.push(Event::Renamed {
@@ -678,7 +732,7 @@ impl Engine {
                     )?;
                 }
                 (None, false) => {
-                    let target = self.claim_path(&id, &entry.path, Some(&text))?;
+                    let target = self.claim_path(manifest, &id, &entry.path, Some(&text))?;
                     // A file that already says this is left exactly as it is, line endings and all.
                     if self.read_disk(&target).map(|(disk, _)| disk).as_deref() != Some(&text) {
                         self.write_disk(&target, &text)?;
@@ -1025,6 +1079,51 @@ mod tests {
         );
         assert_eq!(b.read("Same (local copy).md"), None);
         assert!(b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn two_notes_made_apart_under_one_name_are_both_kept() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Seed.md", "seed\n");
+        exchange(&mut a, &mut b);
+        // Apart, each makes a note of the same name.
+        a.write("Untitled.md", "written on a\n");
+        b.write("Untitled.md", "written on b\n");
+        exchange(&mut a, &mut b);
+        let mut texts = Vec::new();
+        for d in [&a, &b] {
+            let mut kept = [
+                d.read("Untitled.md").unwrap(),
+                d.read("Untitled (local copy).md").unwrap(),
+            ];
+            kept.sort();
+            assert_eq!(kept, ["written on a\n", "written on b\n"]);
+            texts.push(d.read("Untitled.md"));
+        }
+        // Both devices agree which note has the name.
+        assert_eq!(texts[0], texts[1]);
+        assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn two_notes_renamed_apart_to_one_name_are_both_kept() {
+        let (mut a, mut b) = (device(), device());
+        a.write("One.md", "one\n");
+        a.write("Two.md", "two\n");
+        exchange(&mut a, &mut b);
+        a.engine.rename("One.md", "Same.md").unwrap();
+        b.engine.rename("Two.md", "Same.md").unwrap();
+        exchange(&mut a, &mut b);
+        for d in [&a, &b] {
+            let mut kept = [
+                d.read("Same.md").unwrap(),
+                d.read("Same (local copy).md").unwrap(),
+            ];
+            kept.sort();
+            assert_eq!(kept, ["one\n", "two\n"]);
+        }
+        assert_eq!(a.read("Same.md"), b.read("Same.md"));
+        assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
     }
 
     #[test]
