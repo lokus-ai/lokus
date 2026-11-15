@@ -434,6 +434,8 @@ safe:
   where a plain file has the name: each is passed over for "name 2", "name 3". A person's
   own notes cannot reach a team this way, nor one team's notes another. Folders are told
   apart as the disk spells them, so teams "sales" and "Sales" get "sales" and "Sales 2".
+- A connection is asked for one folder by name (`sync_connect`'s `root`) and refused when
+  another is open by then, so a folder opened in the same instant is not taken for the team's.
 - A folder that already synced with this team here is used again, so asking twice makes
   nothing twice.
 - What was being typed is written to its own folder before the team's folder takes the

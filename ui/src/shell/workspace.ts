@@ -387,7 +387,7 @@ let retriedSignIn = false;
 /** The latest request to connect, so a retry for an older one does nothing. */
 let lastAsk = "";
 
-export async function connectSync(server: string, workspace: string, token: string | null): Promise<void> {
+export async function connectSync(server: string, workspace: string, token: string | null, root = app.get().vault?.root ?? ""): Promise<void> {
   const useToken = token ?? (await accessToken());
   if (!useToken) {
     app.set({ sync: { status: "refused", reason: "Sign in first" } });
@@ -395,8 +395,10 @@ export async function connectSync(server: string, workspace: string, token: stri
   }
   await saveAll();
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
-  localStorage.setItem(syncKey(), JSON.stringify({ server, workspace, token }));
+  localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
   localStorage.setItem(STOPPED, JSON.stringify(stoppedSync().filter((w) => w !== workspace)));
+  // Another folder was opened while this waited: this one starts when it is opened again.
+  if (app.get().vault?.root !== root) return;
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -419,9 +421,9 @@ export async function connectSync(server: string, workspace: string, token: stri
   window.setTimeout(() => {
     if (lastAsk !== asking || app.get().sync.status !== "connecting") return;
     reportError(new Error("sync stayed at connecting for 30 seconds"), "sync");
-    void connectSync(server, workspace, token);
+    void connectSync(server, workspace, token, root);
   }, 30_000);
-  await syncConnect(server, workspace, useToken).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
+  await syncConnect(server, workspace, useToken, root).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
 }
 
 export async function disconnectSync(): Promise<void> {
