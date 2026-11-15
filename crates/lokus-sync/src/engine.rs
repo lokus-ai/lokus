@@ -604,14 +604,36 @@ impl Engine {
         Ok(())
     }
 
-    /// Say whether this device may publish (a viewer may not). One that has just been allowed
-    /// to places any note that was waiting for an editor to name it.
-    pub fn allow_publishing(&mut self, yes: bool) -> Result<()> {
-        let waited = yes && !self.can_publish;
+    /// Say whether this device may publish; a viewer's may not.
+    pub fn allow_publishing(&mut self, yes: bool) {
         self.can_publish = yes;
-        if waited {
-            let manifest = self.load(MANIFEST)?;
-            self.materialize(&manifest)?;
+    }
+
+    /// Place any note left waiting while this device was a viewer's. Only for a device that is
+    /// up to date with the relay.
+    pub fn place_waiting(&mut self) -> Result<()> {
+        if !self.can_publish {
+            return Ok(());
+        }
+        let manifest = self.load(MANIFEST)?;
+        self.materialize(&manifest)
+    }
+
+    /// Take everything this device missed, as the relay hands it over in one answer. All of
+    /// what it says about names is taken in before any file is touched. Taking it one change
+    /// at a time, a device that was away met two notes on one name that the team had long
+    /// since named apart, named them apart itself, and that stale word could win: a
+    /// teammate's later rename was undone, or a note they deleted came back.
+    pub fn apply_pulled(&mut self, items: &[(String, Vec<u8>)]) -> Result<()> {
+        let manifest = self.load(MANIFEST)?;
+        for (_, data) in items.iter().filter(|(doc, _)| doc == MANIFEST) {
+            apply(&manifest, data)?;
+        }
+        self.save(MANIFEST, &manifest, None, None)?;
+        self.materialize(&manifest)?;
+        self.materialize_files(&manifest)?;
+        for (doc, data) in items.iter().filter(|(doc, _)| doc != MANIFEST) {
+            self.apply_remote(doc, data)?;
         }
         Ok(())
     }
@@ -1190,17 +1212,6 @@ mod tests {
 
     #[test]
     fn a_viewer_waits_for_an_editor_to_name_two_notes_apart() {
-        fn files(d: &Device) -> Vec<(String, String)> {
-            let mut all: Vec<(String, String)> = d
-                .vault
-                .notes()
-                .unwrap()
-                .into_iter()
-                .map(|p| (p.clone(), d.read(&p).unwrap()))
-                .collect();
-            all.sort();
-            all
-        }
         // What the two editors queue reaches everyone; nothing a viewer queues is ever sent.
         fn settle(a: &mut Device, b: &mut Device, viewer: &mut Device) {
             for _ in 0..4 {
@@ -1222,7 +1233,7 @@ mod tests {
         // Which note keeps the name, and whose write wins, go by random ids: try a few.
         for round in 0..12 {
             let (mut a, mut b, mut viewer) = (device(), device(), device());
-            viewer.engine.allow_publishing(false).unwrap();
+            viewer.engine.allow_publishing(false);
             a.write("One.md", "one\n");
             a.write("Two.md", "two\n");
             settle(&mut a, &mut b, &mut viewer);
@@ -1249,28 +1260,91 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_viewer_made_an_editor_places_the_note_that_was_waiting() {
+    /// Every note on the device, with its text.
+    fn files(d: &Device) -> Vec<(String, String)> {
+        let mut all: Vec<(String, String)> = d
+            .vault
+            .notes()
+            .unwrap()
+            .into_iter()
+            .map(|p| (p.clone(), d.read(&p).unwrap()))
+            .collect();
+        all.sort();
+        all
+    }
+
+    /// Two editors each make `Untitled.md`, and a viewer hears of both notes before either
+    /// editor's device has named them apart.
+    fn a_viewer_left_waiting() -> (Device, Device, Device) {
         let (mut a, mut b, mut viewer) = (device(), device(), device());
-        viewer.engine.allow_publishing(false).unwrap();
+        viewer.engine.allow_publishing(false);
         a.write("Untitled.md", "written on a\n");
         b.write("Untitled.md", "written on b\n");
         a.engine.scan().unwrap();
         b.engine.scan().unwrap();
-        // The viewer hears of both notes before any editor's device has named them apart.
         for d in [&a, &b] {
             for out in d.engine.outbox().unwrap() {
                 viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
             }
         }
         assert_eq!(viewer.vault.notes().unwrap().len(), 1);
-        viewer.engine.allow_publishing(true).unwrap();
+        (a, b, viewer)
+    }
+
+    #[test]
+    fn a_viewer_made_an_editor_places_the_note_that_was_waiting() {
+        let (_a, _b, mut viewer) = a_viewer_left_waiting();
+        viewer.engine.allow_publishing(true);
+        viewer.engine.place_waiting().unwrap();
         let mut texts = [
             viewer.read("Untitled.md").unwrap(),
             viewer.read("Untitled (local copy).md").unwrap(),
         ];
         texts.sort();
         assert_eq!(texts, ["written on a\n", "written on b\n"]);
+    }
+
+    #[test]
+    fn a_device_that_was_away_does_not_undo_what_the_team_did_since() {
+        // Whose word wins goes by random ids: try a few. Odd rounds: the copy was deleted.
+        for round in 0..16 {
+            // It left as a viewer that had heard of both notes, or was away for all of it.
+            let (mut a, mut b, mut away) = a_viewer_left_waiting();
+            if round % 4 < 2 {
+                away = device();
+            }
+            // Meanwhile the editors name the notes apart, then move the copy or delete it.
+            let mut missed: Vec<(String, Vec<u8>)> = Vec::new();
+            for step in 0..2 {
+                if step == 1 && round % 2 == 0 {
+                    a.engine
+                        .rename("Untitled (local copy).md", "Moved.md")
+                        .unwrap();
+                } else if step == 1 {
+                    fs::remove_file(a.vault.root().join("Untitled (local copy).md")).unwrap();
+                }
+                for _ in 0..4 {
+                    a.engine.scan().unwrap();
+                    b.engine.scan().unwrap();
+                    for out in a.engine.outbox().unwrap() {
+                        b.engine.apply_remote(&out.doc, &out.data).unwrap();
+                        a.engine.sent(out.n).unwrap();
+                        missed.push((out.doc, out.data));
+                    }
+                    for out in b.engine.outbox().unwrap() {
+                        a.engine.apply_remote(&out.doc, &out.data).unwrap();
+                        b.engine.sent(out.n).unwrap();
+                        missed.push((out.doc, out.data));
+                    }
+                }
+            }
+            // It comes back, as an editor, and is handed what it missed.
+            away.engine.allow_publishing(true);
+            away.engine.apply_pulled(&missed).unwrap();
+            away.engine.scan().unwrap();
+            assert_eq!(files(&away), files(&a));
+            assert!(away.engine.outbox().unwrap().is_empty());
+        }
     }
 
     #[test]

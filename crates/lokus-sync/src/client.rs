@@ -360,7 +360,10 @@ async fn session(
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
     let mut can_edit = answer["role"] != "viewer";
-    with(engine, |e| e.allow_publishing(can_edit))?;
+    with(engine, |e| {
+        e.allow_publishing(can_edit);
+        Ok(())
+    })?;
     // Facts may have been pushed while this device was away.
     arrived.notify_one();
     // Where to pull from again if the relay says we fell behind its live feed.
@@ -408,17 +411,23 @@ async fn session(
                     // An owner changed what we may do while we were connected.
                     "role" => {
                         can_edit = value["role"] != "viewer";
-                        with(engine, |e| e.allow_publishing(can_edit))?;
+                        // Connected, so up to date: a note that was waiting can be placed now.
+                        with(engine, |e| {
+                            e.allow_publishing(can_edit);
+                            e.place_waiting()
+                        })?;
                         report(json!({ "event": "role", "role": value["role"] }));
                     }
                     "updates" => {
                         let items = value["items"].as_array().cloned().unwrap_or_default();
                         let head = value["head"].as_i64().unwrap_or(0);
                         with(engine, |e| {
+                            let mut missed = Vec::with_capacity(items.len());
                             for item in &items {
                                 let data = B64.decode(item["data"].as_str().unwrap_or_default()).map_err(|x| Error::Crdt(x.to_string()))?;
-                                e.apply_remote(item["doc"].as_str().unwrap_or_default(), &data)?;
+                                missed.push((item["doc"].as_str().unwrap_or_default().to_string(), data));
                             }
+                            e.apply_pulled(&missed)?;
                             e.set_cursor(head)?;
                             e.mark_pulled()?;
                             e.scan()

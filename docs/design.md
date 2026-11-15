@@ -300,7 +300,9 @@ note that sync moves goes with the note.
 
 A device that was away can get several renames as one change (two notes that swapped names, a
 note given the name of one that was deleted). The note in the way steps aside until its own
-move is made, so neither file is written over and sync does not stop.
+move is made, so neither file is written over and sync does not stop. Everything it missed
+about names is taken in before it touches a file, so it never names two notes apart that the
+team has since moved or deleted: said late, that word could win and undo theirs.
 
 **Who may do what**
 
