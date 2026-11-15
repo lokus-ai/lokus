@@ -92,8 +92,12 @@ export function TeamSettings() {
     if (open) setInvites(open);
   }, [attempt, base, connected, current.workspace, owner, server, token]);
 
+  // Asked again on coming back to the window: someone may have accepted an invitation meanwhile.
   useEffect(() => {
     void loadTeam();
+    const again = () => void loadTeam();
+    window.addEventListener("focus", again);
+    return () => window.removeEventListener("focus", again);
   }, [loadTeam]);
   // Opening this page is a good moment to ask again whether anyone has invited this person.
   useEffect(() => void lookForInvites(), []);

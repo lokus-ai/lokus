@@ -414,6 +414,12 @@ export async function disconnectSync(): Promise<void> {
 
 function watchSync(): void {
   startCollab(syncPeers);
+  // Teammates see who is signed in on this cursor from the moment of signing in, wherever it happens.
+  let named = "You";
+  app.subscribe(() => {
+    const name = app.get().account?.email ?? "You";
+    if (name !== named) setIdentity((named = name));
+  });
   onSyncEvent((event) => {
     const { sync } = app.get();
     if (event.event === "online") {
@@ -441,7 +447,12 @@ function watchSync(): void {
       })();
     } else if (event.event === "pulled") for (const path of sessions.keys()) void share(path);
     else if (event.event === "published" || event.event === "wrote") void share(event.path);
-    else if (event.event === "kept_both") notify(`Kept your copy as “${event.moved_to}”`);
+    // Sync moved a file (a teammate renamed it, or another note took its name): its tab goes with it.
+    else if (event.event === "renamed") moveOpen(event.from, event.to);
+    else if (event.event === "kept_both") {
+      moveOpen(event.path, event.moved_to);
+      notify(`Kept your copy as “${event.moved_to}”`);
+    }
   });
 }
 
@@ -483,13 +494,11 @@ export async function boot(): Promise<void> {
     void currentAccount().then((account) => {
       if ((account?.id ?? null) === (app.get().account?.id ?? null)) return;
       identify(account?.id ?? null);
-      setIdentity(account?.email ?? "You");
       app.set({ account });
     }, () => {});
   });
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);
-  setIdentity(account?.email ?? "You");
   app.set({ vault, account, ready: true });
   applyLayout();
   track("app_opened");
@@ -704,6 +713,26 @@ export async function openTasks(): Promise<void> {
 
 const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
 
+/** Open tabs follow a note or a folder to its new path, with what is still to be saved. */
+function moveOpen(from: string, to: string): void {
+  const moved = (p: string) => (under(p, from) ? to + p.slice(from.length) : p);
+  for (const [path, session] of [...sessions]) {
+    if (!under(path, from)) continue;
+    sessions.delete(path);
+    sessions.set(moved(path), session);
+    if (!saveTimers.has(path)) continue;
+    window.clearTimeout(saveTimers.get(path));
+    saveTimers.delete(path);
+    scheduleSave(moved(path));
+  }
+  app.set((s) => ({
+    tabs: s.tabs.map(moved),
+    active: s.active ? moved(s.active) : null,
+    file: s.file ? moved(s.file) : null,
+    dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
+  }));
+}
+
 /** Rename or move a note or a folder; open tabs follow it. */
 export async function renameEntry(from: string, to: string): Promise<void> {
   if (from === to) return;
@@ -711,17 +740,7 @@ export async function renameEntry(from: string, to: string): Promise<void> {
     await saveAll();
     // A shared vault renames through sync, which keeps each note's shared document with it.
     if (!(await syncRename(from, to))) await runCore("note.rename", { from, to });
-    const moved = (p: string) => (under(p, from) ? to + p.slice(from.length) : p);
-    for (const [path, session] of [...sessions]) {
-      if (!under(path, from)) continue;
-      sessions.delete(path);
-      sessions.set(moved(path), session);
-    }
-    app.set((s) => ({
-      tabs: s.tabs.map(moved),
-      active: s.active ? moved(s.active) : null,
-      dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
-    }));
+    moveOpen(from, to);
     await refreshTree();
   } catch (e) {
     report(e);

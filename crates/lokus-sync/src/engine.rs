@@ -76,6 +76,8 @@ pub struct Engine {
     pub(crate) db: Connection,
     client_id: u64,
     pub events: Vec<Event>,
+    /// False on a viewer's device: nothing it writes is sent, so it decides nothing for the team.
+    can_publish: bool,
 }
 
 struct Row {
@@ -111,6 +113,7 @@ impl Engine {
             db,
             client_id: 0,
             events: Vec::new(),
+            can_publish: true,
         };
         engine.create_file_tables()?;
         engine.client_id = match engine.meta("client_id")? {
@@ -159,7 +162,7 @@ impl Engine {
         if dropped {
             self.db.execute_batch(
                 "DELETE FROM docs; DELETE FROM outbox; DELETE FROM files; DELETE FROM transfers;
-                 DELETE FROM meta WHERE key IN ('cursor', 'pulled');",
+                 DELETE FROM meta WHERE key IN ('cursor', 'pulled') OR key LIKE 'unsent:%';",
             )?;
         }
         self.set_meta("workspace", workspace)?;
@@ -205,7 +208,43 @@ impl Engine {
     }
 
     pub fn sent(&self, n: i64) -> Result<()> {
+        // The relay has this note now, so it is no longer only this device's.
+        self.db.execute(
+            "DELETE FROM meta WHERE key = 'unsent:' || (SELECT doc FROM outbox WHERE n = ?1)",
+            [n],
+        )?;
         self.db.execute("DELETE FROM outbox WHERE n = ?1", [n])?;
+        Ok(())
+    }
+
+    /// Make one change of everything queued about names. A device that was away sends where
+    /// its notes are now, not each place they have been: a teammate's device acts on every
+    /// change as it comes, and a note made as "Untitled" and given its title while away was
+    /// met there as a second "Untitled", so one of the two was renamed "(local copy)" for
+    /// good. Only for a device with nothing on its way to the relay.
+    pub fn fold_outbox(&mut self) -> Result<()> {
+        let rows: Vec<(i64, Vec<u8>)> = {
+            let mut q = self
+                .db
+                .prepare("SELECT n, data FROM outbox WHERE doc = ?1 ORDER BY n")?;
+            let rows = q.query_map([MANIFEST], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let Some(&(first, _)) = rows.first().filter(|_| rows.len() > 1) else {
+            return Ok(());
+        };
+        let parts: Vec<&[u8]> = rows.iter().map(|(_, data)| data.as_slice()).collect();
+        let merged = yrs::merge_updates_v1(&parts).map_err(|e| Error::Crdt(e.to_string()))?;
+        // The folded row is written before the others go: stopped in between, the same
+        // changes are queued twice, which is harmless, and none is lost.
+        self.db.execute(
+            "UPDATE outbox SET data = ?1 WHERE n = ?2",
+            params![merged, first],
+        )?;
+        self.db.execute(
+            "DELETE FROM outbox WHERE doc = ?1 AND n != ?2",
+            params![MANIFEST, first],
+        )?;
         Ok(())
     }
 
@@ -280,6 +319,12 @@ impl Engine {
             .collect()
     }
 
+    fn entry(&self, manifest: &Doc, id: &str) -> Option<Entry> {
+        let map = manifest.get_or_insert_map("notes");
+        let txn = manifest.transact();
+        serde_json::from_str(&map.get(&txn, id)?.to_string(&txn)).ok()
+    }
+
     /// Change the manifest and queue the change for the relay.
     fn set_entry(&self, manifest: &Doc, id: &str, entry: &Entry) -> Result<()> {
         let before = manifest.transact().state_vector();
@@ -318,11 +363,16 @@ impl Engine {
     pub fn scan(&mut self) -> Result<()> {
         let manifest = self.load(MANIFEST)?;
         let entries = self.entries(&manifest);
-        let by_path: HashMap<&str, &str> = entries
-            .iter()
-            .filter(|(_, e)| !e.deleted)
-            .map(|(id, e)| (e.path.as_str(), id.as_str()))
-            .collect();
+        let mut by_path: HashMap<&str, &str> = HashMap::new();
+        for (id, e) in entries.iter().filter(|(_, e)| !e.deleted) {
+            // Two notes can name one path until one of them is named aside. The file there is
+            // the one this device put there.
+            if !by_path.contains_key(e.path.as_str())
+                || self.doc_id(&e.path)?.as_deref() == Some(id.as_str())
+            {
+                by_path.insert(e.path.as_str(), id.as_str());
+            }
+        }
         let on_disk: HashSet<String> = self.vault.notes()?.into_iter().collect();
 
         // Notes we wrote before that are no longer on disk: deleted, or renamed.
@@ -354,6 +404,16 @@ impl Engine {
             }
             if !self.pulled()? {
                 continue;
+            }
+            // The file of a note that is waiting to be moved to the name the manifest gives it.
+            // A name this device refuses is never moved to, so that file is read as before.
+            if let Some(id) = self.doc_id(path)? {
+                if entries
+                    .get(&id)
+                    .is_some_and(|e| !e.deleted && self.vault.resolve(&e.path).is_ok())
+                {
+                    continue;
+                }
             }
             // A new path with the exact text of a note that just vanished is a rename.
             let renamed = missing
@@ -388,6 +448,7 @@ impl Engine {
                 .transact()
                 .encode_state_as_update_v1(&StateVector::default());
             self.save(&id, &doc, Some(&text), Some(path))?;
+            self.set_meta(&format!("unsent:{id}"), "1")?;
             self.queue(&id, update)?;
             self.set_entry(
                 &manifest,
@@ -429,13 +490,20 @@ impl Engine {
         self.vault.rename(from, to)?;
         let manifest = self.load(MANIFEST)?;
         let inside = format!("{from}/");
-        let moved: Vec<(String, Entry)> = self
-            .entries(&manifest)
-            .into_iter()
-            .filter(|(_, e)| !e.deleted && (e.path == from || e.path.starts_with(&inside)))
-            .collect();
-        for (id, entry) in moved {
-            let path = format!("{to}{}", &entry.path[from.len()..]);
+        // The notes this device keeps there, by its own record. A note the manifest puts at
+        // one of these names but that is still waiting for it is not one of the files moved.
+        let moved: Vec<(String, String)> = {
+            let mut q = self
+                .db
+                .prepare("SELECT id, path FROM docs WHERE path IS NOT NULL")?;
+            let rows = q.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<Vec<(String, String)>>>()?
+                .into_iter()
+                .filter(|(_, path)| path == from || path.starts_with(&inside))
+                .collect()
+        };
+        for (id, old) in moved {
+            let path = format!("{to}{}", &old[from.len()..]);
             self.set_entry(
                 &manifest,
                 &id,
@@ -448,7 +516,7 @@ impl Engine {
             let synced = self.row(&id)?.and_then(|r| r.synced);
             self.save(&id, &doc, synced.as_deref(), Some(&path))?;
             self.events.push(Event::Renamed {
-                from: entry.path,
+                from: old,
                 to: path,
             });
         }
@@ -468,6 +536,13 @@ impl Engine {
         let base = row.synced.as_deref().unwrap_or(&current);
         if base == disk && row.path.as_deref() == Some(path) {
             return Ok(());
+        }
+        // This note's own file is still where this device keeps it, so the file at `path` is
+        // another note's: the manifest names a move that has not been made here yet.
+        if let Some(own) = row.path.as_deref().filter(|own| *own != path) {
+            if self.vault.resolve(own)?.exists() {
+                return Ok(());
+            }
         }
         let before = doc.transact().state_vector();
         if base != disk {
@@ -551,8 +626,8 @@ impl Engine {
         if path.is_none() {
             // The manifest may already say where this note lives.
             let manifest = self.load(MANIFEST)?;
-            if let Some(entry) = self.entries(&manifest).get(id).filter(|e| !e.deleted) {
-                path = Some(self.claim_path(id, &entry.path)?);
+            if let Some(entry) = self.entry(&manifest, id).filter(|e| !e.deleted) {
+                path = self.claim_path(&manifest, id, &entry.path, Some(&text))?;
             }
         }
         if let Some(p) = &path {
@@ -577,9 +652,68 @@ impl Engine {
         Ok(())
     }
 
-    /// Make sure `path` is free for note `id`. An unrelated local file that
-    /// sits there is moved aside, never overwritten.
-    fn claim_path(&mut self, id: &str, path: &str) -> Result<String> {
+    /// Say whether this device may publish; a viewer's may not.
+    pub fn allow_publishing(&mut self, yes: bool) {
+        self.can_publish = yes;
+    }
+
+    /// Place any note left waiting while this device was a viewer's. Only for a device that is
+    /// up to date with the relay.
+    pub fn place_waiting(&mut self) -> Result<()> {
+        if !self.can_publish {
+            return Ok(());
+        }
+        let manifest = self.load(MANIFEST)?;
+        self.materialize(&manifest)
+    }
+
+    /// Take everything this device missed, as the relay hands it over in one answer. All of
+    /// what it says about names is taken in before any file is touched. Taking it one change
+    /// at a time, a device that was away met two notes on one name that the team had long
+    /// since named apart, named them apart itself, and that stale word could win: a
+    /// teammate's later rename was undone, or a note they deleted came back.
+    pub fn apply_pulled(&mut self, items: &[(String, Vec<u8>)]) -> Result<()> {
+        let manifest = self.load(MANIFEST)?;
+        for (_, data) in items.iter().filter(|(doc, _)| doc == MANIFEST) {
+            apply(&manifest, data)?;
+        }
+        self.save(MANIFEST, &manifest, None, None)?;
+        self.materialize(&manifest)?;
+        self.materialize_files(&manifest)?;
+        for (doc, data) in items.iter().filter(|(doc, _)| doc != MANIFEST) {
+            self.apply_remote(doc, data)?;
+        }
+        Ok(())
+    }
+
+    /// A name beside `path` that no file on this device has.
+    fn beside(&self, path: &str) -> Result<String> {
+        let stem = path.strip_suffix(".md").unwrap_or(path);
+        let mut n = 1;
+        loop {
+            let candidate = if n == 1 {
+                format!("{stem} (local copy).md")
+            } else {
+                format!("{stem} (local copy {n}).md")
+            };
+            if !self.vault.resolve(&candidate)?.exists() {
+                return Ok(candidate);
+            }
+            n += 1;
+        }
+    }
+
+    /// Where note `id`, which the manifest puts at `path`, goes on this device. An unrelated
+    /// local file that sits there is moved aside, never overwritten. One that already holds
+    /// exactly `text` is the same note made twice (a starter note every vault begins with), so
+    /// it stays and becomes this note's file. `None`: the note cannot be placed yet.
+    fn claim_path(
+        &mut self,
+        manifest: &Doc,
+        id: &str,
+        path: &str,
+        text: Option<&str>,
+    ) -> Result<Option<String>> {
         let taken_by_other: Option<String> = self
             .db
             .query_row(
@@ -588,27 +722,76 @@ impl Engine {
                 |r| r.get(0),
             )
             .optional()?;
+        if let Some(other) = &taken_by_other {
+            let stays = self
+                .entry(manifest, other)
+                .is_some_and(|e| !e.deleted && e.path == path);
+            if stays {
+                // A viewer cannot tell the team which note keeps the name, so this one waits
+                // where it is until an editor's device has said. Unless the note in its way is
+                // one the viewer made and the team has never seen: no editor will ever name
+                // that one, and where it goes is only this device's business.
+                let own = self.meta(&format!("unsent:{other}"))?.is_some();
+                if !self.can_publish && !own {
+                    return Ok(None);
+                }
+                // Two notes made apart under one name. Both are kept: the one with the smaller
+                // id has the name, on every device, and the other is named beside it.
+                let aside = self.beside(path)?;
+                let moved = if !self.can_publish || other.as_str() > id {
+                    other
+                } else {
+                    id
+                };
+                self.set_entry(
+                    manifest,
+                    moved,
+                    &Entry {
+                        path: aside.clone(),
+                        deleted: false,
+                    },
+                )?;
+                if moved == id {
+                    return Ok(Some(aside));
+                }
+                if self.vault.resolve(path)?.exists() {
+                    self.vault.rename(path, &aside)?;
+                }
+                let doc = self.load(other)?;
+                let synced = self.row(other)?.and_then(|r| r.synced);
+                self.save(other, &doc, synced.as_deref(), Some(&aside))?;
+                self.events.push(Event::KeptBoth {
+                    path: path.to_string(),
+                    moved_to: aside,
+                });
+                return Ok(Some(path.to_string()));
+            }
+            // The note here is on its way to another name (two notes swapped names). It waits
+            // beside this one until its own turn, so neither file is written over.
+            let aside = self.beside(path)?;
+            if self.vault.resolve(path)?.exists() {
+                self.vault.rename(path, &aside)?;
+            }
+            let doc = self.load(other)?;
+            let synced = self.row(other)?.and_then(|r| r.synced);
+            self.save(other, &doc, synced.as_deref(), Some(&aside))?;
+            self.events.push(Event::Renamed {
+                from: path.to_string(),
+                to: aside,
+            });
+            return Ok(Some(path.to_string()));
+        }
         let exists = self.vault.resolve(path)?.exists();
-        if exists && taken_by_other.is_none() {
+        if exists {
             let ours: Option<String> = self
                 .db
                 .query_row("SELECT path FROM docs WHERE id = ?1", [id], |r| r.get(0))
                 .optional()?
                 .flatten();
-            if ours.as_deref() != Some(path) {
-                let stem = path.strip_suffix(".md").unwrap_or(path);
-                let mut n = 1;
-                let aside = loop {
-                    let candidate = if n == 1 {
-                        format!("{stem} (local copy).md")
-                    } else {
-                        format!("{stem} (local copy {n}).md")
-                    };
-                    if !self.vault.resolve(&candidate)?.exists() {
-                        break candidate;
-                    }
-                    n += 1;
-                };
+            let same =
+                text.is_some() && self.read_disk(path).map(|(disk, _)| disk).as_deref() == text;
+            if ours.as_deref() != Some(path) && !same {
+                let aside = self.beside(path)?;
                 self.vault.rename(path, &aside)?;
                 self.events.push(Event::KeptBoth {
                     path: path.to_string(),
@@ -616,14 +799,23 @@ impl Engine {
                 });
             }
         }
-        Ok(path.to_string())
+        Ok(Some(path.to_string()))
     }
 
     /// Bring files in line with the manifest: create, rename and trash.
     fn materialize(&mut self, manifest: &Doc) -> Result<()> {
-        let mut entries: Vec<(String, Entry)> = self.entries(manifest).into_iter().collect();
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        for (id, entry) in entries {
+        // Notes that are gone leave first, so a note given the name of one finds it free.
+        let mut ids: Vec<(bool, String)> = self
+            .entries(manifest)
+            .into_iter()
+            .map(|(id, entry)| (!entry.deleted, id))
+            .collect();
+        ids.sort();
+        for (_, id) in ids {
+            // Read now, not before the loop: placing an earlier note may have renamed this one.
+            let Some(entry) = self.entry(manifest, &id) else {
+                continue;
+            };
             // A path this device must not write (it would leave the vault, or reach into
             // `.lokus/`) is skipped, not fatal. Failing here would stop sync for good on every
             // device, and any member could cause it with one entry.
@@ -653,7 +845,9 @@ impl Engine {
                     self.save(&id, &doc, row.synced.as_deref(), None)?;
                 }
                 (Some(old), false) if *old != entry.path => {
-                    let target = self.claim_path(&id, &entry.path)?;
+                    let Some(target) = self.claim_path(manifest, &id, &entry.path, None)? else {
+                        continue;
+                    };
                     if self.vault.resolve(old)?.exists() {
                         self.vault.rename(old, &target)?;
                         self.events.push(Event::Renamed {
@@ -674,11 +868,17 @@ impl Engine {
                     )?;
                 }
                 (None, false) => {
-                    let target = self.claim_path(&id, &entry.path)?;
-                    self.write_disk(&target, &text)?;
-                    self.events.push(Event::Wrote {
-                        path: target.clone(),
-                    });
+                    let Some(target) = self.claim_path(manifest, &id, &entry.path, Some(&text))?
+                    else {
+                        continue;
+                    };
+                    // A file that already says this is left exactly as it is, line endings and all.
+                    if self.read_disk(&target).map(|(disk, _)| disk).as_deref() != Some(&text) {
+                        self.write_disk(&target, &text)?;
+                        self.events.push(Event::Wrote {
+                            path: target.clone(),
+                        });
+                    }
                     self.save(&id, &doc, Some(&text), Some(&target))?;
                 }
                 _ => {}
@@ -998,5 +1198,425 @@ mod tests {
             b.read("Same (local copy).md").as_deref(),
             Some("from device b\n")
         );
+    }
+
+    #[test]
+    fn a_local_file_with_the_same_text_is_not_kept_twice() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Same.md", "the same starter note\n");
+        a.engine.scan().unwrap();
+        // Device b began with the identical note, as every new vault does.
+        b.write("Same.md", "the same starter note\n");
+        for out in a.engine.outbox().unwrap() {
+            b.engine.apply_remote(&out.doc, &out.data).unwrap();
+        }
+        b.engine.mark_pulled().unwrap();
+        b.engine.scan().unwrap();
+        assert_eq!(
+            b.read("Same.md").as_deref(),
+            Some("the same starter note\n")
+        );
+        assert_eq!(b.read("Same (local copy).md"), None);
+        assert!(b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn two_notes_made_apart_under_one_name_are_both_kept() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Seed.md", "seed\n");
+        exchange(&mut a, &mut b);
+        // Apart, each makes a note of the same name.
+        a.write("Untitled.md", "written on a\n");
+        b.write("Untitled.md", "written on b\n");
+        exchange(&mut a, &mut b);
+        let mut texts = Vec::new();
+        for d in [&a, &b] {
+            let mut kept = [
+                d.read("Untitled.md").unwrap(),
+                d.read("Untitled (local copy).md").unwrap(),
+            ];
+            kept.sort();
+            assert_eq!(kept, ["written on a\n", "written on b\n"]);
+            texts.push(d.read("Untitled.md"));
+        }
+        // Both devices agree which note has the name.
+        assert_eq!(texts[0], texts[1]);
+        assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn two_notes_renamed_apart_to_one_name_are_both_kept() {
+        let (mut a, mut b) = (device(), device());
+        a.write("One.md", "one\n");
+        a.write("Two.md", "two\n");
+        exchange(&mut a, &mut b);
+        a.engine.rename("One.md", "Same.md").unwrap();
+        b.engine.rename("Two.md", "Same.md").unwrap();
+        exchange(&mut a, &mut b);
+        for d in [&a, &b] {
+            let mut kept = [
+                d.read("Same.md").unwrap(),
+                d.read("Same (local copy).md").unwrap(),
+            ];
+            kept.sort();
+            assert_eq!(kept, ["one\n", "two\n"]);
+        }
+        assert_eq!(a.read("Same.md"), b.read("Same.md"));
+        assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_viewer_waits_for_an_editor_to_name_two_notes_apart() {
+        // What the two editors queue reaches everyone; nothing a viewer queues is ever sent.
+        fn settle(a: &mut Device, b: &mut Device, viewer: &mut Device) {
+            for _ in 0..4 {
+                a.engine.scan().unwrap();
+                b.engine.scan().unwrap();
+                viewer.engine.scan().unwrap();
+                for out in a.engine.outbox().unwrap() {
+                    b.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    a.engine.sent(out.n).unwrap();
+                }
+                for out in b.engine.outbox().unwrap() {
+                    a.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    b.engine.sent(out.n).unwrap();
+                }
+            }
+        }
+        // Which note keeps the name, and whose write wins, go by random ids: try a few.
+        for round in 0..12 {
+            let (mut a, mut b, mut viewer) = (device(), device(), device());
+            viewer.engine.allow_publishing(false);
+            a.write("One.md", "one\n");
+            a.write("Two.md", "two\n");
+            settle(&mut a, &mut b, &mut viewer);
+            if round % 2 == 0 {
+                a.write("Untitled.md", "written on a\n");
+                b.write("Untitled.md", "written on b\n");
+                a.engine.scan().unwrap();
+                b.engine.scan().unwrap();
+            } else {
+                a.engine.rename("One.md", "Untitled.md").unwrap();
+                b.engine.rename("Two.md", "Untitled.md").unwrap();
+            }
+            settle(&mut a, &mut b, &mut viewer);
+            assert_eq!(files(&a), files(&b));
+            assert_eq!(files(&viewer), files(&a));
+            // The viewer wrote nothing of its own, so it still follows what editors do next.
+            assert!(viewer.engine.outbox().unwrap().is_empty());
+            a.engine
+                .rename("Untitled (local copy).md", "Moved.md")
+                .unwrap();
+            settle(&mut a, &mut b, &mut viewer);
+            assert_eq!(files(&viewer), files(&a));
+            assert!(viewer.engine.outbox().unwrap().is_empty());
+        }
+    }
+
+    /// Every note on the device, with its text.
+    fn files(d: &Device) -> Vec<(String, String)> {
+        let mut all: Vec<(String, String)> = d
+            .vault
+            .notes()
+            .unwrap()
+            .into_iter()
+            .map(|p| (p.clone(), d.read(&p).unwrap()))
+            .collect();
+        all.sort();
+        all
+    }
+
+    /// Two editors each make `Untitled.md`, and a viewer hears of both notes before either
+    /// editor's device has named them apart.
+    fn a_viewer_left_waiting() -> (Device, Device, Device) {
+        let (mut a, mut b, mut viewer) = (device(), device(), device());
+        viewer.engine.allow_publishing(false);
+        a.write("Untitled.md", "written on a\n");
+        b.write("Untitled.md", "written on b\n");
+        a.engine.scan().unwrap();
+        b.engine.scan().unwrap();
+        for d in [&a, &b] {
+            for out in d.engine.outbox().unwrap() {
+                viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+            }
+        }
+        assert_eq!(viewer.vault.notes().unwrap().len(), 1);
+        (a, b, viewer)
+    }
+
+    #[test]
+    fn a_viewer_made_an_editor_places_the_note_that_was_waiting() {
+        let (_a, _b, mut viewer) = a_viewer_left_waiting();
+        viewer.engine.allow_publishing(true);
+        viewer.engine.place_waiting().unwrap();
+        let mut texts = [
+            viewer.read("Untitled.md").unwrap(),
+            viewer.read("Untitled (local copy).md").unwrap(),
+        ];
+        texts.sort();
+        assert_eq!(texts, ["written on a\n", "written on b\n"]);
+    }
+
+    #[test]
+    fn a_device_that_was_away_does_not_undo_what_the_team_did_since() {
+        // Whose word wins goes by random ids: try a few. Odd rounds: the copy was deleted.
+        for round in 0..16 {
+            // It left as a viewer that had heard of both notes, or was away for all of it.
+            let (mut a, mut b, mut away) = a_viewer_left_waiting();
+            if round % 4 < 2 {
+                away = device();
+            }
+            // Meanwhile the editors name the notes apart, then move the copy or delete it.
+            let mut missed: Vec<(String, Vec<u8>)> = Vec::new();
+            for step in 0..2 {
+                if step == 1 && round % 2 == 0 {
+                    a.engine
+                        .rename("Untitled (local copy).md", "Moved.md")
+                        .unwrap();
+                } else if step == 1 {
+                    fs::remove_file(a.vault.root().join("Untitled (local copy).md")).unwrap();
+                }
+                for _ in 0..4 {
+                    a.engine.scan().unwrap();
+                    b.engine.scan().unwrap();
+                    for out in a.engine.outbox().unwrap() {
+                        b.engine.apply_remote(&out.doc, &out.data).unwrap();
+                        a.engine.sent(out.n).unwrap();
+                        missed.push((out.doc, out.data));
+                    }
+                    for out in b.engine.outbox().unwrap() {
+                        a.engine.apply_remote(&out.doc, &out.data).unwrap();
+                        b.engine.sent(out.n).unwrap();
+                        missed.push((out.doc, out.data));
+                    }
+                }
+            }
+            // It comes back, as an editor, and is handed what it missed.
+            away.engine.allow_publishing(true);
+            away.engine.apply_pulled(&missed).unwrap();
+            away.engine.scan().unwrap();
+            assert_eq!(files(&away), files(&a));
+            assert!(away.engine.outbox().unwrap().is_empty());
+        }
+    }
+
+    #[test]
+    fn a_viewers_own_note_does_not_hide_the_teams_note_of_the_same_name() {
+        // What the editor queues reaches everyone; a viewer's own changes go nowhere.
+        fn settle(a: &mut Device, viewer: &mut Device, publishes: bool) {
+            for _ in 0..4 {
+                a.engine.scan().unwrap();
+                viewer.engine.scan().unwrap();
+                for out in a.engine.outbox().unwrap() {
+                    viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    a.engine.sent(out.n).unwrap();
+                }
+                for out in viewer
+                    .engine
+                    .outbox()
+                    .unwrap()
+                    .into_iter()
+                    .filter(|_| publishes)
+                {
+                    a.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    viewer.engine.sent(out.n).unwrap();
+                }
+            }
+        }
+        for _ in 0..8 {
+            let (mut a, mut viewer) = (device(), device());
+            viewer.engine.allow_publishing(false);
+            viewer.write("Untitled.md", "viewer private\n");
+            a.write("Untitled.md", "team note\n");
+            settle(&mut a, &mut viewer, false);
+            // The team's note has the name; the viewer's own is beside it, on this device only.
+            assert_eq!(viewer.read("Untitled.md").as_deref(), Some("team note\n"));
+            assert_eq!(
+                viewer.read("Untitled (local copy).md").as_deref(),
+                Some("viewer private\n")
+            );
+            assert_eq!(files(&a).len(), 1);
+            // Renaming its own note leaves the team's alone, also once it may publish.
+            viewer
+                .engine
+                .rename("Untitled (local copy).md", "Mine.md")
+                .unwrap();
+            viewer.engine.allow_publishing(true);
+            viewer.engine.fold_outbox().unwrap();
+            settle(&mut a, &mut viewer, true);
+            for d in [&a, &viewer] {
+                assert_eq!(d.read("Untitled.md").as_deref(), Some("team note\n"));
+                assert_eq!(d.read("Mine.md").as_deref(), Some("viewer private\n"));
+                assert_eq!(files(d).len(), 2);
+            }
+        }
+    }
+
+    #[test]
+    fn a_note_made_and_given_its_title_while_away_disturbs_nobody() {
+        for _ in 0..8 {
+            let (mut a, mut b) = (device(), device());
+            a.write("Untitled.md", "a's note\n");
+            a.engine.scan().unwrap();
+            // b, away, makes a note and gives it its title before it is back.
+            b.write("Untitled.md", "b's meeting\n");
+            b.engine.scan().unwrap();
+            b.engine.rename("Untitled.md", "Meeting.md").unwrap();
+            // Back: it takes in what it missed, then sends where its notes are now.
+            let missed: Vec<(String, Vec<u8>)> = a
+                .engine
+                .outbox()
+                .unwrap()
+                .into_iter()
+                .map(|o| (o.doc, o.data))
+                .collect();
+            b.engine.apply_pulled(&missed).unwrap();
+            b.engine.fold_outbox().unwrap();
+            exchange(&mut a, &mut b);
+            for d in [&a, &b] {
+                assert_eq!(
+                    files(d),
+                    [
+                        ("Meeting.md".to_string(), "b's meeting\n".to_string()),
+                        ("Untitled.md".to_string(), "a's note\n".to_string()),
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn renaming_a_folder_leaves_a_note_that_waits_for_a_name_in_it() {
+        let (mut a, mut viewer) = (device(), device());
+        viewer.engine.allow_publishing(false);
+        a.write("f/One.md", "one\n");
+        exchange(&mut a, &mut viewer);
+        // On the viewer's device only: the note is renamed, then a teammate uses that name.
+        viewer.engine.rename("f/One.md", "f/Plan.md").unwrap();
+        a.write("f/Plan.md", "team plan\n");
+        a.engine.scan().unwrap();
+        for out in a.engine.outbox().unwrap() {
+            viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+            a.engine.sent(out.n).unwrap();
+        }
+        viewer.engine.rename("f", "g").unwrap();
+        // Made an editor: what it did goes out, and no note is lost on either device.
+        viewer.engine.allow_publishing(true);
+        viewer.engine.place_waiting().unwrap();
+        viewer.engine.fold_outbox().unwrap();
+        exchange(&mut a, &mut viewer);
+        assert_eq!(files(&a), files(&viewer));
+        let mut texts: Vec<String> = files(&a).into_iter().map(|(_, text)| text).collect();
+        texts.sort();
+        assert_eq!(texts, ["one\n", "team plan\n"]);
+    }
+
+    #[test]
+    fn renaming_a_note_leaves_another_that_waits_for_its_name() {
+        let (_a, _b, mut viewer) = a_viewer_left_waiting();
+        let shown = viewer.read("Untitled.md").unwrap();
+        viewer.engine.rename("Untitled.md", "Mine.md").unwrap();
+        // The name is free now, so once the device may place it the other note takes it.
+        viewer.engine.allow_publishing(true);
+        viewer.engine.place_waiting().unwrap();
+        assert_eq!(viewer.read("Mine.md"), Some(shown));
+        assert!(viewer
+            .read("Untitled.md")
+            .is_some_and(|t| Some(&t) != viewer.read("Mine.md").as_ref()));
+        assert_eq!(viewer.read("Untitled (local copy).md"), None);
+    }
+
+    #[test]
+    fn a_note_whose_new_name_is_refused_is_still_read_where_it_is() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Plan.md", "the plan\n");
+        exchange(&mut a, &mut b);
+        let id = a.engine.doc_id("Plan.md").unwrap().unwrap();
+        let manifest = a.engine.load(MANIFEST).unwrap();
+        let bad = Entry {
+            path: "../evil.md".to_string(),
+            deleted: false,
+        };
+        a.engine.set_entry(&manifest, &id, &bad).unwrap();
+        for out in a.engine.outbox().unwrap() {
+            b.engine.apply_remote(&out.doc, &out.data).unwrap();
+            a.engine.sent(out.n).unwrap();
+        }
+        b.write("Plan.md", "the plan\nwritten on b afterwards\n");
+        b.engine.scan().unwrap();
+        assert!(!b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn two_notes_that_swapped_names_arrive_as_one_change() {
+        let (mut a, mut b) = (device(), device());
+        a.write("One.md", "one\n");
+        a.write("Two.md", "two\n");
+        exchange(&mut a, &mut b);
+        a.engine.rename("One.md", "Tmp.md").unwrap();
+        a.engine.rename("Two.md", "One.md").unwrap();
+        a.engine.rename("Tmp.md", "Two.md").unwrap();
+        // The relay hands a device that was away the three renames as one change.
+        let out = a.engine.outbox().unwrap();
+        let parts: Vec<&[u8]> = out.iter().map(|o| o.data.as_slice()).collect();
+        let merged = yrs::merge_updates_v1(&parts).unwrap();
+        b.engine.apply_remote(MANIFEST, &merged).unwrap();
+        for o in &out {
+            a.engine.sent(o.n).unwrap();
+        }
+        exchange(&mut a, &mut b);
+        for d in [&a, &b] {
+            assert_eq!(d.read("One.md").as_deref(), Some("two\n"));
+            assert_eq!(d.read("Two.md").as_deref(), Some("one\n"));
+            assert_eq!(d.read("One (local copy).md"), None);
+            assert_eq!(d.read("Two (local copy).md"), None);
+        }
+        assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_note_given_the_name_of_a_deleted_one_arrives_as_one_change() {
+        // Which of the two notes is placed first goes by their ids, so try a few pairs.
+        for _ in 0..8 {
+            let (mut a, mut b) = (device(), device());
+            a.write("Old.md", "old\n");
+            a.write("Kept.md", "kept\n");
+            exchange(&mut a, &mut b);
+            fs::remove_file(a.vault.root().join("Old.md")).unwrap();
+            a.engine.scan().unwrap();
+            a.engine.rename("Kept.md", "Old.md").unwrap();
+            let out = a.engine.outbox().unwrap();
+            let parts: Vec<&[u8]> = out.iter().map(|o| o.data.as_slice()).collect();
+            let merged = yrs::merge_updates_v1(&parts).unwrap();
+            b.engine.apply_remote(MANIFEST, &merged).unwrap();
+            for o in &out {
+                a.engine.sent(o.n).unwrap();
+            }
+            exchange(&mut a, &mut b);
+            for d in [&a, &b] {
+                assert_eq!(d.read("Old.md").as_deref(), Some("kept\n"));
+                assert_eq!(d.read("Kept.md"), None);
+                assert_eq!(d.read("Old (local copy).md"), None);
+            }
+        }
+    }
+
+    #[test]
+    fn a_matching_local_file_keeps_its_own_line_endings() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Mixed.md", "one\ntwo\nthree\n");
+        a.engine.scan().unwrap();
+        b.write("Mixed.md", "one\r\ntwo\nthree\n");
+        // The note's text arrives before the manifest that says where it lives.
+        let mut out = a.engine.outbox().unwrap();
+        out.sort_by_key(|o| o.doc == MANIFEST);
+        for o in out {
+            b.engine.apply_remote(&o.doc, &o.data).unwrap();
+        }
+        b.engine.mark_pulled().unwrap();
+        assert_eq!(b.read("Mixed.md").as_deref(), Some("one\r\ntwo\nthree\n"));
+        assert_eq!(b.read("Mixed (local copy).md"), None);
     }
 }
