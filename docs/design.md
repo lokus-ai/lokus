@@ -423,7 +423,7 @@ button, and "Add workspace", which makes a folder of that name in Documents. A n
 is private; sharing it is one step under Settings, Team. Every window still shows the same
 workspace: switching in one switches them all.
 
-**A team comes by itself (2026-11-15).** Being in a team is enough to have it on a computer.
+**A team comes by itself.** Being in a team is enough to have it on a computer.
 On sign-in, when the app starts and when its window is returned to, the app asks the relay
 which teams the person is in (`GET /v1/workspaces`); each one with no folder on this computer
 gets a folder in Documents named after it, is opened and starts syncing
@@ -432,7 +432,8 @@ safe:
 
 - It never lands in a folder holding files, nor in one that syncs with another team, nor
   where a plain file has the name: each is passed over for "name 2", "name 3". A person's
-  own notes cannot reach a team this way, nor one team's notes another.
+  own notes cannot reach a team this way, nor one team's notes another. Folders are told
+  apart as the disk spells them, so teams "sales" and "Sales" get "sales" and "Sales 2".
 - A folder that already synced with this team here is used again, so asking twice makes
   nothing twice.
 - What was being typed is written to its own folder before the team's folder takes the
@@ -444,9 +445,6 @@ safe:
 - First-run setup chooses the first folder itself; teams are brought when it closes. With
   no relay or no sign-in nothing is made and nothing is said; it is asked again later.
 - A team folder opened while signed out starts syncing when the person signs in.
-
-Before this, only accepting a fresh invitation made the folder; someone already in a team had
-to press "Sync this vault here". To put it back, remove `bringTeams`.
 
 ### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
 

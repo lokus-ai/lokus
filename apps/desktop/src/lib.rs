@@ -145,7 +145,10 @@ fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Val
                 .any(|entry| !entry.file_name().to_string_lossy().starts_with('.')),
             Err(_) => !folder.exists(),
         };
-        return Ok(json!({ "root": folder, "free": free }));
+        // As the disk spells it, which is how a folder's sync is remembered: "sales" and "Sales"
+        // are one folder on a Mac.
+        let root = folder.canonicalize().unwrap_or(folder);
+        return Ok(json!({ "root": root, "free": free }));
     }
     std::fs::create_dir_all(&folder).map_err(
         |e| json!({ "code": "io", "message": format!("Could not make {}: {e}", folder.display()) }),
