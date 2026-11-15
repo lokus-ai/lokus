@@ -25,16 +25,21 @@ export function ModelPicker() {
     setModels(null);
     void aiSettings().then(setSettings, () => setSettings(null));
   }, [settingsOpen]);
-  // A provider with no model of its own to fall back on gets the first one it lists; nobody is asked.
+  // A provider with no model of its own takes the first one it lists. Listing them is what
+  // chooses and saves it (in Rust); here it is only read back and shown.
   useEffect(() => {
     if (!settings || !settings.keys[settings.config.provider] || settings.config.model || DEFAULT_MODEL[settings.config.provider]) return;
-    void aiModels().then((list) => {
-      setModels(list);
-      if (!list[0]) return;
-      const config = { ...settings.config, model: list[0] };
-      setSettings({ ...settings, config });
-      void saveAiConfig(config);
-    }, () => undefined);
+    let stale = false;
+    void aiModels()
+      .then(async (list) => ({ list, now: await aiSettings() }))
+      .then(({ list, now }) => {
+        if (stale) return;
+        setModels(list);
+        if (now.config.model) setSettings(now);
+      }, () => undefined);
+    return () => {
+      stale = true;
+    };
   }, [settings]);
   useEffect(() => {
     if (!open) return;

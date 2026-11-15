@@ -131,6 +131,21 @@ impl Config {
         fs::rename(tmp, dir.join(FILE)).map_err(failed)
     }
 
+    /// A provider with no model of its own takes the first one it lists; nobody is asked. The
+    /// saved settings are read again: they may have changed while the provider was answering, and
+    /// a list asked for one provider says nothing about another.
+    pub fn adopt_model(dir: &Path, asked: &Config, listed: &[String]) -> Result<()> {
+        let mut now = Self::load(dir);
+        let same = now.provider == asked.provider && now.url() == asked.url();
+        match listed.first() {
+            Some(first) if same && now.model().is_err() => {
+                now.model = first.clone();
+                now.save(dir)
+            }
+            _ => Ok(()),
+        }
+    }
+
     pub fn url(&self) -> &str {
         let trimmed = self.base_url.trim().trim_end_matches('/');
         if trimmed.is_empty() {
@@ -301,5 +316,39 @@ pub fn forget(account: &str) {
     let _ = set_secret(account, "");
     if let Ok(mut memory) = MEMORY.lock() {
         memory.remove(account);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_first_listed_model_is_taken_only_by_the_provider_that_listed_it() {
+        // Review of 2026-11-15: the list came back after the provider was changed, and the old
+        // provider was written over the new one.
+        let dir = tempfile::tempdir().unwrap();
+        let asked = Config {
+            provider: Provider::OpenAi,
+            ..Config::default()
+        };
+        let listed = ["gpt-new".to_string(), "gpt-old".to_string()];
+
+        asked.save(dir.path()).unwrap();
+        Config::adopt_model(dir.path(), &asked, &listed).unwrap();
+        assert_eq!(Config::load(dir.path()).model, "gpt-new");
+
+        // A model the person chose stays.
+        Config::adopt_model(dir.path(), &asked, &["other".to_string()]).unwrap();
+        assert_eq!(Config::load(dir.path()).model, "gpt-new");
+
+        // Changed to Claude while OpenAI was answering: nothing of OpenAI's is written.
+        Config::default().save(dir.path()).unwrap();
+        Config::adopt_model(dir.path(), &asked, &listed).unwrap();
+        let now = Config::load(dir.path());
+        assert_eq!(
+            (now.provider, now.model.as_str()),
+            (Provider::Anthropic, "")
+        );
     }
 }

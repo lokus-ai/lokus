@@ -448,7 +448,7 @@ pub async fn send(
     approve: Approver,
 ) -> Result<Outcome> {
     let Request {
-        config,
+        mut config,
         mut messages,
         core,
         extra_servers,
@@ -461,8 +461,12 @@ pub async fn send(
         format!("{SYSTEM}\n\n{}", briefing.trim())
     };
     let key = credential(config.provider).await?;
-    config.model()?;
     let http = reqwest::Client::new();
+    // A provider with no model of its own is asked for its list and given the first.
+    if config.model().is_err() {
+        let listed = provider::models(&http, &config, &key).await?;
+        config.model = listed.into_iter().next().ok_or(AiError::NoModel)?;
+    }
 
     // Tool servers that cannot be reached are skipped, not fatal.
     let mut connections: Vec<Connection> = Vec::new();
