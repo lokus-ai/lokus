@@ -59,6 +59,10 @@ const RETRY: Duration = Duration::from_secs(3);
 const CONNECT: Duration = Duration::from_secs(20);
 /// How often an open connection checks whether it has been handed a newer sign-in.
 const RENEW_CHECK: Duration = Duration::from_secs(20);
+/// The longest an open connection may hear nothing before it is given up and opened again. The
+/// relay is asked to answer at every renew check, so a healthy connection is never this quiet;
+/// one that a sleeping laptop or a changed network left open but dead is.
+const QUIET: Duration = Duration::from_secs(50);
 
 /// What the app can ask a running connection to do.
 pub enum Nudge {
@@ -352,6 +356,7 @@ async fn session(
     );
     let mut renew = tokio::time::interval(RENEW_CHECK);
     renew.tick().await;
+    let mut heard = tokio::time::Instant::now();
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
     let mut can_edit = answer["role"] != "viewer";
@@ -390,6 +395,7 @@ async fn session(
 
         tokio::select! {
             received = inbox.next() => {
+                heard = tokio::time::Instant::now();
                 let message = match received {
                     Some(Ok(Message::Text(text))) => text,
                     Some(Ok(Message::Close(_))) | None => return Ok(()),
@@ -458,6 +464,10 @@ async fn session(
                 }
             }
             _ = renew.tick() => {
+                if heard.elapsed() > QUIET {
+                    return Err(Error::Net("the relay went quiet".into()));
+                }
+                out.send(Message::Ping(Default::default())).await.map_err(|e| Error::Net(e.to_string()))?;
                 // A newer sign-in arrived: hand it to the relay so this connection outlives the old one.
                 let latest = config.token.get();
                 if latest != presented {
