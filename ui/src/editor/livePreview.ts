@@ -447,7 +447,16 @@ class Table extends WidgetType {
       row.forEach((text, col) => {
         const cell = table.rows[i].cells[col];
         cell.style.textAlign = align[col] ?? "";
-        if (cell === document.activeElement) return;
+        if (cell === document.activeElement) {
+          // Own typing already matches. Anything else is a teammate's change to this cell: show it,
+          // or the next key pressed would write the old text back over theirs.
+          const has = (cell.textContent ?? "").replace(/\s*\n\s*/g, " ").trim().replace(/\\\|/g, "|");
+          if (has !== text) {
+            cell.textContent = text;
+            caretToEnd(cell);
+          }
+          return;
+        }
         cell.replaceChildren();
         cellContent(cell, text);
       }),
