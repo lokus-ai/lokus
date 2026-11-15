@@ -262,6 +262,7 @@ macro_rules! commands {
             sync::sync_token,
             sync::sync_status,
             sync::sync_doc,
+            sync::sync_rename,
             sync::sync_local,
             sync::sync_awareness,
             sync::relay_call,

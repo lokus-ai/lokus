@@ -72,6 +72,14 @@ export function syncLocal(id: string, update: Uint8Array): Promise<void> {
   return invoke("sync_local", { id, update: toB64(update) });
 }
 
+/**
+ * Rename a note or a folder in a shared vault, so the note keeps its shared document. Gives
+ * false when the vault is not shared; the caller then renames it the ordinary way.
+ */
+export function syncRename(from: string, to: string): Promise<boolean> {
+  return invoke<boolean>("sync_rename", { from, to });
+}
+
 export function syncAwareness(id: string, data: Uint8Array): void {
   void invoke("sync_awareness", { id, data: toB64(data) });
 }

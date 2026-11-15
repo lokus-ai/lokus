@@ -164,6 +164,22 @@ pub fn sync_doc(sync: State<'_, Sync>, path: String) -> Result<Option<Value>, Va
     Ok(Some(json!({ "id": id, "state": B64.encode(state) })))
 }
 
+/// Rename a note or a folder in a shared vault. `false` when the vault is not shared, and the
+/// caller renames it the ordinary way.
+#[tauri::command(async)]
+pub fn sync_rename(sync: State<'_, Sync>, from: String, to: String) -> Result<bool, Value> {
+    let Some(link) = sync.link() else {
+        return Ok(false);
+    };
+    link.engine
+        .lock()
+        .map_err(|_| fail("sync", "sync engine stopped"))?
+        .rename(&from, &to)
+        .map_err(|e| fail("sync", e))?;
+    link.nudge(Nudge::Changed);
+    Ok(true)
+}
+
 /// An edit typed in the editor.
 #[tauri::command(async)]
 pub fn sync_local(sync: State<'_, Sync>, id: String, update: String) -> Result<(), Value> {

@@ -419,6 +419,42 @@ impl Engine {
         Ok(())
     }
 
+    /// The app renamed a note, or a folder of them. The move on disk and the change to which
+    /// document is where are made together, here, so that a scan never meets the move half
+    /// done. A scan can only guess at a rename, by finding a new path holding the exact text
+    /// of a note that vanished; a note with nothing in it yet gives it nothing to match. So a
+    /// new note given its title was taken for one note deleted and another made: the editor
+    /// went on typing into the deleted one, and none of it reached a file or a teammate.
+    pub fn rename(&mut self, from: &str, to: &str) -> Result<()> {
+        self.vault.rename(from, to)?;
+        let manifest = self.load(MANIFEST)?;
+        let inside = format!("{from}/");
+        let moved: Vec<(String, Entry)> = self
+            .entries(&manifest)
+            .into_iter()
+            .filter(|(_, e)| !e.deleted && (e.path == from || e.path.starts_with(&inside)))
+            .collect();
+        for (id, entry) in moved {
+            let path = format!("{to}{}", &entry.path[from.len()..]);
+            self.set_entry(
+                &manifest,
+                &id,
+                &Entry {
+                    path: path.clone(),
+                    deleted: false,
+                },
+            )?;
+            let doc = self.load(&id)?;
+            let synced = self.row(&id)?.and_then(|r| r.synced);
+            self.save(&id, &doc, synced.as_deref(), Some(&path))?;
+            self.events.push(Event::Renamed {
+                from: entry.path,
+                to: path,
+            });
+        }
+        Ok(())
+    }
+
     /// If the file differs from the last reconciled text, apply just that
     /// difference to the document.
     fn ingest(&mut self, id: &str, path: &str, disk: &str) -> Result<()> {
@@ -901,6 +937,40 @@ mod tests {
         // And it stays deleted: nothing resurrects it on later rounds.
         exchange(&mut a, &mut b);
         assert_eq!(a.read("Gone.md"), None);
+    }
+
+    /// What broke for the first team to use Lokus: New note, type its title, then write.
+    #[test]
+    fn an_empty_note_given_its_title_is_still_the_same_note() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Untitled.md", "");
+        exchange(&mut a, &mut b);
+        let id = a.engine.doc_id("Untitled.md").unwrap().unwrap();
+
+        a.engine.rename("Untitled.md", "Plan.md").unwrap();
+        assert_eq!(
+            a.engine.doc_id("Plan.md").unwrap().as_deref(),
+            Some(id.as_str()),
+            "the note keeps its document, so what is typed next goes to it"
+        );
+        a.write("Plan.md", "Written after the title.\n");
+        exchange(&mut a, &mut b);
+        assert_eq!(
+            b.read("Plan.md").as_deref(),
+            Some("Written after the title.\n")
+        );
+        assert_eq!(b.read("Untitled.md"), None);
+
+        // A folder moves with everything in it.
+        a.write("Old/One.md", "one\n");
+        a.write("Old/Deep/Two.md", "");
+        exchange(&mut a, &mut b);
+        a.engine.rename("Old", "New").unwrap();
+        a.write("New/Deep/Two.md", "two, at last\n");
+        exchange(&mut a, &mut b);
+        assert_eq!(b.read("New/One.md").as_deref(), Some("one\n"));
+        assert_eq!(b.read("New/Deep/Two.md").as_deref(), Some("two, at last\n"));
+        assert_eq!(b.read("Old/One.md"), None);
     }
 
     #[test]

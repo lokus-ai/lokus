@@ -22,7 +22,7 @@ import {
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
-import { onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
+import { syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
@@ -695,7 +695,8 @@ export async function renameEntry(from: string, to: string): Promise<void> {
   if (from === to) return;
   try {
     await saveAll();
-    await runCore("note.rename", { from, to });
+    // A shared vault renames through sync, which keeps each note's shared document with it.
+    if (!(await syncRename(from, to))) await runCore("note.rename", { from, to });
     const moved = (p: string) => (under(p, from) ? to + p.slice(from.length) : p);
     for (const [path, session] of [...sessions]) {
       if (!under(path, from)) continue;
