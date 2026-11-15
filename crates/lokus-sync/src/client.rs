@@ -414,7 +414,12 @@ async fn session(
                         // Connected, so up to date: a note that was waiting can be placed now.
                         with(engine, |e| {
                             e.allow_publishing(can_edit);
-                            e.place_waiting()
+                            e.place_waiting()?;
+                            // A viewer's own changes, about to go out for the first time.
+                            if in_flight.is_empty() {
+                                e.fold_outbox()?;
+                            }
+                            Ok(())
                         })?;
                         report(json!({ "event": "role", "role": value["role"] }));
                     }
@@ -430,7 +435,12 @@ async fn session(
                             e.apply_pulled(&missed)?;
                             e.set_cursor(head)?;
                             e.mark_pulled()?;
-                            e.scan()
+                            e.scan()?;
+                            // What piled up while away goes out as where things are now.
+                            if in_flight.is_empty() {
+                                e.fold_outbox()?;
+                            }
+                            Ok(())
                         })?;
                         safe = safe.max(head);
                         // An open editor needs what was missed while offline, not just the files.

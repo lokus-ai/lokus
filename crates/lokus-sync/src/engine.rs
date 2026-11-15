@@ -162,7 +162,7 @@ impl Engine {
         if dropped {
             self.db.execute_batch(
                 "DELETE FROM docs; DELETE FROM outbox; DELETE FROM files; DELETE FROM transfers;
-                 DELETE FROM meta WHERE key IN ('cursor', 'pulled');",
+                 DELETE FROM meta WHERE key IN ('cursor', 'pulled') OR key LIKE 'unsent:%';",
             )?;
         }
         self.set_meta("workspace", workspace)?;
@@ -208,7 +208,41 @@ impl Engine {
     }
 
     pub fn sent(&self, n: i64) -> Result<()> {
+        // The relay has this note now, so it is no longer only this device's.
+        self.db.execute(
+            "DELETE FROM meta WHERE key = 'unsent:' || (SELECT doc FROM outbox WHERE n = ?1)",
+            [n],
+        )?;
         self.db.execute("DELETE FROM outbox WHERE n = ?1", [n])?;
+        Ok(())
+    }
+
+    /// Make one change of everything queued about names. A device that was away sends where
+    /// its notes are now, not each place they have been: a teammate's device acts on every
+    /// change as it comes, and a note made as "Untitled" and given its title while away was
+    /// met there as a second "Untitled", so one of the two was renamed "(local copy)" for
+    /// good. Only for a device with nothing on its way to the relay.
+    pub fn fold_outbox(&mut self) -> Result<()> {
+        let rows: Vec<(i64, Vec<u8>)> = {
+            let mut q = self
+                .db
+                .prepare("SELECT n, data FROM outbox WHERE doc = ?1 ORDER BY n")?;
+            let rows = q.query_map([MANIFEST], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        let Some(&(first, _)) = rows.first().filter(|_| rows.len() > 1) else {
+            return Ok(());
+        };
+        let parts: Vec<&[u8]> = rows.iter().map(|(_, data)| data.as_slice()).collect();
+        let merged = yrs::merge_updates_v1(&parts).map_err(|e| Error::Crdt(e.to_string()))?;
+        self.db.execute(
+            "DELETE FROM outbox WHERE doc = ?1 AND n != ?2",
+            params![MANIFEST, first],
+        )?;
+        self.db.execute(
+            "UPDATE outbox SET data = ?1 WHERE n = ?2",
+            params![merged, first],
+        )?;
         Ok(())
     }
 
@@ -370,8 +404,12 @@ impl Engine {
                 continue;
             }
             // The file of a note that is waiting to be moved to the name the manifest gives it.
+            // A name this device refuses is never moved to, so that file is read as before.
             if let Some(id) = self.doc_id(path)? {
-                if entries.get(&id).is_some_and(|e| !e.deleted) {
+                if entries
+                    .get(&id)
+                    .is_some_and(|e| !e.deleted && self.vault.resolve(&e.path).is_ok())
+                {
                     continue;
                 }
             }
@@ -408,6 +446,7 @@ impl Engine {
                 .transact()
                 .encode_state_as_update_v1(&StateVector::default());
             self.save(&id, &doc, Some(&text), Some(path))?;
+            self.set_meta(&format!("unsent:{id}"), "1")?;
             self.queue(&id, update)?;
             self.set_entry(
                 &manifest,
@@ -454,7 +493,13 @@ impl Engine {
             .into_iter()
             .filter(|(_, e)| !e.deleted && (e.path == from || e.path.starts_with(&inside)))
             .collect();
+        // A second note the manifest puts at `from` is waiting for that name, not kept there:
+        // it is not the note being renamed.
+        let kept = self.doc_id(from)?;
         for (id, entry) in moved {
+            if entry.path == from && kept.as_deref().is_some_and(|k| k != id) {
+                continue;
+            }
             let path = format!("{to}{}", &entry.path[from.len()..]);
             self.set_entry(
                 &manifest,
@@ -680,14 +725,21 @@ impl Engine {
                 .is_some_and(|e| !e.deleted && e.path == path);
             if stays {
                 // A viewer cannot tell the team which note keeps the name, so this one waits
-                // where it is until an editor's device has said.
-                if !self.can_publish {
+                // where it is until an editor's device has said. Unless the note in its way is
+                // one the viewer made and the team has never seen: no editor will ever name
+                // that one, and where it goes is only this device's business.
+                let own = self.meta(&format!("unsent:{other}"))?.is_some();
+                if !self.can_publish && !own {
                     return Ok(None);
                 }
                 // Two notes made apart under one name. Both are kept: the one with the smaller
                 // id has the name, on every device, and the other is named beside it.
                 let aside = self.beside(path)?;
-                let moved = if other.as_str() > id { other } else { id };
+                let moved = if !self.can_publish || other.as_str() > id {
+                    other
+                } else {
+                    id
+                };
                 self.set_entry(
                     manifest,
                     moved,
@@ -1345,6 +1397,127 @@ mod tests {
             assert_eq!(files(&away), files(&a));
             assert!(away.engine.outbox().unwrap().is_empty());
         }
+    }
+
+    #[test]
+    fn a_viewers_own_note_does_not_hide_the_teams_note_of_the_same_name() {
+        // What the editor queues reaches everyone; a viewer's own changes go nowhere.
+        fn settle(a: &mut Device, viewer: &mut Device, publishes: bool) {
+            for _ in 0..4 {
+                a.engine.scan().unwrap();
+                viewer.engine.scan().unwrap();
+                for out in a.engine.outbox().unwrap() {
+                    viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    a.engine.sent(out.n).unwrap();
+                }
+                for out in viewer
+                    .engine
+                    .outbox()
+                    .unwrap()
+                    .into_iter()
+                    .filter(|_| publishes)
+                {
+                    a.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    viewer.engine.sent(out.n).unwrap();
+                }
+            }
+        }
+        for _ in 0..8 {
+            let (mut a, mut viewer) = (device(), device());
+            viewer.engine.allow_publishing(false);
+            viewer.write("Untitled.md", "viewer private\n");
+            a.write("Untitled.md", "team note\n");
+            settle(&mut a, &mut viewer, false);
+            // The team's note has the name; the viewer's own is beside it, on this device only.
+            assert_eq!(viewer.read("Untitled.md").as_deref(), Some("team note\n"));
+            assert_eq!(
+                viewer.read("Untitled (local copy).md").as_deref(),
+                Some("viewer private\n")
+            );
+            assert_eq!(files(&a).len(), 1);
+            // Renaming its own note leaves the team's alone, also once it may publish.
+            viewer
+                .engine
+                .rename("Untitled (local copy).md", "Mine.md")
+                .unwrap();
+            viewer.engine.allow_publishing(true);
+            viewer.engine.fold_outbox().unwrap();
+            settle(&mut a, &mut viewer, true);
+            for d in [&a, &viewer] {
+                assert_eq!(d.read("Untitled.md").as_deref(), Some("team note\n"));
+                assert_eq!(d.read("Mine.md").as_deref(), Some("viewer private\n"));
+                assert_eq!(files(d).len(), 2);
+            }
+        }
+    }
+
+    #[test]
+    fn a_note_made_and_given_its_title_while_away_disturbs_nobody() {
+        for _ in 0..8 {
+            let (mut a, mut b) = (device(), device());
+            a.write("Untitled.md", "a's note\n");
+            a.engine.scan().unwrap();
+            // b, away, makes a note and gives it its title before it is back.
+            b.write("Untitled.md", "b's meeting\n");
+            b.engine.scan().unwrap();
+            b.engine.rename("Untitled.md", "Meeting.md").unwrap();
+            // Back: it takes in what it missed, then sends where its notes are now.
+            let missed: Vec<(String, Vec<u8>)> = a
+                .engine
+                .outbox()
+                .unwrap()
+                .into_iter()
+                .map(|o| (o.doc, o.data))
+                .collect();
+            b.engine.apply_pulled(&missed).unwrap();
+            b.engine.fold_outbox().unwrap();
+            exchange(&mut a, &mut b);
+            for d in [&a, &b] {
+                assert_eq!(
+                    files(d),
+                    [
+                        ("Meeting.md".to_string(), "b's meeting\n".to_string()),
+                        ("Untitled.md".to_string(), "a's note\n".to_string()),
+                    ]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn renaming_a_note_leaves_another_that_waits_for_its_name() {
+        let (_a, _b, mut viewer) = a_viewer_left_waiting();
+        let shown = viewer.read("Untitled.md").unwrap();
+        viewer.engine.rename("Untitled.md", "Mine.md").unwrap();
+        // The name is free now, so once the device may place it the other note takes it.
+        viewer.engine.allow_publishing(true);
+        viewer.engine.place_waiting().unwrap();
+        assert_eq!(viewer.read("Mine.md"), Some(shown));
+        assert!(viewer
+            .read("Untitled.md")
+            .is_some_and(|t| Some(&t) != viewer.read("Mine.md").as_ref()));
+        assert_eq!(viewer.read("Untitled (local copy).md"), None);
+    }
+
+    #[test]
+    fn a_note_whose_new_name_is_refused_is_still_read_where_it_is() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Plan.md", "the plan\n");
+        exchange(&mut a, &mut b);
+        let id = a.engine.doc_id("Plan.md").unwrap().unwrap();
+        let manifest = a.engine.load(MANIFEST).unwrap();
+        let bad = Entry {
+            path: "../evil.md".to_string(),
+            deleted: false,
+        };
+        a.engine.set_entry(&manifest, &id, &bad).unwrap();
+        for out in a.engine.outbox().unwrap() {
+            b.engine.apply_remote(&out.doc, &out.data).unwrap();
+            a.engine.sent(out.n).unwrap();
+        }
+        b.write("Plan.md", "the plan\nwritten on b afterwards\n");
+        b.engine.scan().unwrap();
+        assert!(!b.engine.outbox().unwrap().is_empty());
     }
 
     #[test]

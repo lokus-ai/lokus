@@ -295,14 +295,18 @@ Two people who each make a note of the same name while apart (two "Untitled" not
 offline), or who each rename a different note to the same name, have two notes, and both are
 kept. Every device that may edit gives the name to the same one of them and names the other
 beside it, "name (local copy)", so no text is merged or lost. A viewer's device decides nothing
-for the team: it shows the second note once an editor's device has named it. A tab open on a
+for the team: it shows the second note once an editor's device has named it. A note the viewer
+made itself, which the team has never seen, is the one that steps aside there. A tab open on a
 note that sync moves goes with the note.
 
 A device that was away can get several renames as one change (two notes that swapped names, a
 note given the name of one that was deleted). The note in the way steps aside until its own
 move is made, so neither file is written over and sync does not stop. Everything it missed
 about names is taken in before it touches a file, so it never names two notes apart that the
-team has since moved or deleted: said late, that word could win and undo theirs.
+team has since moved or deleted: said late, that word could win and undo theirs. What it
+made while away goes out the same way, as where its notes are now and not each place they have
+been, so a note made as "Untitled" and given its title offline never meets a teammate's
+"Untitled".
 
 **Who may do what**
 
