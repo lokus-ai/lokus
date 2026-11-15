@@ -561,6 +561,8 @@ confirms that everything it must not be able to do is refused.
   OpenAI Responses API for OpenAI itself (a key or a ChatGPT plan), and the OpenAI
   chat-completions format for any compatible service at another address. Conversations are
   kept in one shape and translated on the way out.
+- **The address belongs to one provider.** It is typed for a compatible service; choosing
+  another provider drops it, so a ChatGPT sign-in or a Claude key is never sent there.
 - **Tools, in three groups.** Reading the vault (search, read a note in parts, list one folder,
   backlinks) never asks. Changing it (create, edit by exact-match replace, move, set a property)
   waits for the person to allow it unless they switch that off, as does any tool-server action

@@ -56,8 +56,9 @@ function Assistant() {
   return (
     <Section title="Assistant" hint="Bring your own key. It is stored in this computer's keychain and requests go straight from Lokus to the provider. Pick the model in the chat box.">
       <Row label="Provider">
-        {/* A ChatGPT plan and an OpenAI key name their models alike, so the model stays across that switch. */}
-        <Choice value={config.provider} options={PROVIDERS} onChange={(provider) => void save({ provider, model: provider !== "anthropic" && config.provider !== "anthropic" && !config.base_url ? config.model : "" })} />
+        {/* A ChatGPT plan and an OpenAI key name their models alike, so the model stays across that switch.
+            The address was typed for one provider: it is dropped, so another's key is never sent there. */}
+        <Choice value={config.provider} options={PROVIDERS} onChange={(provider) => void save({ provider, base_url: "", model: provider !== "anthropic" && config.provider !== "anthropic" && !config.base_url ? config.model : "" })} />
       </Row>
       {config.provider === "chatgpt" ? (
         <Row label="ChatGPT account" hint={hasKey ? "Signed in. Requests use your ChatGPT plan." : "Uses your own ChatGPT Plus or Pro plan. No API key."}>
