@@ -490,19 +490,20 @@ impl Engine {
         self.vault.rename(from, to)?;
         let manifest = self.load(MANIFEST)?;
         let inside = format!("{from}/");
-        let moved: Vec<(String, Entry)> = self
-            .entries(&manifest)
-            .into_iter()
-            .filter(|(_, e)| !e.deleted && (e.path == from || e.path.starts_with(&inside)))
-            .collect();
-        // A second note the manifest puts at `from` is waiting for that name, not kept there:
-        // it is not the note being renamed.
-        let kept = self.doc_id(from)?;
-        for (id, entry) in moved {
-            if entry.path == from && kept.as_deref().is_some_and(|k| k != id) {
-                continue;
-            }
-            let path = format!("{to}{}", &entry.path[from.len()..]);
+        // The notes this device keeps there, by its own record. A note the manifest puts at
+        // one of these names but that is still waiting for it is not one of the files moved.
+        let moved: Vec<(String, String)> = {
+            let mut q = self
+                .db
+                .prepare("SELECT id, path FROM docs WHERE path IS NOT NULL")?;
+            let rows = q.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<rusqlite::Result<Vec<(String, String)>>>()?
+                .into_iter()
+                .filter(|(_, path)| path == from || path.starts_with(&inside))
+                .collect()
+        };
+        for (id, old) in moved {
+            let path = format!("{to}{}", &old[from.len()..]);
             self.set_entry(
                 &manifest,
                 &id,
@@ -515,7 +516,7 @@ impl Engine {
             let synced = self.row(&id)?.and_then(|r| r.synced);
             self.save(&id, &doc, synced.as_deref(), Some(&path))?;
             self.events.push(Event::Renamed {
-                from: entry.path,
+                from: old,
                 to: path,
             });
         }
@@ -1484,6 +1485,32 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn renaming_a_folder_leaves_a_note_that_waits_for_a_name_in_it() {
+        let (mut a, mut viewer) = (device(), device());
+        viewer.engine.allow_publishing(false);
+        a.write("f/One.md", "one\n");
+        exchange(&mut a, &mut viewer);
+        // On the viewer's device only: the note is renamed, then a teammate uses that name.
+        viewer.engine.rename("f/One.md", "f/Plan.md").unwrap();
+        a.write("f/Plan.md", "team plan\n");
+        a.engine.scan().unwrap();
+        for out in a.engine.outbox().unwrap() {
+            viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+            a.engine.sent(out.n).unwrap();
+        }
+        viewer.engine.rename("f", "g").unwrap();
+        // Made an editor: what it did goes out, and no note is lost on either device.
+        viewer.engine.allow_publishing(true);
+        viewer.engine.place_waiting().unwrap();
+        viewer.engine.fold_outbox().unwrap();
+        exchange(&mut a, &mut viewer);
+        assert_eq!(files(&a), files(&viewer));
+        let mut texts: Vec<String> = files(&a).into_iter().map(|(_, text)| text).collect();
+        texts.sort();
+        assert_eq!(texts, ["one\n", "team plan\n"]);
     }
 
     #[test]
