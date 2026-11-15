@@ -235,13 +235,15 @@ impl Engine {
         };
         let parts: Vec<&[u8]> = rows.iter().map(|(_, data)| data.as_slice()).collect();
         let merged = yrs::merge_updates_v1(&parts).map_err(|e| Error::Crdt(e.to_string()))?;
-        self.db.execute(
-            "DELETE FROM outbox WHERE doc = ?1 AND n != ?2",
-            params![MANIFEST, first],
-        )?;
+        // The folded row is written before the others go: stopped in between, the same
+        // changes are queued twice, which is harmless, and none is lost.
         self.db.execute(
             "UPDATE outbox SET data = ?1 WHERE n = ?2",
             params![merged, first],
+        )?;
+        self.db.execute(
+            "DELETE FROM outbox WHERE doc = ?1 AND n != ?2",
+            params![MANIFEST, first],
         )?;
         Ok(())
     }
