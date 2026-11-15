@@ -192,8 +192,9 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           const close = text.lastIndexOf("](");
           const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0;
           // Folded to its words, a link to a web page is followed with a click, as a link to a note is.
-          const web = folded ? /^\]\(\s*<?(https:\/\/[^)\s>]+)/.exec(text.slice(close))?.[1] : undefined;
-          out.push(Decoration.mark({ class: "cm-link", attributes: web ? { "data-target": web } : undefined }).range(node.from, node.to));
+          const url = folded ? node.node.getChild("URL") : null;
+          const web = url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, "") : "";
+          out.push(Decoration.mark({ class: "cm-link", attributes: web.startsWith("https://") ? { "data-target": web } : undefined }).range(node.from, node.to));
           if (folded) {
             out.push(hide.range(node.from, node.from + 1));
             out.push(hide.range(node.from + close, node.to));

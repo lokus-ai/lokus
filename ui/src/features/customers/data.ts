@@ -222,8 +222,8 @@ export function fromSlack(text: string, plain = false): string {
       const label = shown && shown !== bare ? shown : "";
       if (plain) return label || bare;
       // Only a secure web address can be followed, so any other keeps its address in sight.
-      if (!url.startsWith("https://") || /[()]/.test(url)) return label ? `${label} (${bare})` : bare;
-      return `[${(label || bare).replace(/[[\]\\]/g, "\\$&")}](${url})`;
+      if (!url.startsWith("https://")) return label ? `${label} (${bare})` : bare;
+      return `[${(label || bare).replace(/[[\]\\]/g, "\\$&")}](${url.replace(/[()]/g, (c) => (c === "(" ? "%28" : "%29"))})`;
     })
     .replace(/(^|[\s(\[{>"'])\*(?=\S)([^*\n]*[^*\s])\*(?![\w*])/g, mark("**"))
     .replace(/(^|[\s(\[{>"'])~(?=\S)([^~\n]*[^~\s])~(?![\w~])/g, mark("~~"))
