@@ -286,6 +286,11 @@ engine in `lokus-sync`, which writes the file.
 Once a note has 200 stored edits they are folded into one row. A note's text is whatever its
 edits add up to; that is the cloud copy.
 
+A note arriving at a path where this device already has a file of its own never overwrites it:
+the local file is kept beside it as "name (local copy)" and synced too. The one exception is a
+local file that already holds exactly the arriving text (the starter notes every new vault
+begins with): it is the same note, so it stays where it is and nothing is kept twice.
+
 **Who may do what**
 
 - Roles are owner, editor and viewer per workspace. Per-folder permissions come later.
@@ -300,6 +305,9 @@ edits add up to; that is the cloud copy.
 - A socket does not outlive its sign-in. The app hands each fresh account token (about hourly)
   to the running connection; a socket that is not renewed is closed a minute after its token
   runs out.
+- A socket that has gone silent is not trusted. The app asks the relay to answer every 20
+  seconds; after 50 seconds of hearing nothing (a laptop that slept, a network that changed) it
+  drops the connection and opens a new one, and what either side missed arrives then.
 
 **What the relay refuses**
 
