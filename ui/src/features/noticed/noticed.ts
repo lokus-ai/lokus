@@ -1,4 +1,6 @@
 /** @part-of ui.noticed */
+import { accessToken } from "../../bridge/auth";
+import { relay } from "../../bridge/sync";
 import { onLookAsked, onMinute, showInMenuBar } from "../../bridge/background";
 import { aiActDone, aiApprove, aiSend, onAiAct, onAiEvent } from "../../bridge/ai";
 import { track, traceChat } from "../../bridge/analytics";
@@ -150,9 +152,34 @@ let listening = false;
 let current = "";
 
 /** Look now. Ends with the Noticed list brought up to date; says so if something new is on it. */
-export async function check(reason = "This is a routine look."): Promise<void> {
+/**
+ * In a team, ask the relay for this look. One person's Lokus does it and what it finds syncs to
+ * everyone; the rest are told it has been done and wait for the next one. A look someone asked
+ * for by hand is theirs to have. A relay that does not know the question lets the look go on.
+ */
+async function myTurn(): Promise<boolean> {
+  const { sync } = app.get();
+  if (sync.status !== "online" || !sync.server || !sync.workspace) return true;
+  const token = await accessToken().catch(() => null);
+  if (!token) return true;
+  try {
+    const answer = await relay<{ granted: boolean }>(sync.server, token, "POST", `/v1/workspaces/${sync.workspace}/looks/claim`, { minutes: watchEvery() });
+    return answer.granted !== false;
+  } catch {
+    return true;
+  }
+}
+
+export async function check(reason = "This is a routine look.", asked = false): Promise<void> {
   const state = noticed.get();
   if (state.checking || !app.get().vault) return;
+  if (!asked && !(await myTurn())) {
+    // A teammate's Lokus has just looked. Count it as done here too, and show what it found.
+    localStorage.setItem(CHECKED, String(Date.now()));
+    noticed.set({ checked: Date.now() });
+    await loadNoticed();
+    return;
+  }
   if (!listening) {
     listening = true;
     // In the background nothing may be changed: whatever asks to is told no, at once.
@@ -293,7 +320,7 @@ function due(): boolean {
  */
 function inMenuBar(): void {
   onMinute(() => due() && void check("Lokus is running in the menu bar; nobody has the window open."));
-  onLookAsked(() => void check("The user asked for a look from the menu bar."));
+  onLookAsked(() => void check("The user asked for a look from the menu bar.", true));
   let shown = -1;
   const count = () => {
     const needs = waiting(noticed.get().items).filter((i) => i.kind === "finding" && i.urgency !== "fyi").length;

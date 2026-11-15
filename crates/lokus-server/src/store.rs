@@ -266,6 +266,8 @@ impl Store {
                  url TEXT NOT NULL, signature TEXT NOT NULL, at INTEGER NOT NULL,
                  pulled INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (version, platform));
              CREATE TABLE IF NOT EXISTS app_news (id TEXT PRIMARY KEY, body TEXT NOT NULL, at INTEGER NOT NULL);
+             CREATE TABLE IF NOT EXISTS looks (workspace TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+                 at INTEGER NOT NULL, user TEXT NOT NULL);
              PRAGMA user_version = {SCHEMA};"
         ))?;
         // Columns added after the first relay went live. A database made before them gains
@@ -585,6 +587,31 @@ impl Store {
         record(&tx, &workspace, user, "invite_accepted", Some(&role), None)?;
         tx.commit()?;
         Ok(workspace)
+    }
+
+    /// Ask for the turn to look a workspace over. Granted when nobody has taken one in the
+    /// last `seconds`; taking it is what makes the next person wait. Says whether it was
+    /// granted and when the last look was.
+    pub fn claim_look(&self, workspace: &str, user: &str, seconds: i64) -> Result<(bool, i64)> {
+        let mut db = self.db()?;
+        let tx = db.transaction()?;
+        let last: Option<i64> = tx
+            .query_row(
+                "SELECT at FROM looks WHERE workspace = ?1",
+                [workspace],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if let Some(at) = last.filter(|at| now() - at < seconds) {
+            return Ok((false, at));
+        }
+        tx.execute(
+            "INSERT INTO looks (workspace, at, user) VALUES (?1, ?2, ?3)
+             ON CONFLICT (workspace) DO UPDATE SET at = ?2, user = ?3",
+            params![workspace, now(), user],
+        )?;
+        tx.commit()?;
+        Ok((true, now()))
     }
 
     /// The most recent changes to who may do what, newest first.

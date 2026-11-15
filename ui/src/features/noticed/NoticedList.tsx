@@ -141,7 +141,7 @@ export function NoticedDrawer() {
       <aside className="nt-drawer" role="dialog" aria-label="What the assistant noticed">
         <header>
           <h2>Noticed</h2>
-          <button className="link" disabled={s.checking} onClick={() => void check("The user asked you to look now.")}>
+          <button className="link" disabled={s.checking} onClick={() => void check("The user asked you to look now.", true)}>
             {s.checking ? "Looking…" : "Look now"}
           </button>
           <button className="news-close nt-close" aria-label="Close" onClick={() => noticed.set({ open: false })}>

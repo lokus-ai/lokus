@@ -927,3 +927,23 @@ async fn news_is_published_with_the_key_and_read_by_anyone() {
         .unwrap();
     assert_eq!(read["posts"].as_array().unwrap().len(), 1);
 }
+
+/// Five people in a workspace must not mean five assistants doing the same look.
+#[tokio::test]
+async fn one_device_at_a_time_looks_a_workspace_over() {
+    let relay = relay().await;
+    let id = relay.team("editor").await;
+    let claim = format!("/v1/workspaces/{id}/looks/claim");
+    let ask = json!({ "minutes": 60 });
+    let (status, first) = relay.call("ta", "POST", &claim, ask.clone()).await;
+    assert_eq!((status, &first["granted"]), (200, &json!(true)));
+    let (_, second) = relay.call("tb", "POST", &claim, ask.clone()).await;
+    assert_eq!(second["granted"], false);
+    assert_eq!(second["last"], first["last"]);
+    assert_eq!(
+        relay.call("ta", "POST", &claim, ask.clone()).await.1["granted"],
+        false
+    );
+    // Someone who is not in the workspace has no turn to ask for.
+    assert_eq!(relay.call("tc", "POST", &claim, ask).await.0, 403);
+}

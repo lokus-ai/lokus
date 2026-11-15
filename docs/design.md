@@ -356,6 +356,25 @@ A vault holds pictures, PDFs and CSVs beside its notes, and they sync like any a
 - **Not built.** Pictures made by an image model; looking at a picture already in the vault
   without it being attached; scanned PDFs (no text in them); editing a CSV in place.
 
+### Several people's assistants in one workspace (built; tried with two devices on a local relay)
+
+Five people in a workspace means five copies of Lokus, each with an assistant and each with its
+own connections. Three things keep that from becoming five of everything.
+
+- **The same thing recorded twice is one thing.** A message or issue is filed under the id its
+  source gave it, so two assistants recording the same Slack message write the same note.
+- **One meeting is one record.** Each person's recorder gives the same meeting a different id,
+  so a meeting is matched by customer, day and title; a second person's notes are added to the
+  first record under their name (`ingest::same_meeting`).
+- **One look per workspace.** Before a scheduled look a device asks the relay for the turn
+  (`POST /v1/workspaces/{id}/looks/claim`); one is granted per interval and the rest skip. A
+  look asked for by hand is not held back. Findings live in the vault's `noticed/` folder,
+  which syncs, so everyone sees what the one look found, and dealing with a finding deals
+  with it for all.
+
+Not handled: two people acting on the same finding at the same moment; a meeting whose title
+differs between recorders.
+
 ### In the menu bar (built; tried in the real app on a Mac)
 
 The assistant's looks run on a timer inside the app, so an app that quits with its window stops

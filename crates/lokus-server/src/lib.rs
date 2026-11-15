@@ -198,6 +198,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/brand/lokus.png", get(invites::logo))
         .route("/brand/invitation.jpg", get(invites::picture))
         .route("/v1/workspaces/{id}/audit", get(list_audit))
+        .route("/v1/workspaces/{id}/looks/claim", post(claim_look))
         .route("/v1/invites/{code}/accept", post(invites::accept))
         .route(
             "/v1/workspaces/{id}/blobs/{hash}",
@@ -324,6 +325,32 @@ async fn delete_workspace(
     app.store.delete_workspace(&id, &me.user)?;
     app.changed(&id, None);
     Ok(Json(json!({ "deleted": id })))
+}
+
+#[derive(Deserialize)]
+struct LookClaim {
+    /// How often this workspace is looked over, in minutes, as the asking device has it set.
+    minutes: i64,
+}
+
+/// One device's assistant asks for the turn to look the workspace over. With five people in a
+/// workspace, five assistants would otherwise each do the same look and pay for it five times;
+/// this lets one go ahead and tells the rest it has been done. What it finds syncs to all.
+async fn claim_look(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Json(body): Json<LookClaim>,
+) -> Result<Json<Value>> {
+    let me = app.caller(&headers).await?;
+    if !app.require(&id, &me.user)?.can_edit() {
+        return Err(Error::Forbidden);
+    }
+    // A little under the interval, so the device whose timer fires a few seconds early is
+    // not turned away by its own last look.
+    let seconds = (body.minutes.clamp(5, 24 * 60) * 60) * 9 / 10;
+    let (granted, last) = app.store.claim_look(&id, &me.user, seconds)?;
+    Ok(Json(json!({ "granted": granted, "last": last })))
 }
 
 /// Who changed who may do what, newest first. Owners only.
