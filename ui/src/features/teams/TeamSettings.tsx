@@ -4,7 +4,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
-import { app, connectSync, disconnectSync } from "../../shell/workspace";
+import { allNotes, app, connectSync, disconnectSync } from "../../shell/workspace";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
@@ -135,6 +135,9 @@ export function TeamSettings() {
   };
   const owners = members.filter((m) => m.role === "owner").length;
   const teamName = here?.name ?? "Workspace";
+  // Only what is in this folder is shared. Notes in a person's other workspaces are not.
+  const tree = useStore(app, (st) => st.tree);
+  const shared = tree ? allNotes().length : 0;
 
   if (connected) {
     return (
@@ -143,8 +146,8 @@ export function TeamSettings() {
           <div className="team-head-main">
             <strong>{teamName}</strong>
             <small>
-              <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]}
-              </small>
+              <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]} {shared === 0 ? "Nothing is in this workspace yet." : `${shared} ${shared === 1 ? "note" : "notes"} shared.`}
+            </small>
           </div>
           {owner && token && (
             <button className="primary team-invite-button" onClick={() => setInviting(true)}>
@@ -166,6 +169,11 @@ export function TeamSettings() {
           />
         )}
 
+        {shared === 0 && (
+          <p className="team-empty-note">
+            Only notes made in this workspace are shared with the team. Notes in your other workspaces stay private. While you work, the top of the sidebar should say <b>{vault?.name}</b> and <b>Team</b>.
+          </p>
+        )}
         <div className="team-tabs" role="tablist">
           <button role="tab" aria-selected={tab === "members"} className={tab === "members" ? "on" : ""} onClick={() => setTab("members")}>
             Members <span>{members.length}</span>

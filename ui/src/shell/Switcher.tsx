@@ -71,6 +71,8 @@ export function WorkspaceSwitcher() {
       <button className="vault-name" aria-haspopup="menu" aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}>
         <span className="vault-badge">{letter(vault?.name ?? "")}</span>
         <span className="tree-name">{vault?.name}</span>
+        {/* Said on the sidebar itself: work done in a private workspace reaches nobody else. */}
+        <span className={`switcher-kind${team ? " team" : ""}`}>{team ? "Team" : "Private"}</span>
         <Icon name="down" size={12} />
       </button>
       {open && (
