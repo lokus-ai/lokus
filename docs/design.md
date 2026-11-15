@@ -423,6 +423,28 @@ button, and "Add workspace", which makes a folder of that name in Documents. A n
 is private; sharing it is one step under Settings, Team. Every window still shows the same
 workspace: switching in one switches them all.
 
+**A team comes by itself (2026-11-15).** Being in a team is enough to have it on a computer.
+On sign-in, when the app starts and when its window is returned to, the app asks the relay
+which teams the person is in (`GET /v1/workspaces`); each one with no folder on this computer
+gets a folder in Documents named after it, is opened and starts syncing
+(`bringTeams` in `ui/src/features/teams/invites.ts`). Nobody is asked. The rules that keep it
+safe:
+
+- It never lands in a folder holding files: a folder of the team's name that has any gets
+  passed over for "name 2", "name 3". A person's own notes cannot reach a team this way.
+- A folder that already synced with this team here is used again, so asking twice makes
+  nothing twice. A folder of that name belonging to another team is passed over.
+- A team whose syncing was stopped on this computer (Settings, Team, Stop syncing) is not
+  started again. "Sync this vault here" starts it.
+- One connection is open at a time, the open folder's. With several teams the first is left
+  on screen; the others sync when their folder is opened from the switcher.
+- First-run setup chooses the first folder itself; teams are brought when it closes. With
+  no relay or no sign-in nothing is made and nothing is said; it is asked again later.
+- A team folder opened while signed out starts syncing when the person signs in.
+
+Before this, only accepting a fresh invitation made the folder; someone already in a team had
+to press "Sync this vault here". To put it back, remove `bringTeams`.
+
 ### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
 
 An owner types an address under Settings, Team. The relay emails that person from

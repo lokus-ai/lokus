@@ -123,7 +123,12 @@ fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
 /// With `open` it is made if need be and opened; without, only its place is told.
 /// A `name` asks for a folder of that name instead, for a team's workspace joined by invitation.
 #[tauri::command(async)]
-fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Value, Value> {
+fn vault_default(
+    app: AppHandle,
+    open: bool,
+    name: Option<String>,
+    fresh: bool,
+) -> Result<Value, Value> {
     // A workspace's name is whatever its owner typed; only what is safe as a folder is kept.
     let named: String = name
         .unwrap_or_default()
@@ -131,12 +136,27 @@ fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Val
         .filter(|c| !c.is_control() && !"/\\:".contains(*c))
         .collect();
     let named = named.trim().trim_start_matches('.').trim();
-    let folder = app
+    let named = if named.is_empty() { "Lokus" } else { named };
+    let documents = app
         .path()
         .document_dir()
         .or_else(|_| app.path().home_dir())
-        .map_err(|e| json!({ "code": "io", "message": format!("Could not find your Documents folder: {e}") }))?
-        .join(if named.is_empty() { "Lokus" } else { named });
+        .map_err(|e| json!({ "code": "io", "message": format!("Could not find your Documents folder: {e}") }))?;
+    let mut folder = documents.join(named);
+    // A folder made without asking must be nobody's: one of that name with files in it is left
+    // alone, and the next free name is used.
+    let holds_files = |folder: &std::path::Path| {
+        std::fs::read_dir(folder).is_ok_and(|inside| {
+            inside
+                .flatten()
+                .any(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+        })
+    };
+    let mut number = 2;
+    while fresh && holds_files(&folder) {
+        folder = documents.join(format!("{named} {number}"));
+        number += 1;
+    }
     if !open {
         return Ok(json!({ "root": folder }));
     }
