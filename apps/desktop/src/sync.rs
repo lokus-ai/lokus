@@ -117,7 +117,7 @@ pub async fn sync_connect(
         &app,
         &format!(
             "connect asked for: {server}, workspace {}",
-            &workspace.chars().take(8).collect::<String>()
+            workspace.chars().take(8).collect::<String>()
         ),
     );
     let sync = app.state::<Sync>();
