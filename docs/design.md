@@ -430,10 +430,13 @@ gets a folder in Documents named after it, is opened and starts syncing
 (`bringTeams` in `ui/src/features/teams/invites.ts`). Nobody is asked. The rules that keep it
 safe:
 
-- It never lands in a folder holding files: a folder of the team's name that has any gets
-  passed over for "name 2", "name 3". A person's own notes cannot reach a team this way.
+- It never lands in a folder holding files, nor in one that syncs with another team, nor
+  where a plain file has the name: each is passed over for "name 2", "name 3". A person's
+  own notes cannot reach a team this way, nor one team's notes another.
 - A folder that already synced with this team here is used again, so asking twice makes
-  nothing twice. A folder of that name belonging to another team is passed over.
+  nothing twice.
+- What was being typed is written to its own folder before the team's folder takes the
+  screen. A team that cannot be given a folder does not hold up the others.
 - A team whose syncing was stopped on this computer (Settings, Team, Stop syncing) is not
   started again. "Sync this vault here" starts it.
 - One connection is open at a time, the open folder's. With several teams the first is left

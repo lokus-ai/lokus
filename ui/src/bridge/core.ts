@@ -173,13 +173,13 @@ export const isMainWindow = () => getCurrentWindow().label === "main";
 
 /**
  * Where notes go when someone does not pick a folder: Documents, Lokus. With a `name`, a folder
- * of that name in Documents instead, which is where a team's workspace is put. `fresh` asks for
- * a folder holding nothing: when that name is taken by a folder with files in it, the next free one.
+ * of that name in Documents instead, which is where a team's workspace is put. Asked without
+ * opening it, `free` says whether it is not there yet or holds nothing.
  */
-export async function defaultVault(open: boolean, name?: string, fresh = false): Promise<VaultInfo> {
+export async function defaultVault(open: boolean, name?: string): Promise<VaultInfo & { free?: boolean }> {
   try {
-    const found = await invoke<{ root: string; name?: string }>("vault_default", { open, name: name ?? null, fresh });
-    return { name: found.name ?? name ?? "Lokus", root: found.root };
+    const found = await invoke<{ root: string; name?: string; free?: boolean }>("vault_default", { open, name: name ?? null });
+    return { name: found.name ?? name ?? "Lokus", root: found.root, free: found.free };
   } catch (raw) {
     throw toCoreError(raw);
   }

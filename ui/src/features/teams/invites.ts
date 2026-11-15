@@ -130,16 +130,22 @@ export async function bringTeams(): Promise<void> {
     const stopped = stoppedSync();
     // Last to first, so the first team is the one left on screen.
     for (const w of mine.filter((w) => !here.has(w.id) && !stopped.includes(w.id)).reverse()) {
-      // The folder it had here before, when this computer still knows it; otherwise one holding
-      // nothing. A folder of that name that is another team's is passed over.
-      let name = w.name;
-      let was = syncedWith((await defaultVault(false, name)).root);
-      for (let n = 2; was && was !== w.id; n++) was = syncedWith((await defaultVault(false, (name = `${w.name} ${n}`))).root);
-      const had = was === w.id;
-      await setVault((await defaultVault(true, name, !had)).root);
-      if (!had) await connectSync(HOME, w.id, null);
-      track("action", { feature: "team", action: "team_brought" });
-      notify(`${w.name} is on this computer now`);
+      try {
+        // The folder it had here before, when this computer still knows it; otherwise the first
+        // of "name", "name 2", ... that holds nothing and is no other team's.
+        let name = w.name;
+        let at = await defaultVault(false, name);
+        for (let n = 2; syncedWith(at.root) !== w.id && (syncedWith(at.root) || !at.free); n++) {
+          at = await defaultVault(false, (name = `${w.name} ${n}`));
+        }
+        const had = syncedWith(at.root) === w.id;
+        await setVault((await defaultVault(true, name)).root);
+        if (!had) await connectSync(HOME, w.id, null);
+        track("action", { feature: "team", action: "team_brought" });
+        notify(`${w.name} is on this computer now`);
+      } catch {
+        // this team is tried again at the next look; the others still come
+      }
     }
   } catch {
     // no relay or no sign-in right now: asked again when the window is next returned to
