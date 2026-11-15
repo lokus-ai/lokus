@@ -55,6 +55,8 @@ pub struct Config {
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 const RETRY: Duration = Duration::from_secs(3);
+/// The longest a connection may take to open before it is given up and tried again.
+const CONNECT: Duration = Duration::from_secs(20);
 /// How often an open connection checks whether it has been handed a newer sign-in.
 const RENEW_CHECK: Duration = Duration::from_secs(20);
 
@@ -299,9 +301,15 @@ async fn session(
     moved: &Notify,
     arrived: &Notify,
 ) -> Result<()> {
-    let (socket, _) = tokio_tungstenite::connect_async(socket_url(config))
-        .await
-        .map_err(|e| Error::Net(e.to_string()))?;
+    // Bounded: a connection that neither opens nor fails would otherwise be waited on for
+    // ever, with the app saying "Connecting" and nothing to retry.
+    let (socket, _) = tokio::time::timeout(
+        CONNECT,
+        tokio_tungstenite::connect_async(socket_url(config)),
+    )
+    .await
+    .map_err(|_| Error::Net("the relay did not answer in time".into()))?
+    .map_err(|e| Error::Net(e.to_string()))?;
     let (mut out, mut inbox) = socket.split();
     // Say who we are before anything else; the relay answers `hello` or refuses.
     let mut presented = config.token.get();

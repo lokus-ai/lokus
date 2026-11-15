@@ -29,6 +29,31 @@ struct Running {
     token: Token,
 }
 
+/// Add a line to the sync log (Lokus's own log folder, `sync.log`). It is started again when
+/// it passes a megabyte, so it never grows without end.
+pub fn note(app: &AppHandle, line: &str) {
+    use std::io::Write;
+    let Ok(dir) = app.path().app_log_dir() else {
+        return;
+    };
+    let _ = std::fs::create_dir_all(&dir);
+    let file = dir.join("sync.log");
+    if std::fs::metadata(&file).is_ok_and(|m| m.len() > 1_000_000) {
+        let _ = std::fs::rename(&file, dir.join("sync.old.log"));
+    }
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    if let Ok(mut out) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(file)
+    {
+        let _ = writeln!(out, "{at} {line}");
+    }
+}
+
 fn fail(code: &str, message: impl ToString) -> Value {
     json!({ "code": code, "message": message.to_string() })
 }
@@ -84,8 +109,17 @@ pub async fn sync_connect(
         std::mem::take(&mut *ending)
     };
     for task in ending {
-        let _ = task.await;
+        // It was told to stop and ends at its next pause. Should it be somewhere that never
+        // pauses, connecting again must not wait on it for ever.
+        let _ = tokio::time::timeout(std::time::Duration::from_secs(3), task).await;
     }
+    note(
+        &app,
+        &format!(
+            "connect asked for: {server}, workspace {}",
+            &workspace.chars().take(8).collect::<String>()
+        ),
+    );
     let sync = app.state::<Sync>();
     let (link, nudges) = link(&core.vault).map_err(|e| fail("sync", e))?;
     let token = Token::new(token);
@@ -97,10 +131,23 @@ pub async fn sync_connect(
     let (reporter, done) = (app.clone(), app.clone());
     let serving = link.clone();
     let task = tauri::async_runtime::spawn(async move {
+        let logging = reporter.clone();
         let outcome = serve(serving, nudges, config, move |event| {
+            // What the connection goes through is kept: when sync misbehaves on someone's
+            // computer, this file is the only account of it there is.
+            match event["event"].as_str() {
+                Some("online") => note(&logging, &format!("online as {}", event["role"])),
+                Some("offline") => note(&logging, &format!("offline: {}", event["reason"])),
+                Some("pulled") => note(&logging, &format!("pulled {} edits", event["edits"])),
+                Some(kind @ ("renamed" | "kept_both" | "skipped" | "rebound")) => {
+                    note(&logging, &format!("{kind}: {event}"))
+                }
+                _ => {}
+            }
             let _ = reporter.emit("sync:event", event);
         })
         .await;
+        note(&done, &format!("connection ended: {outcome:?}"));
         if let Err(e) = outcome {
             let _ = done.emit(
                 "sync:event",

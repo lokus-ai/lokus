@@ -364,6 +364,8 @@ let syncSignIn: string | null = null;
 let stopSignIns: (() => void) | null = null;
 /** Whether a refusal has already been answered with one fresh sign-in. */
 let retriedSignIn = false;
+/** The latest request to connect, so a retry for an older one does nothing. */
+let lastAsk = "";
 
 export async function connectSync(server: string, workspace: string, token: string | null): Promise<void> {
   const useToken = token ?? (await accessToken());
@@ -379,13 +381,25 @@ export async function connectSync(server: string, workspace: string, token: stri
   stopSignIns?.();
   stopSignIns = null;
   // An account sign-in lasts about an hour. Each new one is handed to the connection as it arrives.
+  // Not waited for: the connection must be asked for whatever the account service is doing.
   if (token === null) {
-    stopSignIns = await onAccessToken((fresh) => {
+    void onAccessToken((fresh) => {
       if (fresh === syncSignIn) return;
       syncSignIn = fresh;
       void syncToken(fresh);
-    });
+    }).then(
+      (stop) => (stopSignIns = stop),
+      () => {},
+    );
   }
+  // Asked for but never answered: say so and try again, where it used to say "Connecting" for good.
+  const asking = `${server}|${workspace}|${Date.now()}`;
+  lastAsk = asking;
+  window.setTimeout(() => {
+    if (lastAsk !== asking || app.get().sync.status !== "connecting") return;
+    reportError(new Error("sync stayed at connecting for 30 seconds"), "sync");
+    void connectSync(server, workspace, token);
+  }, 30_000);
   await syncConnect(server, workspace, useToken).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
 }
 
