@@ -679,10 +679,13 @@ impl Engine {
                 }
                 (None, false) => {
                     let target = self.claim_path(&id, &entry.path, Some(&text))?;
-                    self.write_disk(&target, &text)?;
-                    self.events.push(Event::Wrote {
-                        path: target.clone(),
-                    });
+                    // A file that already says this is left exactly as it is, line endings and all.
+                    if self.read_disk(&target).map(|(disk, _)| disk).as_deref() != Some(&text) {
+                        self.write_disk(&target, &text)?;
+                        self.events.push(Event::Wrote {
+                            path: target.clone(),
+                        });
+                    }
                     self.save(&id, &doc, Some(&text), Some(&target))?;
                 }
                 _ => {}
@@ -1022,5 +1025,22 @@ mod tests {
         );
         assert_eq!(b.read("Same (local copy).md"), None);
         assert!(b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_matching_local_file_keeps_its_own_line_endings() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Mixed.md", "one\ntwo\nthree\n");
+        a.engine.scan().unwrap();
+        b.write("Mixed.md", "one\r\ntwo\nthree\n");
+        // The note's text arrives before the manifest that says where it lives.
+        let mut out = a.engine.outbox().unwrap();
+        out.sort_by_key(|o| o.doc == MANIFEST);
+        for o in out {
+            b.engine.apply_remote(&o.doc, &o.data).unwrap();
+        }
+        b.engine.mark_pulled().unwrap();
+        assert_eq!(b.read("Mixed.md").as_deref(), Some("one\r\ntwo\nthree\n"));
+        assert_eq!(b.read("Mixed (local copy).md"), None);
     }
 }
