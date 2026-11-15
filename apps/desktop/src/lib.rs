@@ -97,6 +97,8 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
             core: core.clone(),
             _watch: handle,
         });
+        // A connection asked for the last folder may have started while this one opened.
+        sync::stop_for(app);
     }
     let _ = app.emit("vault:opened", &info);
     Ok(info)

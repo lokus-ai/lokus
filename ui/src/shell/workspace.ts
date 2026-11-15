@@ -423,7 +423,10 @@ export async function connectSync(server: string, workspace: string, token: stri
     reportError(new Error("sync stayed at connecting for 30 seconds"), "sync");
     void connectSync(server, workspace, token, root);
   }, 30_000);
-  await syncConnect(server, workspace, useToken, root).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
+  await syncConnect(server, workspace, useToken, root).catch((e) => {
+    // Refused because another folder was opened meanwhile: that folder is not the one to say so.
+    if ((app.get().vault?.root ?? "") === root) app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } });
+  });
 }
 
 export async function disconnectSync(): Promise<void> {

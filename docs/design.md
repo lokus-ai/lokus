@@ -436,6 +436,8 @@ safe:
   apart as the disk spells them, so teams "sales" and "Sales" get "sales" and "Sales 2".
 - A connection is asked for one folder by name (`sync_connect`'s `root`) and refused when
   another is open by then, so a folder opened in the same instant is not taken for the team's.
+  It is looked at again at the moment the connection starts, and opening a folder ends any
+  connection begun for the last one: none runs behind a folder it was not asked for.
 - A folder that already synced with this team here is used again, so asking twice makes
   nothing twice.
 - What was being typed is written to its own folder before the team's folder takes the

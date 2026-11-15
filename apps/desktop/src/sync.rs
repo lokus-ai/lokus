@@ -125,6 +125,19 @@ pub async fn sync_connect(
         ),
     );
     let sync = app.state::<Sync>();
+    // Looked at again, and held until this connection is the running one: another folder may
+    // have been opened while the last connection ended.
+    let shell = app.state::<Shell>();
+    let open = shell
+        .open
+        .lock()
+        .map_err(|_| fail("sync", "sync stopped"))?;
+    if !open
+        .as_ref()
+        .is_some_and(|o| o.core.vault.root() == core.vault.root())
+    {
+        return Err(fail("no_vault", "that folder is not the one open"));
+    }
     let (link, nudges) = link(&core.vault).map_err(|e| fail("sync", e))?;
     let token = Token::new(token);
     let config = Config {
