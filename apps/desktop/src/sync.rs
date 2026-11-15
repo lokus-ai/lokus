@@ -93,11 +93,15 @@ pub async fn sync_connect(
     server: String,
     workspace: String,
     token: String,
+    root: String,
 ) -> Result<Value, Value> {
+    // The folder this was asked for, not whichever is open by now: another may have been opened
+    // while the asking waited, and its notes are not this team's.
     let core = app
         .state::<Shell>()
         .core()
-        .ok_or_else(|| fail("no_vault", "no vault is open"))?;
+        .filter(|core| core.vault.root() == std::path::Path::new(&root))
+        .ok_or_else(|| fail("no_vault", "that folder is not the one open"))?;
     // Stop whatever is running and wait until it has really ended before opening the engine.
     let ending = {
         let sync = app.state::<Sync>();
@@ -121,6 +125,19 @@ pub async fn sync_connect(
         ),
     );
     let sync = app.state::<Sync>();
+    // Looked at again, and held until this connection is the running one: another folder may
+    // have been opened while the last connection ended.
+    let shell = app.state::<Shell>();
+    let open = shell
+        .open
+        .lock()
+        .map_err(|_| fail("sync", "sync stopped"))?;
+    if !open
+        .as_ref()
+        .is_some_and(|o| o.core.vault.root() == core.vault.root())
+    {
+        return Err(fail("no_vault", "that folder is not the one open"));
+    }
     let (link, nudges) = link(&core.vault).map_err(|e| fail("sync", e))?;
     let token = Token::new(token);
     let config = Config {

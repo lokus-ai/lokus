@@ -1,10 +1,10 @@
 /** @part-of ui.teams */
 import { track } from "../../bridge/analytics";
 import { accessToken } from "../../bridge/auth";
-import { defaultVault } from "../../bridge/core";
+import { defaultVault, listVaults } from "../../bridge/core";
 import { relay } from "../../bridge/sync";
 import { createStore } from "../../shell/store";
-import { allNotes, app, connectSync, notify, setVault } from "../../shell/workspace";
+import { allNotes, app, connectSync, notify, resumeSync, saveAll, setVault, stoppedSync, syncedWith, unsaved } from "../../shell/workspace";
 
 /**
  * Invitations, from both ends.
@@ -94,13 +94,15 @@ export function sharedAlready(): boolean {
  * Documents named after the workspace.
  */
 export async function join(w: Waiting, where: "here" | "new"): Promise<void> {
+  // The folder open when it was pressed, not one opened while the relay answered.
+  let root = where === "here" ? app.get().vault?.root : undefined;
   const token = await accessToken();
   if (!token) throw new Error("Sign in first");
   invited.set({ joining: w.code });
   try {
     await relay<{ workspace: string }>(HOME, token, "POST", `/v1/invites/${w.code}/accept`);
-    if (where === "new" || !app.get().vault) await setVault((await defaultVault(true, w.name)).root);
-    await connectSync(HOME, w.workspace, null);
+    if (!root) await setVault((root = (await defaultVault(true, w.name)).root));
+    await connectSync(HOME, w.workspace, null, root);
     track("action", { feature: "team", action: "invite_accepted", where, role: w.role });
     notify(`You joined ${w.name}`);
     invited.set((s) => ({ waiting: s.waiting.filter((x) => x.code !== w.code) }));
@@ -109,18 +111,75 @@ export async function join(w: Waiting, where: "here" | "new"): Promise<void> {
   }
 }
 
+/** Whether first-run setup is on screen. It decides the first folder itself, so nothing is brought under it. */
+let settingUp: () => boolean = () => false;
+let bringing = false;
+
+/**
+ * A team this person is already in, with no folder on this computer, gets one and starts
+ * syncing. Nobody is asked: being in the team is the answer. It lands in a folder of its own in
+ * Documents, never in a folder of the person's notes, and a team whose syncing was stopped
+ * here by hand stays stopped.
+ */
+export async function bringTeams(): Promise<void> {
+  if (!HOME || bringing || settingUp() || invited.get().joining || !app.get().ready || !app.get().account) return;
+  bringing = true;
+  try {
+    const token = await accessToken();
+    if (!token) return;
+    const mine = await relay<{ id: string; name: string }[]>(HOME, token, "GET", "/v1/workspaces");
+    const here = new Set((await listVaults()).map((v) => syncedWith(v.root)));
+    const stopped = stoppedSync();
+    // Last to first, so the first team is the one left on screen.
+    for (const w of mine.filter((w) => !here.has(w.id) && !stopped.includes(w.id)).reverse()) {
+      try {
+        // The folder it had here before, when this computer still knows it; otherwise the first
+        // of "name", "name 2", ... that holds nothing and is no other team's.
+        let name = w.name;
+        let at = await defaultVault(false, name);
+        for (let n = 2; syncedWith(at.root) !== w.id && (syncedWith(at.root) || !at.free); n++) {
+          at = await defaultVault(false, (name = `${w.name} ${n}`));
+        }
+        const had = syncedWith(at.root) === w.id;
+        // The folder on screen is about to change: what was typed there is written first.
+        await saveAll();
+        // A note that could not be written keeps its folder on screen; the teams wait for the next look.
+        if (unsaved()) return;
+        const { root } = await defaultVault(true, name);
+        await setVault(root);
+        if (!had) await connectSync(HOME, w.id, null, root);
+        track("action", { feature: "team", action: "team_brought" });
+        notify(`${w.name} is on this computer now`);
+      } catch {
+        // this team is tried again at the next look; the others still come
+      }
+    }
+  } catch {
+    // no relay or no sign-in right now: asked again when the window is next returned to
+  } finally {
+    bringing = false;
+  }
+}
+
 /** Ask when someone signs in, and again when they come back to the window after a while. */
-export function watchInvites(): void {
+export function watchInvites(setup: () => boolean): void {
   if (!HOME) return;
+  settingUp = setup;
   let who = app.get().account?.id ?? null;
-  void lookForInvites();
+  const look = () => {
+    void lookForInvites();
+    void bringTeams();
+  };
+  look();
   app.subscribe(() => {
     const now = app.get().account?.id ?? null;
     if (now === who) return;
     who = now;
-    void lookForInvites();
+    // A team folder opened while signed out was refused: the sign-in is what it was waiting for.
+    if (now && app.get().sync.status === "refused") void resumeSync();
+    look();
   });
   window.addEventListener("focus", () => {
-    if (Date.now() - asked > AGAIN) void lookForInvites();
+    if (Date.now() - asked > AGAIN) look();
   });
 }
