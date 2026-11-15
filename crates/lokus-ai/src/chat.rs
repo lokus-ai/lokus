@@ -448,7 +448,7 @@ pub async fn send(
     approve: Approver,
 ) -> Result<Outcome> {
     let Request {
-        config,
+        mut config,
         mut messages,
         core,
         extra_servers,
@@ -461,8 +461,13 @@ pub async fn send(
         format!("{SYSTEM}\n\n{}", briefing.trim())
     };
     let key = credential(config.provider).await?;
-    config.model()?;
     let http = reqwest::Client::new();
+    // A ChatGPT plan with no model is given the first one the plan recommends.
+    if config.provider == Provider::ChatGpt && config.model().is_err() {
+        let listed = provider::models(&http, &config, &key).await?;
+        config.model = listed.into_iter().next().unwrap_or_default();
+    }
+    config.model()?;
 
     // Tool servers that cannot be reached are skipped, not fatal.
     let mut connections: Vec<Connection> = Vec::new();

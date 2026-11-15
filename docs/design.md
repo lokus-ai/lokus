@@ -558,8 +558,8 @@ confirms that everything it must not be able to do is refused.
   Rust, so the UI and plugins never see a key. `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` are read
   as a fallback, which is how the command line and the scripted flow supply one.
 - **Three wire formats:** Anthropic's Messages API for Claude (default model Claude Opus 5.5), the
-  OpenAI chat-completions format for OpenAI and any compatible service, and the OpenAI Responses
-  API for a ChatGPT plan. Conversations are
+  OpenAI Responses API for OpenAI itself (a key or a ChatGPT plan), and the OpenAI
+  chat-completions format for any compatible service at another address. Conversations are
   kept in one shape and translated on the way out.
 - **Tools, in three groups.** Reading the vault (search, read a note in parts, list one folder,
   backlinks) never asks. Changing it (create, edit by exact-match replace, move, set a property)

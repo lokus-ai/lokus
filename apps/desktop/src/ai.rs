@@ -102,9 +102,11 @@ pub async fn ai_models(app: AppHandle) -> Result<Vec<String>, Value> {
     let key = lokus_ai::chat::credential(config.provider)
         .await
         .map_err(|e| e.body())?;
-    lokus_ai::provider::models(&reqwest_client(), &config, &key)
+    let models = lokus_ai::provider::models(&reqwest_client(), &config, &key)
         .await
-        .map_err(|e| e.body())
+        .map_err(|e| e.body())?;
+    Config::adopt_model(&config_dir(&app)?, &config, &models).map_err(|e| e.body())?;
+    Ok(models)
 }
 
 fn reqwest_client() -> lokus_ai::provider::Client {
