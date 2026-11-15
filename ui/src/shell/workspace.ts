@@ -728,6 +728,7 @@ function moveOpen(from: string, to: string): void {
   app.set((s) => ({
     tabs: s.tabs.map(moved),
     active: s.active ? moved(s.active) : null,
+    file: s.file ? moved(s.file) : null,
     dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
   }));
 }
