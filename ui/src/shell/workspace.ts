@@ -414,6 +414,12 @@ export async function disconnectSync(): Promise<void> {
 
 function watchSync(): void {
   startCollab(syncPeers);
+  // Teammates see who is signed in on this cursor from the moment of signing in, wherever it happens.
+  let named = "You";
+  app.subscribe(() => {
+    const name = app.get().account?.email ?? "You";
+    if (name !== named) setIdentity((named = name));
+  });
   onSyncEvent((event) => {
     const { sync } = app.get();
     if (event.event === "online") {
@@ -483,13 +489,11 @@ export async function boot(): Promise<void> {
     void currentAccount().then((account) => {
       if ((account?.id ?? null) === (app.get().account?.id ?? null)) return;
       identify(account?.id ?? null);
-      setIdentity(account?.email ?? "You");
       app.set({ account });
     }, () => {});
   });
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);
-  setIdentity(account?.email ?? "You");
   app.set({ vault, account, ready: true });
   applyLayout();
   track("app_opened");
