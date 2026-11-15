@@ -30,7 +30,11 @@ fi
 hdiutil create -volname "Lokus" -srcfolder "$STAGE" -fs HFS+ -format UDRW -ov "$RW" >/dev/null
 hdiutil attach "$RW" -readwrite -noverify -noautoopen >/dev/null
 
-osascript "$HERE/dmg-layout.applescript"
+# Finder draws the window. Where Finder cannot be driven (a build machine with nobody signed
+# in to allow it) the image is still made, only without the arranged window, and says so.
+if ! perl -e 'alarm 90; exec @ARGV' osascript "$HERE/dmg-layout.applescript"; then
+  echo "the installer window could not be arranged here; the disk image is plain"
+fi
 sync
 sleep 2
 

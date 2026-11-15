@@ -8,6 +8,9 @@
 #   sh deploy/release/mac.sh 2.0.0-alpha.1 https://relay.example aarch64    (Apple Silicon)
 # Building for the other kind of Mac needs that target: rustup target add x86_64-apple-darwin
 #
+# In CI the same script runs from .github/workflows/release.yml, which puts the keys in place
+# and sets APPLE_API_KEY_PATH, APPLE_API_KEY_ID and APPLE_API_ISSUER for notarization.
+#
 # Needs: the update signing key at ~/.lokus-release/updater.key, a "Developer ID Application"
 # certificate in the keychain, and for notarization a stored profile named "lokus":
 #   xcrun notarytool store-credentials lokus --apple-id YOU --team-id TEAM
@@ -56,11 +59,18 @@ APP=$(ls -d "$OUT"/macos/*.app | head -1)
 codesign --verify --deep --strict "$APP" && echo "signed: $APP"
 DMG="$OUT/Lokus_${VERSION}_$ARCH.dmg"
 
-if xcrun notarytool history --keychain-profile lokus >/dev/null 2>&1; then
+# How Apple is told who is asking: a key file and its ids (in CI), or the profile stored on
+# this Mac's keychain. `$NOTARY` is spliced unquoted on purpose; none of its parts has a space.
+if [ -n "$APPLE_API_KEY_PATH" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
+  NOTARY="--key $APPLE_API_KEY_PATH --key-id $APPLE_API_KEY_ID --issuer $APPLE_API_ISSUER"
+else
+  NOTARY="--keychain-profile lokus"
+fi
+if xcrun notarytool history $NOTARY >/dev/null 2>&1; then
   # Apple checks a copy of the app; the ticket it gives back is attached to the app itself.
   ZIP="$OUT/notarize.zip"
   ditto -c -k --keepParent "$APP" "$ZIP"
-  xcrun notarytool submit "$ZIP" --keychain-profile lokus --wait
+  xcrun notarytool submit "$ZIP" $NOTARY --wait
   rm -f "$ZIP"
   xcrun stapler staple "$APP"
   # The update file was packed before the ticket was attached; pack and sign it again.
@@ -71,13 +81,15 @@ if xcrun notarytool history --keychain-profile lokus >/dev/null 2>&1; then
 else
   NOTARIZED=no
   echo "NOT NOTARIZED: no stored credentials. A downloaded copy will be blocked by macOS until this is done."
+  # A release made by the pipeline goes straight to people; one Apple has not checked must not.
+  [ -z "$LOKUS_MUST_NOTARIZE" ] || { echo "stopping: this release has to be notarized"; exit 1; }
 fi
 
 # The disk image people download, with its "drag Lokus into Applications" window.
 sh "$(dirname "$0")/dmg.sh" "$APP" "$DMG"
 codesign --sign "$IDENTITY" "$DMG"
 if [ "$NOTARIZED" = yes ]; then
-  xcrun notarytool submit "$DMG" --keychain-profile lokus --wait
+  xcrun notarytool submit "$DMG" $NOTARY --wait
   xcrun stapler staple "$DMG"
 fi
 
