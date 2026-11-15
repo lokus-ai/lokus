@@ -302,6 +302,8 @@ macro_rules! commands {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Before anything makes a secure connection: see `lokus_sync::client::secure`.
+    lokus_sync::client::secure();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())

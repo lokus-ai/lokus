@@ -2865,6 +2865,7 @@ version = "2.0.0-alpha.0"
 dependencies = [
  "base64 0.22.1",
  "block2",
+ "futures-util",
  "lokus-ai",
  "lokus-core",
  "lokus-sync",
@@ -2913,6 +2914,7 @@ dependencies = [
  "lokus-core",
  "reqwest",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "similar",

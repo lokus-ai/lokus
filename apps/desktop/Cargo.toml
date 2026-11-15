@@ -24,6 +24,7 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-dialog = "2"
+futures-util.workspace = true
 tauri-plugin-updater = "2"
 url = "2"
 tokio.workspace = true

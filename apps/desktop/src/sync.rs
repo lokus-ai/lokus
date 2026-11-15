@@ -132,7 +132,9 @@ pub async fn sync_connect(
     let serving = link.clone();
     let task = tauri::async_runtime::spawn(async move {
         let logging = reporter.clone();
-        let outcome = serve(serving, nudges, config, move |event| {
+        // Run where a panic can be seen. One inside the connection used to end it without a
+        // word, and the app went on saying "Connecting".
+        let working = std::panic::AssertUnwindSafe(serve(serving, nudges, config, move |event| {
             // What the connection goes through is kept: when sync misbehaves on someone's
             // computer, this file is the only account of it there is.
             match event["event"].as_str() {
@@ -145,8 +147,19 @@ pub async fn sync_connect(
                 _ => {}
             }
             let _ = reporter.emit("sync:event", event);
-        })
-        .await;
+        }));
+        // Caught in this same task, so stopping the task still stops the connection.
+        let outcome = match futures_util::FutureExt::catch_unwind(working).await {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                note(&done, "the connection crashed");
+                let _ = done.emit(
+                    "sync:event",
+                    json!({ "event": "offline", "reason": "sync stopped unexpectedly; it will be tried again" }),
+                );
+                return;
+            }
+        };
         note(&done, &format!("connection ended: {outcome:?}"));
         if let Err(e) = outcome {
             let _ = done.emit(

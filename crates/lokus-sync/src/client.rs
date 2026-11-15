@@ -102,12 +102,23 @@ pub async fn run(
 }
 
 /// Like [`run`], for a caller that already owns the link (and the file watcher).
+/// Choose the encryption provider for every secure connection this process makes.
+///
+/// The app is built with two (one comes with the updater's HTTP client, one with the
+/// socket), and rustls will not pick between them: the first secure connection made without a
+/// choice panics. The socket to the relay was sometimes that first connection, so sync died
+/// silently at start-up and the app said "Connecting" for good. Safe to call more than once.
+pub fn secure() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 pub async fn serve(
     link: Link,
     mut changes: mpsc::UnboundedReceiver<Nudge>,
     config: Config,
     report: impl Fn(Value) + Send + Sync + 'static,
 ) -> Result<()> {
+    secure();
     let engine = link.engine.clone();
     // What this vault remembers about syncing belongs to one workspace only.
     if with(&engine, |e| e.bind(&config.workspace))? {
