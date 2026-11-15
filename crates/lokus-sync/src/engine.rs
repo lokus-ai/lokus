@@ -552,7 +552,7 @@ impl Engine {
             // The manifest may already say where this note lives.
             let manifest = self.load(MANIFEST)?;
             if let Some(entry) = self.entries(&manifest).get(id).filter(|e| !e.deleted) {
-                path = Some(self.claim_path(id, &entry.path)?);
+                path = Some(self.claim_path(id, &entry.path, Some(&text))?);
             }
         }
         if let Some(p) = &path {
@@ -578,8 +578,10 @@ impl Engine {
     }
 
     /// Make sure `path` is free for note `id`. An unrelated local file that
-    /// sits there is moved aside, never overwritten.
-    fn claim_path(&mut self, id: &str, path: &str) -> Result<String> {
+    /// sits there is moved aside, never overwritten. One that already holds
+    /// exactly `text` is the same note made twice (a starter note every vault
+    /// begins with), so it stays and becomes this note's file.
+    fn claim_path(&mut self, id: &str, path: &str, text: Option<&str>) -> Result<String> {
         let taken_by_other: Option<String> = self
             .db
             .query_row(
@@ -595,7 +597,9 @@ impl Engine {
                 .query_row("SELECT path FROM docs WHERE id = ?1", [id], |r| r.get(0))
                 .optional()?
                 .flatten();
-            if ours.as_deref() != Some(path) {
+            let same =
+                text.is_some() && self.read_disk(path).map(|(disk, _)| disk).as_deref() == text;
+            if ours.as_deref() != Some(path) && !same {
                 let stem = path.strip_suffix(".md").unwrap_or(path);
                 let mut n = 1;
                 let aside = loop {
@@ -653,7 +657,7 @@ impl Engine {
                     self.save(&id, &doc, row.synced.as_deref(), None)?;
                 }
                 (Some(old), false) if *old != entry.path => {
-                    let target = self.claim_path(&id, &entry.path)?;
+                    let target = self.claim_path(&id, &entry.path, None)?;
                     if self.vault.resolve(old)?.exists() {
                         self.vault.rename(old, &target)?;
                         self.events.push(Event::Renamed {
@@ -674,7 +678,7 @@ impl Engine {
                     )?;
                 }
                 (None, false) => {
-                    let target = self.claim_path(&id, &entry.path)?;
+                    let target = self.claim_path(&id, &entry.path, Some(&text))?;
                     self.write_disk(&target, &text)?;
                     self.events.push(Event::Wrote {
                         path: target.clone(),
@@ -998,5 +1002,25 @@ mod tests {
             b.read("Same (local copy).md").as_deref(),
             Some("from device b\n")
         );
+    }
+
+    #[test]
+    fn a_local_file_with_the_same_text_is_not_kept_twice() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Same.md", "the same starter note\n");
+        a.engine.scan().unwrap();
+        // Device b began with the identical note, as every new vault does.
+        b.write("Same.md", "the same starter note\n");
+        for out in a.engine.outbox().unwrap() {
+            b.engine.apply_remote(&out.doc, &out.data).unwrap();
+        }
+        b.engine.mark_pulled().unwrap();
+        b.engine.scan().unwrap();
+        assert_eq!(
+            b.read("Same.md").as_deref(),
+            Some("the same starter note\n")
+        );
+        assert_eq!(b.read("Same (local copy).md"), None);
+        assert!(b.engine.outbox().unwrap().is_empty());
     }
 }
