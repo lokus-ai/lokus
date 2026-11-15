@@ -32,6 +32,7 @@
 .cm-editor .cm-table th { background: var(--bg-sidebar); font-weight: 600; white-space: nowrap; }
 .cm-editor .cm-table td:first-child { white-space: nowrap; }
 .cm-editor .cm-table .cm-wikilink { cursor: pointer; }
+.cm-editor .cm-table th:focus, .cm-editor .cm-table td:focus { outline: 2px solid var(--accent); outline-offset: -2px; white-space: pre-wrap; }
 .cm-editor .cm-table code { font-family: var(--font-mono); font-size: 0.9em; background: var(--code-bg); border-radius: var(--radius-xs); padding: 0.1em 0.3em; }
 
 /* Slash menu */

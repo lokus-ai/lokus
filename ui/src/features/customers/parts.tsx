@@ -1,8 +1,8 @@
 /** @part-of ui.customers */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Icon, type IconName } from "../../shell/Icon";
-import { resolveImage } from "../../shell/workspace";
+import { renderMarkdown, resolveImage } from "../../shell/workspace";
 import { isPicture } from "../page-header/PageHeader";
 import { ago, HEALTH, type Item, type Kind, KINDS, parseDay, readBody, tone } from "./data";
 
@@ -103,13 +103,20 @@ const KIND_ICON: Record<string, IconName> = { issue: "issue", message: "message"
  * One thing that happened: a line saying what, where from, who and when. Clicking it opens the
  * rest underneath, in place, since the note behind it holds little more than this.
  */
+/** What someone said or wrote, drawn the way a note is: bold is bold, a list is a list. */
+export function Said({ text }: { text: string }) {
+  const mount = useRef<HTMLDivElement>(null);
+  useEffect(() => (mount.current ? renderMarkdown(mount.current, text) : undefined), [text]);
+  return <div className="cust-said-text" ref={mount} />;
+}
+
 export function ItemRow({ item, onOpen }: { item: Item; onOpen(path: string): void }) {
   const [open, setOpen] = useState(false);
   const [body, setBody] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
     let current = true;
-    void readBody(item.path)
+    void readBody(item)
       .then((text) => current && setBody(text))
       .catch(() => current && setBody(""));
     return () => {
@@ -132,7 +139,7 @@ export function ItemRow({ item, onOpen }: { item: Item; onOpen(path: string): vo
       {open && (
         <div className="cust-talk">
           <div className="cust-line">
-            <p>{body === null ? "" : body && body !== item.title ? body : "There is nothing more recorded about this."}</p>
+            {body === null ? <p /> : body && body !== item.title ? <Said text={body} /> : <p>There is nothing more recorded about this.</p>}
             <span className="cust-line-who">
               <time>
                 {[item.source && `From ${cap(item.source)}`, item.at ? new Date(item.at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : ""].filter(Boolean).join("  ·  ")}
