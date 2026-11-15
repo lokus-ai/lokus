@@ -292,8 +292,15 @@ local file that already holds exactly the arriving text (the starter notes every
 begins with): it is the same note, so it stays where it is and nothing is kept twice.
 
 Two people who each make a note of the same name while apart (two "Untitled" notes written
-offline), or who each rename a different note to the same name, have two notes, and both are kept. Every device gives the name to the same one of
-them and names the other beside it, "name (local copy)", so no text is merged or lost.
+offline), or who each rename a different note to the same name, have two notes, and both are
+kept. Every device that may edit gives the name to the same one of them and names the other
+beside it, "name (local copy)", so no text is merged or lost. A viewer's device decides nothing
+for the team: it shows the second note once an editor's device has named it. A tab open on a
+note that sync moves goes with the note.
+
+A device that was away can get several renames as one change (two notes that swapped names, a
+note given the name of one that was deleted). The note in the way steps aside until its own
+move is made, so neither file is written over and sync does not stop.
 
 **Who may do what**
 

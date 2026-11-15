@@ -76,6 +76,8 @@ pub struct Engine {
     pub(crate) db: Connection,
     client_id: u64,
     pub events: Vec<Event>,
+    /// False on a viewer's device: nothing it writes is sent, so it decides nothing for the team.
+    pub can_publish: bool,
 }
 
 struct Row {
@@ -111,6 +113,7 @@ impl Engine {
             db,
             client_id: 0,
             events: Vec::new(),
+            can_publish: true,
         };
         engine.create_file_tables()?;
         engine.client_id = match engine.meta("client_id")? {
@@ -324,11 +327,16 @@ impl Engine {
     pub fn scan(&mut self) -> Result<()> {
         let manifest = self.load(MANIFEST)?;
         let entries = self.entries(&manifest);
-        let by_path: HashMap<&str, &str> = entries
-            .iter()
-            .filter(|(_, e)| !e.deleted)
-            .map(|(id, e)| (e.path.as_str(), id.as_str()))
-            .collect();
+        let mut by_path: HashMap<&str, &str> = HashMap::new();
+        for (id, e) in entries.iter().filter(|(_, e)| !e.deleted) {
+            // Two notes can name one path until one of them is named aside. The file there is
+            // the one this device put there.
+            if !by_path.contains_key(e.path.as_str())
+                || self.doc_id(&e.path)?.as_deref() == Some(id.as_str())
+            {
+                by_path.insert(e.path.as_str(), id.as_str());
+            }
+        }
         let on_disk: HashSet<String> = self.vault.notes()?.into_iter().collect();
 
         // Notes we wrote before that are no longer on disk: deleted, or renamed.
@@ -360,6 +368,12 @@ impl Engine {
             }
             if !self.pulled()? {
                 continue;
+            }
+            // The file of a note that is waiting to be moved to the name the manifest gives it.
+            if let Some(id) = self.doc_id(path)? {
+                if entries.get(&id).is_some_and(|e| !e.deleted) {
+                    continue;
+                }
             }
             // A new path with the exact text of a note that just vanished is a rename.
             let renamed = missing
@@ -565,7 +579,7 @@ impl Engine {
             // The manifest may already say where this note lives.
             let manifest = self.load(MANIFEST)?;
             if let Some(entry) = self.entry(&manifest, id).filter(|e| !e.deleted) {
-                path = Some(self.claim_path(&manifest, id, &entry.path, Some(&text))?);
+                path = self.claim_path(&manifest, id, &entry.path, Some(&text))?;
             }
         }
         if let Some(p) = &path {
@@ -610,14 +624,14 @@ impl Engine {
     /// Where note `id`, which the manifest puts at `path`, goes on this device. An unrelated
     /// local file that sits there is moved aside, never overwritten. One that already holds
     /// exactly `text` is the same note made twice (a starter note every vault begins with), so
-    /// it stays and becomes this note's file.
+    /// it stays and becomes this note's file. `None`: the note cannot be placed yet.
     fn claim_path(
         &mut self,
         manifest: &Doc,
         id: &str,
         path: &str,
         text: Option<&str>,
-    ) -> Result<String> {
+    ) -> Result<Option<String>> {
         let taken_by_other: Option<String> = self
             .db
             .query_row(
@@ -631,6 +645,11 @@ impl Engine {
                 .entry(manifest, other)
                 .is_some_and(|e| !e.deleted && e.path == path);
             if stays {
+                // A viewer cannot tell the team which note keeps the name, so this one waits
+                // where it is until an editor's device has said.
+                if !self.can_publish {
+                    return Ok(None);
+                }
                 // Two notes made apart under one name. Both are kept: the one with the smaller
                 // id has the name, on every device, and the other is named beside it.
                 let aside = self.beside(path)?;
@@ -644,7 +663,7 @@ impl Engine {
                     },
                 )?;
                 if moved == id {
-                    return Ok(aside);
+                    return Ok(Some(aside));
                 }
                 if self.vault.resolve(path)?.exists() {
                     self.vault.rename(path, &aside)?;
@@ -656,7 +675,7 @@ impl Engine {
                     path: path.to_string(),
                     moved_to: aside,
                 });
-                return Ok(path.to_string());
+                return Ok(Some(path.to_string()));
             }
             // The note here is on its way to another name (two notes swapped names). It waits
             // beside this one until its own turn, so neither file is written over.
@@ -671,7 +690,7 @@ impl Engine {
                 from: path.to_string(),
                 to: aside,
             });
-            return Ok(path.to_string());
+            return Ok(Some(path.to_string()));
         }
         let exists = self.vault.resolve(path)?.exists();
         if exists {
@@ -691,7 +710,7 @@ impl Engine {
                 });
             }
         }
-        Ok(path.to_string())
+        Ok(Some(path.to_string()))
     }
 
     /// Bring files in line with the manifest: create, rename and trash.
@@ -737,7 +756,9 @@ impl Engine {
                     self.save(&id, &doc, row.synced.as_deref(), None)?;
                 }
                 (Some(old), false) if *old != entry.path => {
-                    let target = self.claim_path(manifest, &id, &entry.path, None)?;
+                    let Some(target) = self.claim_path(manifest, &id, &entry.path, None)? else {
+                        continue;
+                    };
                     if self.vault.resolve(old)?.exists() {
                         self.vault.rename(old, &target)?;
                         self.events.push(Event::Renamed {
@@ -758,7 +779,10 @@ impl Engine {
                     )?;
                 }
                 (None, false) => {
-                    let target = self.claim_path(manifest, &id, &entry.path, Some(&text))?;
+                    let Some(target) = self.claim_path(manifest, &id, &entry.path, Some(&text))?
+                    else {
+                        continue;
+                    };
                     // A file that already says this is left exactly as it is, line endings and all.
                     if self.read_disk(&target).map(|(disk, _)| disk).as_deref() != Some(&text) {
                         self.write_disk(&target, &text)?;
@@ -1150,6 +1174,67 @@ mod tests {
         }
         assert_eq!(a.read("Same.md"), b.read("Same.md"));
         assert!(a.engine.outbox().unwrap().is_empty() && b.engine.outbox().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_viewer_waits_for_an_editor_to_name_two_notes_apart() {
+        fn files(d: &Device) -> Vec<(String, String)> {
+            let mut all: Vec<(String, String)> = d
+                .vault
+                .notes()
+                .unwrap()
+                .into_iter()
+                .map(|p| (p.clone(), d.read(&p).unwrap()))
+                .collect();
+            all.sort();
+            all
+        }
+        // What the two editors queue reaches everyone; nothing a viewer queues is ever sent.
+        fn settle(a: &mut Device, b: &mut Device, viewer: &mut Device) {
+            for _ in 0..4 {
+                a.engine.scan().unwrap();
+                b.engine.scan().unwrap();
+                viewer.engine.scan().unwrap();
+                for out in a.engine.outbox().unwrap() {
+                    b.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    a.engine.sent(out.n).unwrap();
+                }
+                for out in b.engine.outbox().unwrap() {
+                    a.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    viewer.engine.apply_remote(&out.doc, &out.data).unwrap();
+                    b.engine.sent(out.n).unwrap();
+                }
+            }
+        }
+        // Which note keeps the name, and whose write wins, go by random ids: try a few.
+        for round in 0..12 {
+            let (mut a, mut b, mut viewer) = (device(), device(), device());
+            viewer.engine.can_publish = false;
+            a.write("One.md", "one\n");
+            a.write("Two.md", "two\n");
+            settle(&mut a, &mut b, &mut viewer);
+            if round % 2 == 0 {
+                a.write("Untitled.md", "written on a\n");
+                b.write("Untitled.md", "written on b\n");
+                a.engine.scan().unwrap();
+                b.engine.scan().unwrap();
+            } else {
+                a.engine.rename("One.md", "Untitled.md").unwrap();
+                b.engine.rename("Two.md", "Untitled.md").unwrap();
+            }
+            settle(&mut a, &mut b, &mut viewer);
+            assert_eq!(files(&a), files(&b));
+            assert_eq!(files(&viewer), files(&a));
+            // The viewer wrote nothing of its own, so it still follows what editors do next.
+            assert!(viewer.engine.outbox().unwrap().is_empty());
+            a.engine
+                .rename("Untitled (local copy).md", "Moved.md")
+                .unwrap();
+            settle(&mut a, &mut b, &mut viewer);
+            assert_eq!(files(&viewer), files(&a));
+            assert!(viewer.engine.outbox().unwrap().is_empty());
+        }
     }
 
     #[test]
