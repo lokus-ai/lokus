@@ -360,9 +360,10 @@ async fn session(
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
     let mut can_edit = answer["role"] != "viewer";
+    // What piled up while away goes out as where things are now, before any of it is sent.
     with(engine, |e| {
         e.allow_publishing(can_edit);
-        Ok(())
+        e.fold_outbox()
     })?;
     // Facts may have been pushed while this device was away.
     arrived.notify_one();
@@ -435,12 +436,7 @@ async fn session(
                             e.apply_pulled(&missed)?;
                             e.set_cursor(head)?;
                             e.mark_pulled()?;
-                            e.scan()?;
-                            // What piled up while away goes out as where things are now.
-                            if in_flight.is_empty() {
-                                e.fold_outbox()?;
-                            }
-                            Ok(())
+                            e.scan()
                         })?;
                         safe = safe.max(head);
                         // An open editor needs what was missed while offline, not just the files.
