@@ -188,14 +188,15 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           return false;
         }
         if (name === "Link") {
-          out.push(Decoration.mark({ class: "cm-link" }).range(node.from, node.to));
-          if (!touches(state, node.from, node.to)) {
-            const text = state.sliceDoc(node.from, node.to);
-            const close = text.lastIndexOf("](");
-            if (text.startsWith("[") && close > 0) {
-              out.push(hide.range(node.from, node.from + 1));
-              out.push(hide.range(node.from + close, node.to));
-            }
+          const text = state.sliceDoc(node.from, node.to);
+          const close = text.lastIndexOf("](");
+          const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0;
+          // Folded to its words, a link to a web page is followed with a click, as a link to a note is.
+          const web = folded ? /^\]\(\s*<?(https:\/\/[^)\s>]+)/.exec(text.slice(close))?.[1] : undefined;
+          out.push(Decoration.mark({ class: "cm-link", attributes: web ? { "data-target": web } : undefined }).range(node.from, node.to));
+          if (folded) {
+            out.push(hide.range(node.from, node.from + 1));
+            out.push(hide.range(node.from + close, node.to));
           }
           return;
         }
@@ -727,7 +728,7 @@ function linkClicks(open: (target: string, newTab: boolean) => void) {
   return EditorView.domEventHandlers({
     mousedown(event) {
       if (event.button !== 0 || event.altKey || event.shiftKey) return false;
-      const link = (event.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
+      const link = (event.target as HTMLElement).closest<HTMLElement>(".cm-wikilink, .cm-link[data-target]");
       const target = link?.dataset.target;
       if (!link || !target || link.textContent?.includes("[[")) return false;
       event.preventDefault();

@@ -217,9 +217,14 @@ export function fromSlack(text: string, plain = false): string {
       const name = (shown || id.split("^")[0]).replace(/^[@#]/, "");
       return `${kind === "#" ? "#" : "@"}${name}`;
     })
-    .replace(/<((?:https?:\/\/|mailto:)[^<>|\s]+)(?:\|([^<>]*))?>/g, (_, url: string, shown?: string) =>
-      !shown || shown === url.replace(/^mailto:/, "") ? url.replace(/^mailto:/, "") : plain ? shown : `[${shown}](${url})`,
-    )
+    .replace(/<((?:https?:\/\/|mailto:)[^<>|\s]+)(?:\|([^<>]*))?>/g, (_, url: string, shown?: string) => {
+      const bare = url.replace(/^mailto:/, "");
+      const label = shown && shown !== bare ? shown : "";
+      if (plain) return label || bare;
+      // Only a secure web address can be followed, so any other keeps its address in sight.
+      if (!url.startsWith("https://") || /[()]/.test(url)) return label ? `${label} (${bare})` : bare;
+      return `[${(label || bare).replace(/[[\]\\]/g, "\\$&")}](${url})`;
+    })
     .replace(/(^|[\s(\[{>"'])\*(?=\S)([^*\n]*[^*\s])\*(?![\w*])/g, mark("**"))
     .replace(/(^|[\s(\[{>"'])~(?=\S)([^~\n]*[^~\s])~(?![\w~])/g, mark("~~"))
     .replace(/&(lt|gt|amp);/g, (_, name: string) => ({ lt: "<", gt: ">", amp: "&" })[name]!);

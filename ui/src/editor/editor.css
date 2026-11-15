@@ -13,7 +13,7 @@
 .cm-editor .cm-code-first { border-radius: var(--radius-md) var(--radius-md) 0 0; padding-top: 6px; color: var(--fg-3); }
 .cm-editor .cm-code-last { border-radius: 0 0 var(--radius-md) var(--radius-md); padding-bottom: 6px; color: var(--fg-3); }
 .cm-editor .cm-link, .cm-editor .cm-wikilink { color: var(--accent); text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 3px; }
-.cm-editor .cm-wikilink { cursor: pointer; }
+.cm-editor .cm-wikilink, .cm-editor .cm-link[data-target] { cursor: pointer; }
 .cm-editor .cm-highlight { background: var(--highlight); border-radius: 2px; }
 .cm-editor .cm-list-mark, .cm-editor .cm-bullet { color: var(--fg-3); }
 .cm-editor .cm-task-box { margin: 0 6px 0 0; width: 15px; height: 15px; vertical-align: -2px; accent-color: var(--accent); cursor: pointer; }
