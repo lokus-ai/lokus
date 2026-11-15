@@ -33,7 +33,7 @@
         "enable": true,
         "scope": []
       },
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset: http://asset.localhost http://127.0.0.1:*; font-src 'self' data:; frame-src lokus-plugin: http://lokus-plugin.localhost https://www.youtube-nocookie.com https://www.loom.com; media-src 'self' https: blob: http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co https://*.posthog.com"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: asset: http://asset.localhost http://127.0.0.1:*; font-src 'self' data:; frame-src asset: http://asset.localhost lokus-plugin: http://lokus-plugin.localhost https://www.youtube-nocookie.com https://www.loom.com; media-src 'self' https: blob: http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost https://*.supabase.co https://*.posthog.com"
     }
   },
   "bundle": {

@@ -4,11 +4,13 @@ import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, use
 
 import { identify } from "../bridge/analytics";
 import { accountsAvailable } from "../bridge/auth";
+import { isMainWindow } from "../bridge/core";
 import { AiPanel } from "../features/ai/AiPanel";
 import { chat, continueShared, newChat, shareChat } from "../features/ai/chat";
 import { AccountDialog } from "../features/auth/AccountDialog";
 import { Backlinks } from "../features/backlinks/Backlinks";
 import { FileTree } from "../features/file-tree/FileTree";
+import { FileView } from "../features/files/FileView";
 import { PluginView } from "../features/plugins/PluginView";
 import { isPicture, PageHeader } from "../features/page-header/PageHeader";
 import { SearchPalette } from "../features/search/SearchPalette";
@@ -16,6 +18,7 @@ import { Boundary } from "./Boundary";
 import { formatKeys, runCommand } from "./commands";
 import { Icon } from "./Icon";
 import { Palette } from "./Palette";
+import { WorkspaceSwitcher } from "./Switcher";
 import { useStore } from "./store";
 import {
   app,
@@ -29,7 +32,7 @@ import {
   deleteEntry,
   getEditor,
   GRAPH_TAB,
-  openNote,
+  isNotePath, openNote,
   reloadFromDisk,
   renameEntry,
   resolveImage,
@@ -47,8 +50,9 @@ const DatabaseView = lazy(() => import("../features/database/DatabaseView"));
 import { Avatar } from "../features/profile/Profile";
 import { onboarding } from "../features/onboarding/onboarding";
 import { Start } from "../features/onboarding/Start";
+import { Invited } from "../features/teams/Invite";
 import { NoteSuggestions, NoticedButton, NoticedDrawer } from "../features/noticed/NoticedList";
-import { NewsButton, UpdateCard, WhatsNew } from "../features/updates/UpdateCard";
+import { Misplaced, NewsButton, UpdateCard, WhatsNew } from "../features/updates/UpdateCard";
 import { useMe } from "../features/profile/profiles";
 
 const CustomersList = lazy(() => import("../features/customers/CustomersList"));
@@ -61,7 +65,6 @@ const TaskProfile = lazy(() => import("../features/tasks/TaskProfile"));
 const tabName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
 function Sidebar() {
-  const vault = useStore(app, (s) => s.vault);
   const tree = useStore(app, (s) => s.tree);
   const active = useStore(app, (s) => s.active);
   const open = useStore(app, (s) => s.sidebar);
@@ -93,10 +96,7 @@ function Sidebar() {
     <aside className={`sidebar${open ? "" : " closed"}`} aria-hidden={!open}>
      <div className="sidebar-inner">
       <div className="sidebar-top" data-tauri-drag-region />
-      <button className="vault-name" title="Open another vault" onClick={() => act("vault.choose")}>
-        <span className="vault-badge">{vault?.name.slice(0, 1).toUpperCase()}</span>
-        <span className="tree-name">{vault?.name}</span>
-      </button>
+      <WorkspaceSwitcher />
       <div className="sidebar-actions">
         <button onClick={() => act("palette.notes")}>
           <Icon name="goto" />
@@ -223,6 +223,7 @@ function Tabs() {
   const narrow = useStore(app, (s) => s.narrow);
   const peers = useStore(app, (s) => s.peers);
   const view = useStore(app, (s) => s.view);
+  const file = useStore(app, (s) => s.file);
   const icon = useStore(app, (s) => s.properties.icon);
   // A page's own icon is only known while it is the open note, so each tab remembers the last one seen.
   const icons = useRef<Record<string, string | undefined>>({});
@@ -242,8 +243,10 @@ function Tabs() {
             </button>
           </div>
         ) : (
-        <div key={path} className={`tab${view === "note" && path === active ? " active" : ""}`} onMouseDown={() => void openNote(path)}>
-          {isPicture(icons.current[path]) ? (
+        <div key={path} className={`tab${(view === "note" && path === active) || (view === "file" && path === file) ? " active" : ""}`} onMouseDown={() => void openNote(path)}>
+          {!isNotePath(path) ? (
+            <Icon name="file" size={14} />
+          ) : isPicture(icons.current[path]) ? (
             <img className="tab-icon picture" src={resolveImage(icons.current[path]) ?? ""} alt="" />
           ) : icons.current[path] ? (
             <span className="tab-icon">{icons.current[path]}</span>
@@ -498,6 +501,9 @@ export function App() {
           <Onboarding />
         </Suspense>
       )}
+      <Misplaced />
+      {/* While setup is open it makes the offer itself, as one of its steps. */}
+      {!onboardingOpen && isMainWindow() && <Invited />}
     </>
   );
 }
@@ -509,6 +515,7 @@ function Workspace() {
   const sidebarWidth = useStore(app, (s) => s.sidebarWidth);
   const palette = useStore(app, (s) => s.palette);
   const view = useStore(app, (s) => s.view);
+  const file = useStore(app, (s) => s.file);
   const version = useStore(app, (s) => s.version);
   const open = useCallback((path: string) => void openNote(path), []);
   const accountDialog = useStore(app, (s) => s.accountDialog);
@@ -527,6 +534,11 @@ function Workspace() {
             <Suspense fallback={null}>
               <GraphView active={active} version={version} onOpen={open} />
             </Suspense>
+          </Boundary>
+        )}
+        {view === "file" && file && (
+          <Boundary name="This file">
+            <FileView key={file} path={file} />
           </Boundary>
         )}
         {!active && view === "note" && <Start />}

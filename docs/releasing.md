@@ -43,29 +43,37 @@ password manager and in the CI secrets, nowhere else.
 
 ## Publishing a version
 
+**A version goes out when a pull request is merged into `main`.** Nobody runs anything.
+
+1. In the pull request, change the one line in the file `VERSION` (say to `2.0.1`).
+2. Add `news/2-0-1.md` if there is something to tell people (see below).
+3. Merge it. `.github/workflows/release.yml` builds both kinds of Mac, signs and notarizes
+   them, puts the files on a GitHub pre-release, posts the news, and tells installed copies.
+
+A merge that leaves `VERSION` alone releases nothing. Who can release is who can merge into
+`main`. The keys are in the repository's `release` environment, which only a run on `main` can
+use, so a workflow on another branch or in a fork's pull request cannot read them.
+
+It is always a PRE-release, never "latest": Lokus 1 updates itself from this repository's
+"latest" release.
+
+### By hand, from a Mac (if the pipeline is down)
+
 ```sh
-# 1. Build with the signed update files. On this Mac (signs, notarizes when credentials are stored):
-sh deploy/release/mac.sh 2.0.1 https://relay…
-#    Other platforms: the "Release build" workflow, or by hand:
-TAURI_SIGNING_PRIVATE_KEY=… VITE_LOKUS_UPDATES=https://relay… \
-  pnpm tauri build --config apps/desktop/release.conf.json
-
-# 2. Put the files somewhere with an https address, each with its .sig beside it
-
-# 3. Write what is new (see below) and publish it first, so the pop-up can show it
-lokus news file=news/2-0-1.md server=https://relay…
-
-# 4. Publish the version
-lokus release version=2.0.1 server=https://relay… \
-  darwin-aarch64=https://…/Lokus.app.tar.gz \
-  darwin-x86_64=https://…/Lokus_x64.app.tar.gz \
-  windows-x86_64=https://…/Lokus_2.0.1_x64-setup.exe \
-  linux-x86_64=https://…/Lokus_2.0.1_amd64.AppImage
+#    Once per Mac: xcrun notarytool store-credentials lokus --key … --key-id … --issuer …
+sh deploy/release/mac.sh 2.0.1 https://relay.lokusmd.com            # Apple Silicon
+sh deploy/release/mac.sh 2.0.1 https://relay.lokusmd.com x86_64     # Intel
+gh release create v2.0.1 --prerelease --latest=false --target main dist-release/2.0.1/Lokus_*
+lokus news file=news/2-0-1.md server=https://relay.lokusmd.com
+lokus release version=2.0.1 server=https://relay.lokusmd.com \
+  darwin-aarch64=https://…/Lokus_aarch64.app.tar.gz \
+  darwin-x86_64=https://…/Lokus_x86_64.app.tar.gz
 ```
 
 `lokus release` refuses to publish when:
 
 - a file cannot be downloaded from the address given, or its signature was not made with our key
+- the signature does not say which version it was signed for (the app refuses those)
 - the release has no build for a platform the release before it had (pass `partial=true` only
   if that is meant)
 
@@ -122,5 +130,23 @@ computer; alpha.1 installed by hand, then updated twice from inside the app.
 | Relay unreachable | "could not reach the update server" when asked by hand; silent otherwise |
 | Publishing with a wrong key, an unsigned file, or a missing platform | each refused |
 
-Not tested: Windows and Linux; a signed and notarized Mac build downloaded through a browser;
+## Tested over the internet (2026-11-14, the first public release)
+
+2.0.0-alpha.2, published as a GitHub pre-release and offered by `relay.lokusmd.com`. A copy at
+2.0.0-alpha.1, asking the production relay:
+
+| Step | Result |
+|---|---|
+| Asked the relay, was offered alpha.2 with its "what's new" | works |
+| Update now: downloaded the file from GitHub, checked its signature and version | works |
+| What was left on disk | the notarized alpha.2 app, accepted by macOS |
+| Restart now | closed and came back by itself as a new process within 6 seconds |
+| Intel build | notarized, starts under Rosetta, offered to `darwin-x86_64` |
+| Lokus 1's `latest.json` after all of it | still 1.3.0 |
+
+Found on the way, and now checked by `lokus release`: an update file re-signed after
+notarizing had lost the version in its signature, and every installed copy would have refused
+it.
+
+Not tested: Windows and Linux (not built); a download through a browser on someone else's Mac;
 an app sitting in `/Applications` owned by another user; the release workflow in CI.

@@ -201,6 +201,7 @@ pub fn update_restart(app: AppHandle) {
             .stderr(std::process::Stdio::null())
             .spawn();
     }
+    crate::background::allow_exit(&app);
     app.restart();
 }
 
@@ -221,4 +222,17 @@ pub fn open_web(url: String) -> Result<(), Value> {
         return Err(fail("not_web", "That is not a secure web address."));
     }
     open::that(&url).map_err(|e| fail("no_browser", format!("Could not open your browser: {e}")))
+}
+
+/// Where this copy is running from, when that is somewhere it should not stay: the disk image
+/// it was downloaded in, for one. The window says so as soon as it opens, because from there
+/// it cannot update itself and vanishes when the disk is ejected.
+#[tauri::command]
+pub fn app_place() -> Value {
+    json!({ "misplaced": stuck() })
+}
+
+#[tauri::command]
+pub fn app_quit(app: AppHandle) {
+    crate::background::quit(&app);
 }

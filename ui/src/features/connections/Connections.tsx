@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
 import { Icon } from "../../shell/Icon";
 import { notify } from "../../shell/workspace";
+import { WorkspaceKeys } from "../customers/DataDoor";
 import { Toggle } from "../settings/parts";
 import { Logo } from "./logos";
 
@@ -360,6 +361,9 @@ export function Connections() {
             )}
           </div>
         </div>
+      </section>
+      <section className="settings-section">
+        <WorkspaceKeys />
       </section>
     </div>
   );

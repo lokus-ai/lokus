@@ -3,7 +3,9 @@ import { track } from "../../bridge/analytics";
 import { useCallback, useEffect, useState } from "react";
 
 import { relay } from "../../bridge/sync";
-import { notify } from "../../shell/workspace";
+import { accessToken } from "../../bridge/auth";
+import { useStore } from "../../shell/store";
+import { app, notify } from "../../shell/workspace";
 import { Row } from "../settings/parts";
 
 interface Key {
@@ -126,12 +128,12 @@ export function DataDoor({ server, token, workspace }: Props) {
   if (!supported) return null;
   return (
     <>
-      <h3>Customer data from your own systems</h3>
+      <h3>API keys</h3>
       <Row
-        label="Keys"
-        hint="Your backend sends facts about customers (a plan change, a payment, a support message) with a key. Each fact lands on that customer's page for the whole team."
+        label="New key"
+        hint="For your backend to send data in."
       >
-        <input value={label} placeholder="What will use it, like Billing" aria-label="Name for the new key" onChange={(e) => setLabel(e.target.value)} />
+        <input value={label} placeholder="Name, like Billing" aria-label="Name for the new key" onChange={(e) => setLabel(e.target.value)} />
         <button className="settings-button" onClick={() => void make()}>
           Make a key
         </button>
@@ -178,10 +180,21 @@ export function DataDoor({ server, token, workspace }: Props) {
         </div>
       )}
       {!fresh && (
-        <button className="link" onClick={() => copy(brief(server), "Instructions copied")}>
-          Copy instructions for a coding assistant
+        <button className="link door-brief" onClick={() => copy(brief(server), "Instructions copied")}>
+          Copy setup instructions
         </button>
       )}
     </>
   );
+}
+
+/** The keys of the workspace this folder is shared with, for an owner; nothing otherwise. */
+export function WorkspaceKeys() {
+  const sync = useStore(app, (s) => s.sync);
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    void accessToken().then(setToken, () => setToken(null));
+  }, [sync.workspace]);
+  if (sync.role !== "owner" || !sync.server || !sync.workspace || !token) return null;
+  return <DataDoor server={sync.server} token={token} workspace={sync.workspace} />;
 }

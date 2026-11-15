@@ -18,6 +18,8 @@ similar = "2"
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+# Named so that one encryption provider can be chosen outright; see `client::secure`.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 uuid.workspace = true
 yrs.workspace = true
 

@@ -28,6 +28,12 @@ fn tool(name: &str, description: &str, properties: Value, required: &[&str], wri
 }
 
 pub fn vault_tools() -> Vec<Tool> {
+    let mut all = note_tools();
+    all.extend(crate::files::tools());
+    all
+}
+
+fn note_tools() -> Vec<Tool> {
     let path =
         json!({ "type": "string", "description": "Path inside the vault, e.g. Projects/Plan.md" });
     vec![
@@ -952,7 +958,8 @@ pub fn run(core: &Core, name: &str, input: &Value) -> Result<String, String> {
             )?;
             Ok(format!("updated {path}"))
         }
-        other => Err(format!("there is no tool called {other}")),
+        other => crate::files::run(core, other, input)
+            .unwrap_or_else(|| Err(format!("there is no tool called {other}"))),
     }
 }
 

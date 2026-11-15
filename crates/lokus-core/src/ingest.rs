@@ -242,8 +242,19 @@ pub(crate) fn write_event(
     } else {
         format!("{source}-{id}")
     };
-    let note = format!("{folder}/{}.md", file_name(&named)?);
     let at = event.at.clone().unwrap_or_else(|| iso(now));
+    let own = format!("{folder}/{}.md", file_name(&named)?);
+    // One meeting, recorded by each person who was in it, arrives once per person and under
+    // a different id each time. It is still one meeting.
+    if event.kind == "meeting" && !vault.resolve(&own)?.exists() {
+        if let Some(first) = same_meeting(vault, folder, &event.title, &at)? {
+            if also_from(vault, &first, event)? {
+                changed.push(first);
+            }
+            return Ok(());
+        }
+    }
+    let note = own;
     let props = [
         ("kind", json!(event.kind)),
         ("source", json!(source)),
@@ -274,6 +285,59 @@ pub(crate) fn write_event(
         changed.push(note);
     }
     Ok(())
+}
+
+/// What a title comes down to when its punctuation, spacing and capitals are set aside.
+fn plain_title(title: &str) -> String {
+    title
+        .to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A meeting already on record in this folder with the same title on the same day.
+fn same_meeting(vault: &Vault, folder: &str, title: &str, at: &str) -> Result<Option<String>> {
+    let (wanted, day) = (plain_title(title), at.get(..10).unwrap_or(at));
+    if wanted.is_empty() {
+        return Ok(None);
+    }
+    let prefix = format!("{folder}/");
+    for path in vault.notes()? {
+        if !path.starts_with(&prefix) || path[prefix.len()..].contains('/') {
+            continue;
+        }
+        let props = frontmatter::read(&vault.read(&path)?.text);
+        let is = |key: &str| props.get(key).and_then(Value::as_str).unwrap_or_default();
+        if is("kind") == "meeting"
+            && is("at").starts_with(day)
+            && plain_title(is("title")) == wanted
+        {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
+/// Add another person's notes of a meeting to the record of it, under their name. Says
+/// whether anything was added: the same person's notes sent twice are added once.
+fn also_from(vault: &Vault, path: &str, event: &Event) -> Result<bool> {
+    let words = event.text.trim();
+    if words.is_empty() {
+        return Ok(false);
+    }
+    let heading = format!(
+        "## Notes from {}",
+        event.from.as_deref().unwrap_or("someone else")
+    );
+    let note = vault.read(path)?;
+    if note.text.contains(&heading) || note.text.contains(words) {
+        return Ok(false);
+    }
+    let text = format!("{}\n\n{heading}\n\n{words}\n", note.text.trim_end());
+    vault.write(path, &text, Eol::Lf, Some(&note.hash))?;
+    Ok(true)
 }
 
 /// Write one fact into the vault. `now` is the time in seconds since 1970.
@@ -626,6 +690,71 @@ mod tests {
         assert_eq!(
             (acme["type"].clone(), acme["plan"].clone()),
             (json!("customer"), json!("pro --- type: evil"))
+        );
+    }
+    #[test]
+    fn one_meeting_recorded_by_three_people_is_one_meeting() {
+        let (_dir, v) = vault();
+        let said = |id: &str, from: &str, text: &str, title: &str| {
+            json!({ "customer": "Acme", "source": "granola", "event": { "id": id, "kind": "meeting",
+                "title": title, "from": from, "at": "2026-11-12T17:00:00Z", "text": text } })
+        };
+        apply(
+            &v,
+            &said(
+                "g-pratham",
+                "Pratham",
+                "They want SSO before renewal.",
+                "Quarterly review: Acme",
+            ),
+            100,
+        )
+        .unwrap();
+        let second = apply(
+            &v,
+            &said(
+                "g-maya",
+                "Maya",
+                "Dana asked for a named contact.",
+                "Quarterly Review - Acme",
+            ),
+            100,
+        )
+        .unwrap();
+        apply(
+            &v,
+            &said(
+                "g-maya",
+                "Maya",
+                "Dana asked for a named contact.",
+                "Quarterly Review - Acme",
+            ),
+            100,
+        )
+        .unwrap();
+        apply(&v, &said("g-raj", "Raj", "", "quarterly review acme"), 100).unwrap();
+        let meetings: Vec<String> = v
+            .notes()
+            .unwrap()
+            .into_iter()
+            .filter(|p| p.starts_with("customers/Acme/"))
+            .collect();
+        assert_eq!(meetings, vec!["customers/Acme/granola-g-pratham.md"]);
+        assert_eq!(second, vec!["customers/Acme/granola-g-pratham.md"]);
+        let text = v.read(&meetings[0]).unwrap().text;
+        assert!(text.contains("They want SSO before renewal."));
+        assert_eq!(text.matches("## Notes from Maya").count(), 1);
+        assert!(text.contains("Dana asked for a named contact."));
+        // Another meeting, or the same title on another day, is its own record.
+        apply(&v, &json!({ "customer": "Acme", "source": "granola", "event": { "id": "g-next", "kind": "meeting",
+            "title": "Quarterly review: Acme", "at": "2027-02-12T17:00:00Z", "text": "Next quarter." } }), 100).unwrap();
+        assert_eq!(
+            v.notes()
+                .unwrap()
+                .into_iter()
+                .filter(|p| p.starts_with("customers/Acme/"))
+                .count(),
+            2
         );
     }
 }

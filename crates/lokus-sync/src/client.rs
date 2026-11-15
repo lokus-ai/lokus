@@ -55,8 +55,14 @@ pub struct Config {
 
 const B64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 const RETRY: Duration = Duration::from_secs(3);
+/// The longest a connection may take to open before it is given up and tried again.
+const CONNECT: Duration = Duration::from_secs(20);
 /// How often an open connection checks whether it has been handed a newer sign-in.
 const RENEW_CHECK: Duration = Duration::from_secs(20);
+/// The longest an open connection may hear nothing before it is given up and opened again. The
+/// relay is asked to answer at every renew check, so a healthy connection is never this quiet;
+/// one that a sleeping laptop or a changed network left open but dead is.
+const QUIET: Duration = Duration::from_secs(50);
 
 /// What the app can ask a running connection to do.
 pub enum Nudge {
@@ -100,12 +106,23 @@ pub async fn run(
 }
 
 /// Like [`run`], for a caller that already owns the link (and the file watcher).
+/// Choose the encryption provider for every secure connection this process makes.
+///
+/// The app is built with two (one comes with the updater's HTTP client, one with the
+/// socket), and rustls will not pick between them: the first secure connection made without a
+/// choice panics. The socket to the relay was sometimes that first connection, so sync died
+/// silently at start-up and the app said "Connecting" for good. Safe to call more than once.
+pub fn secure() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
+}
+
 pub async fn serve(
     link: Link,
     mut changes: mpsc::UnboundedReceiver<Nudge>,
     config: Config,
     report: impl Fn(Value) + Send + Sync + 'static,
 ) -> Result<()> {
+    secure();
     let engine = link.engine.clone();
     // What this vault remembers about syncing belongs to one workspace only.
     if with(&engine, |e| e.bind(&config.workspace))? {
@@ -299,9 +316,15 @@ async fn session(
     moved: &Notify,
     arrived: &Notify,
 ) -> Result<()> {
-    let (socket, _) = tokio_tungstenite::connect_async(socket_url(config))
-        .await
-        .map_err(|e| Error::Net(e.to_string()))?;
+    // Bounded: a connection that neither opens nor fails would otherwise be waited on for
+    // ever, with the app saying "Connecting" and nothing to retry.
+    let (socket, _) = tokio::time::timeout(
+        CONNECT,
+        tokio_tungstenite::connect_async(socket_url(config)),
+    )
+    .await
+    .map_err(|_| Error::Net("the relay did not answer in time".into()))?
+    .map_err(|e| Error::Net(e.to_string()))?;
     let (mut out, mut inbox) = socket.split();
     // Say who we are before anything else; the relay answers `hello` or refuses.
     let mut presented = config.token.get();
@@ -333,9 +356,15 @@ async fn session(
     );
     let mut renew = tokio::time::interval(RENEW_CHECK);
     renew.tick().await;
+    let mut heard = tokio::time::Instant::now();
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
     let mut can_edit = answer["role"] != "viewer";
+    // What piled up while away goes out as where things are now, before any of it is sent.
+    with(engine, |e| {
+        e.allow_publishing(can_edit);
+        e.fold_outbox()
+    })?;
     // Facts may have been pushed while this device was away.
     arrived.notify_one();
     // Where to pull from again if the relay says we fell behind its live feed.
@@ -371,6 +400,7 @@ async fn session(
 
         tokio::select! {
             received = inbox.next() => {
+                heard = tokio::time::Instant::now();
                 let message = match received {
                     Some(Ok(Message::Text(text))) => text,
                     Some(Ok(Message::Close(_))) | None => return Ok(()),
@@ -382,16 +412,28 @@ async fn session(
                     // An owner changed what we may do while we were connected.
                     "role" => {
                         can_edit = value["role"] != "viewer";
+                        // Connected, so up to date: a note that was waiting can be placed now.
+                        with(engine, |e| {
+                            e.allow_publishing(can_edit);
+                            e.place_waiting()?;
+                            // A viewer's own changes, about to go out for the first time.
+                            if in_flight.is_empty() {
+                                e.fold_outbox()?;
+                            }
+                            Ok(())
+                        })?;
                         report(json!({ "event": "role", "role": value["role"] }));
                     }
                     "updates" => {
                         let items = value["items"].as_array().cloned().unwrap_or_default();
                         let head = value["head"].as_i64().unwrap_or(0);
                         with(engine, |e| {
+                            let mut missed = Vec::with_capacity(items.len());
                             for item in &items {
                                 let data = B64.decode(item["data"].as_str().unwrap_or_default()).map_err(|x| Error::Crdt(x.to_string()))?;
-                                e.apply_remote(item["doc"].as_str().unwrap_or_default(), &data)?;
+                                missed.push((item["doc"].as_str().unwrap_or_default().to_string(), data));
                             }
+                            e.apply_pulled(&missed)?;
                             e.set_cursor(head)?;
                             e.mark_pulled()?;
                             e.scan()
@@ -439,6 +481,10 @@ async fn session(
                 }
             }
             _ = renew.tick() => {
+                if heard.elapsed() > QUIET {
+                    return Err(Error::Net("the relay went quiet".into()));
+                }
+                out.send(Message::Ping(Default::default())).await.map_err(|e| Error::Net(e.to_string()))?;
                 // A newer sign-in arrived: hand it to the relay so this connection outlives the old one.
                 let latest = config.token.get();
                 if latest != presented {

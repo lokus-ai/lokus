@@ -31,6 +31,7 @@
     { "id": "ui.onboarding", "description": "Onboarding: the first-run setup and the start page shown when nothing is open.", "paths": ["ui/src/features/onboarding/"] },
     { "id": "ui.noticed", "description": "Noticed: the assistant working on its own; what it found, and suggestions on notes.", "paths": ["ui/src/features/noticed/"] },
     { "id": "ui.updates", "description": "Updates: the update pop-up, What's new and news pushed from the server.", "paths": ["ui/src/features/updates/"] },
+    { "id": "ui.files", "description": "Files that are not notes: the viewer for pictures, PDFs and CSVs.", "paths": ["ui/src/features/files/"] },
     { "id": "ui.profile", "description": "Profile: the name and picture each person on the team goes by.", "paths": ["ui/src/features/profile/"] },
     { "id": "ui.tasks", "description": "Tasks: the team's board and list of work, and a task's own page.", "paths": ["ui/src/features/tasks/"] },
     { "id": "ui.customers", "description": "Customers: the list of who needs attention and each customer's page, built from note properties.", "paths": ["ui/src/features/customers/"] },

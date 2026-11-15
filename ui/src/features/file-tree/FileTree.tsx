@@ -119,9 +119,9 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
         return (
           <button
             key={entry.path}
-            className={`tree-row${entry.path === active ? " active" : ""}${isNote ? "" : " muted"}`}
+            className={`tree-row${entry.path === active ? " active" : ""}`}
             style={indent}
-            onClick={() => isNote && onOpen(entry.path)}
+            onClick={() => onOpen(entry.path)}
             onContextMenu={(e) => showMenu(e, entry)}
           >
             <span className="tree-caret"><Icon name={isNote ? "note" : "file"} size={14} /></span>

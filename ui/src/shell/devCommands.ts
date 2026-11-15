@@ -158,6 +158,51 @@ const commands: Command[] = [
     },
   },
   {
+    // Be someone a local relay knows by a fixed token, to drive teams and invitations: `email=` and `token=`.
+    id: "account.pretend",
+    title: "Stand in for a sign-in",
+    hidden: true,
+    async run(args) {
+      const { pretendAccount } = await import("../bridge/auth");
+      const { app } = await import("./workspace");
+      const account = pretendAccount(String(args.email ?? ""), String(args.token ?? ""));
+      app.set({ account });
+      return { account };
+    },
+  },
+  {
+    // Where sync stands, and how long each step of connecting takes, with the real account.
+    id: "debug.sync",
+    title: "Say where sync stands",
+    hidden: true,
+    async run() {
+      const { app } = await import("./workspace");
+      const auth = await import("../bridge/auth");
+      const sync = await import("../bridge/sync");
+      const timed = async <T,>(work: () => Promise<T>) => {
+        const began = Date.now();
+        const settled = await Promise.race([work().then((v) => ({ ok: true as const, v }), (e) => ({ ok: false as const, v: String(e) })), new Promise<{ ok: false; v: string }>((r) => setTimeout(() => r({ ok: false, v: "no answer in 8s" }), 8000))]);
+        return { ms: Date.now() - began, ...settled };
+      };
+      const token = await timed(() => auth.accessToken());
+      const watch = await timed(async () => {
+        const stop = await auth.onAccessToken(() => {});
+        stop();
+        return "registered";
+      });
+      const status = await timed(() => sync.syncStatus());
+      const root = app.get().vault?.root ?? "";
+      return {
+        ui: app.get().sync,
+        account: app.get().account?.email ?? null,
+        saved: JSON.parse(localStorage.getItem(`lokus.sync:${root}`) ?? "null"),
+        accessToken: { ms: token.ms, ok: token.ok, length: token.ok && typeof token.v === "string" ? token.v.length : token.v },
+        onAccessToken: watch,
+        rust: status,
+      };
+    },
+  },
+  {
     id: "analytics.recent",
     title: "The last things counted",
     hidden: true,

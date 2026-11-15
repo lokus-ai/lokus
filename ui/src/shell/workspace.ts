@@ -9,6 +9,7 @@ import {
   currentVault,
   type Entry,
   type InstalledPlugin,
+  isMainWindow,
   type Eol,
   type Note,
   onCloseTab,
@@ -21,7 +22,7 @@ import {
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
-import { onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
+import { syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
@@ -52,7 +53,9 @@ export interface AppState {
   palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | "history" | null;
   /** What the main area shows. */
   /** Which tab is showing: a note, or the graph (which sits in `tabs` as `GRAPH_TAB`). */
-  view: "note" | "graph";
+  view: "note" | "graph" | "file";
+  /** The file showing when `view` is "file": a picture, a PDF, a CSV. It sits in `tabs` by its path. */
+  file: string | null;
   /** The settings dialog, and which of its pages is showing; null when it is closed. */
   settings: string | null;
   /** What the panel on the right shows, if it is open. */
@@ -88,6 +91,7 @@ export const app = createStore<AppState>({
   conflict: null,
   palette: null,
   view: "note",
+  file: null,
   settings: null,
   panel: null,
   plugins: [],
@@ -360,6 +364,8 @@ let syncSignIn: string | null = null;
 let stopSignIns: (() => void) | null = null;
 /** Whether a refusal has already been answered with one fresh sign-in. */
 let retriedSignIn = false;
+/** The latest request to connect, so a retry for an older one does nothing. */
+let lastAsk = "";
 
 export async function connectSync(server: string, workspace: string, token: string | null): Promise<void> {
   const useToken = token ?? (await accessToken());
@@ -375,13 +381,25 @@ export async function connectSync(server: string, workspace: string, token: stri
   stopSignIns?.();
   stopSignIns = null;
   // An account sign-in lasts about an hour. Each new one is handed to the connection as it arrives.
+  // Not waited for: the connection must be asked for whatever the account service is doing.
   if (token === null) {
-    stopSignIns = await onAccessToken((fresh) => {
+    void onAccessToken((fresh) => {
       if (fresh === syncSignIn) return;
       syncSignIn = fresh;
       void syncToken(fresh);
-    });
+    }).then(
+      (stop) => (stopSignIns = stop),
+      () => {},
+    );
   }
+  // Asked for but never answered: say so and try again, where it used to say "Connecting" for good.
+  const asking = `${server}|${workspace}|${Date.now()}`;
+  lastAsk = asking;
+  window.setTimeout(() => {
+    if (lastAsk !== asking || app.get().sync.status !== "connecting") return;
+    reportError(new Error("sync stayed at connecting for 30 seconds"), "sync");
+    void connectSync(server, workspace, token);
+  }, 30_000);
   await syncConnect(server, workspace, useToken).catch((e) => app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } }));
 }
 
@@ -396,6 +414,12 @@ export async function disconnectSync(): Promise<void> {
 
 function watchSync(): void {
   startCollab(syncPeers);
+  // Teammates see who is signed in on this cursor from the moment of signing in, wherever it happens.
+  let named = "You";
+  app.subscribe(() => {
+    const name = app.get().account?.email ?? "You";
+    if (name !== named) setIdentity((named = name));
+  });
   onSyncEvent((event) => {
     const { sync } = app.get();
     if (event.event === "online") {
@@ -423,7 +447,12 @@ function watchSync(): void {
       })();
     } else if (event.event === "pulled") for (const path of sessions.keys()) void share(path);
     else if (event.event === "published" || event.event === "wrote") void share(event.path);
-    else if (event.event === "kept_both") notify(`Kept your copy as “${event.moved_to}”`);
+    // Sync moved a file (a teammate renamed it, or another note took its name): its tab goes with it.
+    else if (event.event === "renamed") moveOpen(event.from, event.to);
+    else if (event.event === "kept_both") {
+      moveOpen(event.path, event.moved_to);
+      notify(`Kept your copy as “${event.moved_to}”`);
+    }
   });
 }
 
@@ -448,10 +477,13 @@ export async function boot(): Promise<void> {
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
   onCloseTab(() => {
-    const { active, view } = app.get();
+    // Cmd+W closes the tab showing and nothing more. With no tab left it closes an extra
+    // window, but never the last one: that would quit Lokus, which is what Cmd+Q is for.
+    const { active, view, file } = app.get();
     if (view === "graph") closeGraph();
+    else if (view === "file" && file) void closeTab(file);
     else if (active) void closeTab(active);
-    else closeWindow();
+    else if (!isMainWindow()) closeWindow();
   });
   // Every window shows the same folder: when another window opens a different one, follow it.
   onVaultOpened((vault) => {
@@ -462,13 +494,11 @@ export async function boot(): Promise<void> {
     void currentAccount().then((account) => {
       if ((account?.id ?? null) === (app.get().account?.id ?? null)) return;
       identify(account?.id ?? null);
-      setIdentity(account?.email ?? "You");
       app.set({ account });
     }, () => {});
   });
   const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
   identify(account?.id ?? null);
-  setIdentity(account?.email ?? "You");
   app.set({ vault, account, ready: true });
   applyLayout();
   track("app_opened");
@@ -514,7 +544,9 @@ export async function chooseVault(): Promise<void> {
 }
 
 export async function refreshTree(): Promise<void> {
-  app.set({ tree: await runCore<Entry[]>("vault.tree") });
+  // What the assistant noticed is kept in a folder of its own; it is shown under Noticed, not as files.
+  const tree = await runCore<Entry[]>("vault.tree");
+  app.set({ tree: tree.filter((e) => !(e.kind === "folder" && e.path === "noticed")) });
 }
 
 export function allNotes(entries: Entry[] = app.get().tree, out: string[] = []): string[] {
@@ -544,7 +576,24 @@ function syncPeers(): void {
   if (JSON.stringify(next) !== JSON.stringify(app.get().peers)) app.set({ peers: next });
 }
 
+/** Whether a path is a note; anything else in a vault is a file to look at, not to edit. */
+export const isNotePath = (path: string) => /\.md$/i.test(path);
+
+/** Show a file that is not a note (a picture, a PDF, a CSV) in its own tab. */
+export function openFile(path: string): void {
+  app.set((s) => ({ view: "file", file: path, tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
+  track("page_opened", { kind: "file" });
+}
+
+/** Bring a tab forward, whatever it holds. */
+function go(tab: string): void {
+  if (tab === GRAPH_TAB) showGraph();
+  else if (isNotePath(tab)) show(tab);
+  else openFile(tab);
+}
+
 export async function openNote(path: string): Promise<void> {
+  if (!isNotePath(path)) return openFile(path);
   // The editor mounts with the first render after a vault opens.
   for (let i = 0; !editor && i < 50; i++) await new Promise((r) => window.setTimeout(r, 20));
   if (!editor) return;
@@ -565,6 +614,16 @@ export async function openNote(path: string): Promise<void> {
 }
 
 export async function closeTab(path: string): Promise<void> {
+  if (!isNotePath(path)) {
+    const { tabs, file, view, active } = app.get();
+    const rest = tabs.filter((t) => t !== path);
+    if (view !== "file" || file !== path) return app.set({ tabs: rest });
+    const next = rest[Math.min(tabs.indexOf(path), rest.length - 1)];
+    app.set({ tabs: rest, file: null, view: "note" });
+    // The note underneath is still loaded; any other tab is brought forward.
+    if (next && next !== active) go(next);
+    return;
+  }
   await save(path);
   const { tabs, active } = app.get();
   const index = tabs.indexOf(path);
@@ -578,15 +637,14 @@ export async function closeTab(path: string): Promise<void> {
   }
   const next = rest[Math.min(index, rest.length - 1)] ?? null;
   app.set({ tabs: rest, active: null, properties: {} });
-  if (next === GRAPH_TAB) showGraph();
-  else if (next) show(next);
+  if (next) go(next);
 }
 
 /** Go to the tab after the one showing (or before it), wrapping round at the ends. */
 export function stepTab(by: 1 | -1): void {
   const { tabs, active, view } = app.get();
   if (tabs.length < 2) return;
-  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : (active ?? ""));
+  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : view === "file" ? (app.get().file ?? "") : (active ?? ""));
   const next = tabs[(at + by + tabs.length) % tabs.length];
   if (next === GRAPH_TAB) showGraph();
   else void openNote(next);
@@ -655,23 +713,34 @@ export async function openTasks(): Promise<void> {
 
 const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
 
+/** Open tabs follow a note or a folder to its new path, with what is still to be saved. */
+function moveOpen(from: string, to: string): void {
+  const moved = (p: string) => (under(p, from) ? to + p.slice(from.length) : p);
+  for (const [path, session] of [...sessions]) {
+    if (!under(path, from)) continue;
+    sessions.delete(path);
+    sessions.set(moved(path), session);
+    if (!saveTimers.has(path)) continue;
+    window.clearTimeout(saveTimers.get(path));
+    saveTimers.delete(path);
+    scheduleSave(moved(path));
+  }
+  app.set((s) => ({
+    tabs: s.tabs.map(moved),
+    active: s.active ? moved(s.active) : null,
+    file: s.file ? moved(s.file) : null,
+    dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
+  }));
+}
+
 /** Rename or move a note or a folder; open tabs follow it. */
 export async function renameEntry(from: string, to: string): Promise<void> {
   if (from === to) return;
   try {
     await saveAll();
-    await runCore("note.rename", { from, to });
-    const moved = (p: string) => (under(p, from) ? to + p.slice(from.length) : p);
-    for (const [path, session] of [...sessions]) {
-      if (!under(path, from)) continue;
-      sessions.delete(path);
-      sessions.set(moved(path), session);
-    }
-    app.set((s) => ({
-      tabs: s.tabs.map(moved),
-      active: s.active ? moved(s.active) : null,
-      dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
-    }));
+    // A shared vault renames through sync, which keeps each note's shared document with it.
+    if (!(await syncRename(from, to))) await runCore("note.rename", { from, to });
+    moveOpen(from, to);
     await refreshTree();
   } catch (e) {
     report(e);

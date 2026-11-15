@@ -156,6 +156,15 @@ async fn run_out(expires: Option<i64>, grace: i64) {
     }
 }
 
+/// Says in the log when a connection ends, however it ends.
+struct Closed(u64);
+
+impl Drop for Closed {
+    fn drop(&mut self) {
+        eprintln!("socket closed: conn {}", self.0);
+    }
+}
+
 async fn serve(app: Arc<App>, socket: WebSocket) {
     let (mut out, mut inbox) = socket.split();
     let first = tokio::time::timeout(HELLO_WAIT, inbox.next()).await;
@@ -166,6 +175,8 @@ async fn serve(app: Arc<App>, socket: WebSocket) {
     let mut me = match opened {
         Ok(session) => session,
         Err(e) => {
+            // Said in the log: a device that cannot connect is otherwise invisible from here.
+            eprintln!("socket refused: {e}");
             let _ = tell(&mut out, refusal(&e)).await;
             let _ = out.close().await;
             return;
@@ -173,6 +184,14 @@ async fn serve(app: Arc<App>, socket: WebSocket) {
     };
 
     let conn = app.conn_id();
+    let short = |text: &str| text.chars().take(8).collect::<String>();
+    eprintln!(
+        "socket open: conn {conn}, user {}, workspace {}, {}",
+        short(&me.user),
+        short(&me.workspace),
+        me.role.name()
+    );
+    let _closed = Closed(conn);
     let room = app.room(&me.workspace);
     let mut feed = room.subscribe();
     let mut changes = app.changes.subscribe();

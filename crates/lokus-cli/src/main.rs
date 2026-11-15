@@ -199,9 +199,30 @@ fn run_in_app(p: &Parsed) -> Result<Value, Value> {
     }
 }
 
+/// Where there are no unix sockets the dev app listens on a port on this computer.
 #[cfg(not(unix))]
-fn run_in_app(_p: &Parsed) -> Result<Value, Value> {
-    Err(json!({ "code": "unsupported", "message": "`lokus app` needs macOS or Linux for now" }))
+fn run_in_app(p: &Parsed) -> Result<Value, Value> {
+    use std::io::{BufRead, BufReader, Write};
+    let port: u16 = std::env::var("LOKUS_DEV_PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(47615);
+    let io = |e: std::io::Error| json!({ "code": "app_unreachable", "message": format!("port {port} ({e}); is `pnpm dev` running?") });
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port)).map_err(io)?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(20)))
+        .map_err(io)?;
+    let request = json!({ "name": p.command, "args": p.args });
+    writeln!(stream, "{request}").map_err(io)?;
+    let mut line = String::new();
+    BufReader::new(stream).read_line(&mut line).map_err(io)?;
+    let reply: Value = serde_json::from_str(&line)
+        .map_err(|e| json!({ "code": "bad_reply", "message": e.to_string() }))?;
+    if reply["ok"] == true {
+        Ok(reply["value"].clone())
+    } else {
+        Err(reply["error"].clone())
+    }
 }
 
 /// Keep a vault in sync until interrupted. One JSON object per line on stdout.

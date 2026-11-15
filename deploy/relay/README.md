@@ -23,3 +23,20 @@ to the VM as `relay-data`.
 
 The relay's database gains tables on its own when a newer build starts (`ingest_keys`, `inbox`, `app_releases`, `app_news`);
 nothing needs to be moved.
+
+## Invitations by email
+
+The relay emails workspace invitations from `noreply@lokusmd.com` through Resend. Until the
+steps below are done it sends nothing and Lokus says "this server does not send email".
+
+1. At resend.com, add the domain `lokusmd.com` and add every DNS record it shows to
+   Cloudflare as "DNS only". Wait for Resend to say Verified.
+2. Make an API key there with "Sending access" only.
+3. `sh deploy/relay/ship.sh mail` and paste the key. It writes `LOKUS_MAIL_KEY` and
+   `LOKUS_PUBLIC_URL=https://relay.lokusmd.com` to the relay's env file and restarts it. The
+   log line "invitations are emailed" means it took.
+
+`LOKUS_MAIL_FROM` changes the sender (default `Lokus <noreply@lokusmd.com>`). Email
+confirmation must stay on in Supabase: an invitation is shown to whoever signs in with the
+address it was sent to.
+

@@ -1,4 +1,7 @@
 /** @part-of ui.noticed */
+import { accessToken } from "../../bridge/auth";
+import { relay } from "../../bridge/sync";
+import { onLookAsked, onMinute, showInMenuBar } from "../../bridge/background";
 import { aiActDone, aiApprove, aiSend, onAiAct, onAiEvent } from "../../bridge/ai";
 import { track, traceChat } from "../../bridge/analytics";
 import { aiSettings } from "../../bridge/ai";
@@ -149,9 +152,34 @@ let listening = false;
 let current = "";
 
 /** Look now. Ends with the Noticed list brought up to date; says so if something new is on it. */
-export async function check(reason = "This is a routine look."): Promise<void> {
+/**
+ * In a team, ask the relay for this look. One person's Lokus does it and what it finds syncs to
+ * everyone; the rest are told it has been done and wait for the next one. A look someone asked
+ * for by hand is theirs to have. A relay that does not know the question lets the look go on.
+ */
+async function myTurn(): Promise<boolean> {
+  const { sync } = app.get();
+  if (sync.status !== "online" || !sync.server || !sync.workspace) return true;
+  const token = await accessToken().catch(() => null);
+  if (!token) return true;
+  try {
+    const answer = await relay<{ granted: boolean }>(sync.server, token, "POST", `/v1/workspaces/${sync.workspace}/looks/claim`, { minutes: watchEvery() });
+    return answer.granted !== false;
+  } catch {
+    return true;
+  }
+}
+
+export async function check(reason = "This is a routine look.", asked = false): Promise<void> {
   const state = noticed.get();
   if (state.checking || !app.get().vault) return;
+  if (!asked && !(await myTurn())) {
+    // A teammate's Lokus has just looked. Count it as done here too, and show what it found.
+    localStorage.setItem(CHECKED, String(Date.now()));
+    noticed.set({ checked: Date.now() });
+    await loadNoticed();
+    return;
+  }
   if (!listening) {
     listening = true;
     // In the background nothing may be changed: whatever asks to is told no, at once.
@@ -280,10 +308,33 @@ function schedule(): void {
   if (minutes > 0) timer = window.setInterval(() => void check(), minutes * 60_000);
 }
 
+/** Whether enough time has gone by since the last look for another. */
+function due(): boolean {
+  const minutes = watchEvery();
+  return minutes > 0 && Date.now() - noticed.get().checked > minutes * 60_000;
+}
+
+/**
+ * Keep looking while Lokus sits in the menu bar with its window closed, and show there how
+ * many things need the person.
+ */
+function inMenuBar(): void {
+  onMinute(() => due() && void check("Lokus is running in the menu bar; nobody has the window open."));
+  onLookAsked(() => void check("The user asked for a look from the menu bar.", true));
+  let shown = -1;
+  const count = () => {
+    const needs = waiting(noticed.get().items).filter((i) => i.kind === "finding" && i.urgency !== "fyi").length;
+    if (needs !== shown) showInMenuBar((shown = needs));
+  };
+  noticed.subscribe(count);
+  count();
+}
+
 /** Begin: look shortly after opening if it is due, then on the timer, and when a customer fact arrives. */
 export function startWatching(): void {
   followNoticed();
   schedule();
+  inMenuBar();
   window.setTimeout(() => {
     void loadNoticed();
     const minutes = watchEvery();

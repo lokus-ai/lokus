@@ -16,6 +16,7 @@ pub async fn call(
     if !path.starts_with("/v1/") {
         return Err(Error::Net("not a relay path".into()));
     }
+    crate::client::secure();
     let url = format!("{}{}", server.trim_end_matches('/'), path);
     let client = reqwest::Client::new();
     let request = match method {

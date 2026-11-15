@@ -36,6 +36,7 @@
 | Onboarding: the first-run setup and the start page shown when nothing is open. | `ui/src/features/onboarding/` | `ui.onboarding` |
 | Noticed: the assistant working on its own; what it found, and suggestions on notes. | `ui/src/features/noticed/` | `ui.noticed` |
 | Updates: the update pop-up, What's new and news pushed from the server. | `ui/src/features/updates/` | `ui.updates` |
+| Files that are not notes: the viewer for pictures, PDFs and CSVs. | `ui/src/features/files/` | `ui.files` |
 | Profile: the name and picture each person on the team goes by. | `ui/src/features/profile/` | `ui.profile` |
 | Tasks: the team's board and list of work, and a task's own page. | `ui/src/features/tasks/` | `ui.tasks` |
 | Customers: the list of who needs attention and each customer's page, built from note properties. | `ui/src/features/customers/` | `ui.customers` |

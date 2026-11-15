@@ -8,6 +8,7 @@ pub mod chat;
 pub mod chatgpt;
 pub mod config;
 pub mod error;
+pub mod files;
 pub mod mcp;
 pub mod mcp_login;
 pub mod own_api;

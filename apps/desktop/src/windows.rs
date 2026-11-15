@@ -63,3 +63,10 @@ pub fn tell_front(app: &AppHandle, event: &str) {
         }
     }
 }
+
+/// Close the window in front.
+pub fn close_front(app: &AppHandle) {
+    if let Some(front) = focused(app) {
+        let _ = front.close();
+    }
+}

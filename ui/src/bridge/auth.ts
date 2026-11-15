@@ -1,4 +1,5 @@
 /** @part-of ui.bridge */
+import { DEV_CHANNEL } from "./dev";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -48,7 +49,19 @@ export async function rememberName(name: string): Promise<void> {
 
 export const accountsAvailable = Boolean(URL && ANON);
 
+/**
+ * Dev builds only: stand in for a sign-in with one of a local relay's fixed tokens
+ * (`LOKUS_DEV_TOKENS`), so team features can be driven from a terminal with no real account.
+ */
+let standIn: { token: string; account: Account } | null = null;
+export function pretendAccount(email: string, token: string): Account | null {
+  if (!DEV_CHANNEL) return null;
+  standIn = email ? { token, account: { id: email.split("@")[0], email, name: "", picture: "", provider: "email" } } : null;
+  return standIn?.account ?? null;
+}
+
 export async function currentAccount(): Promise<Account | null> {
+  if (standIn) return standIn.account;
   // No stored session means nobody is signed in; skip loading the library.
   if (!accountsAvailable || !localStorage.getItem(SESSION_KEY)) return null;
   const { data } = await (await supabase()).auth.getSession();
@@ -108,6 +121,7 @@ export async function onAccessToken(handler: (token: string) => void): Promise<(
 
 /** The signed-in account's token, for the relay. */
 export async function accessToken(): Promise<string | null> {
+  if (standIn) return standIn.token;
   if (!accountsAvailable || !localStorage.getItem(SESSION_KEY)) return null;
   const { data } = await (await supabase()).auth.getSession();
   return data.session?.access_token ?? null;

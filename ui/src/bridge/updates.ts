@@ -81,3 +81,12 @@ export async function fetchNews(): Promise<Post[]> {
 export function openWeb(url: string): void {
   void invoke("open_web", { url });
 }
+
+/** Why this copy should be moved before it is used, or null when it is where it belongs. */
+export async function misplaced(): Promise<string | null> {
+  return (await invoke<{ misplaced: string | null }>("app_place")).misplaced;
+}
+
+export function quitApp(): void {
+  void invoke("app_quit");
+}

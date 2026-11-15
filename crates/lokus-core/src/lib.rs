@@ -7,6 +7,7 @@
 pub mod chats;
 pub mod commands;
 pub mod error;
+pub mod files;
 pub mod frontmatter;
 pub mod history;
 pub mod index;

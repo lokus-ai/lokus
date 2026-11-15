@@ -1,11 +1,14 @@
 //! @part-of core
-//! What the assistant noticed on its own, waiting for the person to look at.
+//! What the assistant noticed on its own, waiting for someone to look at.
 //!
 //! Two kinds of thing land here. A **finding** is something worth knowing with a recommended
 //! next step ("Quivly has waited two days; the fix already shipped, so tell them"). A
 //! **suggestion** is a piece of text proposed for a note, shown on that note until it is added
-//! or dismissed. Both are files in `.lokus/noticed/`, which is never synced: they are proposals
-//! to one person, not facts about the workspace, until that person acts on them.
+//! or dismissed. Both are files in the vault's `noticed/` folder, which syncs like any other
+//! file: in a team, one person's Lokus does the looking and everyone sees what it found, and
+//! when one person deals with a finding it is dealt with for all. (They used to live in
+//! `.lokus/noticed/`, seen by one person only; those are moved across the first time they are
+//! listed.)
 //!
 //! When the person acts, what they chose can be written into `Assistant.md` as a line under
 //! "How we handle things", so the next time the same kind of thing comes up the assistant
@@ -25,8 +28,27 @@ const MAX_BYTES: usize = 64 * 1024;
 pub const MEMORY: &str = "Assistant.md";
 pub const HANDLED: &str = "## How we handle things";
 
+/// The folder findings are kept in. It is hidden from the list of notes and files.
+pub const FOLDER: &str = "noticed";
+
 fn dir(vault: &Vault) -> PathBuf {
-    vault.root().join(META_DIR).join("noticed")
+    vault.root().join(FOLDER)
+}
+
+/// Bring findings kept the old, private way into the shared folder. Ones already there win.
+fn move_in(vault: &Vault) {
+    let old = vault.root().join(META_DIR).join("noticed");
+    let Ok(entries) = fs::read_dir(&old) else {
+        return;
+    };
+    let _ = fs::create_dir_all(dir(vault));
+    for entry in entries.filter_map(|e| e.ok()) {
+        let to = dir(vault).join(entry.file_name());
+        if to.exists() || fs::rename(entry.path(), &to).is_err() {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+    let _ = fs::remove_dir(&old);
 }
 
 fn bad(message: &str) -> CoreError {
@@ -68,13 +90,20 @@ fn read(path: &std::path::Path) -> Option<Value> {
 
 /// Everything noticed, newest first.
 pub fn list(vault: &Vault) -> Result<Vec<Value>> {
+    move_in(vault);
     let Ok(entries) = fs::read_dir(dir(vault)) else {
         return Ok(Vec::new());
     };
     let mut found: Vec<Value> = entries
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
-        .filter_map(|e| read(&e.path()))
+        .filter_map(|e| {
+            // A file is a finding only under its own name. A copy that sync set aside when two
+            // people changed the same one at once ("x (local copy).json") is not listed twice.
+            let item = read(&e.path())?;
+            let named = e.path().file_stem()?.to_str()? == item["id"].as_str()?;
+            named.then_some(item)
+        })
         .collect();
     found.sort_by_key(|item| std::cmp::Reverse(item["created"].as_i64().unwrap_or(0)));
     Ok(found)
@@ -238,7 +267,7 @@ mod tests {
         );
         assert!(dir
             .path()
-            .join(".lokus/noticed/waiting-acme-thread-12.json")
+            .join("noticed/waiting-acme-thread-12.json")
             .exists());
 
         // Doing it teaches the assistant what was chosen; noticing it again does not bring it back.
@@ -265,5 +294,28 @@ mod tests {
         assert_eq!(memory.matches("## How we handle things").count(), 1);
         assert!(memory.contains("contradicts: leave it, do not bring it up (2026-11-15)"));
         assert!(resolve(&vault, "../x", "done", false, "d").is_err());
+    }
+    #[test]
+    fn findings_kept_the_old_private_way_are_moved_to_where_a_team_sees_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = Vault::open(dir.path()).unwrap();
+        let old = dir.path().join(".lokus/noticed");
+        fs::create_dir_all(&old).unwrap();
+        fs::write(
+            old.join("late-reply.json"),
+            r#"{"id":"late-reply","title":"A late reply","state":"new","created":5}"#,
+        )
+        .unwrap();
+        let listed = list(&vault).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(dir.path().join("noticed/late-reply.json").exists());
+        assert!(!old.exists());
+        // A copy that sync set aside is the same finding, not a second one.
+        fs::copy(
+            dir.path().join("noticed/late-reply.json"),
+            dir.path().join("noticed/late-reply (local copy).json"),
+        )
+        .unwrap();
+        assert_eq!(list(&vault).unwrap().len(), 1);
     }
 }

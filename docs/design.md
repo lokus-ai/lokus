@@ -276,7 +276,7 @@ engine in `lokus-sync`, which writes the file.
 |---|---|
 | `workspaces` | id, name, who created it and when |
 | `members` | workspace, user, email, role, when they joined |
-| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it |
+| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often |
 | `updates` | the edit log: a running number, workspace, note id, the edit, who made it and when |
 | `blobs` | attachments under the hash of their bytes, with size, who stored them and when |
 | `audit` | who changed who may do what; kept even after a workspace is deleted |
@@ -285,6 +285,28 @@ engine in `lokus-sync`, which writes the file.
 
 Once a note has 200 stored edits they are folded into one row. A note's text is whatever its
 edits add up to; that is the cloud copy.
+
+A note arriving at a path where this device already has a file of its own never overwrites it:
+the local file is kept beside it as "name (local copy)" and synced too. The one exception is a
+local file that already holds exactly the arriving text (the starter notes every new vault
+begins with): it is the same note, so it stays where it is and nothing is kept twice.
+
+Two people who each make a note of the same name while apart (two "Untitled" notes written
+offline), or who each rename a different note to the same name, have two notes, and both are
+kept. Every device that may edit gives the name to the same one of them and names the other
+beside it, "name (local copy)", so no text is merged or lost. A viewer's device decides nothing
+for the team: it shows the second note once an editor's device has named it. A note the viewer
+made itself, which the team has never seen, is the one that steps aside there. A tab open on a
+note that sync moves goes with the note.
+
+A device that was away can get several renames as one change (two notes that swapped names, a
+note given the name of one that was deleted). The note in the way steps aside until its own
+move is made, so neither file is written over and sync does not stop. Everything it missed
+about names is taken in before it touches a file, so it never names two notes apart that the
+team has since moved or deleted: said late, that word could win and undo theirs. What it
+made while away goes out the same way, as where its notes are now and not each place they have
+been, so a note made as "Untitled" and given its title offline never meets a teammate's
+"Untitled".
 
 **Who may do what**
 
@@ -300,6 +322,9 @@ edits add up to; that is the cloud copy.
 - A socket does not outlive its sign-in. The app hands each fresh account token (about hourly)
   to the running connection; a socket that is not renewed is closed a minute after its token
   runs out.
+- A socket that has gone silent is not trusted. The app asks the relay to answer every 20
+  seconds; after 50 seconds of hearing nothing (a laptop that slept, a network that changed) it
+  drops the connection and opens a new one, and what either side missed arrives then.
 
 **What the relay refuses**
 
@@ -321,7 +346,7 @@ new one. Only one sync engine runs on a vault at a time: a second one (another w
 command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
 
 **Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
-change a role, remove someone, make and cancel invite codes, stop syncing, leave or delete.
+change a role, remove someone, invite by email and cancel invitations, stop syncing, leave or delete.
 There is no separate team window.
 
 **Not built:** end-to-end encryption (whoever runs the relay can read the notes; see the
@@ -333,6 +358,101 @@ scripted flows: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`
 Device and relay exchange only what the other is missing; after that edits are relayed live.
 Cursors and presence pass through memory and are never stored. A personal vault is local-only
 by default; turning sync on makes it a one-person workspace on the same pipeline.
+
+### Files that are not notes (built; tried in the real app with a ChatGPT-plan model)
+
+A vault holds pictures, PDFs and CSVs beside its notes, and they sync like any attachment.
+
+- **Looking at one.** Clicking a file in the sidebar opens it in a tab: a picture as a picture,
+  a PDF in the system's own PDF view, a CSV as a table (first 1,000 rows), a text file as text.
+  Nothing is edited there. `file.read` hands a file over whole and `file.text` gives its words
+  (a PDF's text through `pdf-extract`), in parts for a long one.
+- **Attaching to the assistant.** The + in the message box, a drop or a paste puts a file with
+  the next message; "Ask about this" on an open file does the same. A file from outside is
+  first kept in `attachments/`, so the conversation can be reopened and a teammate has it too.
+  The conversation stores only the file's place (`{type: "attachment", path}`); what the model
+  is sent is made for each request in `lokus-ai/src/files.rs`: a picture as a picture (all
+  three providers), anything with words as up to 24,000 characters of them, the rest read with
+  `read_file`. A picture over 4.5 MB is named and left out.
+- **Files the assistant makes.** `create_file` writes a CSV, an SVG chart or a text file;
+  `create_pdf` writes a PDF from text laid out like a note (`file.pdf`, Latin letters only, since
+  it uses the fonts every reader has). Both ask first. What was made shows as a card under the
+  reply, a picture as itself, and opens in a tab.
+- **Not built.** Pictures made by an image model; looking at a picture already in the vault
+  without it being attached; scanned PDFs (no text in them); editing a CSV in place.
+
+### Several people's assistants in one workspace (built; tried with two devices on a local relay)
+
+Five people in a workspace means five copies of Lokus, each with an assistant and each with its
+own connections. Three things keep that from becoming five of everything.
+
+- **The same thing recorded twice is one thing.** A message or issue is filed under the id its
+  source gave it, so two assistants recording the same Slack message write the same note.
+- **One meeting is one record.** Each person's recorder gives the same meeting a different id,
+  so a meeting is matched by customer, day and title; a second person's notes are added to the
+  first record under their name (`ingest::same_meeting`).
+- **One look per workspace.** Before a scheduled look a device asks the relay for the turn
+  (`POST /v1/workspaces/{id}/looks/claim`); one is granted per interval and the rest skip. A
+  look asked for by hand is not held back. Findings live in the vault's `noticed/` folder,
+  which syncs, so everyone sees what the one look found, and dealing with a finding deals
+  with it for all.
+
+Not handled: two people acting on the same finding at the same moment; a meeting whose title
+differs between recorders.
+
+### In the menu bar (built; tried in the real app on a Mac)
+
+The assistant's looks run on a timer inside the app, so an app that quits with its window stops
+looking. Lokus therefore stays: closing the window or pressing Cmd+Q hides the window and the
+Dock icon and leaves a mark in the menu bar (`apps/desktop/src/background.rs`). The mark's menu
+opens Lokus, asks for a look now, or quits it for good, which is the only real quit. A number
+beside the mark says how many findings need the person. Once a minute the shell tells the
+hidden window the time has moved, because the system slows a hidden window's own timers; the
+window decides whether a look is due. "Keep Lokus in the menu bar" under Settings, Assistant
+turns all of it off. Not built: a system notification when something is found; starting Lokus
+when the computer starts.
+
+### Workspaces and the switcher (built; tried in the real app)
+
+A workspace is a folder. A person can have several (one for a team, one for school) and
+nothing is shared between them. The shell keeps the list of every folder opened in Lokus
+(`vaults.json` beside `last-vault`; a folder that is gone drops out). The workspace's name at
+the top of the sidebar opens the switcher, after Notion's: the open workspace with Settings
+and Invite people, the others with "Team" on the shared ones, invitations waiting with a Join
+button, and "Add workspace", which makes a folder of that name in Documents. A new workspace
+is private; sharing it is one step under Settings, Team. Every window still shows the same
+workspace: switching in one switches them all.
+
+### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
+
+An owner types an address under Settings, Team. The relay emails that person from
+`noreply@lokusmd.com`; they sign in to Lokus with that address and the invitation is waiting.
+Nobody copies or pastes a code.
+
+- **Sending.** `POST /v1/workspaces/{id}/invites` with an `email` makes the invite and sends
+  it through Resend's HTTP API (`crates/lokus-server/src/mail.rs`). The relay needs
+  `LOKUS_MAIL_KEY` and `LOKUS_PUBLIC_URL`; without them it sends nothing and says so, and
+  invites go out as links as before. A reply to the email goes to the owner who invited.
+- **The email** (`assets/invitation.html`) says who invited whom to what, as what, with one
+  button and the three steps after it. It is the app's own colours, light and dark.
+- **The link** opens `/join/{code}` on the relay: the same facts, the installers for the newest
+  build, which address to sign in with, and the code for someone who signs in under another.
+- **Waiting.** `GET /v1/invites/mine` gives the invitations addressed to the signed-in
+  person's email. The app asks on sign-in and when the window is returned to. In first-run
+  setup it is the step after signing in, and joining skips the questions about pages (those
+  are the team's). Afterwards it is a card, and stays under Settings, Team if put away.
+- **Where the workspace lands.** A folder that holds the person's own notes is never merged
+  into a team silently: the card offers a new folder in Documents named after the workspace
+  (the default) or the open folder, saying how many notes would become the team's.
+- **Limits.** One live invitation per address per workspace (a new one replaces the old); not
+  to someone already inside; 60 emails a day per account; the same one again after a minute.
+  A person's name is not printed if it looks like a link or an address, and everything typed
+  by a person is escaped.
+- **What it rests on.** "Waiting for you" trusts the address in the sign-in, so email
+  confirmation must stay on in Supabase. The code in the link still works for whoever holds
+  it, once, as before.
+- **Not built.** A `lokus://` link that opens the app from the email (the app has no link
+  scheme yet); telling the owner when an invitation is declined.
 
 ### Attachments (built)
 

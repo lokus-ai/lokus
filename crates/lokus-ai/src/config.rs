@@ -9,7 +9,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AiError, Result};
 
-const SERVICE: &str = "io.lokus.app";
+/// Where saved sign-ins are kept in the keychain. A build made while developing keeps its own
+/// apart from the released app's. They used to share one, and since macOS ties each entry to
+/// the app that made it, the released app asked for the keychain password once for every
+/// entry a development build had made (2026-11-14).
+const SERVICE: &str = if cfg!(debug_assertions) {
+    "io.lokus.app.dev"
+} else {
+    "io.lokus.app"
+};
+/// Where development builds kept theirs before they were given their own place.
+#[cfg(debug_assertions)]
+const SHARED: &str = "io.lokus.app";
 const FILE: &str = "ai.json";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,7 +206,7 @@ pub fn secret(account: &str) -> Option<String> {
         .map_err(|_| ())
         .and_then(|e| match e.get_password() {
             Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
-            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(keyring::Error::NoEntry) => Ok(moved_in(account)),
             // Refused or dismissed: that says nothing about whether a sign-in is saved.
             Err(_) => Err(()),
         });
@@ -209,6 +220,33 @@ pub fn secret(account: &str) -> Option<String> {
         // app was restarted (2026-11-13).
         Err(()) => None,
     }
+}
+
+/// A development build that finds nothing in its own place looks once in the place it used
+/// to share with the released app. What it finds there it made itself: it takes it along and
+/// removes it, so the released app is never asked about it.
+#[cfg(debug_assertions)]
+fn moved_in(account: &str) -> Option<String> {
+    if std::env::var("LOKUS_KEYCHAIN").is_ok_and(|s| !s.is_empty()) {
+        return None;
+    }
+    let old = keyring::Entry::new(SHARED, account).ok()?;
+    let found = old.get_password().ok().filter(|s| !s.is_empty())?;
+    if entry(account)
+        .and_then(|e| {
+            e.set_password(&found)
+                .map_err(|e| AiError::Keychain(e.to_string()))
+        })
+        .is_ok()
+    {
+        let _ = old.delete_credential();
+    }
+    Some(found)
+}
+
+#[cfg(not(debug_assertions))]
+fn moved_in(_account: &str) -> Option<String> {
+    None
 }
 
 pub fn key_account(provider: Provider) -> String {
