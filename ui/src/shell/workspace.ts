@@ -298,6 +298,11 @@ export async function saveAll(): Promise<void> {
   await Promise.all([...sessions.keys()].map((p) => save(p)));
 }
 
+/** Whether an open note holds text that is not on disk. */
+export function unsaved(): boolean {
+  return [...sessions].some(([path, session]) => !session.shared && textOf(path) !== session.saved);
+}
+
 export const SIDEBAR_MIN = 200;
 export const SIDEBAR_MAX = 420;
 const NARROW = "(max-width: 760px)";
