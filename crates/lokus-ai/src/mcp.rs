@@ -3,7 +3,7 @@
 //! connected for the length of one request and its tools are offered to the
 //! model beside the vault's own.
 
-use rmcp::model::CallToolRequestParams;
+use rmcp::model::{CallToolRequestParams, ClientConfig, ProtocolVersion};
 use rmcp::service::RunningService;
 use rmcp::transport::auth::AuthClient;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
@@ -11,13 +11,13 @@ use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::{RoleClient, ServiceExt};
 use serde_json::Value;
 
-use crate::config::{mcp_account, secret, McpServer};
+use crate::config::{mcp_account, read_secret, secret, set_secret, Config, McpServer};
 use crate::error::{AiError, Result};
 use crate::tools::Tool;
 
 pub struct Connection {
     pub server: String,
-    service: RunningService<RoleClient, ()>,
+    service: RunningService<RoleClient, ClientConfig>,
     pub tools: Vec<Tool>,
 }
 
@@ -56,25 +56,91 @@ pub async fn connect_soon(server: &McpServer) -> Result<Connection> {
 }
 
 pub async fn connect(server: &McpServer) -> Result<Connection> {
+    connect_using(server, None).await
+}
+
+/// Validate a pasted token without saving it or falling back to an existing sign-in.
+pub async fn check_token(server: &McpServer, token: &str) -> Result<Connection> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err(AiError::Mcp {
+            server: server.name.clone(),
+            message: "Enter a personal access token.".into(),
+        });
+    }
+    tokio::time::timeout(CONNECT, connect_using(server, Some(token)))
+        .await
+        .map_err(|_| AiError::Mcp {
+            server: server.name.clone(),
+            message: "The service did not answer. Check your connection and try again.".into(),
+        })?
+        .map_err(|_| AiError::Mcp {
+            server: server.name.clone(),
+            message:
+                "Could not connect. Check your token, its access and your network, then try again."
+                    .into(),
+        })
+}
+
+/// Commit an already checked token and its server together; a settings failure restores the
+/// previous credential, so updating a token cannot break a working connection on disk failure.
+pub fn save_token(dir: &std::path::Path, mut server: McpServer, token: &str) -> Result<()> {
+    let token = token.trim();
+    if token.is_empty() {
+        return Err(AiError::Config("Enter a personal access token.".into()));
+    }
+    let account = mcp_account(&server.name);
+    let previous = read_secret(&account)?;
+    let mut config = Config::load(dir);
+    if let Some(existing) = config.mcp.iter().find(|s| s.name == server.name) {
+        server.enabled = existing.enabled;
+    }
+    config.mcp.retain(|s| s.name != server.name);
+    config.mcp.push(server.clone());
+    if let Err(error) = set_secret(&account, token).and_then(|_| config.save(dir)) {
+        set_secret(&account, previous.as_deref().unwrap_or_default()).map_err(|_| {
+            AiError::Keychain(
+                "the previous token could not be restored; unlock the keychain and reconnect"
+                    .into(),
+            )
+        })?;
+        return Err(error);
+    }
+    let _ = crate::mcp_login::sign_out(&server.name);
+    Ok(())
+}
+
+async fn connect_using(server: &McpServer, token: Option<&str>) -> Result<Connection> {
     let failed = |message: String| AiError::Mcp {
         server: server.name.clone(),
         message,
     };
     let mut config = StreamableHttpClientTransportConfig::with_uri(server.url.clone());
-    if let Some(token) = secret(&mcp_account(&server.name)) {
-        config = config.auth_header(token);
+    let token = token
+        .map(str::to_owned)
+        .or_else(|| secret(&mcp_account(&server.name)));
+    if let Some(token) = &token {
+        config = config.auth_header(token.clone());
     }
     // A server the person signed in to is reached with those credentials,
     // which the SDK keeps fresh; otherwise with a pasted token, or nothing.
-    let started = match crate::mcp_login::authorized(server).await? {
+    let authorized = if token.is_some() {
+        None
+    } else {
+        crate::mcp_login::authorized(server).await?
+    };
+    // `serve` uses initialize, which newer protocol versions no longer support.
+    let info =
+        ClientConfig::default().with_protocol_version(ProtocolVersion::LATEST_WITH_INITIALIZE);
+    let started = match authorized {
         Some(manager) => {
             let client = AuthClient::new(reqwest::Client::default(), manager);
-            ().serve(StreamableHttpClientTransport::with_client(client, config))
+            info.serve(StreamableHttpClientTransport::with_client(client, config))
                 .await
         }
         None => {
             let client = reqwest::Client::default();
-            ().serve(StreamableHttpClientTransport::with_client(client, config))
+            info.serve(StreamableHttpClientTransport::with_client(client, config))
                 .await
         }
     };
