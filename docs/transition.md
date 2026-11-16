@@ -26,7 +26,7 @@ breaks if it is skipped. Nothing here has been done yet unless it says so. Writt
 
 | # | Step | State today |
 |---|---|---|
-| 10 | **Signed, notarized installers** for macOS, and builds for Windows and Linux | Done for Macs on 2026-11-14: `deploy/release/mac.sh` builds, signs and notarizes both kinds of Mac, and 2.0.0-alpha.2 is out as a GitHub pre-release with the relay offering it. Windows and Linux are not built. The CI release workflow has still never been run |
+| 10 | **Signed, notarized installers** for macOS, and builds for Windows and Linux | Done for Macs on 2026-11-14: `deploy/release/mac.sh` builds, signs and notarizes both kinds of Mac, and 2.0.0-alpha.2 is out as a GitHub pre-release with the relay offering it. Windows and Linux since 2026-11-15 (2.0.0-alpha.10): the release workflow on GitHub builds the Windows installer and the Linux AppImage beside the two Macs, installs and opens them, and puts nothing out if one fails. They carry no Windows or Linux certificate |
 | 11 | **The hosted relay brought up to date** and given a real name | Brought up to date on 2026-11-14 (data-push door, releases and news, a publish key). Still under a temporary `sslip.io` name. Daily backups are on; restoring one has never been tried |
 | 12 | **One Supabase project chosen for production**, with Google sign-in set to the production return address | The app points at a project made for testing |
 | 13 | **The Slack app published** in the Slack Marketplace | It works only in the workspace it was made in. GitHub and Google need the same kind of registration and have not been started |

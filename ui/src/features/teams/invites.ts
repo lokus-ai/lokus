@@ -11,7 +11,8 @@ import { allNotes, app, connectSync, notify, resumeSync, saveAll, setVault, stop
  *
  * An owner names someone by their email address and the relay writes to them. The person
  * invited signs in to Lokus with that address and the invitation is found waiting: this file
- * asks for it when they sign in and when they come back to the window, and joins them.
+ * asks for it when they sign in and when they come back to the window, and joins them. One
+ * they already said yes to, on the page its email opens, is joined without asking again.
  */
 
 /** The relay this build syncs through; empty when the build has none. */
@@ -30,6 +31,8 @@ export interface Waiting {
   from: string | null;
   from_name: string | null;
   expires_at: number;
+  /** When they pressed Join on the invitation's page in a browser; null when they have not. */
+  agreed_at: number | null;
 }
 
 /** What the relay says about an invite just made or sent again. */
@@ -42,7 +45,8 @@ export interface Made {
 }
 
 const LATER = "lokus.invites.later";
-const AGAIN = 60_000;
+/** Coming back to the window asks again after this long: someone who pressed Join on the invitation page is not kept waiting. */
+const AGAIN = 10_000;
 /** The pages setup makes. A folder holding only these has nothing of the person's own in it. */
 const STARTER = ["Customers.md", "Tasks.md", "Assistant.md"];
 
@@ -63,11 +67,35 @@ export const joinLink = (server: string, code: string) => `${server.replace(/\/+
 
 let asked = 0;
 
-/** Ask the relay what is waiting for whoever is signed in. Quiet when there is nobody, or no relay. */
-export async function lookForInvites(): Promise<Waiting[]> {
+let looking: Promise<Waiting[]> | null = null;
+
+/**
+ * Ask the relay what is waiting for whoever is signed in. Quiet when there is nobody, or no
+ * relay. One look at a time: a second asker is given the first one's answer, so an invitation
+ * is never used twice.
+ */
+export function lookForInvites(): Promise<Waiting[]> {
+  return (looking ??= find().finally(() => (looking = null)));
+}
+
+async function find(): Promise<Waiting[]> {
   asked = Date.now();
   const token = HOME && app.get().account ? await accessToken().catch(() => null) : null;
-  const waiting = token ? await relay<Waiting[]>(HOME, token, "GET", "/v1/invites/mine").catch(() => invited.get().waiting) : [];
+  let waiting = token ? await relay<Waiting[]>(HOME, token, "GET", "/v1/invites/mine").catch(() => invited.get().waiting) : [];
+  // Said yes to on its page: joined here and now, and `bringTeams` gives it a folder. First-run
+  // setup keeps it instead, to make it the person's first folder. One that could not be joined
+  // right now stays waiting, with its Join button.
+  if (token && !settingUp()) {
+    for (const w of waiting.filter((w) => w.agreed_at)) {
+      const joined = await relay(HOME, token, "POST", `/v1/invites/${w.code}/accept`).then(
+        () => true,
+        () => false,
+      );
+      if (!joined) continue;
+      track("action", { feature: "team", action: "invite_accepted", where: "page", role: w.role });
+      waiting = waiting.filter((x) => x.code !== w.code);
+    }
+  }
   invited.set({ waiting });
   return waiting;
 }
@@ -161,25 +189,28 @@ export async function bringTeams(): Promise<void> {
   }
 }
 
+/** Everything a look is: what is waiting, then the teams with no folder here. In this order: an invitation joined by the first is a team the second brings. */
+export const lookForTeams = () => void lookForInvites().finally(() => void bringTeams());
+
 /** Ask when someone signs in, and again when they come back to the window after a while. */
 export function watchInvites(setup: () => boolean): void {
   if (!HOME) return;
   settingUp = setup;
   let who = app.get().account?.id ?? null;
-  const look = () => {
-    void lookForInvites();
-    void bringTeams();
-  };
-  look();
+  lookForTeams();
   app.subscribe(() => {
     const now = app.get().account?.id ?? null;
     if (now === who) return;
     who = now;
     // A team folder opened while signed out was refused: the sign-in is what it was waiting for.
     if (now && app.get().sync.status === "refused") void resumeSync();
-    look();
+    lookForTeams();
   });
+  let due = 0;
   window.addEventListener("focus", () => {
-    if (Date.now() - asked > AGAIN) look();
+    // Asked a moment ago: asked again when the moment is over, not dropped.
+    const wait = asked + AGAIN - Date.now();
+    if (wait <= 0) lookForTeams();
+    else if (!due) due = window.setTimeout(() => ((due = 0), lookForTeams()), wait);
   });
 }

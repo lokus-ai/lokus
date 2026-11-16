@@ -194,7 +194,7 @@ pub fn router(app: Arc<App>) -> Router {
             post(invites::resend),
         )
         .route("/v1/invites/mine", get(invites::mine))
-        .route("/join/{code}", get(invites::page))
+        .route("/join/{code}", get(invites::page).post(invites::agree))
         .route("/brand/lokus.png", get(invites::logo))
         .route("/brand/invitation.jpg", get(invites::picture))
         .route("/v1/workspaces/{id}/audit", get(list_audit))
