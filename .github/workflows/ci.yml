@@ -88,16 +88,17 @@ jobs:
         run: $RUN node checks/desktop-smoke.mjs
       # The way a release builds it (deploy/release/desktop.sh), signed with a key made for
       # this run and thrown away with it; the real one is only in the release environment.
+      # The version is shaped like the ones that go out (2.0.0-alpha.9), file names and all.
       - name: Build what people would download
         run: |
           set -e
           pnpm tauri signer generate --ci -w "$RUNNER_TEMP/throwaway.key" >/dev/null
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/throwaway.key")" sh deploy/release/desktop.sh 0.0.1 https://relay.lokusmd.com
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/throwaway.key")" sh deploy/release/desktop.sh 0.0.1-alpha.1 https://relay.lokusmd.com
       - name: Install it and open it (Windows)
         if: runner.os == 'Windows'
         run: |
           set -e
-          cmd //c "$(cygpath -w dist-release/0.0.1/Lokus_0.0.1_x64-setup.exe) /S"
+          cmd //c "$(cygpath -w dist-release/0.0.1-alpha.1/Lokus_0.0.1-alpha.1_x64-setup.exe) /S"
           APP=$(ls "$LOCALAPPDATA"/Lokus/*.exe | grep -vi uninstall | head -1)
           echo "installed: $APP"
           node checks/desktop-smoke.mjs "$APP"
@@ -105,8 +106,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           set -e
-          chmod +x dist-release/0.0.1/*.AppImage
-          $RUN node checks/desktop-smoke.mjs "$PWD/dist-release/0.0.1/Lokus_0.0.1_amd64.AppImage" --appimage-extract-and-run
+          chmod +x dist-release/0.0.1-alpha.1/*.AppImage
+          $RUN node checks/desktop-smoke.mjs "$PWD/dist-release/0.0.1-alpha.1/Lokus_0.0.1-alpha.1_amd64.AppImage" --appimage-extract-and-run
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -115,4 +116,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: lokus-installer-${{ runner.os }}
-          path: dist-release/0.0.1/
+          path: dist-release/0.0.1-alpha.1/
