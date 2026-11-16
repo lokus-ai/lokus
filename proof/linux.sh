@@ -9,14 +9,36 @@ chmod +x "$APP"
 OLD=$(sha256sum "$APP" | cut -d' ' -f1); NEW=$(sha256sum new.AppImage | cut -d' ' -f1)
 echo "published $FROM: $OLD" | tee out/hashes.txt
 echo "published $TO: $NEW" | tee -a out/hashes.txt
-"$APP" > out/app.log 2>&1 &
-sleep 8
-if ! pgrep -f "$APP" > /dev/null; then
-  echo "did not start mounted; running unpacked" | tee -a out/hashes.txt
-  tail -5 out/app.log
-  APPIMAGE_EXTRACT_AND_RUN=1 "$APP" > out/app.log 2>&1 &
-  sleep 10
-fi
+trap 'pkill -f "$APP"' EXIT
+open_app() {
+  "$APP" > out/app.log 2>&1 &
+  sleep 8
+  if ! pgrep -f "$APP" > /dev/null; then
+    echo "did not start mounted; running unpacked" | tee -a out/hashes.txt
+    tail -5 out/app.log
+    export APPIMAGE_EXTRACT_AND_RUN=1
+    "$APP" > out/app.log 2>&1 &
+    sleep 10
+  fi
+}
+# A new copy opens on its setup, which covers the update offer. Someone who already uses
+# Lokus has been through setup, so mark it done the way the app itself does, then reopen.
+open_app
+sleep 6
+pkill -f "$APP"; sleep 3
+find "$HOME/.local/share" -maxdepth 4 | grep -i -E "lokus|localstorage" | head -20
+DB=$(find "$HOME/.local/share" -name "*.localstorage" | head -1)
+[ -n "$DB" ] || { DB="$HOME/.local/share/io.lokus.app/localstorage/tauri_localhost_0.localstorage"; mkdir -p "$(dirname "$DB")"; }
+echo "setup marked done in $DB"
+python3 - "$DB" <<'PY'
+import sqlite3, sys
+c = sqlite3.connect(sys.argv[1])
+c.execute("CREATE TABLE IF NOT EXISTS ItemTable (key TEXT UNIQUE ON CONFLICT REPLACE, value BLOB NOT NULL ON CONFLICT FAIL)")
+c.execute("INSERT INTO ItemTable VALUES (?, ?)", ("lokus.onboarded", "2026-11-16T00:00:00.000Z".encode("utf-16-le")))
+c.commit()
+print([k for (k,) in c.execute("SELECT key FROM ItemTable")])
+PY
+open_app
 pgrep -af Lokus | cut -c1-200 | tee out/processes-before.txt
 FIRST=$(pgrep -of "$APP")
 
