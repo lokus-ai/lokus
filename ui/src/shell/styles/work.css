@@ -504,6 +504,11 @@ body:has(.task-card.carried) { cursor: grabbing; }
 .ai-connect .primary { height: 38px; }
 .ai-connect small { color: var(--fg-3); font-size: var(--text-caption); text-align: center; margin-bottom: 6px; }
 .ai-connect .settings-button { height: 34px; }
+.ai-connect-key { display: flex; flex-direction: column; gap: 8px; }
+.ai-connect-key .segmented button { flex: 1; }
+.ai-connect-key input { height: 34px; padding: 0 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); outline: 0; font-size: var(--text-small); user-select: text; -webkit-user-select: text; }
+.ai-connect-key input:focus-visible { border-color: var(--accent); }
+.ai-connect-key small { margin: 0; }
 .ai-connect-problem { margin: 4px 0 0; color: var(--danger); font-size: var(--text-small); line-height: 1.45; }
 .ob .ai-connect { margin-top: 24px; width: min(340px, 100%); }
 .ob .ai-connect small { text-align: left; }
