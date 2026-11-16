@@ -110,7 +110,7 @@ Small things that make it a daily driver, all plain commands over plain files:
   A note a teammate deletes while it is open here closes its tab and says so, so nobody goes on
   typing into a note that is gone; it is in this computer's trash too. The graph or a file in
   front stays in front, and while it is in front keys do not reach the note underneath, however
-  it was brought forward. A note that is not shared, with words not yet in its file, keeps its tab,
+  it was brought forward; the note takes the keyboard again when it is back in front. A note that is not shared, with words not yet in its file, keeps its tab,
   and saving brings it back. Known limit: in a shared note, keys typed in the instant between the
   delete arriving and the tab closing (about a tenth of a second) reach no file.
 - **Version history:** when a note is overwritten (by you, a teammate's edit or the assistant) its

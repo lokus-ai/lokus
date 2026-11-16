@@ -596,7 +596,7 @@ export function allNotes(entries: Entry[] = app.get().tree, out: string[] = []):
 function show(path: string): void {
   const next = sessions.get(path);
   if (!editor || !next) return;
-  const previous = app.get().active;
+  const { active: previous, view } = app.get();
   // The note already on screen keeps what was typed in it. One coming forward shows what a
   // teammate typed while its tab was behind another.
   if (previous !== path) {
@@ -609,6 +609,8 @@ function show(path: string): void {
   syncProperties();
   syncPeers();
   editor.view.focus();
+  // Behind the graph or a file the page was hidden, and a hidden page cannot take the keyboard.
+  if (view !== "note") enterNote();
 }
 
 function syncPeers(): void {
@@ -628,6 +630,17 @@ function leaveNote(): void {
   // A click on a button leaves the cursor in the note, and keys follow the cursor.
   const cursor = window.getSelection();
   if (cursor?.anchorNode && page?.contains(cursor.anchorNode)) cursor.removeAllRanges();
+}
+
+/** A note back in front takes the keyboard again, once its page is showing. */
+function enterNote(): void {
+  requestAnimationFrame(() => {
+    if (app.get().view !== "note" || !app.get().active) return;
+    // Someone typing in a field elsewhere (a rename, the palette) keeps it.
+    const at = document.activeElement;
+    if (at instanceof HTMLElement && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return;
+    editor?.view.focus();
+  });
 }
 
 /** Show a file that is not a note (a picture, a PDF, a CSV) in its own tab. */
@@ -674,6 +687,7 @@ export async function closeTab(path: string): Promise<void> {
     app.set({ tabs: rest, file: null, view: "note" });
     // The note underneath is still loaded; any other tab is brought forward.
     if (next && next !== active) go(next);
+    else enterNote();
     return;
   }
   await save(path);
@@ -718,6 +732,7 @@ export function showGraph(): void {
 /** Close the graph's tab; the note that was open underneath shows again. */
 export function closeGraph(): void {
   app.set((s) => ({ view: "note", tabs: s.tabs.filter((t) => t !== GRAPH_TAB) }));
+  enterNote();
 }
 
 function uniquePath(folder: string, base: string): string {
