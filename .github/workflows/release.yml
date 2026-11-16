@@ -154,7 +154,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Tauri system libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev xdg-utils libfuse2 file
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev dbus xvfb imagemagick xdg-utils libfuse2 file
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
@@ -173,6 +173,28 @@ jobs:
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         run: sh deploy/release/desktop.sh "${{ needs.decide.outputs.version }}" "${{ vars.LOKUS_RELAY }}"
+      # The very file people will download is installed and opened here first. One that does
+      # not stay open stops the release.
+      - name: Install it and open it (Windows)
+        if: runner.os == 'Windows'
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+        run: |
+          set -e
+          cmd //c "$(cygpath -w "dist-release/$VERSION/Lokus_${VERSION}_x64-setup.exe") /S"
+          APP=$(ls "$LOCALAPPDATA"/Lokus/*.exe | grep -vi uninstall | head -1)
+          node checks/desktop-smoke.mjs "$APP"
+      - name: Open it (Linux)
+        if: runner.os == 'Linux'
+        env:
+          VERSION: ${{ needs.decide.outputs.version }}
+          # A runner has no graphics card; WebKit on Linux draws nothing without these.
+          WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+          WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+        run: |
+          set -e
+          chmod +x "dist-release/$VERSION/Lokus_${VERSION}_amd64.AppImage"
+          dbus-run-session -- xvfb-run -a node checks/desktop-smoke.mjs "$PWD/dist-release/$VERSION/Lokus_${VERSION}_amd64.AppImage" --appimage-extract-and-run
       - uses: actions/upload-artifact@v4
         with:
           name: lokus-${{ needs.decide.outputs.version }}-${{ matrix.name }}

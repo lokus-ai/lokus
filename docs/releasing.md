@@ -50,7 +50,9 @@ password manager and in the CI secrets, nowhere else.
 3. Merge it. `.github/workflows/release.yml` builds both kinds of Mac (signed and notarized),
    a Windows installer and a Linux AppImage (`deploy/release/desktop.sh`; no certificate, only
    our update signature), puts the files on a GitHub pre-release, posts the news, and tells
-   installed copies. If one platform fails to build, nothing is put out.
+   installed copies. The Windows installer and the AppImage are installed and opened on the
+   machine that built them first; if one platform fails to build or does not stay open,
+   nothing is put out.
 
 A merge that leaves `VERSION` alone releases nothing. Who can release is who can merge into
 `main`. The keys are in the repository's `release` environment, which only a run on `main` can
@@ -150,8 +152,8 @@ Found on the way, and now checked by `lokus release`: an update file re-signed a
 notarizing had lost the version in its signature, and every installed copy would have refused
 it.
 
-Windows and Linux: every pull request starts the real app on a Windows and a Linux machine of
-GitHub's and uses it alone and in a team against a relay started beside it (notes both ways,
+Windows and Linux: every pull request into `main` (a release), and any other one labelled
+`desktop`, starts the real app on a Windows and a Linux machine of GitHub's and uses it alone and in a team against a relay started beside it (notes both ways,
 typing, an attachment, rename, delete, the relay going away and coming back, catching up after
 being closed), then builds the installer and the AppImage the way a release does and opens
 them (`checks/desktop-smoke.mjs`, the `desktop` job in `.github/workflows/ci.yml`). Not tested

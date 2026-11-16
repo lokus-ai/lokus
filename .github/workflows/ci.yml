@@ -41,9 +41,10 @@ jobs:
   # relay started on the runner), then what people would download (the Windows installer, the
   # Linux AppImage), built the way a release builds it, installed and opened. The pictures
   # and the downloads are kept. It takes about forty minutes, so it runs when asked for
-  # (Actions, CI, Run workflow) or on a pull request labelled "desktop", not on every push.
+  # (Actions, CI, Run workflow), on a pull request labelled "desktop", and on every pull
+  # request into main (that is a release), not on every push.
   desktop:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'desktop')
+    if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main' || contains(github.event.pull_request.labels.*.name, 'desktop')
     strategy:
       fail-fast: false
       matrix:
