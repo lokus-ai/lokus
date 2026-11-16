@@ -181,11 +181,7 @@ pub async fn revoke(
 pub async fn mine(State(app): State<Arc<App>>, headers: HeaderMap) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
     let waiting = match me.email.as_deref() {
-        Some(email) => {
-            // What they said yes to on its page is theirs already, and is not asked again.
-            app.store.join_agreed(email, &me.user)?;
-            app.store.invitations_for(email, &me.user)?
-        }
+        Some(email) => app.store.invitations_for(email, &me.user)?,
         None => Vec::new(),
     };
     Ok(Json(json!(waiting)))
@@ -330,7 +326,7 @@ pub async fn page(
             let (first, sign_in, last, other) = match &invitation.email {
                 Some(to) if invitation.agreed_at.is_some() => (
                     format!(
-                        "<li class=\"done\"><b>You joined {workspace}</b><p>Nothing more to press. It opens in Lokus by itself.</p></li>"
+                        "<li class=\"done\"><b>You joined {workspace}</b><p>It opens in Lokus by itself.</p></li>"
                     ),
                     format!(
                         "<b>Sign in as <span class=\"to\">{to}</span></b><p>Already signed in? Go back to Lokus and {workspace} is there. Otherwise Lokus asks you to sign in when it first opens: use this address, since it is the one that was invited.</p>",

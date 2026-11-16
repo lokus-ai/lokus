@@ -248,16 +248,20 @@ export default function Onboarding() {
   const waiting = useStore(invited, (s) => s.waiting);
   // Kept once seen: joining takes it off the waiting list, and the last screen still needs to name it.
   const [offer, setOffer] = useState<Waiting | null>(null);
-  useEffect(() => {
-    if (!hadVault.current && !offer && waiting[0]) setOffer(waiting[0]);
-  }, [waiting, offer]);
   const [answer, setAnswer] = useState<"join" | "own" | "">("");
+  useEffect(() => {
+    if (hadVault.current || offer || !waiting[0]) return;
+    // One they pressed Join for on its page in a browser is not asked about again.
+    const agreed = waiting.find((w) => w.agreed_at);
+    setOffer(agreed ?? waiting[0]);
+    if (agreed) setAnswer("join");
+  }, [waiting, offer]);
   const joining = offer && answer === "join" ? offer : null;
   const order = useMemo<Step[]>(
     () => [
       "hello",
       ...(needsAccount.current ? (["account"] as Step[]) : []),
-      ...(offer ? (["invited"] as Step[]) : []),
+      ...(offer && !offer.agreed_at ? (["invited"] as Step[]) : []),
       // The pages and what they are for are the team's to decide; a person joining is asked only about themselves.
       ...(joining ? [] : (["uses", "aim", "team"] as Step[])),
       "look",

@@ -226,10 +226,11 @@ async fn an_invitation_is_emailed_and_waits_for_the_person_it_names() {
 }
 
 /// Saying yes on the invitation's page: bob presses Join there, signed in to nothing, and the
-/// workspace is his the next time Lokus asks the relay anything as him. Opening the page alone
-/// joins nobody, and the page offers the download for every system, the reader's own first.
+/// invitation then tells Lokus, signed in as him, that he need not be asked again. Opening the
+/// page alone says nothing, and the page offers the download for every system, the reader's
+/// own first.
 #[tokio::test]
-async fn pressing_join_on_the_page_is_enough() {
+async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
     let (relay, _mail) = mailing_relay().await;
     let releases = Store::open(&relay._dir.path().join("relay.sqlite")).unwrap();
     let at = "https://files.example/v2.0.0-alpha.11";
@@ -285,14 +286,13 @@ async fn pressing_join_on_the_page_is_enough() {
             .ends_with("_aarch64.dmg")
     );
 
-    // Reading the page, as a mail program does by itself, joins nobody.
+    // Reading the page, as a mail program does by itself, says yes to nothing.
     assert!(windows.contains("<form method=\"post\">"));
-    let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
-    assert_eq!(teams, json!([]));
     let (_, waiting) = relay
         .call("tb", "GET", "/v1/invites/mine", Value::Null)
         .await;
     assert_eq!(waiting.as_array().unwrap().len(), 1);
+    assert_eq!(waiting[0]["agreed_at"], Value::Null);
 
     // Bob presses Join. He is signed in to nothing there, so the page only takes his word.
     let pressed = relay.http.post(&join).send().await.unwrap();
@@ -301,36 +301,36 @@ async fn pressing_join_on_the_page_is_enough() {
     assert!(after.contains("You joined Acme"));
     assert!(!after.contains("<form"));
 
-    // It is bob's and nobody else's, the next time Lokus asks as him, with nothing to press.
-    let (_, others) = relay.call("tc", "GET", "/v1/workspaces", Value::Null).await;
-    assert_eq!(others, json!([]));
+    // Nobody is a member yet. The invitation waits for bob and nobody else, now saying he
+    // agreed, which is what lets Lokus join him without asking; pressing again changes nothing.
     let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
-    assert_eq!(teams[0]["id"], id.as_str());
+    assert_eq!(teams, json!([]));
+    let (_, others) = relay
+        .call("tc", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(others, json!([]));
     let (_, waiting) = relay
         .call("tb", "GET", "/v1/invites/mine", Value::Null)
         .await;
-    assert_eq!(waiting, json!([]));
-    let (_, members) = relay
-        .call(
-            "ta",
-            "GET",
-            &format!("/v1/workspaces/{id}/members"),
-            Value::Null,
-        )
+    let agreed = waiting[0]["agreed_at"].as_i64().unwrap();
+    assert!(agreed > 0);
+    assert_eq!(relay.http.post(&join).send().await.unwrap().status(), 200);
+    let (_, waiting) = relay
+        .call("tb", "GET", "/v1/invites/mine", Value::Null)
         .await;
-    let bob = members
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["email"] == "bob@x.io")
-        .unwrap();
-    assert_eq!(bob["role"], "editor");
+    assert_eq!(waiting[0]["agreed_at"], agreed);
+
+    // Lokus joins him the way it always has.
+    let accept = format!("/v1/invites/{code}/accept");
+    assert_eq!(relay.call("tb", "POST", &accept, Value::Null).await.0, 200);
+    let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams[0]["id"], id.as_str());
     assert!(relay
         .page(&format!("/join/{code}"))
         .await
         .contains("can no longer be used"));
 
-    // An invitation the owner took back after Join was pressed brings nobody in.
+    // An invitation the owner took back after Join was pressed waits for nobody.
     let (_, made) = relay
         .call(
             "ta",
@@ -350,10 +350,12 @@ async fn pressing_join_on_the_page_is_enough() {
         .await
         .unwrap();
     assert!(cancel.status().is_success());
-    let (_, teams) = relay.call("tc", "GET", "/v1/workspaces", Value::Null).await;
-    assert_eq!(teams, json!([]));
+    let (_, waiting) = relay
+        .call("tc", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(waiting, json!([]));
 
-    // A bare link names nobody, so pressing brings nobody in: its code is still pasted.
+    // A bare link names nobody, so there is nothing to press: its code is still pasted.
     let (_, made) = relay
         .call("ta", "POST", &invites, json!({ "role": "viewer" }))
         .await;
@@ -362,8 +364,7 @@ async fn pressing_join_on_the_page_is_enough() {
     let page = page.text().await.unwrap();
     assert!(page.contains("Paste your code"));
     assert!(!page.contains("<form"));
-    let (_, teams) = relay.call("tc", "GET", "/v1/workspaces", Value::Null).await;
-    assert_eq!(teams, json!([]));
+    assert!(!page.contains("You joined"));
 }
 
 #[tokio::test]

@@ -106,8 +106,8 @@ pub struct Invitation {
     pub expires_at: i64,
     #[serde(skip)]
     pub sent_at: Option<i64>,
-    /// When the person it names said yes on its page, before signing in.
-    #[serde(skip)]
+    /// When the person it names said yes on its page, signed in to nothing. Lokus joins such
+    /// an invitation without asking again.
     pub agreed_at: Option<i64>,
 }
 
@@ -215,30 +215,6 @@ fn invitation(r: &rusqlite::Row) -> rusqlite::Result<Invitation> {
         sent_at: r.get(8)?,
         agreed_at: r.get(9)?,
     })
-}
-
-/// Use an invite once, inside a change already begun. Gives back the workspace joined.
-fn use_invite(tx: &Transaction, code: &str, user: &str, email: Option<&str>) -> Result<String> {
-    let found: Option<(String, String)> = tx
-        .query_row(
-            "SELECT workspace, role FROM invites
-             WHERE code = ?1 AND used_by IS NULL AND revoked = 0 AND expires_at > ?2",
-            params![code, now()],
-            |r| Ok((r.get(0)?, r.get(1)?)),
-        )
-        .optional()?;
-    let (workspace, role) = found.ok_or(Error::NotFound("invite"))?;
-    tx.execute(
-        "INSERT INTO members (workspace, user, email, role, joined_at) VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT (workspace, user) DO NOTHING",
-        params![workspace, user, email, role, now()],
-    )?;
-    tx.execute(
-        "UPDATE invites SET used_by = ?2, used_at = ?3 WHERE code = ?1",
-        params![code, user, now()],
-    )?;
-    record(tx, &workspace, user, "invite_accepted", Some(&role), None)?;
-    Ok(workspace)
 }
 
 const LAST_OWNER: &str =
@@ -595,14 +571,32 @@ impl Store {
     pub fn accept_invite(&self, code: &str, user: &str, email: Option<&str>) -> Result<String> {
         let mut db = self.db()?;
         let tx = db.transaction()?;
-        let workspace = use_invite(&tx, code, user, email)?;
+        let found: Option<(String, String)> = tx
+            .query_row(
+                "SELECT workspace, role FROM invites
+                 WHERE code = ?1 AND used_by IS NULL AND revoked = 0 AND expires_at > ?2",
+                params![code, now()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        let (workspace, role) = found.ok_or(Error::NotFound("invite"))?;
+        tx.execute(
+            "INSERT INTO members (workspace, user, email, role, joined_at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT (workspace, user) DO NOTHING",
+            params![workspace, user, email, role, now()],
+        )?;
+        tx.execute(
+            "UPDATE invites SET used_by = ?2, used_at = ?3 WHERE code = ?1",
+            params![code, user, now()],
+        )?;
+        record(&tx, &workspace, user, "invite_accepted", Some(&role), None)?;
         tx.commit()?;
         Ok(workspace)
     }
 
     /// The person an emailed invitation names said yes on its page. They are signed in to
-    /// nothing there, so nobody joins yet: `join_agreed` does that when they next sign in.
-    /// Says whether there was such an invitation.
+    /// nothing there, so nobody joins yet: Lokus does, without asking again, when it next finds
+    /// the invitation waiting for them. Says whether there was such an invitation.
     pub fn agree(&self, code: &str) -> Result<bool> {
         let changed = self.db()?.execute(
             "UPDATE invites SET agreed_at = COALESCE(agreed_at, ?2)
@@ -610,29 +604,6 @@ impl Store {
             params![code, now()],
         )?;
         Ok(changed > 0)
-    }
-
-    /// `user` has signed in as `email`: every invitation that address said yes to on its page
-    /// is used now, so the workspace is theirs without another click.
-    pub fn join_agreed(&self, email: &str, user: &str) -> Result<()> {
-        let mut db = self.db()?;
-        let tx = db.transaction()?;
-        let codes: Vec<String> = {
-            let mut q = tx.prepare(
-                "SELECT i.code FROM invites i
-                 WHERE i.email = ?1 AND i.agreed_at IS NOT NULL AND i.used_by IS NULL
-                   AND i.revoked = 0 AND i.expires_at > ?2",
-            )?;
-            let rows = q.query_map(params![email.to_lowercase(), now()], |r| r.get(0))?;
-            rows.collect::<rusqlite::Result<_>>()?
-        };
-        if codes.is_empty() {
-            return Ok(());
-        }
-        for code in codes {
-            use_invite(&tx, &code, user, Some(email))?;
-        }
-        Ok(tx.commit()?)
     }
 
     /// Ask for the turn to look a workspace over. Granted when nobody has taken one in the

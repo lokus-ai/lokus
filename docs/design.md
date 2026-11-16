@@ -484,7 +484,7 @@ safe:
 An owner types an address under Settings, Team. The relay emails that person from
 `noreply@lokusmd.com`; they press Join on the page the email opens, and the workspace comes to
 every computer where they are signed in to Lokus with that address. Nobody copies or pastes a
-code, and someone who already has Lokus presses nothing inside it.
+code, and someone who pressed Join on the page is not asked again inside Lokus.
 
 - **Sending.** `POST /v1/workspaces/{id}/invites` with an `email` makes the invite and sends
   it through Resend's HTTP API (`crates/lokus-server/src/mail.rs`). The relay needs
@@ -498,13 +498,14 @@ code, and someone who already has Lokus presses nothing inside it.
   for someone who signs in under another.
 - **Join on the page.** The button posts to `/join/{code}`, which only notes that the person
   the invitation names said yes (`agreed_at`): the page is signed in to nothing, so nobody
-  joins yet. The next time Lokus asks the relay for that person's workspaces or invitations
-  (`GET /v1/workspaces`, `GET /v1/invites/mine`), signed in with the invited address, the
-  invitation is used and they are a member; `bringTeams` then gives the workspace a folder as
-  for any team they are in. So it needs no new app: every copy that brings teams by itself
-  does it. Opening the link joins nobody, because mail programs open links by themselves; an
-  invitation cancelled or run out after the press brings nobody in; a bare link (no address)
-  has no button, since it names nobody.
+  joins there. `GET /v1/invites/mine` hands `agreed_at` to Lokus, signed in with the invited
+  address, and Lokus uses the invitation without asking (`lookForInvites`), then `bringTeams`
+  gives the workspace a folder as for any team the person is in. In first-run setup it is the
+  person's first folder and the question "join, or set up my own first" is not put. Opening
+  the link says yes to nothing, because mail programs open links by themselves; a bare link
+  (no address) has no button, since it names nobody. A copy of Lokus from before this
+  (2.0.0-alpha.11 and older) does not read `agreed_at`: it shows the invitation with its Join
+  button, as it always did.
 - **Waiting.** Someone who signs in without pressing Join on the page is still asked inside
   the app: `GET /v1/invites/mine` gives the invitations addressed to the signed-in
   person's email. The app asks on sign-in and when the window is returned to (at most every

@@ -11,7 +11,8 @@ import { allNotes, app, connectSync, notify, resumeSync, saveAll, setVault, stop
  *
  * An owner names someone by their email address and the relay writes to them. The person
  * invited signs in to Lokus with that address and the invitation is found waiting: this file
- * asks for it when they sign in and when they come back to the window, and joins them.
+ * asks for it when they sign in and when they come back to the window, and joins them. One
+ * they already said yes to, on the page its email opens, is joined without asking again.
  */
 
 /** The relay this build syncs through; empty when the build has none. */
@@ -30,6 +31,8 @@ export interface Waiting {
   from: string | null;
   from_name: string | null;
   expires_at: number;
+  /** When they pressed Join on the invitation's page in a browser; null when they have not. */
+  agreed_at: number | null;
 }
 
 /** What the relay says about an invite just made or sent again. */
@@ -68,7 +71,21 @@ let asked = 0;
 export async function lookForInvites(): Promise<Waiting[]> {
   asked = Date.now();
   const token = HOME && app.get().account ? await accessToken().catch(() => null) : null;
-  const waiting = token ? await relay<Waiting[]>(HOME, token, "GET", "/v1/invites/mine").catch(() => invited.get().waiting) : [];
+  let waiting = token ? await relay<Waiting[]>(HOME, token, "GET", "/v1/invites/mine").catch(() => invited.get().waiting) : [];
+  // Said yes to on its page: joined here and now, and `bringTeams` gives it a folder. First-run
+  // setup keeps it instead, to make it the person's first folder. One that could not be joined
+  // right now stays waiting, with its Join button.
+  if (token && !settingUp()) {
+    for (const w of waiting.filter((w) => w.agreed_at)) {
+      const joined = await relay(HOME, token, "POST", `/v1/invites/${w.code}/accept`).then(
+        () => true,
+        () => false,
+      );
+      if (!joined) continue;
+      track("action", { feature: "team", action: "invite_accepted", where: "page", role: w.role });
+      waiting = waiting.filter((x) => x.code !== w.code);
+    }
+  }
   invited.set({ waiting });
   return waiting;
 }
@@ -167,10 +184,8 @@ export function watchInvites(setup: () => boolean): void {
   if (!HOME) return;
   settingUp = setup;
   let who = app.get().account?.id ?? null;
-  const look = () => {
-    void lookForInvites();
-    void bringTeams();
-  };
+  // In this order: an invitation joined by the first is a team the second brings.
+  const look = () => void lookForInvites().finally(() => void bringTeams());
   look();
   app.subscribe(() => {
     const now = app.get().account?.id ?? null;

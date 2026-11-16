@@ -264,10 +264,6 @@ async fn create_workspace(
 
 async fn list_workspaces(State(app): State<Arc<App>>, headers: HeaderMap) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
-    // An invitation said yes to on its page counts from the moment its person signs in.
-    if let Some(email) = me.email.as_deref() {
-        app.store.join_agreed(email, &me.user)?;
-    }
     Ok(Json(json!(app.store.workspaces_of(&me.user)?)))
 }
 
