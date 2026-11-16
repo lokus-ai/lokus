@@ -22,6 +22,7 @@ import {
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
+import { openWeb } from "../bridge/updates";
 import { syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
@@ -854,6 +855,7 @@ function resolveNote(target: string): string | null {
  * is simply brought forward.
  */
 export async function openLink(target: string, newTab = false): Promise<void> {
+  if (target.startsWith("https://")) return openWeb(target);
   const match = resolveNote(target);
   const ref = /[#^].*$/.exec(target)?.[0];
   if (!match) return createNote(target.replace(/[#^].*$/, "").trim());

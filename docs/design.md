@@ -90,6 +90,16 @@ Small things that make it a daily driver, all plain commands over plain files:
 
 - **Links inside a note:** `[[Note#Heading]]` and `[[Note^block]]` open the note at that place;
   `![[Note#Heading]]` embeds just that part. "Go to a heading" lists the open note's headings.
+  A link to a web page, `[words](https://…)`, opens in the browser on a click, as a link to a
+  note opens the note (Option-click or the arrow keys to change it). Only `https` addresses.
+- **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
+  cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
+  a new row past the last one, and a right-click adds or removes a row or a column. Each
+  keystroke changes only that cell's text in the file, so the note is still a plain markdown
+  table. When the file changes outside the app, only the part that differs is replaced in the
+  open note, so the cell being typed in keeps the keyboard. If the row being typed in is itself
+  removed outside, the next key goes nowhere instead of into the row that took its place. `ui/src/editor/livePreview.ts`.
+  Tried in the real app on a Mac.
 - **Daily note:** `Daily/YYYY-MM-DD.md`, created on first use from `Templates/Daily.md` if present.
 - **Templates:** any note in `Templates/`; `{{date}}`, `{{time}}` and `{{title}}` are filled in.
 - **Trash:** deleting moves a file to `.lokus/trash/`; "Restore from the trash" puts it back.
@@ -127,6 +137,10 @@ customer needs someone and what that customer's story is.
   customer, `out` from us). Messages with the same thread are one conversation: a single line
   that opens into who said what, in order. When the customer spoke last it is marked "Waiting
   on us", and that becomes a reason in the list ("Waiting on our reply for 2d").
+  What was said is drawn the way a note is (bold, lists, links). A message from Slack keeps the
+  text Slack sent in its note, and is shown the way Slack shows it: `<@U1|Pavan>` reads "@Pavan",
+  `<https://x|the doc>` is a link that opens in the browser, `*this*` is bold. An address
+  that is not `https` cannot be opened, so it is written out next to its words.
 - The list has a "Waiting on us" view: every conversation, across customers, where the customer
   spoke last, the longest wait first. It cannot yet tell a question from a thank-you.
 - Clicking an issue or event opens the rest of it underneath, in place; "Open as a note" is

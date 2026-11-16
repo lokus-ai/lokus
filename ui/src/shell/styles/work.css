@@ -140,6 +140,11 @@ textarea.cust-summary { width: 100%; min-height: 110px; padding: 6px 8px; border
 .cust-line-who time { color: var(--fg-3); }
 .cust-line p { margin: 2px 0 0; color: var(--fg); line-height: 1.5; user-select: text; -webkit-user-select: text; cursor: text; white-space: pre-wrap; }
 .cust-line.ours p { color: var(--fg-2); }
+.cust-said-text { margin-top: 2px; user-select: text; -webkit-user-select: text; cursor: text; }
+.cust-said-text .cm-editor { background: none; font-size: inherit; }
+.cust-said-text .cm-content { padding: 0; min-height: 0; }
+.cust-said-text .cm-line { padding: 0; }
+.cust-line.ours .cust-said-text { color: var(--fg-2); }
 
 /* Customers: the people at a customer */
 .cust-item .cust-person { flex: none; color: var(--fg); font-weight: 500; }
