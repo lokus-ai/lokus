@@ -115,10 +115,12 @@ fn reqwest_client() -> lokus_ai::provider::Client {
 
 /// Connect to a tool server and list what it offers, to check an address.
 #[tauri::command]
-pub async fn ai_mcp_check(server: McpServer) -> Result<Vec<Value>, Value> {
-    let connection = lokus_ai::mcp::connect(&server)
-        .await
-        .map_err(|e| e.body())?;
+pub async fn ai_mcp_check(server: McpServer, token: Option<String>) -> Result<Vec<Value>, Value> {
+    let connection = match token {
+        Some(token) => lokus_ai::mcp::check_token(&server, &token).await,
+        None => lokus_ai::mcp::connect_soon(&server).await,
+    }
+    .map_err(|e| e.body())?;
     let tools = connection
         .tools
         .iter()
@@ -126,6 +128,12 @@ pub async fn ai_mcp_check(server: McpServer) -> Result<Vec<Value>, Value> {
         .collect();
     connection.close().await;
     Ok(tools)
+}
+
+/// Save a checked token connection, restoring its old token if settings cannot be saved.
+#[tauri::command(async)]
+pub fn ai_mcp_token_save(app: AppHandle, server: McpServer, token: String) -> Result<(), Value> {
+    lokus_ai::mcp::save_token(&config_dir(&app)?, server, &token).map_err(|e| e.body())
 }
 
 /// Run one request. Progress arrives as `ai:event` messages tagged with the

@@ -3,8 +3,8 @@
 //!
 //! A connector is a tool server (MCP) run by the service itself. Each entry here was checked
 //! against the live server on 2026-11-13: its address, and whether an app nobody has registered
-//! with that service may sign a person in. The ones that may are ready; the others wait until
-//! Lokus is registered with that service, which only the people who ship Lokus can do.
+//! with that service may sign a person in. GitHub also supports a personal access token,
+//! without registering Lokus (GitHub's MCP documentation, checked 2026-11-16).
 
 use serde::Serialize;
 
@@ -12,7 +12,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Ready {
-    /// Sign in with the service in the browser; nothing else is needed.
+    /// Connect with the service's supported sign-in or token flow.
     Yes,
     /// The service only lets apps it has registered sign people in, and Lokus is not one yet.
     NeedsRegistration,
@@ -31,6 +31,8 @@ pub struct Connector {
     pub url: &'static str,
     pub kind: &'static str,
     pub ready: Ready,
+    /// When present, connect with a personal access token instead of browser sign-in.
+    pub token_url: Option<&'static str>,
     /// Set for a service that only signs people in through an app registered with it.
     #[serde(skip)]
     pub app: Option<App>,
@@ -101,6 +103,7 @@ const fn open(
         url,
         kind,
         ready: Ready::Yes,
+        token_url: None,
         app: None,
     }
 }
@@ -119,6 +122,7 @@ const fn closed(
         url,
         kind,
         ready: Ready::NeedsRegistration,
+        token_url: None,
         app: None,
     }
 }
@@ -194,13 +198,16 @@ pub fn all() -> Vec<Connector> {
                 "https://mcp.slack.com/mcp",
             )
         },
-        closed(
-            "github",
-            "GitHub",
-            "Code",
-            "Read and update issues, pull requests and code.",
-            "https://api.githubcopilot.com/mcp/",
-        ),
+        Connector {
+            token_url: Some("https://github.com/settings/personal-access-tokens/new"),
+            ..open(
+                "github",
+                "GitHub",
+                "Code",
+                "Read and update issues, pull requests and code.",
+                "https://api.githubcopilot.com/mcp/",
+            )
+        },
         closed(
             "gmail",
             "Gmail",
@@ -243,6 +250,7 @@ pub fn all() -> Vec<Connector> {
             about: "Read your conversations on this Mac and send messages you approve.",
             url: "",
             ready: Ready::NotBuilt,
+            token_url: None,
             app: None,
         },
     ]
@@ -251,6 +259,18 @@ pub fn all() -> Vec<Connector> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn github_connects_with_a_token_without_registering_an_app() {
+        let github = all().into_iter().find(|c| c.id == "github").unwrap();
+        assert_eq!(github.ready, Ready::Yes);
+        assert!(github.token_url.is_some());
+        assert!(github.app.is_none());
+        assert!(all()
+            .iter()
+            .filter(|c| c.id != "github")
+            .all(|c| c.token_url.is_none()));
+    }
 
     #[test]
     fn every_connector_has_a_usable_name_and_a_safe_address() {

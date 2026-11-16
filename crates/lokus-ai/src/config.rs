@@ -210,30 +210,34 @@ pub fn set_secret(account: &str, secret: &str) -> Result<()> {
 }
 
 pub fn secret(account: &str) -> Option<String> {
+    read_secret(account).ok().flatten()
+}
+
+/// Unlike an optional sign-in lookup, replacing a credential must stop if its old value
+/// cannot be read: a denied keychain prompt does not mean there is nothing to restore.
+pub fn read_secret(account: &str) -> Result<Option<String>> {
     // Held for the whole read. Without it, several parts of the app asking at the same moment
     // each put their own password prompt on screen for the same entry, one behind another, and
     // answering the first did not dismiss the rest (2026-11-13).
     let mut asked = ASKED.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(known) = asked.get(account) {
-        return known.clone();
+        return Ok(known.clone());
     }
-    let read = entry(account)
-        .map_err(|_| ())
-        .and_then(|e| match e.get_password() {
-            Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
-            Err(keyring::Error::NoEntry) => Ok(moved_in(account)),
-            // Refused or dismissed: that says nothing about whether a sign-in is saved.
-            Err(_) => Err(()),
-        });
+    let read = entry(account).and_then(|e| match e.get_password() {
+        Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
+        Err(keyring::Error::NoEntry) => Ok(moved_in(account)),
+        // Refused or dismissed: that says nothing about whether a sign-in is saved.
+        Err(e) => Err(AiError::Keychain(e.to_string())),
+    });
     match read {
         Ok(found) => {
             asked.insert(account.to_string(), found.clone());
-            found
+            Ok(found)
         }
         // Not remembered, so the next time it is needed the keychain is asked again. Remembering
         // a refusal as "nothing saved" made every connected service look signed out until the
         // app was restarted (2026-11-13).
-        Err(()) => None,
+        Err(error) => Err(error),
     }
 }
 
