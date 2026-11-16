@@ -7,7 +7,7 @@ pub type Result<T> = std::result::Result<T, AiError>;
 pub enum AiError {
     #[error("add an API key for {0} in Settings first")]
     NoKey(String),
-    #[error("choose a model in Settings first")]
+    #[error("choose a model in the chat box first")]
     NoModel,
     #[error("the API key was refused")]
     BadKey,
