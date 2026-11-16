@@ -642,6 +642,13 @@ confirms that everything it must not be able to do is refused.
   error rather than writing into the new workspace. Drafts are not synced, shared between
   windows or kept after an app restart. Imported files remain ordinary vault files when
   removed from a draft or when a conversation is deleted.
+  Switching conversations or starting New chat saves unfinished reply progress before
+  leaving. Opening another workspace from this window waits for its captured transcript
+  save; a failed save refuses the switch. A workspace change already completed by another
+  window or initial setup may lose the latest unsaved reply text; its draft is still retained
+  and no transcript is written to another workspace. Stop also cancels while context is
+  loading, before a provider request starts. Late loads/replies cannot undo a newer choice
+  or reopen a deleted conversation.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.

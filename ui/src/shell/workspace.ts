@@ -554,6 +554,12 @@ export function applyLayout(): void {
 
 /** This window is the one changing folder, so it does not also follow its own change. */
 let switching = false;
+let flushChat: (() => Promise<void>) | undefined;
+
+/** The assistant drains its existing writer before this window opens another vault. */
+export function registerChatFlush(flush: () => Promise<void>): void {
+  flushChat = flush;
+}
 
 async function enterVault(vault: VaultInfo): Promise<void> {
   for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
@@ -567,6 +573,7 @@ export async function setVault(path: string): Promise<void> {
   await saveAll();
   switching = true;
   try {
+    await flushChat?.();
     await enterVault(await openVault(path));
     track("vault_opened");
   } finally {

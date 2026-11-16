@@ -3,7 +3,7 @@ import { aiActDone, type AiOutcome, aiApprove, type AiEvent, aiSend, aiSettings,
 import { type Entry, type Note, runCore } from "../../bridge/core";
 import { traceChat, track } from "../../bridge/analytics";
 import { createStore, type Store } from "../../shell/store";
-import { allFiles, app, getEditor, notify, openNote, refreshTree, showGraph } from "../../shell/workspace";
+import { allFiles, app, getEditor, notify, openNote, refreshTree, registerChatFlush, showGraph } from "../../shell/workspace";
 
 /** One thing shown in the conversation. */
 export type Item =
@@ -222,6 +222,14 @@ async function appState(mentions: string[]): Promise<{ text: string; attached: t
 /** Questions the assistant has asked that the person has not answered yet, by the question's id. */
 const asked = new Map<string, (answer: string) => void>();
 
+/** Keep the question and visible progress when a reply stops before its provider history arrives. */
+function interrupted(message: { role: string; content: unknown }, why: string): void {
+  const items = chat.get().items;
+  const since = items.slice(items.map((i) => i.kind).lastIndexOf("user") + 1);
+  const said = since.filter((i) => i.kind === "assistant").map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
+  history = [...history, message, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(${why} The request above still stands unless they say otherwise.)` }] }];
+}
+
 /** The person's answer to a question the assistant asked. */
 export function reply(id: string, text: string): void {
   track("action", { feature: "assistant", action: "question_answered" });
@@ -338,7 +346,7 @@ function traced(id: string, began: number, question: string, outcome: AiOutcome 
 export async function ask(text: string, mentions: string[] = [], files: string[] = []): Promise<boolean> {
   // A file sent with no words is still a question: what is this?
   const question = text.trim() || (files.length ? (files.length === 1 ? "Take a look at this file." : "Take a look at these files.") : "");
-  if (!question || chat.get().busy || !vaultRoot) return false;
+  if (!question || chat.get().busy || !vaultRoot || deleting.has(JSON.stringify([vaultRoot, chatId]))) return false;
   if (!listening) {
     listening = true;
     onAiEvent((id, event) => id === requestId && onEvent(event));
@@ -387,17 +395,15 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     // The question is kept even though no answer came back, with whatever had been said so far.
     // Without this the next message ("continue") reached a model that had never seen the question.
     if (pending) {
-      const items = chat.get().items;
-      const since = items.slice(items.map((i) => i.kind).lastIndexOf("user") + 1);
-      const said = since.filter((i) => i.kind === "assistant").map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
       const why = err.code === "stopped" ? "The user stopped this reply before it was finished." : "This reply failed before it was finished.";
-      history = [...history, pending, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(${why} The request above still stands unless they say otherwise.)` }] }];
+      interrupted(pending, why);
     }
     update((items) => [...settle(items), { kind: "notice", text: err.code === "stopped" ? "Stopped." : (err.message ?? String(e)), error: err.code !== "stopped", code: err.code }]);
     return false;
   } finally {
     if (sending === requestId) {
       window.clearTimeout(keeping);
+      requestId = null;
       unanswered = null;
       chat.set({ busy: false });
       keep();
@@ -415,12 +421,19 @@ function keep(): void {
   if (!first || first.kind !== "user") return;
   // While a reply is still being worked on, the request it answers is kept beside it, so a
   // conversation cut off by the app closing can be told apart from a finished one and resumed.
-  void runCore("chats.save", { id: chatId, title: first.text, updated: Date.now(), body: { items, history, ...(unanswered ? { unanswered } : {}) } }, vaultRoot).catch(() => {});
+  const root = vaultRoot;
+  const saved = { id: chatId, title: first.text, updated: Date.now(), body: { items, history, ...(unanswered ? { unanswered } : {}) } };
+  saving = saving.catch(() => {}).then(() => runCore("chats.save", saved, root));
+  // Background saves have no caller; explicit loads/deletes/vault switches still await failures.
+  void saving.catch(() => {});
 }
 
 /** The request being answered right now; null between replies. */
 let unanswered: { role: string; content: unknown } | null = null;
 let keeping = 0;
+/** Saves finish in order; loading or deleting waits for already captured writes. */
+let saving: Promise<unknown> = Promise.resolve();
+const deleting = new Set<string>();
 
 /** Save as it goes, a moment after each step, so little is lost if the app closes mid-reply. */
 function keepSoon(): void {
@@ -444,16 +457,20 @@ export async function keptChats(): Promise<Kept[]> {
 /** Bring a kept conversation back, ready to be continued. */
 export async function openChat(id: string): Promise<void> {
   track("action", { feature: "assistant", action: "chat_reopened" });
+  const ticket = ++opening;
+  const root = vaultRoot;
+  if (deleting.has(JSON.stringify([root, id]))) return;
   if (id === chatId) {
     chat.set({ history: false });
     return;
   }
-  const ticket = ++opening;
-  const root = vaultRoot;
   let kept: { body: { items?: Item[]; history?: unknown[]; unanswered?: { role: string; content: string } } };
   try {
+    await saving;
+    if (ticket !== opening || root !== vaultRoot) return;
     kept = await runCore<typeof kept>("chats.load", { id }, root);
   } catch (e) {
+    if (ticket !== opening || root !== vaultRoot) return;
     if ((e as { code?: string }).code === "not_found" && vaultDrafts(root).has(id)) kept = { body: {} };
     else {
       notify(e instanceof Error ? e.message : String(e));
@@ -469,13 +486,13 @@ export async function openChat(id: string): Promise<void> {
   let items = kept.body.items ?? [];
   const cut = kept.body.unanswered;
   if (cut) {
-    // Lokus closed while this was being answered. Tell the model what had been asked and how
+    // The reply was interrupted. Tell the model what had been asked and how
     // far it got, and tell the person, so "keep going" picks up where it left off.
     const since = items.slice(items.map((i) => i.kind).lastIndexOf("user") + 1);
     const steps = since.flatMap((i) => (i.kind === "tool" && i.status === "ok" ? [i.name] : []));
     const said = since.map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
-    history = [...history, cut, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(The app closed before this reply was finished. Steps that had completed: ${steps.length ? steps.join(", ") : "none"}. Check what is already done before doing it again. The request above still stands.)` }] }];
-    items = [...items.map((i) => (i.kind === "tool" && (i.status === "running" || i.status === "asking") ? { ...i, status: "failed" as const, result: "Lokus closed before this finished" } : i)), { kind: "notice", text: "This reply was cut off when Lokus closed. Say “keep going” and it carries on from here." }];
+    history = [...history, cut, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(This reply was interrupted before it finished. Steps that had completed: ${steps.length ? steps.join(", ") : "none"}. Check what is already done before doing it again. The request above still stands.)` }] }];
+    items = [...items.map((i) => (i.kind === "tool" && (i.status === "running" || i.status === "asking") ? { ...i, status: "failed" as const, result: "The reply was interrupted before this finished" } : i)), { kind: "notice", text: "This reply was cut off before it finished. Say “keep going” and it carries on from here." }];
   }
   briefing = null;
   carried = null;
@@ -486,16 +503,23 @@ export async function openChat(id: string): Promise<void> {
 export async function forgetChat(id: string): Promise<void> {
   track("action", { feature: "assistant", action: "chat_deleted" });
   const root = vaultRoot;
+  const key = JSON.stringify([root, id]);
+  if (deleting.has(key)) return;
+  deleting.add(key);
   ++opening;
   if (id === chatId) {
-    leaveChat();
+    leaveChat(false);
     chat.set((s) => ({ busy: false, items: settle(s.items) }));
   }
   try {
+    await saving;
     await runCore("chats.delete", { id }, root);
   } catch (e) {
+    if (root === vaultRoot && id === chatId) keep();
     notify(e instanceof Error ? e.message : String(e));
     return;
+  } finally {
+    deleting.delete(key);
   }
   vaultDrafts(root).delete(id);
   if (root === vaultRoot && id === chatId) newChat();
@@ -573,8 +597,19 @@ export async function continueShared(path: string): Promise<void> {
 }
 
 export function stop(): void {
+  stopReply(true);
+}
+
+function stopReply(preserve: boolean): void {
+  if (!requestId) return;
   track("action", { feature: "assistant", action: "stopped" });
-  if (requestId) void aiStop(requestId);
+  void aiStop(requestId);
+  requestId = null;
+  window.clearTimeout(keeping);
+  if (unanswered) interrupted(unanswered, "The user stopped this reply before it was finished.");
+  unanswered = null;
+  chat.set((s) => ({ busy: false, items: [...settle(s.items), { kind: "notice", text: "Stopped." }] }));
+  if (preserve) keep();
 }
 
 /** Allow this change and every further change of the same kind until the current request is done. */
@@ -591,8 +626,8 @@ export function answer(id: string, allow: boolean): void {
   void aiApprove(id, allow);
 }
 
-function leaveChat(): void {
-  if (chat.get().busy) stop();
+function leaveChat(preserve = true): void {
+  if (chat.get().busy) stopReply(preserve);
   requestId = null;
   window.clearTimeout(keeping);
   unanswered = null;
@@ -602,6 +637,7 @@ export function newChat(): void {
   track("action", { feature: "assistant", action: "new_chat" });
   ++opening;
   leaveChat();
+  vaultRoot = app.get().vault?.root;
   asked.clear();
   chatId = freshId();
   allowed.clear();
@@ -612,10 +648,16 @@ export function newChat(): void {
   chat.set({ items: [], busy: false, history: false, draft: draftFor(chatId) });
 }
 
+registerChatFlush(async () => {
+  ++opening;
+  if (chat.get().busy) stopReply(true);
+  else keep();
+  await saving;
+});
+
 // Panels may unmount freely; a different workspace must never inherit this conversation.
 app.subscribe(() => {
   const root = app.get().vault?.root;
   if (root === vaultRoot) return;
-  vaultRoot = root;
   newChat();
 });
