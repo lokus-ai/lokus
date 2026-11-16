@@ -63,6 +63,8 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; down: boolean } | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
+  /** Where the "Add column" list sits on the window, worked out when it is opened. */
+  const [addAt, setAddAt] = useState<{ left: number; top: number; maxHeight: number }>({ left: 0, top: 0, maxHeight: 320 });
   const [editing, setEditing] = useState<{ path: string; key: string } | null>(null);
   const [fresh, setFresh] = useState({ name: "", kind: "text" as Kind });
   const [tick, setTick] = useState(0);
@@ -390,19 +392,37 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
                 )}
                 {columns.map((key) => head(key, KIND_ICON_OF[kind(key)], label(key), true))}
                 <th className="custs-add">
-                  <button className="custs-th" title="Add a column" aria-expanded={menu === "+"} onClick={() => setMenu(menu === "+" ? null : "+")}>
+                  <button
+                    className="custs-th"
+                    title="Add a column"
+                    aria-expanded={menu === "+"}
+                    onClick={(e) => {
+                      // Placed on the window, inside the page: under the button, never past the
+                      // page's right edge (the assistant may be there) or the window's bottom.
+                      const at = e.currentTarget.getBoundingClientRect();
+                      const page = e.currentTarget.closest(".custs")?.getBoundingClientRect();
+                      const left = Math.max((page?.left ?? 0) + 8, Math.min(at.left, (page?.right ?? window.innerWidth) - 268));
+                      setAddAt({ left, top: at.bottom + 4, maxHeight: Math.max(160, window.innerHeight - at.bottom - 16) });
+                      setMenu(menu === "+" ? null : "+");
+                    }}
+                  >
                     <Icon name="plus" size={14} />
                     <span>Add column</span>
                   </button>
                   {menu === "+" && (
-                    <div className="cust-menu left wide">
-                      {offered.length > 0 && <small>A detail your customers already have</small>}
-                      {offered.map((key) => (
-                        <button key={key} onClick={() => addColumn(key)}>
-                          <Icon name={KIND_ICON_OF[kind(key)]} size={14} />
-                          {label(key)}
-                        </button>
-                      ))}
+                    <div className="cust-menu wide custs-add-menu" style={addAt}>
+                      {/* The details scroll; the form for a new one stays in view under them. */}
+                      {offered.length > 0 && (
+                        <div className="custs-offered">
+                          <small>A detail your customers already have</small>
+                          {offered.map((key) => (
+                            <button key={key} onClick={() => addColumn(key)}>
+                              <Icon name={KIND_ICON_OF[kind(key)]} size={14} />
+                              {label(key)}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {offered.length > 0 && <hr />}
                       <small>A new detail</small>
                       <form

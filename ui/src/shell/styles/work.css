@@ -127,6 +127,10 @@ textarea.cust-summary { width: 100%; min-height: 110px; padding: 6px 8px; border
 .cust-menu hr { margin: 5px 0; border: 0; border-top: 1px solid var(--border); }
 .cust-menu.left { left: 6px; right: auto; top: 36px; text-align: left; }
 .cust-menu.wide { width: 260px; }
+/* The list of columns to add can be longer than the table: it sits on the window with its own scroll, so it neither stretches the table's scroll area nor hides under the assistant. */
+.custs-add-menu { position: fixed; right: auto; display: flex; flex-direction: column; text-align: left; }
+.custs-add-menu > * { flex: none; }
+.custs-add-menu .custs-offered { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 
 /* Customers: a conversation, closed as one line and open as who said what */
 .cust-item-kind.chevron { transition: transform var(--fast); }
