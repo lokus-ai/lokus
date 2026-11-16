@@ -93,8 +93,8 @@ Small things that make it a daily driver, all plain commands over plain files:
   A link to a web page, `[words](https://…)`, opens in the browser on a click, as a link to a
   note opens the note (Option-click or the arrow keys to change it). Only `https` addresses.
   A picture, `![words](file)`, is shown when its file name has brackets in it too.
-  A link or a picture written over two lines stays as text. A note that cannot be drawn does not
-  open, and the note on screen stays as it was.
+  A link whose address is on the line below, or a picture written over two lines, stays as text.
+  A note that cannot be drawn does not open, and the note on screen stays as it was.
 - **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
   cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
   a new row past the last one, and a right-click adds or removes a row or a column. A link in a
