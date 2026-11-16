@@ -486,7 +486,7 @@ export default function Onboarding() {
         <p className="ob-sub">It is what does the linking for you: reads what customers say, updates the board, tells you what needs you. It needs a model to think with.</p>
         {model.ready ? (
           <p className="ob-line" style={nth(0)}>
-            Connected. It is ready.
+            Connected. Choose your model in the chat box.
           </p>
         ) : (
           <ConnectModel from="setup" onDone={model.recheck} />
