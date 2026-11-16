@@ -163,7 +163,7 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
         if (name === "ListMark") {
           const text = state.sliceDoc(node.from, node.to);
           const line = state.doc.lineAt(node.from);
-          const isTask = /^\s\[[ xX]\]/.test(state.sliceDoc(node.to, node.to + 4));
+          const isTask = /^[ \t]\[[ xX]\]/.test(state.sliceDoc(node.to, node.to + 4)); // not a box on the line below
           if (isTask && !touches(state, line.from, node.to + 4)) {
             out.push(hide.range(node.from, node.to + 1));
           } else if (/^[-*+]$/.test(text) && !touches(state, node.from, node.to)) {
