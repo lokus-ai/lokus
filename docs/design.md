@@ -270,7 +270,11 @@ sprints, estimates, a roadmap or timeline view, comments on a task, and reading 
   screen; a small picture of their Lokus fills in as they answer. The last screen does the work
   in front of them: makes Documents/Lokus if no folder is open, creates `Customers.md` and
   `Tasks.md` when asked for, and writes "About this workspace" into `Assistant.md` so the
-  assistant knows what they are here for. `Lokus: run the setup again` replays it.
+  assistant knows what they are here for. `Lokus: run the setup again` replays it. Someone
+  with no model connected is asked to turn the assistant on: Sign in with ChatGPT, or a Claude
+  or OpenAI key pasted right there (`ui/src/features/ai/Connect.tsx`, the same card the
+  assistant's panel shows). The key is not sent to Settings for: Settings is not on screen
+  until a folder is open.
 - **Start page**: what shows when nothing is open. Cards ordered by what they said they use,
   their aim, the tools they named but have not connected, and their notes.
 - **Windows** (`apps/desktop/src/windows.rs`): File, New Window (Cmd+Shift+N). Every window
