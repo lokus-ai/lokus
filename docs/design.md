@@ -95,7 +95,9 @@ shortcuts, plugins and AI tools.
   macOS Control-Tab/Control-Shift-Tab run through the same UI command route while cancelling the
   native default, because WebKit otherwise consumes them for focus navigation.
   Settings opens even without a vault, focuses its controls, keeps Tab within the dialog and
-  makes the workspace behind it inert. Editor commands reject a note hidden by Graph, a file
+  makes the workspace behind it inert. Dismissal restores the previous focus; follow-on
+  news/sign-in dialogs replace Settings and keep their own focus, including before a vault.
+  Editor commands reject a note hidden by Graph, a file
   viewer or Settings. Mark, heading and link commands accept an optional `path` matching the
   current note; a delayed menu action cannot edit a different note after navigation.
   Menus never substitute note formatting for system clipboard operations.
