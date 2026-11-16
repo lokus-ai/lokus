@@ -291,8 +291,12 @@ impl Store {
         ] {
             add_column(&db, "invites", column, kind)?;
         }
+        // An emailed invitation from before the key existed gets one, so that sending it again
+        // carries a link its page can say yes with.
         db.execute_batch(
-            "CREATE INDEX IF NOT EXISTS invites_by_email ON invites (email) WHERE email IS NOT NULL;",
+            "CREATE INDEX IF NOT EXISTS invites_by_email ON invites (email) WHERE email IS NOT NULL;
+             UPDATE invites SET agree_key = lower(hex(randomblob(16)))
+             WHERE email IS NOT NULL AND agree_key IS NULL AND used_by IS NULL AND revoked = 0;",
         )?;
         Ok(Self { db: Mutex::new(db) })
     }
