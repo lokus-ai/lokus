@@ -168,10 +168,8 @@ export function Connections() {
   const disconnect = async (name: string) => {
     setNote(null);
     try {
-      const clearToken = setAiSecret("mcp", name, "");
-      if (catalog.find((c) => c.id === name)?.token_url) await clearToken;
-      else await clearToken.catch(() => {});
       await mcpLogout(name);
+      await setAiSecret("mcp", name, "");
       await saveAiConfig({ ...config, mcp: config.mcp.filter((s) => s.name !== name) });
       setTools((t) => { const next = { ...t }; delete next[name]; return next; });
     } catch {
