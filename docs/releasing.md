@@ -7,8 +7,9 @@ Nothing here depends on an app store.
 
 1. A pop-up in the corner: "A new version of Lokus is ready", with **Update now**.
 2. A progress bar while it downloads. They can keep working.
-3. "The update is installed", with **Restart now**. It says Lokus will close and open again by
-   itself, and what to do if it does not (open it again; nothing is lost).
+3. On Mac and Linux, "The update is installed", with **Restart now**. It says Lokus will close
+   and open again by itself, and what to do if it does not (open it again; nothing is lost).
+   On Windows, the installer closes and reopens Lokus automatically after **Update now**.
 4. Lokus comes back as the new version and opens "What's new" on that version's post, with its
    video.
 
