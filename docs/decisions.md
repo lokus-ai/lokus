@@ -174,6 +174,6 @@ question was open, nobody answered, and a default was taken: those are the easie
   file open. I don't know why. Also, there is no button to collapse all the folders."
   Devin chose explicit reveal and workspace-scoped choices within that folder-collapse
   mandate, retaining the existing named-command registry and design system.
-- **PR:** Pending creation after real-app verification; filled before review handoff.
+- **PR:** [#591](https://github.com/lokus-ai/lokus/pull/591); merge SHA pending parent review.
 - **Reversal:** Revert this PR to remove the control/commands and restore the old forced-open
   rendering; no file, storage or sync migration is involved.
