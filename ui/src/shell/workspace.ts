@@ -666,7 +666,7 @@ export async function closeTab(path: string): Promise<void> {
     return;
   }
   await save(path);
-  const { tabs, active } = app.get();
+  const { tabs, active, view, file } = app.get();
   const index = tabs.indexOf(path);
   const rest = tabs.filter((t) => t !== path);
   const closing = sessions.get(path)?.shared;
@@ -679,6 +679,8 @@ export async function closeTab(path: string): Promise<void> {
   const next = rest[Math.min(index, rest.length - 1)] ?? null;
   app.set({ tabs: rest, active: null, properties: {} });
   if (next) go(next);
+  // The graph or a file in front of the note stays in front.
+  if (view !== "note") app.set({ view, file });
 }
 
 /** Go to the tab after the one showing (or before it), wrapping round at the ends. */
