@@ -446,7 +446,7 @@ class Table extends WidgetType {
   }
 
   /** Fill the table in, leaving a cell that is being typed in as the person has it. */
-  private draw(wrap: HTMLElement, view: EditorView): void {
+  private draw(wrap: HTMLElement, view: EditorView, before?: string): void {
     const lines = this.source.split("\n");
     const align = cells(lines[1] ?? "").map((c) =>
       c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "",
@@ -456,8 +456,19 @@ class Table extends WidgetType {
     const typing = document.activeElement?.closest(".cm-table") === wrap ? (document.activeElement as HTMLElement) : null;
     const same = table.rows.length === rows.length && [...table.rows].every((tr) => tr.cells.length === rows[0].length);
     if (!same) {
-      // Rows or columns came or went: build it again, and keep typing where the person was.
-      const was = typing ? { row: (typing.parentElement as HTMLTableRowElement).rowIndex, col: (typing as HTMLTableCellElement).cellIndex } : null;
+      // Rows or columns came or went: build it again, and keep typing in the row the person was in.
+      // That row is known by what it held. When it is gone, the next key goes nowhere, not into
+      // the row that took its place.
+      let was: { row: number; col: number } | null = null;
+      if (typing && before !== undefined) {
+        const at = (typing.parentElement as HTMLTableRowElement).rowIndex;
+        const held = grid(before)[at]?.join("\n");
+        const found = rows
+          .map((row, i) => (row.join("\n") === held ? i : -1))
+          .filter((i) => i >= 0)
+          .sort((a, b) => Math.abs(a - at) - Math.abs(b - at))[0];
+        if (found !== undefined) was = { row: found, col: (typing as HTMLTableCellElement).cellIndex };
+      }
       table.replaceChildren();
       rows.forEach((row, i) => {
         const tr = table.appendChild(document.createElement("tr"));
@@ -466,7 +477,7 @@ class Table extends WidgetType {
           if (!view.state.readOnly) cell.contentEditable = "plaintext-only";
         });
       });
-      const again = was && cellAt(wrap, Math.min(was.row, rows.length - 1), Math.min(was.col, rows[0].length - 1));
+      const again = was && cellAt(wrap, was.row, was.col);
       if (again) {
         again.focus();
         caretToEnd(again);
@@ -493,8 +504,9 @@ class Table extends WidgetType {
   }
 
   updateDOM(dom: HTMLElement, view: EditorView) {
+    const before = (dom as TableBox).widget.source;
     (dom as TableBox).widget = this;
-    this.draw(dom, view);
+    this.draw(dom, view, before);
     return true;
   }
 

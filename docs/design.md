@@ -97,7 +97,8 @@ Small things that make it a daily driver, all plain commands over plain files:
   a new row past the last one, and a right-click adds or removes a row or a column. Each
   keystroke changes only that cell's text in the file, so the note is still a plain markdown
   table. When the file changes outside the app, only the part that differs is replaced in the
-  open note, so the cell being typed in keeps the keyboard. `ui/src/editor/livePreview.ts`.
+  open note, so the cell being typed in keeps the keyboard. If the row being typed in is itself
+  removed outside, the next key goes nowhere instead of into the row that took its place. `ui/src/editor/livePreview.ts`.
   Tried in the real app on a Mac.
 - **Daily note:** `Daily/YYYY-MM-DD.md`, created on first use from `Templates/Daily.md` if present.
 - **Templates:** any note in `Templates/`; `{{date}}`, `{{time}}` and `{{title}}` are filled in.
