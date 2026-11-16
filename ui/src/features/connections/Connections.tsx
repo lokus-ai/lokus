@@ -36,12 +36,22 @@ export function TokenConnection({ connector, from = "settings", onCancel, onConn
   useEffect(() => {
     if (phase === "checking") cancelButton.current?.focus();
   }, [phase]);
-  const cancel = () => {
+  const cancel = useCallback(() => {
     if (phase === "saving") return;
     active.current = false;
     setToken("");
     onCancel();
-  };
+  }, [phase, onCancel]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      cancel();
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [cancel]);
   const submit = async () => {
     if (!token.trim() || phase !== "idle") return;
     setPhase("checking");
@@ -66,7 +76,7 @@ export function TokenConnection({ connector, from = "settings", onCancel, onConn
     }
   };
   return (
-    <div className="conn" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); cancel(); } }}>
+    <div className="conn">
       <form className="conn-list" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
         <div className="conn-line">
           <Logo id={connector.id} name={connector.name} />
