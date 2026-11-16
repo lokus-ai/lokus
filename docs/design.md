@@ -707,7 +707,8 @@ or leaving the screen saves nothing. Saving requires the keychain; a rejected to
 save never reports success. A token replacement stops if the old credential cannot be read;
 if saving settings fails, the previous token is restored (or the new one removed). A connected
 GitHub row offers Update token for an expired or revoked
-credential. Existing OAuth and custom-server connections keep their own sign-in flows; tool
+credential without switching on a connection the person switched off. Existing OAuth and
+custom-server connections keep their own sign-in flows; tool
 annotations and the assistant's existing approval gate still govern writes.
 
 A server that is not listed can be added by its address. A plugin can still bring its own.

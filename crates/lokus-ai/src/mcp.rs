@@ -84,7 +84,7 @@ pub async fn check_token(server: &McpServer, token: &str) -> Result<Connection> 
 
 /// Commit an already checked token and its server together; a settings failure restores the
 /// previous credential, so updating a token cannot break a working connection on disk failure.
-pub fn save_token(dir: &std::path::Path, server: McpServer, token: &str) -> Result<()> {
+pub fn save_token(dir: &std::path::Path, mut server: McpServer, token: &str) -> Result<()> {
     let token = token.trim();
     if token.is_empty() {
         return Err(AiError::Config("Enter a personal access token.".into()));
@@ -92,6 +92,9 @@ pub fn save_token(dir: &std::path::Path, server: McpServer, token: &str) -> Resu
     let account = mcp_account(&server.name);
     let previous = read_secret(&account)?;
     let mut config = Config::load(dir);
+    if let Some(existing) = config.mcp.iter().find(|s| s.name == server.name) {
+        server.enabled = existing.enabled;
+    }
     config.mcp.retain(|s| s.name != server.name);
     config.mcp.push(server.clone());
     if let Err(error) = set_secret(&account, token).and_then(|_| config.save(dir)) {
