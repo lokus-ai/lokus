@@ -634,8 +634,10 @@ function leaveNote(): void {
 
 /** A note back in front takes the keyboard again, once its page is showing. */
 function enterNote(): void {
+  const note = app.get().active;
   requestAnimationFrame(() => {
-    if (app.get().view !== "note" || !app.get().active) return;
+    // A note a teammate deleted meanwhile does not hand the keyboard to its neighbour.
+    if (app.get().view !== "note" || !note || app.get().active !== note) return;
     // Someone typing in a field elsewhere (a rename, the palette) keeps it.
     const at = document.activeElement;
     if (at instanceof HTMLElement && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return;
@@ -687,7 +689,7 @@ export async function closeTab(path: string): Promise<void> {
     app.set({ tabs: rest, file: null, view: "note" });
     // The note underneath is still loaded; any other tab is brought forward.
     if (next && next !== active) go(next);
-    else enterNote();
+    enterNote();
     return;
   }
   await save(path);
