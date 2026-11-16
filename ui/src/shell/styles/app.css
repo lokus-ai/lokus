@@ -348,6 +348,11 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
 .menu button:hover { background: var(--bg-hover); }
 .menu .danger { color: var(--danger); }
 .menu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+.menu.context-menu { overflow-y: auto; animation: none; }
+.context-menu button { flex-shrink: 0; }
+.context-menu button:focus { background: var(--bg-hover); outline: 1px solid var(--accent); outline-offset: -1px; }
+.context-menu button:disabled { color: var(--fg-3); background: none; }
+.cm-table .cm-context-target { outline: 1px solid var(--accent); outline-offset: -1px; }
 
 /* Search */
 .palette.wide { width: min(720px, 92vw); }
