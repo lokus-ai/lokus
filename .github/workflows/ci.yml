@@ -36,16 +36,39 @@ jobs:
       - run: cargo test --workspace
       - run: node checks/run.mjs
 
-  # Lokus on Windows: the tests, then the real app started and used through its dev channel,
-  # then the installer people would download. The pictures and the installer are kept.
-  # It takes about forty minutes, so it runs when asked for (Actions, CI, Run workflow) or on
-  # a pull request labelled "windows", not on every push.
-  windows:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'windows')
-    runs-on: windows-latest
-    timeout-minutes: 60
+  # Lokus on Windows and on Linux: the tests, then the real app started and used through its
+  # dev channel (a folder, notes, and a team folder kept in step with a teammate through a
+  # relay started on the runner), then the installer people would download, installed and
+  # opened. The pictures and the installers are kept. It takes about forty minutes, so it runs
+  # when asked for (Actions, CI, Run workflow) or on a pull request labelled "desktop", not on
+  # every push.
+  desktop:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'desktop')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          # Linux has no screen on a runner, so the app gets a pretend one.
+          - os: ubuntu-22.04
+            run: dbus-run-session -- xvfb-run -a -s "-screen 0 1440x900x24"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    env:
+      # A runner has no graphics card; WebKit on Linux draws nothing without these.
+      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+      RUN: ${{ matrix.run }}
     steps:
       - uses: actions/checkout@v4
+      - name: Tauri system libraries and a screen
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev dbus xvfb imagemagick xdg-utils libfuse2 file
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: pnpm/action-setup@v4
@@ -59,18 +82,40 @@ jobs:
         run: pnpm tauri build --debug --no-bundle
         env:
           VITE_LOKUS_DEV_CHANNEL: "1"
-      - run: cargo build -p lokus-cli
-      - name: Start Lokus and use it
-        shell: pwsh
-        run: ./checks/windows-smoke.ps1
+      - run: cargo build -p lokus-cli -p lokus-server
+      - name: Start Lokus and use it, alone and in a team
+        run: $RUN node checks/desktop-smoke.mjs
+      - name: Build the installer
+        run: pnpm tauri build --bundles ${{ runner.os == 'Windows' && 'nsis' || 'deb,appimage' }}
+      - name: Install it and open it (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -e
+          SETUP=$(ls target/release/bundle/nsis/*-setup.exe)
+          cmd //c "$(cygpath -w "$SETUP") /S"
+          APP=$(ls "$LOCALAPPDATA"/Lokus/*.exe | grep -vi uninstall | head -1)
+          echo "installed: $APP"
+          node checks/desktop-smoke.mjs "$APP"
+      - name: Install it and open it (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          sudo apt-get install -y ./target/release/bundle/deb/*.deb
+          APP=$(dpkg -L lokus | grep '^/usr/bin/' | head -1)
+          echo "installed: $APP"
+          $RUN node checks/desktop-smoke.mjs "$APP"
+          mv desktop-smoke/installed.png desktop-smoke/installed-deb.png
+          chmod +x target/release/bundle/appimage/*.AppImage
+          $RUN node checks/desktop-smoke.mjs "$(ls "$PWD"/target/release/bundle/appimage/*.AppImage)" --appimage-extract-and-run
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: windows-smoke
-          path: windows-smoke/
-      - name: Build the installer
-        run: pnpm tauri build --bundles nsis
+          name: desktop-smoke-${{ runner.os }}
+          path: desktop-smoke/
       - uses: actions/upload-artifact@v4
         with:
-          name: lokus-windows-installer
-          path: target/release/bundle/nsis/*.exe
+          name: lokus-installer-${{ runner.os }}
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/deb/*.deb
+            target/release/bundle/appimage/*.AppImage
