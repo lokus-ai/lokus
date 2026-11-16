@@ -270,8 +270,8 @@ const inline = (hooks: PreviewHooks) =>
     { decorations: (plugin) => plugin.decorations },
   );
 
-/** `[words](address)` in a table cell, not a picture: the address may hold `(1)` or `\)`, and a "title" may follow it. */
-const CELL_LINK = /(?<!!)\[[^\]]+\]\((?:\\.|[^()\s\\]|\((?:\\.|[^()\s\\])*\))+(?:\s+"[^"]*")?\)/;
+/** `[words](address)` in a table cell, not a picture, a linked picture or `\[escaped\]`: the address may hold `(1)` or `\)`, and a "title" may follow it. */
+const CELL_LINK = /(?<![!\\])\[(?!!\[)[^\]]+\]\((?:\\.|[^()\s\\]|\((?:\\.|[^()\s\\])*\))+(?:\s+"[^"]*")?\)/;
 const WHOLE_CELL_LINK = new RegExp(`^${CELL_LINK.source}$`);
 
 /** Inline marks inside a table cell: bold, italic, code, strikethrough, links. */
