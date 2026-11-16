@@ -486,6 +486,7 @@ function Welcome() {
 export function App() {
   const ready = useStore(app, (s) => s.ready);
   const vault = useStore(app, (s) => s.vault);
+  const settings = useStore(app, (s) => s.settings);
   const onboardingOpen = useStore(onboarding, (s) => s.open);
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
   return (
@@ -508,6 +509,13 @@ export function App() {
       <Misplaced />
       {/* While setup is open it makes the offer itself, as one of its steps. */}
       {!onboardingOpen && isMainWindow() && <Invited />}
+      {settings && (
+        <Boundary name="Settings">
+          <Suspense fallback={null}>
+            <SettingsView page={settings} onPage={(page) => app.set({ settings: page })} onClose={() => app.set({ settings: null })} />
+          </Suspense>
+        </Boundary>
+      )}
     </>
   );
 }
@@ -527,7 +535,7 @@ function Workspace() {
   const notice = useStore(app, (s) => s.notice);
 
   return (
-    <div className={`app${narrow ? " narrow" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
+    <div className={`app${narrow ? " narrow" : ""}`} inert={!!settings} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
       <Sidebar />
       {narrow && sidebar && <div className="scrim" onMouseDown={() => app.set({ sidebar: false })} />}
       <main className="main">
@@ -558,13 +566,6 @@ function Workspace() {
             app.set({ account, accountDialog: false });
           }}
         />
-      )}
-      {settings && (
-        <Boundary name="Settings">
-          <Suspense fallback={null}>
-            <SettingsView page={settings} onPage={(page) => app.set({ settings: page })} onClose={() => app.set({ settings: null })} />
-          </Suspense>
-        </Boundary>
       )}
       <NoticedDrawer />
       <UpdateCard />

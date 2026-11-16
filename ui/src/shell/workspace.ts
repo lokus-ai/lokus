@@ -4,15 +4,12 @@ import type { EditorState } from "@codemirror/state";
 import { identify, track, reportError } from "../bridge/analytics";
 import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
 import {
-  closeWindow,
   CoreError,
   currentVault,
   type Entry,
   type InstalledPlugin,
-  isMainWindow,
   type Eol,
   type Note,
-  onCloseTab,
   onIndexReady,
   onVaultChanged,
   onVaultOpened,
@@ -512,15 +509,6 @@ export async function boot(): Promise<void> {
   watchSync();
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
-  onCloseTab(() => {
-    // Cmd+W closes the tab showing and nothing more. With no tab left it closes an extra
-    // window, but never the last one: that would quit Lokus, which is what Cmd+Q is for.
-    const { active, view, file } = app.get();
-    if (view === "graph") closeGraph();
-    else if (view === "file" && file) void closeTab(file);
-    else if (active) void closeTab(active);
-    else if (!isMainWindow()) closeWindow();
-  });
   // Every window shows the same folder: when another window opens a different one, follow it.
   onVaultOpened((vault) => {
     if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);

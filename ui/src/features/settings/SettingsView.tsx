@@ -1,5 +1,5 @@
 /** @part-of ui.settings */
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { type AiConfig, type AiSettings, aiSettings, chatgptLogin, chatgptLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
 import { analyticsEnabled, chatSharingEnabled, setAnalyticsEnabled, setChatSharing, track } from "../../bridge/analytics";
@@ -310,6 +310,10 @@ interface Props {
 
 /** Settings open over the app as a dialog: pages on the left, the chosen page on the right. */
 export default function SettingsView({ page, onPage, onClose }: Props) {
+  const dialog = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    dialog.current?.querySelector<HTMLButtonElement>(".settings-nav .active")?.focus();
+  }, []);
   useEffect(() => track("settings_opened", { page }), [page]);
   const current = PAGES.find((p) => p.id === page) ?? PAGES[0];
   useEffect(() => {
@@ -319,7 +323,13 @@ export default function SettingsView({ page, onPage, onClose }: Props) {
   }, [onClose]);
   return (
     <div className="overlay" onMouseDown={onClose}>
-      <div className="settings-dialog" role="dialog" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={dialog} className="settings-dialog" role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')].filter((el) => el.getClientRects().length > 0);
+        const first = controls[0], last = controls.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }}>
         <nav className="settings-nav">
           <p>Settings</p>
           {PAGES.map((p) => (

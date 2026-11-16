@@ -74,6 +74,34 @@ shortcuts, plugins and AI tools.
 - **Core commands** are registered in `lokus-core`. The Tauri shell exposes a single `run`
   entry that forwards to that registry.
 - **UI commands** (editor and shell actions) are registered in the UI.
+- **Desktop menus** present those same registered commands, not separate implementations.
+  On macOS, Lokus → Settings… uses Command-comma, after About and before Services. On Windows
+  and Linux, Settings is in Edit, Quit in File, and About in Help; Mac-only app items are absent.
+  File offers New Note, Today's Note, New Note from Template, New Window, Open Vault, Save,
+  Close Tab and Close Window. Edit keeps system clipboard actions and adds search
+  across notes. Format offers the existing marks, link, headings and normal text. View offers
+  the command palette, note/heading navigation, sidebar, assistant and graph; Window adds next
+  and previous tab to the supported system window controls. Predefined Undo/Redo and Fullscreen
+  appear only on macOS; Minimize/Maximize appear on macOS and Windows, not Linux, following
+  [Tauri's platform support](https://docs.rs/tauri/latest/tauri/menu/struct.PredefinedMenuItem.html).
+  Ordinary editing shortcuts still belong to the focused editor or input on every platform.
+  Unbuilt actions (such as print/export) and a
+  new folder prompt are not advertised; folder creation remains in the file tree.
+  Commands are sent only to the focused window. Unavailable items stay visible but disabled:
+  workspace commands need a vault and no dialog, note commands need a visible note, tab
+  navigation needs multiple tabs, and Format needs focus in the visible note's text editor
+  (not another input or frame). The bridge checks again before running a command. Native menu
+  accelerators own their shortcuts, so the UI and CodeMirror do not execute them a second time.
+  macOS Control-Tab/Control-Shift-Tab run through the same UI command route while cancelling the
+  native default, because WebKit otherwise consumes them for focus navigation.
+  Settings opens even without a vault, focuses its controls, keeps Tab within the dialog and
+  makes the workspace behind it inert. Editor commands reject a note hidden by Graph, a file
+  viewer or Settings. Mark, heading and link commands accept an optional `path` matching the
+  current note; a delayed menu action cannot edit a different note after navigation.
+  Menus never substitute note formatting for system clipboard operations.
+  Placement follows [Apple's menu-bar guidance](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar)
+  ([readable HIG text](https://appstoreguidelines.com/human-interface-guidelines/version/17/the-menu-bar/))
+  and [Tauri's native-menu platform behavior](https://v2.tauri.app/learn/window-menu/).
 - **`lokus` CLI** runs any core command against a real vault:
   `lokus note.read --vault ~/notes '{"path":"Welcome.md"}'`.
 - **Dev channel** (debug builds only): a unix socket in the running app that runs any command,
