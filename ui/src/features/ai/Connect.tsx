@@ -27,7 +27,7 @@ export function useModel(): { ready: boolean | null; recheck(): void } {
       () => setReady(false),
     );
   }, []);
-  // Looked at again whenever Settings closes: that is where a key gets pasted.
+  // Looked at again whenever Settings closes: a key can be pasted there too.
   useEffect(recheck, [recheck, settingsOpen]);
   return { ready, recheck };
 }
@@ -50,7 +50,10 @@ export function ConnectModel({ onDone, from }: { onDone(): void; from: "panel" |
       await prove();
       const { config } = await aiSettings();
       // The address was typed for another provider: this key or sign-in is never sent there.
-      await saveAiConfig({ ...config, provider, model: "", base_url: "" });
+      // A ChatGPT plan and an OpenAI key name their models alike, so the model stays across
+      // that switch, as it does in Settings.
+      const model = provider !== "anthropic" && config.provider !== "anthropic" && !config.base_url ? config.model : "";
+      await saveAiConfig({ ...config, provider, model, base_url: "" });
       track("connection_added", { service: provider, from });
       onDone();
     } catch (e) {
