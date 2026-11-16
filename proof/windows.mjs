@@ -1,84 +1,56 @@
 // Drives the published Windows copy through its own update, by its own buttons.
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
-const FROM = process.env.FROM, TO = process.env.TO;
+const FROM = process.env.FROM, TO = process.env.TO, APP = process.env.APP_EXE;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(new Date().toISOString(), ...a);
+const ps = (command) => execFileSync("powershell", ["-NoProfile", "-Command", command], { encoding: "utf8" }).trim();
+const press = (name, seconds, shot) => {
+  try { return execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "proof/click.ps1", "-Name", name, "-Seconds", String(seconds), "-Shot", shot ? `out\\${shot}.png` : ""], { encoding: "utf8" }).trim(); }
+  catch (e) { log(String(e.stdout || e).slice(0, 1500)); return null; }
+};
+const version = () => ps(`(Get-Item '${APP}').VersionInfo.ProductVersion`);
+const pids = () => ps("(Get-Process lokus-desktop -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) -join ','");
+const screen = (name) => ps(`Add-Type -AssemblyName System.Windows.Forms, System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height; [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen(0, 0, 0, 0, $bmp.Size); $bmp.Save('out\\${name}.png')`);
 
-async function connect(within) {
-  const until = Date.now() + within;
-  while (Date.now() < until) {
-    try {
-      const list = await (await fetch("http://127.0.0.1:9222/json")).json();
-      const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
-      if (page) {
-        const ws = new WebSocket(page.webSocketDebuggerUrl);
-        await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = no; });
-        let id = 0, open = true;
-        const waiting = new Map();
-        ws.onmessage = (m) => { const d = JSON.parse(m.data); waiting.get(d.id)?.(d); waiting.delete(d.id); };
-        ws.onclose = () => { open = false; for (const w of waiting.values()) w({ closed: true }); };
-        const send = (method, params = {}) => new Promise((ok) => { if (!open) return ok({ closed: true }); const n = ++id; waiting.set(n, ok); ws.send(JSON.stringify({ id: n, method, params })); });
-        const run = async (expression) => {
-          const r = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-          if (r.closed) throw new Error("closed");
-          if (r.result?.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 400));
-          return r.result?.result?.value;
-        };
-        const shot = async (name) => { const r = await send("Page.captureScreenshot", { format: "png" }); if (r.result?.data) writeFileSync(`out/${name}.png`, Buffer.from(r.result.data, "base64")); };
-        return { send, run, shot, url: page.url, isOpen: () => open };
-      }
-    } catch {}
-    await sleep(500);
-  }
-  throw new Error("the app's window did not appear");
+// The window's own answer to "which version are you", when the window can be asked.
+async function about() {
+  try {
+    const list = await (await fetch("http://127.0.0.1:9222/json")).json();
+    const page = list.find((t) => t.type === "page" && t.webSocketDebuggerUrl);
+    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    await new Promise((ok, no) => { ws.onopen = ok; ws.onerror = no; });
+    const answer = new Promise((ok) => { ws.onmessage = (m) => ok(JSON.parse(m.data)); });
+    ws.send(JSON.stringify({ id: 1, method: "Runtime.evaluate", params: { expression: "window.__TAURI_INTERNALS__.invoke('app_about').then(JSON.stringify)", awaitPromise: true, returnByValue: true } }));
+    const r = await Promise.race([answer, sleep(8000)]);
+    ws.close();
+    return r?.result?.result?.value ?? null;
+  } catch { return null; }
 }
-const about = (c) => c.run("window.__TAURI_INTERNALS__.invoke('app_about').then(JSON.stringify)");
-const button = (label) => `(() => { const b = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === ${JSON.stringify(label)} && b.offsetParent); if (!b) return null; const r = b.getBoundingClientRect(); return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2 }); })()`;
 
-let c = await connect(60000);
-log("window", c.url);
-let a;
-for (let i = 0; i < 40 && !a; i++) { a = await about(c).catch(() => null); if (!a) await sleep(500); }
-log("about before", a);
-if (JSON.parse(a).version !== FROM) throw new Error(`expected ${FROM} to be running`);
-let at = null;
-for (let i = 0; i < 120 && !at; i++) { at = await c.run(button("Update now")).catch(() => null); if (!at) await sleep(500); }
-if (!at) { await c.shot("no-offer"); log(await c.run("document.body.innerText.slice(0, 1500)")); throw new Error("no update was offered"); }
-log("offered:", (await c.run("document.body.innerText")).split("\n").filter((l) => /update|version|alpha/i.test(l)).slice(0, 8).join(" | "));
-await c.shot("1-offered");
-const { x, y } = JSON.parse(at);
-await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
-await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
-log("clicked Update now");
-let said = "", shots = 0;
+const before = { file: version(), pids: pids(), about: await about() };
+log("before", JSON.stringify(before));
+if (before.file !== FROM) throw new Error(`expected ${FROM} installed`);
+const offered = press("Update now", 90, "1-offered");
+if (!offered) { screen("no-offer"); throw new Error("no update was offered"); }
+log(offered);
 const began = Date.now();
-while (c.isOpen() && Date.now() - began < 300000) {
-  const text = await c.run("[...document.querySelectorAll('button, .update-card, [class*=update]')].map((e) => e.textContent.trim()).filter(Boolean).join(' | ').slice(0, 300)").catch(() => null);
-  if (text === null) break;
-  if (text !== said) { said = text; log("card:", text); if (shots++ < 6) await c.shot(`2-progress-${shots}`); }
-  const restart = await c.run(button("Restart now")).catch(() => null);
-  if (restart) {
-    await c.shot("3-ready");
-    const p = JSON.parse(restart);
-    await c.send("Input.dispatchMouseEvent", { type: "mousePressed", x: p.x, y: p.y, button: "left", clickCount: 1 });
-    await c.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: p.x, y: p.y, button: "left", clickCount: 1 });
-    log("clicked Restart now");
-    await sleep(3000);
-  }
-  await sleep(300);
+let after = null;
+while (Date.now() - began < 420000) {
+  await sleep(2000);
+  const now = { file: version(), pids: pids() };
+  if (now.pids && now.pids === before.pids && press("Restart now", 1, "")) log("pressed Restart now");
+  if (now.file === TO && now.pids && now.pids !== before.pids) { after = now; break; }
+  if ((Date.now() - began) % 20000 < 2100) log("waiting", JSON.stringify(now));
 }
-log("the old copy closed after", Math.round((Date.now() - began) / 1000), "s");
-await sleep(2000);
-c = await connect(240000);
-a = null;
-for (let i = 0; i < 60 && !a; i++) { a = await about(c).catch(() => null); if (!a) await sleep(500); }
-log("about after", a);
-await sleep(8000);
-await c.shot("4-after");
-log("screen after:", (await c.run("document.body.innerText")).split("\n").filter(Boolean).slice(0, 25).join(" | "));
-const again = await c.run("window.__TAURI_INTERNALS__.invoke('update_check', { server: 'https://relay.lokusmd.com' }).then(JSON.stringify)").catch((e) => String(e));
-log("update check after:", again);
-writeFileSync("out/result.json", JSON.stringify({ before: FROM, after: JSON.parse(a), again }, null, 1));
-if (JSON.parse(a).version !== TO) throw new Error(`expected ${TO} after the update, got ${a}`);
-log("PASS: the published copy updated itself from", FROM, "to", TO);
+if (!after) { screen("stuck"); throw new Error(`still ${version()} with processes ${pids()} after 7 minutes`); }
+log("the new copy is open after", Math.round((Date.now() - began) / 1000), "s", JSON.stringify(after));
+await sleep(12000);
+screen("4-after");
+after.about = await about();
+after.stillOffered = (() => { try { execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "proof/click.ps1", "-Name", "Update now", "-Seconds", "8", "-Look"]); return true; } catch (e) { log(String(e.stdout).slice(0, 600)); return false; } })();
+log("after", JSON.stringify(after));
+writeFileSync("out/result.json", JSON.stringify({ before, after }, null, 1));
+if (after.stillOffered) throw new Error("the new copy still offers an update");
+log("PASS: the published copy updated itself from", FROM, "to", TO, "and reopened");
 process.exit(0);
