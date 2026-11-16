@@ -117,10 +117,16 @@ fn reqwest_client() -> lokus_ai::provider::Client {
 #[tauri::command]
 pub async fn ai_mcp_check(server: McpServer, token: Option<String>) -> Result<Vec<Value>, Value> {
     let connection = match token {
-        Some(token) => lokus_ai::mcp::check_token(&server, &token).await,
-        None => lokus_ai::mcp::connect_soon(&server).await,
-    }
-    .map_err(|e| e.body())?;
+        Some(token) => lokus_ai::mcp::check_token(&server, &token)
+            .await
+            .map_err(|e| match e {
+                AiError::Mcp { message, .. } => fail("mcp", message),
+                other => other.body(),
+            })?,
+        None => lokus_ai::mcp::connect_soon(&server)
+            .await
+            .map_err(|e| e.body())?,
+    };
     let tools = connection
         .tools
         .iter()

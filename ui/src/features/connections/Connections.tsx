@@ -27,10 +27,14 @@ function TokenConnection({ connector, onCancel, onConnected }: {
   const [phase, setPhase] = useState<"idle" | "checking" | "saving">("idle");
   const [error, setError] = useState<string | null>(null);
   const active = useRef(true);
+  const cancelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     active.current = true;
     return () => { active.current = false; };
   }, []);
+  useEffect(() => {
+    if (phase === "checking") cancelButton.current?.focus();
+  }, [phase]);
   const cancel = () => {
     if (phase === "saving") return;
     active.current = false;
@@ -71,7 +75,7 @@ function TokenConnection({ connector, onCancel, onConnected }: {
           <label htmlFor="connection-token">Personal access token</label>
           <input id="connection-token" type="password" autoFocus autoComplete="off" spellCheck={false} value={token} disabled={phase !== "idle"} onChange={(e) => setToken(e.target.value)} />
           <button className="settings-button" disabled={!token.trim() || phase !== "idle"} type="submit">{phase === "checking" ? "Checking…" : phase === "saving" ? "Saving…" : "Connect"}</button>
-          <button className="link" type="button" disabled={phase === "saving"} onClick={cancel}>Cancel</button>
+          <button ref={cancelButton} className="link" type="button" disabled={phase === "saving"} onClick={cancel}>Cancel</button>
         </div>
         <div className="conn-detail">
           <button className="link" type="button" onClick={() => openWeb(connector.token_url!)}>Create a token</button>
