@@ -225,6 +225,167 @@ async fn an_invitation_is_emailed_and_waits_for_the_person_it_names() {
     assert_eq!(mail.lock().unwrap().len(), 1);
 }
 
+/// Saying yes on the invitation's page: bob presses Join there, signed in to nothing, and the
+/// invitation then tells Lokus, signed in as him, that he need not be asked again. Opening the
+/// page alone says nothing, and the page offers the download for every system, the reader's
+/// own first.
+#[tokio::test]
+async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
+    let (relay, mail) = mailing_relay().await;
+    // The link as the email carries it: with the key that lets its page say yes.
+    let emailed = |n: usize| {
+        let text = mail.lock().unwrap()[n]["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let link = text.lines().find(|l| l.contains("/join/")).unwrap();
+        assert!(link.contains("?k="), "{link}");
+        link.to_string()
+    };
+    let releases = Store::open(&relay._dir.path().join("relay.sqlite")).unwrap();
+    let at = "https://files.example/v2.0.0-alpha.11";
+    for (platform, file) in [
+        ("darwin-aarch64", "Lokus_aarch64.app.tar.gz"),
+        ("darwin-x86_64", "Lokus_x86_64.app.tar.gz"),
+        ("windows-x86_64", "Lokus_2.0.0-alpha.11_x64-setup.exe"),
+        ("linux-x86_64", "Lokus_2.0.0-alpha.11_amd64.AppImage"),
+    ] {
+        releases
+            .put_release("2.0.0-alpha.11", platform, &format!("{at}/{file}"), "sig")
+            .unwrap();
+    }
+    let id = relay.workspace("Acme").await;
+    let invites = format!("/v1/workspaces/{id}/invites");
+    let (_, made) = relay
+        .call(
+            "ta",
+            "POST",
+            &invites,
+            json!({ "role": "editor", "email": "bob@x.io" }),
+        )
+        .await;
+    let code = made["code"].as_str().unwrap().to_string();
+    let join = emailed(0);
+    // The owner is told the link without the key, so cannot say yes for bob: no button there,
+    // and a press without the key, or with a wrong one, changes nothing.
+    let owners = made["link"].as_str().unwrap().to_string();
+    assert_eq!(owners, format!("{}/join/{code}", relay.url));
+    assert!(!relay.page(&format!("/join/{code}")).await.contains("<form"));
+    for press in [owners.clone(), format!("{owners}?k=0000")] {
+        let page = relay.http.post(&press).send().await.unwrap();
+        assert!(!page.text().await.unwrap().contains("You said yes"));
+    }
+    let read = |agent: &'static str| {
+        let request = relay.http.get(&join).header("user-agent", agent);
+        async move { request.send().await.unwrap().text().await.unwrap() }
+    };
+
+    let windows = read("Mozilla/5.0 (Windows NT 10.0; Win64; x64)").await;
+    for file in [
+        "Lokus_2.0.0-alpha.11_aarch64.dmg",
+        "Lokus_2.0.0-alpha.11_x86_64.dmg",
+        "Lokus_2.0.0-alpha.11_x64-setup.exe",
+        "Lokus_2.0.0-alpha.11_amd64.AppImage",
+    ] {
+        assert!(windows.contains(&format!("{at}/{file}")), "{file}");
+    }
+    let first = |page: &str| {
+        let from = page.find("<a class=\"button\" href=\"").unwrap();
+        page[from..].split('"').nth(3).unwrap().to_string()
+    };
+    assert!(first(&windows).ends_with("x64-setup.exe"));
+    assert!(windows.contains("Run anyway"));
+    assert!(first(&read("Mozilla/5.0 (X11; Linux x86_64)").await).ends_with(".AppImage"));
+    assert!(
+        first(&read("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)").await)
+            .ends_with("_aarch64.dmg")
+    );
+    assert!(
+        first(&read("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)").await)
+            .ends_with("_aarch64.dmg")
+    );
+
+    // Reading the page, as a mail program does by itself, says yes to nothing.
+    assert!(windows.contains("<form method=\"post\""));
+    let (_, waiting) = relay
+        .call("tb", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(waiting.as_array().unwrap().len(), 1);
+    assert_eq!(waiting[0]["agreed_at"], Value::Null);
+
+    // Bob presses Join. He is signed in to nothing there, so the page only takes his word.
+    let pressed = relay.http.post(&join).send().await.unwrap();
+    assert_eq!(pressed.status(), 200);
+    let after = pressed.text().await.unwrap();
+    assert!(after.contains("You said yes to Acme"));
+    assert!(!after.contains("<form"));
+
+    // Nobody is a member yet. The invitation waits for bob and nobody else, now saying he
+    // agreed, which is what lets Lokus join him without asking; pressing again changes nothing.
+    let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams, json!([]));
+    let (_, others) = relay
+        .call("tc", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(others, json!([]));
+    let (_, waiting) = relay
+        .call("tb", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    let agreed = waiting[0]["agreed_at"].as_i64().unwrap();
+    assert!(agreed > 0);
+    assert_eq!(relay.http.post(&join).send().await.unwrap().status(), 200);
+    let (_, waiting) = relay
+        .call("tb", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(waiting[0]["agreed_at"], agreed);
+
+    // Lokus joins him the way it always has.
+    let accept = format!("/v1/invites/{code}/accept");
+    assert_eq!(relay.call("tb", "POST", &accept, Value::Null).await.0, 200);
+    let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams[0]["id"], id.as_str());
+    assert!(relay
+        .page(&format!("/join/{code}"))
+        .await
+        .contains("can no longer be used"));
+
+    // An invitation the owner took back after Join was pressed waits for nobody.
+    let (_, made) = relay
+        .call(
+            "ta",
+            "POST",
+            &invites,
+            json!({ "role": "viewer", "email": "carol@x.io" }),
+        )
+        .await;
+    let taken_back = made["code"].as_str().unwrap();
+    let pressed = relay.http.post(emailed(1)).send().await.unwrap();
+    assert!(pressed.text().await.unwrap().contains("You said yes"));
+    let cancel = relay
+        .http
+        .delete(format!("{}{invites}/{taken_back}", relay.url))
+        .bearer_auth("ta")
+        .send()
+        .await
+        .unwrap();
+    assert!(cancel.status().is_success());
+    let (_, waiting) = relay
+        .call("tc", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(waiting, json!([]));
+
+    // A bare link names nobody, so there is nothing to press: its code is still pasted.
+    let (_, made) = relay
+        .call("ta", "POST", &invites, json!({ "role": "viewer" }))
+        .await;
+    let bare = format!("{}/join/{}", relay.url, made["code"].as_str().unwrap());
+    let page = relay.http.post(&bare).send().await.unwrap();
+    let page = page.text().await.unwrap();
+    assert!(page.contains("Paste your code"));
+    assert!(!page.contains("<form"));
+    assert!(!page.contains("You said yes"));
+}
+
 #[tokio::test]
 async fn emailing_an_invitation_has_its_limits() {
     let (relay, mail) = mailing_relay().await;
