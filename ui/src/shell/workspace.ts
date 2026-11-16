@@ -814,16 +814,18 @@ function closeGone(path: string): void {
 }
 
 /** Rename or move a note or a folder; open tabs follow it. */
-export async function renameEntry(from: string, to: string): Promise<void> {
-  if (from === to) return;
+export async function renameEntry(from: string, to: string): Promise<boolean> {
+  if (from === to) return true;
   try {
     await saveAll();
     // A shared vault renames through sync, which keeps each note's shared document with it.
     if (!(await syncRename(from, to))) await runCore("note.rename", { from, to });
     moveOpen(from, to);
     await refreshTree();
+    return true;
   } catch (e) {
     report(e);
+    return false;
   }
 }
 

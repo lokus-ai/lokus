@@ -120,6 +120,14 @@ and fails unless every file is byte-identical.
 
 Small things that make it a daily driver, all plain commands over plain files:
 
+- **Folders in the sidebar:** opening a file shows its parents unless the person has closed
+  them. A manually closed folder stays closed through edits, tab changes and renaming it
+  in the sidebar; its nested folder choices follow the rename too. The separate
+  **Collapse all folders** sidebar button and `tree.collapseAll` command close every folder
+  in the open workspace, including nested folders, without closing files, changing text or
+  stopping sync. `tree.revealActive` (**Reveal active file in sidebar**) reopens the active
+  file's parents and brings its row into view. Folder choices belong to the current workspace
+  and window; switching workspaces starts a fresh tree, not another workspace's choices.
 - **Links inside a note:** `[[Note#Heading]]` and `[[Note^block]]` open the note at that place;
   `![[Note#Heading]]` embeds just that part. "Go to a heading" lists the open note's headings.
   A link to a web page, `[words](https://…)`, opens in the browser on a click, as a link to a

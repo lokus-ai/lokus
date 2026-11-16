@@ -66,9 +66,11 @@ const tabName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
 function Sidebar() {
   const tree = useStore(app, (s) => s.tree);
-  const active = useStore(app, (s) => s.active);
+  const root = useStore(app, (s) => s.vault?.root);
+  const active = useStore(app, (s) => s.view === "file" ? s.file : s.view === "note" ? s.active : null);
   const open = useStore(app, (s) => s.sidebar);
   const narrow = useStore(app, (s) => s.narrow);
+  const revealTree = useCallback(() => app.set({ sidebar: true }), []);
 
   const startResize = (e: PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -135,15 +137,23 @@ function Sidebar() {
           <kbd>{formatKeys("Mod-n")}</kbd>
         </button>
       </div>
+      <div className="sidebar-actions">
+        <button onClick={() => void runCommand("tree.collapseAll")}>
+          <Icon name="collapse" />
+          <span>Collapse all folders</span>
+        </button>
+      </div>
       <div className="sidebar-scroll">
         <FileTree
+          key={root}
           entries={tree}
           active={active}
           onOpen={pick}
           onNewNote={(folder) => void createNoteIn(folder)}
           onNewFolder={(path) => void createFolder(path)}
-          onRename={(from, to) => void renameEntry(from, to)}
+          onRename={renameEntry}
           onDelete={(path) => void deleteEntry(path)}
+          onReveal={revealTree}
         />
       </div>
       <AccountBar act={act} />
