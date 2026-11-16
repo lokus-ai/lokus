@@ -623,6 +623,17 @@ confirms that everything it must not be able to do is refused.
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
+  explicitly picked @ notes/folders and attached files. Each conversation in each workspace
+  has its own draft in this window's memory; Earlier conversations also lists messages not
+  sent yet, so New chat or a workspace switch leaves them reachable. Deleting a conversation
+  clears its draft. A successful answer clears the submitted draft only if it was not edited
+  while waiting; a failure, stop or model refusal keeps it. Sending waits for file imports.
+  An import belongs to the draft and vault where it started, even if the panel closes or the
+  conversation changes. If its vault is no longer open when the write starts, it reports an
+  error rather than writing into the new workspace. Drafts are not synced, shared between
+  windows or kept after an app restart. Imported files remain ordinary vault files when
+  removed from a draft or when a conversation is deleted.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
