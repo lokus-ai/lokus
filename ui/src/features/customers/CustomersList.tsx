@@ -1,6 +1,6 @@
 /** @part-of ui.customers */
 import { track } from "../../bridge/analytics";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { runCore } from "../../bridge/core";
 import { Icon, type IconName } from "../../shell/Icon";
@@ -63,11 +63,44 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; down: boolean } | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
-  /** Where the "Add column" list sits on the window, worked out when it is opened. */
-  const [addAt, setAddAt] = useState<{ left: number; top: number; maxHeight: number }>({ left: 0, top: 0, maxHeight: 320 });
+  const addMenu = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<{ path: string; key: string } | null>(null);
   const [fresh, setFresh] = useState({ name: "", kind: "text" as Kind });
   const [tick, setTick] = useState(0);
+
+  useLayoutEffect(() => {
+    const panel = addMenu.current;
+    const button = panel?.parentElement?.querySelector("button");
+    const page = panel?.closest(".custs");
+    if (menu !== "+" || !panel || !button || !page) return;
+    const bounds = page.getBoundingClientRect();
+    const anchor = button.getBoundingClientRect();
+    const gap = parseFloat(getComputedStyle(panel).paddingTop);
+    const left = Math.max(0, bounds.left) + gap;
+    const right = Math.min(window.innerWidth, bounds.right) - gap;
+    panel.style.maxWidth = `${Math.max(0, right - left)}px`;
+    const width = panel.getBoundingClientRect().width;
+    const list = panel.querySelector<HTMLElement>(".custs-offered");
+    const fixedHeight = panel.scrollHeight - (list?.scrollHeight ?? 0);
+    const bottom = window.innerHeight - gap;
+    const top = Math.max(gap, Math.min(anchor.bottom + gap, bottom - fixedHeight));
+    panel.style.left = `${Math.max(left, Math.min(anchor.left, right - width))}px`;
+    panel.style.top = `${top}px`;
+    panel.style.maxHeight = `${Math.max(0, bottom - top)}px`;
+    panel.querySelector("input")?.focus({ preventScroll: true });
+
+    const close = () => setMenu(null);
+    const resized = new ResizeObserver(() => {
+      const next = page.getBoundingClientRect();
+      if (next.width !== bounds.width || next.height !== bounds.height) close();
+    });
+    resized.observe(page);
+    window.addEventListener("resize", close);
+    return () => {
+      resized.disconnect();
+      window.removeEventListener("resize", close);
+    };
+  }, [menu]);
 
   useEffect(() => {
     let current = true;
@@ -396,21 +429,13 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
                     className="custs-th"
                     title="Add a column"
                     aria-expanded={menu === "+"}
-                    onClick={(e) => {
-                      // Placed on the window, inside the page: under the button, never past the
-                      // page's right edge (the assistant may be there) or the window's bottom.
-                      const at = e.currentTarget.getBoundingClientRect();
-                      const page = e.currentTarget.closest(".custs")?.getBoundingClientRect();
-                      const left = Math.max((page?.left ?? 0) + 8, Math.min(at.left, (page?.right ?? window.innerWidth) - 268));
-                      setAddAt({ left, top: at.bottom + 4, maxHeight: Math.max(160, window.innerHeight - at.bottom - 16) });
-                      setMenu(menu === "+" ? null : "+");
-                    }}
+                    onClick={() => setMenu(menu === "+" ? null : "+")}
                   >
                     <Icon name="plus" size={14} />
                     <span>Add column</span>
                   </button>
                   {menu === "+" && (
-                    <div className="cust-menu wide custs-add-menu" style={addAt}>
+                    <div className="cust-menu wide custs-add-menu" ref={addMenu}>
                       {/* The details scroll; the form for a new one stays in view under them. */}
                       {offered.length > 0 && (
                         <div className="custs-offered">
@@ -433,7 +458,7 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
                           if (key && !columns.includes(key)) addColumn(key, fresh.kind);
                         }}
                       >
-                        <input autoFocus placeholder="Name, like Contract end" value={fresh.name} onChange={(e) => setFresh({ ...fresh, name: e.target.value })} />
+                        <input placeholder="Name, like Contract end" value={fresh.name} onChange={(e) => setFresh({ ...fresh, name: e.target.value })} />
                         <select aria-label="Type of the new detail" value={fresh.kind} onChange={(e) => setFresh({ ...fresh, kind: e.target.value as Kind })}>
                           {(Object.keys(KINDS) as Kind[]).map((k) => (
                             <option key={k} value={k}>
