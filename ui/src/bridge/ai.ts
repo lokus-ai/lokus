@@ -18,6 +18,7 @@ export interface Connector {
   url: string;
   kind: string;
   ready: "yes" | "needs_registration" | "not_built";
+  token_url: string | null;
 }
 
 export interface AiConfig {
@@ -85,7 +86,8 @@ export const saveAiConfig = (config: AiConfig) => call<void>("ai_settings_save",
 /** Store a provider key or tool-server token in the keychain; an empty value removes it. */
 export const setAiSecret = (kind: "provider" | "mcp" | "api", name: string, value: string) => call<void>("ai_secret_set", { kind, name, value });
 export const aiModels = () => call<string[]>("ai_models");
-export const checkMcp = (server: McpServer) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server });
+export const checkMcp = (server: McpServer, token?: string) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server, token });
+export const saveMcpToken = (server: McpServer, token: string) => call<void>("ai_mcp_token_save", { server, token });
 /** Sign in to a tool server in the browser; resolves when the browser has come back. */
 export const aiConnectors = () => call<Connector[]>("ai_connectors");
 export const mcpLogin = (server: McpServer) => call<void>("ai_mcp_login", { server });
