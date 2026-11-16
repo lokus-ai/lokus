@@ -326,6 +326,19 @@ function caretToEnd(cell: HTMLElement): void {
   selection?.addRange(range);
 }
 
+/** The one stretch of `old` that has to be replaced to make it `next`. */
+export function differing(old: string, next: string): { from: number; to: number; insert: string } {
+  let start = 0;
+  while (start < next.length && start < old.length && next[start] === old[start]) start++;
+  let end = 0;
+  while (end < next.length - start && end < old.length - start && next.at(-1 - end) === old.at(-1 - end)) end++;
+  // An emoji is two units: one that both texts share is not cut in half.
+  const half = (at: number, low: number) => (old.charCodeAt(at) & 0xfc00) === low;
+  if (start && half(start - 1, 0xd800)) start--;
+  if (end && half(old.length - end, 0xdc00)) end--;
+  return { from: start, to: old.length - end, insert: next.slice(start, next.length - end) };
+}
+
 /**
  * A table is edited as a table: a click in a cell types into that cell, and each keystroke is
  * written into the cell's markdown. The cell being typed in shows its own markdown; the rest
@@ -423,7 +436,11 @@ class Table extends WidgetType {
       if (!cell) return;
       e.preventDefault();
       const { row, col } = place(cell);
-      tableMenu(e.clientX, e.clientY, row, grid(wrap.widget.source)[0].length, (how) => wrap.widget.change(view, (lines) => how(lines, row === 0 ? 0 : row + 1, col)));
+      tableMenu(e.clientX, e.clientY, row, grid(wrap.widget.source)[0].length, (how) => {
+        wrap.widget.change(view, (lines) => how(lines, row === 0 ? 0 : row + 1, col));
+        // The keyboard goes back to the note, so undo takes back what was just chosen.
+        view.focus();
+      });
     });
     return wrap;
   }
@@ -510,20 +527,10 @@ class Table extends WidgetType {
     const lines = this.source.split("\n");
     how(lines);
     const next = lines.join("\n");
-    let start = 0;
-    while (start < next.length && start < this.source.length && next[start] === this.source[start]) start++;
-    let end = 0;
-    while (end < next.length - start && end < this.source.length - start && next.at(-1 - end) === this.source.at(-1 - end)) end++;
-    // An emoji is two units: one that both texts share is not cut in half.
-    const half = (at: number, low: number) => (this.source.charCodeAt(at) & 0xfc00) === low;
-    if (start && half(start - 1, 0xd800)) start--;
-    if (end && half(this.source.length - end, 0xdc00)) end--;
     // A table that is no longer what this was drawn from (another note, a teammate) is left alone.
     if (next === this.source || view.state.sliceDoc(this.from, this.from + this.source.length) !== this.source) return;
-    view.dispatch({
-      changes: { from: this.from + start, to: this.from + this.source.length - end, insert: next.slice(start, next.length - end) },
-      userEvent: "input.type",
-    });
+    const { from, to, insert } = differing(this.source, next);
+    view.dispatch({ changes: { from: this.from + from, to: this.from + to, insert }, userEvent: "input.type" });
   }
 
   /** A click on a link follows it; everything else in the table is the table's own. */
