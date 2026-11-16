@@ -51,7 +51,7 @@ jobs:
           - os: windows-latest
           # Linux has no screen on a runner, so the app gets a pretend one.
           - os: ubuntu-22.04
-            run: dbus-run-session -- xvfb-run -a -s "-screen 0 1440x900x24"
+            run: dbus-run-session -- xvfb-run -a
     runs-on: ${{ matrix.os }}
     timeout-minutes: 75
     defaults:
