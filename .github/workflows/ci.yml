@@ -1,119 +1,66 @@
+# Throwaway: a published copy of one version updates itself to the next. Never merged.
 name: CI
-
-# Minutes are limited: this runs for pull requests and on demand, not on
-# every push. Run the same steps locally first (see CONTRIBUTING.md).
 on:
-  pull_request:
-    branches: [next, main]
   workflow_dispatch:
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
+    inputs:
+      from:
+        default: 2.0.0-alpha.10
+      to:
+        default: 2.0.0-alpha.11
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Tauri system libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm -C ui build
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
-      - run: node checks/run.mjs
-
-  # Lokus on Windows and on Linux: the tests, then the real app started and used through its
-  # dev channel (a folder, notes, and a team folder kept in step with a teammate through a
-  # relay started on the runner), then what people would download (the Windows installer, the
-  # Linux AppImage), built the way a release builds it, installed and opened. The pictures
-  # and the downloads are kept. It takes about forty minutes, so it runs when asked for
-  # (Actions, CI, Run workflow), on a pull request labelled "desktop", and on every pull
-  # request into main (that is a release), not on every push.
-  desktop:
-    if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main' || contains(github.event.pull_request.labels.*.name, 'desktop')
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-          # Linux has no screen on a runner, so the app gets a pretend one.
-          - os: ubuntu-22.04
-            run: dbus-run-session -- xvfb-run -a
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
+  windows:
+    runs-on: windows-latest
     defaults:
       run:
         shell: bash
     env:
-      # A runner has no graphics card; WebKit on Linux draws nothing without these.
-      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
-      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
-      RUN: ${{ matrix.run }}
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: --remote-debugging-port=9222
     steps:
       - uses: actions/checkout@v4
-      - name: Tauri system libraries and a screen
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev dbus xvfb imagemagick xdg-utils libfuse2 file
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: cargo test --workspace
-      - name: Build the app with its dev channel
-        run: pnpm tauri build --debug --no-bundle
-        env:
-          VITE_LOKUS_DEV_CHANNEL: "1"
-      - run: cargo build -p lokus-cli -p lokus-server
-      - name: Start Lokus and use it, alone and in a team
-        run: $RUN node checks/desktop-smoke.mjs
-      # The way a release builds it (deploy/release/desktop.sh), signed with a key made for
-      # this run and thrown away with it; the real one is only in the release environment.
-      # The version is shaped like the ones that go out (2.0.0-alpha.9), file names and all.
-      - name: Build what people would download
+      - name: Install the published copy and let it update itself
         run: |
           set -e
-          pnpm tauri signer generate --ci -w "$RUNNER_TEMP/throwaway.key" >/dev/null
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/throwaway.key")" sh deploy/release/desktop.sh 0.0.1-alpha.1 https://relay.lokusmd.com
-      - name: Install it and open it (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          set -e
-          cmd //c "$(cygpath -w dist-release/0.0.1-alpha.1/Lokus_0.0.1-alpha.1_x64-setup.exe) /S"
+          mkdir -p out
+          curl -fsSL -o old-setup.exe "https://github.com/lokus-ai/lokus/releases/download/v$FROM/Lokus_${FROM}_x64-setup.exe"
+          sha256sum old-setup.exe | tee out/old-setup.sha256
+          cmd //c "$(cygpath -w old-setup.exe) /S"
           APP=$(ls "$LOCALAPPDATA"/Lokus/*.exe | grep -vi uninstall | head -1)
           echo "installed: $APP"
-          node checks/desktop-smoke.mjs "$APP"
-      - name: Open it (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          set -e
-          chmod +x dist-release/0.0.1-alpha.1/*.AppImage
-          $RUN node checks/desktop-smoke.mjs "$PWD/dist-release/0.0.1-alpha.1/Lokus_0.0.1-alpha.1_amd64.AppImage" --appimage-extract-and-run
+          powershell -Command "(Get-Item '$(cygpath -w "$APP")').VersionInfo | Format-List ProductVersion,FileVersion" | tee out/version-before.txt
+          sha256sum "$APP" | tee out/exe-before.sha256
+          "$APP" > out/app.log 2>&1 &
+          node proof/windows.mjs
+          sleep 3
+          powershell -Command "(Get-Item '$(cygpath -w "$APP")').VersionInfo | Format-List ProductVersion,FileVersion" | tee out/version-after.txt
+          sha256sum "$APP" | tee out/exe-after.sha256
+          powershell -Command "Get-Process | Where-Object { \$_.Path -like '*Lokus*' } | Format-Table Id,StartTime,Path -AutoSize" | tee out/processes.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: desktop-smoke-${{ runner.os }}
-          path: desktop-smoke/
+          name: selfupdate-windows
+          path: out/
+  linux:
+    runs-on: ubuntu-22.04
+    env:
+      FROM: ${{ inputs.from }}
+      TO: ${{ inputs.to }}
+      WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+      WEBKIT_DISABLE_COMPOSITING_MODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: What the app needs to run, a screen, and eyes
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 librsvg2-2 dbus xvfb imagemagick xdg-utils libfuse2 file xdotool tesseract-ocr
+      - name: Open the published copy and let it update itself
+        run: dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" bash proof/linux.sh
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: lokus-installer-${{ runner.os }}
-          path: dist-release/0.0.1-alpha.1/
+          name: selfupdate-linux
+          path: out/
