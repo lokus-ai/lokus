@@ -172,7 +172,8 @@ built all four platforms, installed and opened the Windows installer, and opened
 AppImage before publishing. Both Mac builds were signed and notarized.
 
 A separate [published-update run](https://github.com/lokus-ai/lokus/actions/runs/43815532107)
-opened the published alpha.10 builds on Windows and Linux, used their Update now and Restart
-now controls, and verified that a new process opened showing alpha.11. Windows also reported
+opened the published alpha.10 builds on Windows and Linux and used their in-app update flow.
+Windows reopened automatically after Update now; Linux used Restart now. Both verified that a
+new process opened showing alpha.11. Windows also reported
 alpha.11 in the installed executable's version; the Linux AppImage hash matched the published
 alpha.11 file. This was a one-off check on GitHub runners, not a check every release runs.
