@@ -620,9 +620,20 @@ function syncPeers(): void {
 /** Whether a path is a note; anything else in a vault is a file to look at, not to edit. */
 export const isNotePath = (path: string) => /\.md$/i.test(path);
 
+/** With the graph or a file in front, keys do not go on into the note underneath. */
+function leaveNote(): void {
+  const page = editor?.view.dom.closest(".page");
+  const at = document.activeElement;
+  if (at instanceof HTMLElement && page?.contains(at)) at.blur();
+  // A click on a button leaves the cursor in the note, and keys follow the cursor.
+  const cursor = window.getSelection();
+  if (cursor?.anchorNode && page?.contains(cursor.anchorNode)) cursor.removeAllRanges();
+}
+
 /** Show a file that is not a note (a picture, a PDF, a CSV) in its own tab. */
 export function openFile(path: string): void {
   app.set((s) => ({ view: "file", file: path, tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
+  leaveNote();
   track("page_opened", { kind: "file" });
 }
 
@@ -682,7 +693,10 @@ export async function closeTab(path: string): Promise<void> {
   app.set({ tabs: rest, active: null, properties: {} });
   if (next) go(next);
   // The graph or a file in front of the note stays in front.
-  if (view !== "note") app.set({ view, file });
+  if (view !== "note") {
+    app.set({ view, file });
+    leaveNote();
+  }
 }
 
 /** Go to the tab after the one showing (or before it), wrapping round at the ends. */
@@ -698,6 +712,7 @@ export function stepTab(by: 1 | -1): void {
 /** Open the graph as a tab, or bring its tab forward. */
 export function showGraph(): void {
   app.set((s) => ({ view: "graph", tabs: s.tabs.includes(GRAPH_TAB) ? s.tabs : [...s.tabs, GRAPH_TAB] }));
+  leaveNote();
 }
 
 /** Close the graph's tab; the note that was open underneath shows again. */
