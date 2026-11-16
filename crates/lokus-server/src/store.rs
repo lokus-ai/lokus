@@ -602,16 +602,17 @@ impl Store {
                 |r| r.get(0),
             )
             .optional()?;
-        if let Some(at) = last.filter(|at| now() - at < seconds) {
-            return Ok((false, at));
+        let at = now();
+        if let Some(last) = last.filter(|last| at - last < seconds) {
+            return Ok((false, last));
         }
         tx.execute(
             "INSERT INTO looks (workspace, at, user) VALUES (?1, ?2, ?3)
              ON CONFLICT (workspace) DO UPDATE SET at = ?2, user = ?3",
-            params![workspace, now(), user],
+            params![workspace, at, user],
         )?;
         tx.commit()?;
-        Ok((true, now()))
+        Ok((true, at))
     }
 
     /// The most recent changes to who may do what, newest first.

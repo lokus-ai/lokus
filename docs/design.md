@@ -519,7 +519,7 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
 
-### Releases and news (built; tested on macOS with three local releases)
+### Releases and news (built; tested on macOS with three local releases; Windows and Linux are built and opened in CI)
 
 The relay also answers every copy of the app, signed in or not: `GET /v1/app/update/{target}/{arch}/{version}`
 (the newest build for that platform, or 204) and `GET /v1/app/news` (posts, newest first). Tables
