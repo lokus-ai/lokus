@@ -39,8 +39,8 @@ c.commit()
 print([k for (k,) in c.execute("SELECT key FROM ItemTable")])
 PY
 open_app
-pgrep -af Lokus | cut -c1-200 | tee out/processes-before.txt
-FIRST=$(pgrep -of "$APP")
+pgrep -af -i lokus | cut -c1-200 | tee out/processes-before.txt
+FIRST=$(pgrep -x lokus-desktop | tr "\n" " ")
 
 # Look at the screen for two words side by side and click between them.
 see() {
@@ -87,14 +87,15 @@ sleep 2; import -window root out/2-downloading.png
 press Restart Lokus 150 3-ready || { echo "FAIL: the update did not reach Restart now"; exit 1; }
 sleep 15
 import -window root out/4-after.png
-pgrep -af Lokus | cut -c1-200 | tee out/processes-after.txt
+pgrep -af -i lokus | cut -c1-200 | tee out/processes-after.txt
 NOW=$(sha256sum "$APP" | cut -d' ' -f1)
 echo "file after: $NOW" | tee -a out/hashes.txt
-SECOND=$(pgrep -of "$APP")
+SECOND=$(pgrep -x lokus-desktop | tr "\n" " ")
 echo "process before $FIRST, after ${SECOND:-none}" | tee -a out/hashes.txt
 for i in 1 2 3 4 5; do see "version" "$TO" && { echo "screen says version $TO"; cp out/now.png out/5-says.png; break; }; sleep 1; done
 convert out/4-after.png -resize 200% -colorspace Gray out/big.png; tesseract out/big.png out/after --psm 11 > /dev/null 2>&1; tr '\n' ' ' < out/after.txt | cut -c1-600; echo
 rm -f out/big.png out/now.png
 [ "$NOW" = "$NEW" ] || { echo "FAIL: the file on disk is not the published $TO"; exit 1; }
 [ -n "$SECOND" ] && [ "$SECOND" != "$FIRST" ] || { echo "FAIL: Lokus did not come back after the restart"; exit 1; }
+grep -q "$TO" out/after.txt || { echo "FAIL: the copy that came back does not say $TO on screen"; exit 1; }
 echo "PASS: the published copy updated itself from $FROM to $TO and reopened"
