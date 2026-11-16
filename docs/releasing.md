@@ -158,8 +158,21 @@ typing, an attachment, rename, delete, the relay going away and coming back, cat
 being closed) (`checks/desktop-smoke.mjs`, the `desktop` job in `.github/workflows/ci.yml`).
 The installer and the AppImage are built and opened by the release itself, before anything is
 put out, and by that job only when it is run by hand (Actions, CI, Run workflow): the way to
-try a change to `deploy/release/desktop.sh` without releasing. Not tested there: a person's own Windows or Linux computer, an update from one published version to the
-next, sign-in through the browser.
+try a change to `deploy/release/desktop.sh` without releasing. Not tested there: a person's own
+Windows or Linux computer, an update from one published version to the next, sign-in through
+the browser.
 
 Not tested: a download through a browser on someone else's Mac;
-an app sitting in `/Applications` owned by another user; the release workflow in CI.
+an app sitting in `/Applications` owned by another user.
+
+## Published Windows and Linux builds (2026-11-16)
+
+The [alpha.11 release workflow](https://github.com/lokus-ai/lokus/actions/runs/43810784896)
+built all four platforms, installed and opened the Windows installer, and opened the Linux
+AppImage before publishing. Both Mac builds were signed and notarized.
+
+A separate [published-update run](https://github.com/lokus-ai/lokus/actions/runs/43815532107)
+opened the published alpha.10 builds on Windows and Linux, used their Update now and Restart
+now controls, and verified that a new process opened showing alpha.11. Windows also reported
+alpha.11 in the installed executable's version; the Linux AppImage hash matched the published
+alpha.11 file. This was a one-off check on GitHub runners, not a check every release runs.
