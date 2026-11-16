@@ -285,6 +285,7 @@ macro_rules! commands {
             ai::ai_models,
             ai::ai_connectors,
             ai::ai_mcp_check,
+            ai::ai_mcp_token_save,
             ai::ai_mcp_login,
             ai::ai_mcp_logout,
             ai::ai_chatgpt_login,
