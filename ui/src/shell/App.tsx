@@ -1,6 +1,6 @@
 /** @part-of ui.shell */
 import { track } from "../bridge/analytics";
-import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { identify } from "../bridge/analytics";
 import { accountsAvailable } from "../bridge/auth";
@@ -488,6 +488,8 @@ export function App() {
   const vault = useStore(app, (s) => s.vault);
   const settings = useStore(app, (s) => s.settings);
   const accountDialog = useStore(app, (s) => s.accountDialog);
+  const settingsOpen = !!settings;
+  const settingsFocus = useMemo(() => settingsOpen ? document.activeElement : null, [settingsOpen]);
   const onboardingOpen = useStore(onboarding, (s) => s.open);
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
   return (
@@ -513,7 +515,7 @@ export function App() {
       {settings && (
         <Boundary name="Settings">
           <Suspense fallback={null}>
-            <SettingsView page={settings} onPage={(page) => app.set({ settings: page })} onClose={() => app.set({ settings: null })} />
+            <SettingsView page={settings} returnFocus={settingsFocus} onPage={(page) => app.set({ settings: page })} onClose={() => app.set({ settings: null })} />
           </Suspense>
         </Boundary>
       )}

@@ -303,17 +303,24 @@ const PAGES: { id: string; title: string; icon: IconName; body: () => ReactNode 
 ];
 
 interface Props {
+  returnFocus: Element | null;
   page: string;
   onPage(page: string): void;
   onClose(): void;
 }
 
 /** Settings open over the app as a dialog: pages on the left, the chosen page on the right. */
-export default function SettingsView({ page, onPage, onClose }: Props) {
+export default function SettingsView({ page, returnFocus, onPage, onClose }: Props) {
   const dialog = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     dialog.current?.querySelector<HTMLButtonElement>(".settings-nav .active")?.focus();
-  }, []);
+    return () => {
+      // Wait for inert to clear, without taking focus from a follow-on dialog.
+      requestAnimationFrame(() => {
+        if (returnFocus instanceof HTMLElement && returnFocus.isConnected && !document.querySelector(".overlay, [role=dialog]")) returnFocus.focus();
+      });
+    };
+  }, [returnFocus]);
   useEffect(() => track("settings_opened", { page }), [page]);
   const current = PAGES.find((p) => p.id === page) ?? PAGES[0];
   useEffect(() => {
