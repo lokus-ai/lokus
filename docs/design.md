@@ -300,7 +300,7 @@ engine in `lokus-sync`, which writes the file.
 |---|---|
 | `workspaces` | id, name, who created it and when |
 | `members` | workspace, user, email, role, when they joined |
-| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often, and when the person it names pressed Join on its page |
+| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often, the key its email carries, and when the person it names pressed Join on its page |
 | `updates` | the edit log: a running number, workspace, note id, the edit, who made it and when |
 | `blobs` | attachments under the hash of their bytes, with size, who stored them and when |
 | `audit` | who changed who may do what; kept even after a workspace is deleted |
@@ -496,14 +496,18 @@ code, and someone who pressed Join on the page is not asked again inside Lokus.
   for the newest build (both kinds of Mac, Windows, Linux; the reader's own system first, with
   the one thing that system asks when opening it), which address to sign in with, and the code
   for someone who signs in under another.
-- **Join on the page.** The button posts to `/join/{code}`, which only notes that the person
-  the invitation names said yes (`agreed_at`): the page is signed in to nothing, so nobody
-  joins there. `GET /v1/invites/mine` hands `agreed_at` to Lokus, signed in with the invited
-  address, and Lokus uses the invitation without asking (`lookForInvites`), then `bringTeams`
+- **Join on the page.** The link in the email carries a key (`?k=`, `invites.agree_key`) that
+  the owner who sent the invitation is never shown. With it the page has a Join button, which
+  posts to `/join/{code}?k=...` and only notes that the person the invitation names said yes
+  (`agreed_at`): the page is signed in to nothing, so nobody joins there. `GET
+  /v1/invites/mine` hands `agreed_at` to Lokus, signed in with the invited address, and Lokus
+  uses the invitation without asking (`lookForInvites`, one look at a time), then `bringTeams`
   gives the workspace a folder as for any team the person is in. In first-run setup it is the
   person's first folder and the question "join, or set up my own first" is not put. Opening
-  the link says yes to nothing, because mail programs open links by themselves; a bare link
-  (no address) has no button, since it names nobody. A copy of Lokus from before this
+  the link says yes to nothing, because mail programs open links by themselves. Without the
+  key (the owner's copy of the link, an email sent before this, a bare link with no address)
+  there is no button and the invitation waits inside Lokus as before, so an owner cannot put
+  a workspace on someone's computer for them. A copy of Lokus from before this
   (2.0.0-alpha.11 and older) does not read `agreed_at`: it shows the invitation with its Join
   button, as it always did.
 - **Waiting.** Someone who signs in without pressing Join on the page is still asked inside
@@ -521,7 +525,7 @@ code, and someone who pressed Join on the page is not asked again inside Lokus.
   by a person is escaped.
 - **What it rests on.** "Waiting for you" trusts the address in the sign-in, so email
   confirmation must stay on in Supabase. The code in the link still works for whoever holds
-  it, once, as before; pressing Join with it can only bring in the address it was sent to.
+  it, once, as before. Saying yes on the page takes the key that only the email carries.
 - **Not built.** A `lokus://` link that opens the app from the email (the app has no link
   scheme yet); telling the owner when an invitation is declined.
 

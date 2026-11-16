@@ -12,9 +12,9 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, HeaderMap};
-use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::response::{Html, IntoResponse, Response};
 use axum::Json;
 use semver::Version;
 use serde::Deserialize;
@@ -265,11 +265,25 @@ fn installers(app: &App, reader: Option<System>) -> Vec<(System, &'static str, S
     found
 }
 
+#[derive(Deserialize)]
+pub struct FromEmail {
+    /// The key the email's link carries.
+    k: Option<String>,
+}
+
 /// Saying yes on the page. It is a press of a button, not the opening of the link, because
-/// mail programs open links by themselves to look for harm.
-pub async fn agree(State(app): State<Arc<App>>, Path(code): Path<String>) -> Result<Response> {
-    app.store.agree(&code)?;
-    Ok(Redirect::to(&format!("/join/{code}")).into_response())
+/// mail programs open links by themselves to look for harm; and it takes the key from the
+/// email, so the owner who sent the invitation cannot say yes for the person invited.
+pub async fn agree(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(code): Path<String>,
+    Query(from): Query<FromEmail>,
+) -> Result<Response> {
+    if let Some(key) = &from.k {
+        app.store.agree(&code, key)?;
+    }
+    page(State(app), headers, Path(code), Query(from)).await
 }
 
 /// The page an invitation's link opens, in a browser, signed in to nothing.
@@ -277,6 +291,7 @@ pub async fn page(
     State(app): State<Arc<App>>,
     headers: HeaderMap,
     Path(code): Path<String>,
+    Query(from): Query<FromEmail>,
 ) -> Result<Response> {
     let found = app.store.invitation(&code)?;
     let (title, body) = match &found {
@@ -322,29 +337,42 @@ pub async fn page(
                 Some(System::Linux) => " Allow the file to run as a program, then open it.",
                 None => "",
             };
-            // An emailed invitation is said yes to here; a bare link is a code to paste.
+            // Reached from its email, an invitation is said yes to here. Reached any other
+            // way (the owner's copy of the link, an email from before this), it waits inside
+            // Lokus; a bare link is a code to paste.
+            let from_email = from.k.is_some() && from.k == invitation.agree_key;
+            let waits = "Signing in with a different address? Open Settings, then Team, and paste this code instead.";
             let (first, sign_in, last, other) = match &invitation.email {
                 Some(to) if invitation.agreed_at.is_some() => (
                     format!(
-                        "<li class=\"done\"><b>You joined {workspace}</b><p>It opens in Lokus by itself.</p></li>"
+                        "<li class=\"done\"><b>You said yes to {workspace}</b><p>It is waiting for you in Lokus.</p></li>"
                     ),
                     format!(
                         "<b>Sign in as <span class=\"to\">{to}</span></b><p>Already signed in? Go back to Lokus and {workspace} is there. Otherwise Lokus asks you to sign in when it first opens: use this address, since it is the one that was invited.</p>",
                         to = escape(to)
                     ),
                     String::new(),
-                    "Signing in with a different address? Open Settings, then Team, and paste this code instead.",
+                    waits,
                 ),
                 Some(to) => (
-                    format!(
-                        "<li><b>Join {workspace}</b><p>One press. {workspace} then opens in Lokus by itself.</p><form method=\"post\"><button class=\"button\">Join {workspace}</button></form></li>"
-                    ),
+                    if from_email {
+                        format!(
+                            "<li><b>Join {workspace}</b><p>Say yes here, and {workspace} is waiting for you in Lokus.</p><form method=\"post\" action=\"?k={key}\"><button class=\"button\">Join {workspace}</button></form></li>",
+                            key = escape(from.k.as_deref().unwrap_or_default())
+                        )
+                    } else {
+                        String::new()
+                    },
                     format!(
                         "<b>Sign in as <span class=\"to\">{to}</span></b><p>Lokus asks you to sign in when it first opens. Use this address, since it is the one that was invited.</p>",
                         to = escape(to)
                     ),
-                    String::new(),
-                    "Signing in with a different address? Open Settings, then Team, and paste this code instead.",
+                    if from_email {
+                        String::new()
+                    } else {
+                        "<li><b>Click Join</b><p>Your invitation is waiting inside. Nothing to copy.</p></li>".to_string()
+                    },
+                    waits,
                 ),
                 None => (
                     String::new(),

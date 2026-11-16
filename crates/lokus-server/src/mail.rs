@@ -66,7 +66,12 @@ impl Mailer {
     /// Email an invitation. The error is for the log; the caller words its own for the person.
     pub async fn invite(&self, invitation: &Invitation) -> Result<(), String> {
         let to = invitation.email.as_deref().ok_or("no address")?;
-        let letter = Letter::of(invitation, &self.link(&invitation.code));
+        // The email's own link carries the key that lets its page say yes.
+        let mut link = self.link(&invitation.code);
+        if let Some(key) = &invitation.agree_key {
+            link = format!("{link}?k={key}");
+        }
+        let letter = Letter::of(invitation, &link);
         let mut body = json!({
             "from": self.from,
             "to": [to],
@@ -244,7 +249,7 @@ impl Letter {
              How it works:\n\
              1. Open the link and press Join.\n\
              2. Get Lokus for Mac, Windows or Linux. It is free. Already have it? Skip this.\n\
-             3. Sign in as {to}. {workspace} opens by itself.\n\n\
+             3. Sign in as {to}. {workspace} is waiting inside.\n\n\
              The invitation works until {until}. Not expecting it? Ignore this email and nothing happens.\n"
         );
         let html = TEMPLATE
@@ -344,6 +349,7 @@ mod tests {
             expires_at: 1_794_614_400,
             sent_at: None,
             agreed_at: None,
+            agree_key: None,
         };
         let letter = Letter::of(&invitation, "https://relay.example/join/abc");
         assert!(!letter.html.contains("<script>"));

@@ -67,8 +67,18 @@ export const joinLink = (server: string, code: string) => `${server.replace(/\/+
 
 let asked = 0;
 
-/** Ask the relay what is waiting for whoever is signed in. Quiet when there is nobody, or no relay. */
-export async function lookForInvites(): Promise<Waiting[]> {
+let looking: Promise<Waiting[]> | null = null;
+
+/**
+ * Ask the relay what is waiting for whoever is signed in. Quiet when there is nobody, or no
+ * relay. One look at a time: a second asker is given the first one's answer, so an invitation
+ * is never used twice.
+ */
+export function lookForInvites(): Promise<Waiting[]> {
+  return (looking ??= find().finally(() => (looking = null)));
+}
+
+async function find(): Promise<Waiting[]> {
   asked = Date.now();
   const token = HOME && app.get().account ? await accessToken().catch(() => null) : null;
   let waiting = token ? await relay<Waiting[]>(HOME, token, "GET", "/v1/invites/mine").catch(() => invited.get().waiting) : [];

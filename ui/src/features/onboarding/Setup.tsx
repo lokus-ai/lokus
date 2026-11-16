@@ -254,7 +254,10 @@ export default function Onboarding() {
     // One they pressed Join for on its page in a browser is not asked about again.
     const agreed = waiting.find((w) => w.agreed_at);
     setOffer(agreed ?? waiting[0]);
-    if (agreed) setAnswer("join");
+    if (!agreed) return;
+    setAnswer("join");
+    // The questions about pages are the team's now: someone in the middle of them moves past.
+    setStep((at) => (at === "uses" || at === "aim" || at === "team" ? "look" : at));
   }, [waiting, offer]);
   const joining = offer && answer === "join" ? offer : null;
   const order = useMemo<Step[]>(

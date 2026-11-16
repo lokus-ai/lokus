@@ -231,7 +231,17 @@ async fn an_invitation_is_emailed_and_waits_for_the_person_it_names() {
 /// own first.
 #[tokio::test]
 async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
-    let (relay, _mail) = mailing_relay().await;
+    let (relay, mail) = mailing_relay().await;
+    // The link as the email carries it: with the key that lets its page say yes.
+    let emailed = |n: usize| {
+        let text = mail.lock().unwrap()[n]["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let link = text.lines().find(|l| l.contains("/join/")).unwrap();
+        assert!(link.contains("?k="), "{link}");
+        link.to_string()
+    };
     let releases = Store::open(&relay._dir.path().join("relay.sqlite")).unwrap();
     let at = "https://files.example/v2.0.0-alpha.11";
     for (platform, file) in [
@@ -255,7 +265,16 @@ async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
         )
         .await;
     let code = made["code"].as_str().unwrap().to_string();
-    let join = format!("{}/join/{code}", relay.url);
+    let join = emailed(0);
+    // The owner is told the link without the key, so cannot say yes for bob: no button there,
+    // and a press without the key, or with a wrong one, changes nothing.
+    let owners = made["link"].as_str().unwrap().to_string();
+    assert_eq!(owners, format!("{}/join/{code}", relay.url));
+    assert!(!relay.page(&format!("/join/{code}")).await.contains("<form"));
+    for press in [owners.clone(), format!("{owners}?k=0000")] {
+        let page = relay.http.post(&press).send().await.unwrap();
+        assert!(!page.text().await.unwrap().contains("You said yes"));
+    }
     let read = |agent: &'static str| {
         let request = relay.http.get(&join).header("user-agent", agent);
         async move { request.send().await.unwrap().text().await.unwrap() }
@@ -287,7 +306,7 @@ async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
     );
 
     // Reading the page, as a mail program does by itself, says yes to nothing.
-    assert!(windows.contains("<form method=\"post\">"));
+    assert!(windows.contains("<form method=\"post\""));
     let (_, waiting) = relay
         .call("tb", "GET", "/v1/invites/mine", Value::Null)
         .await;
@@ -298,7 +317,7 @@ async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
     let pressed = relay.http.post(&join).send().await.unwrap();
     assert_eq!(pressed.status(), 200);
     let after = pressed.text().await.unwrap();
-    assert!(after.contains("You joined Acme"));
+    assert!(after.contains("You said yes to Acme"));
     assert!(!after.contains("<form"));
 
     // Nobody is a member yet. The invitation waits for bob and nobody else, now saying he
@@ -340,8 +359,8 @@ async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
         )
         .await;
     let taken_back = made["code"].as_str().unwrap();
-    let press = format!("{}/join/{taken_back}", relay.url);
-    assert_eq!(relay.http.post(&press).send().await.unwrap().status(), 200);
+    let pressed = relay.http.post(emailed(1)).send().await.unwrap();
+    assert!(pressed.text().await.unwrap().contains("You said yes"));
     let cancel = relay
         .http
         .delete(format!("{}{invites}/{taken_back}", relay.url))
@@ -364,7 +383,7 @@ async fn pressing_join_on_the_page_is_not_asked_again_in_lokus() {
     let page = page.text().await.unwrap();
     assert!(page.contains("Paste your code"));
     assert!(!page.contains("<form"));
-    assert!(!page.contains("You joined"));
+    assert!(!page.contains("You said yes"));
 }
 
 #[tokio::test]
