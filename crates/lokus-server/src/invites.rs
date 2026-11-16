@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::http::{header, HeaderMap};
-use axum::response::{Html, IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::Json;
 use semver::Version;
 use serde::Deserialize;
@@ -181,7 +181,11 @@ pub async fn revoke(
 pub async fn mine(State(app): State<Arc<App>>, headers: HeaderMap) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
     let waiting = match me.email.as_deref() {
-        Some(email) => app.store.invitations_for(email, &me.user)?,
+        Some(email) => {
+            // What they said yes to on its page is theirs already, and is not asked again.
+            app.store.join_agreed(email, &me.user)?;
+            app.store.invitations_for(email, &me.user)?
+        }
         None => Vec::new(),
     };
     Ok(Json(json!(waiting)))
@@ -199,9 +203,33 @@ pub async fn accept(
     Ok(Json(json!({ "workspace": workspace })))
 }
 
-/// The newest build's installers, by the kind of Mac: found beside the update files, which
-/// `deploy/release/mac.sh` names `Lokus_<arch>.app.tar.gz` next to `Lokus_<version>_<arch>.dmg`.
-fn installers(app: &App) -> Vec<(&'static str, String)> {
+/// The system someone is reading the page on, from what their browser says about itself.
+#[derive(Clone, Copy, PartialEq)]
+enum System {
+    Mac,
+    Windows,
+    Linux,
+}
+
+fn system(headers: &HeaderMap) -> Option<System> {
+    let agent = headers.get(header::USER_AGENT)?.to_str().ok()?;
+    if agent.contains("Android") || agent.contains("iPhone") || agent.contains("iPad") {
+        None
+    } else if agent.contains("Windows") {
+        Some(System::Windows)
+    } else if agent.contains("Macintosh") {
+        Some(System::Mac)
+    } else if agent.contains("Linux") || agent.contains("X11") {
+        Some(System::Linux)
+    } else {
+        None
+    }
+}
+
+/// The newest build's installers, the reader's own system first. A Mac's is found beside its
+/// update file, which `deploy/release/mac.sh` names `Lokus_<arch>.app.tar.gz` next to
+/// `Lokus_<version>_<arch>.dmg`; on Windows and Linux the update file is the installer.
+fn installers(app: &App, reader: Option<System>) -> Vec<(System, &'static str, String)> {
     let Ok(all) = app.store.releases() else {
         return Vec::new();
     };
@@ -213,47 +241,72 @@ fn installers(app: &App) -> Vec<(&'static str, String)> {
     let Some(newest) = newest.map(|v| v.to_string()) else {
         return Vec::new();
     };
-    [
-        ("darwin-aarch64", "aarch64", "Mac with an Apple chip"),
-        ("darwin-x86_64", "x86_64", "Mac with an Intel chip"),
+    let mut found: Vec<_> = [
+        (System::Mac, "darwin-aarch64", "Mac with an Apple chip"),
+        (System::Mac, "darwin-x86_64", "Mac with an Intel chip"),
+        (System::Windows, "windows-x86_64", "Windows"),
+        (System::Linux, "linux-x86_64", "Linux"),
     ]
     .into_iter()
-    .filter_map(|(platform, arch, label)| {
+    .filter_map(|(system, platform, label)| {
         let build = all
             .iter()
             .find(|r| !r.pulled && r.version == newest && r.platform == platform)?;
-        let folder = build
-            .url
-            .strip_suffix(&format!("Lokus_{arch}.app.tar.gz"))?;
-        Some((label, format!("{folder}Lokus_{newest}_{arch}.dmg")))
+        let url = match platform.strip_prefix("darwin-") {
+            Some(arch) => {
+                let folder = build
+                    .url
+                    .strip_suffix(&format!("Lokus_{arch}.app.tar.gz"))?;
+                format!("{folder}Lokus_{newest}_{arch}.dmg")
+            }
+            None => build.url.clone(),
+        };
+        Some((system, label, url))
     })
-    .collect()
+    .collect();
+    // Stable, so the two kinds of Mac keep their order.
+    found.sort_by_key(|(system, ..)| Some(*system) != reader);
+    found
+}
+
+/// Saying yes on the page. It is a press of a button, not the opening of the link, because
+/// mail programs open links by themselves to look for harm.
+pub async fn agree(State(app): State<Arc<App>>, Path(code): Path<String>) -> Result<Response> {
+    app.store.agree(&code)?;
+    Ok(Redirect::to(&format!("/join/{code}")).into_response())
 }
 
 /// The page an invitation's link opens, in a browser, signed in to nothing.
-pub async fn page(State(app): State<Arc<App>>, Path(code): Path<String>) -> Result<Response> {
+pub async fn page(
+    State(app): State<Arc<App>>,
+    headers: HeaderMap,
+    Path(code): Path<String>,
+) -> Result<Response> {
     let found = app.store.invitation(&code)?;
     let (title, body) = match &found {
         None => (
             "This invitation can no longer be used".to_string(),
             "<h1>This invitation can no longer be used</h1>\
              <p class=\"gone\">It was already used, it was cancelled, or it is more than a week old. \
-             Ask the person who invited you to send a new one.</p>"
+             Already joined? Open Lokus and the workspace is there. \
+             Otherwise ask the person who invited you to send a new one.</p>"
                 .to_string(),
         ),
         Some(invitation) => {
             let who = mail::sender(invitation);
             let title = format!("{who} invited you to {}", invitation.name);
+            let workspace = escape(&invitation.name);
             let initial = invitation
                 .name
                 .chars()
                 .find(|c| c.is_alphanumeric())
                 .map(|c| c.to_uppercase().to_string())
                 .unwrap_or_else(|| "L".into());
-            let get: String = installers(&app)
+            let reader = system(&headers);
+            let get: String = installers(&app, reader)
                 .iter()
                 .enumerate()
-                .map(|(i, (label, url))| {
+                .map(|(i, (_, label, url))| {
                     format!(
                         "<a class=\"button{}\" href=\"{}\">{label}</a>",
                         if i == 0 { "" } else { " second" },
@@ -266,20 +319,41 @@ pub async fn page(State(app): State<Arc<App>>, Path(code): Path<String>) -> Resu
             } else {
                 get
             };
-            let sign_in = match &invitation.email {
-                Some(to) => format!(
-                    "<b>Sign in as <span class=\"to\">{}</span></b><p>Lokus asks you to sign in when it first opens. Use this address, since it is the one that was invited.</p>",
-                    escape(to)
-                ),
-                None => "<b>Sign in</b><p>Lokus asks you to sign in when it first opens.</p>".to_string(),
+            // What the download asks of someone, on the system they are reading this on.
+            let open = match reader {
+                Some(System::Mac) => " Open the download and drag Lokus into Applications.",
+                Some(System::Windows) => " Windows asks before running it: choose More info, then Run anyway.",
+                Some(System::Linux) => " Allow the file to run as a program, then open it.",
+                None => "",
             };
-            let (join, other) = match &invitation.email {
-                Some(_) => (
-                    "<b>Click Join</b><p>Your invitation is waiting inside. Nothing to copy.</p>",
+            // An emailed invitation is said yes to here; a bare link is a code to paste.
+            let (first, sign_in, last, other) = match &invitation.email {
+                Some(to) if invitation.agreed_at.is_some() => (
+                    format!(
+                        "<li class=\"done\"><b>You joined {workspace}</b><p>Nothing more to press. It opens in Lokus by itself.</p></li>"
+                    ),
+                    format!(
+                        "<b>Sign in as <span class=\"to\">{to}</span></b><p>Already signed in? Go back to Lokus and {workspace} is there. Otherwise Lokus asks you to sign in when it first opens: use this address, since it is the one that was invited.</p>",
+                        to = escape(to)
+                    ),
+                    String::new(),
+                    "Signing in with a different address? Open Settings, then Team, and paste this code instead.",
+                ),
+                Some(to) => (
+                    format!(
+                        "<li><b>Join {workspace}</b><p>One press. {workspace} then opens in Lokus by itself.</p><form method=\"post\"><button class=\"button\">Join {workspace}</button></form></li>"
+                    ),
+                    format!(
+                        "<b>Sign in as <span class=\"to\">{to}</span></b><p>Lokus asks you to sign in when it first opens. Use this address, since it is the one that was invited.</p>",
+                        to = escape(to)
+                    ),
+                    String::new(),
                     "Signing in with a different address? Open Settings, then Team, and paste this code instead.",
                 ),
                 None => (
-                    "<b>Paste your code</b><p>Open Settings, then Team, and paste the code below under “Join with an invite”.</p>",
+                    String::new(),
+                    "<b>Sign in</b><p>Lokus asks you to sign in when it first opens.</p>".to_string(),
+                    "<li><b>Paste your code</b><p>Open Settings, then Team, and paste the code below under “Join with an invite”.</p></li>".to_string(),
                     "Your invite code. It works once.",
                 ),
             };
@@ -288,15 +362,15 @@ pub async fn page(State(app): State<Arc<App>>, Path(code): Path<String>) -> Resu
                  <p class=\"lead\">Lokus is where a team keeps its customers, tasks and notes in one place. You would join as {role}.</p>\
                  <div class=\"card\"><div class=\"tile\">{initial}</div><div><strong>{workspace}</strong><span>{role_name}, invited by {by}. Works until {until}.</span></div></div>\
                  <ol>\
-                 <li><b>Get Lokus</b><p>Free, for Mac. Open the download and drag Lokus into Applications. Already have it? Skip this.</p><div class=\"get\">{get}</div></li>\
+                 {first}\
+                 <li><b>Get Lokus</b><p>Free, for Mac, Windows and Linux. Already have it? Skip this.{open}</p><div class=\"get\">{get}</div></li>\
                  <li>{sign_in}</li>\
-                 <li>{join}</li>\
+                 {last}\
                  </ol>\
                  <div class=\"other\">{other}<div class=\"code\"><code>{code}</code><button data-copy=\"{code}\">Copy</button></div></div>",
                 title = escape(&title),
                 role = escape(mail::may(invitation.role)),
                 initial = escape(&initial),
-                workspace = escape(&invitation.name),
                 role_name = escape(&mail::capital(invitation.role.name())),
                 by = escape(invitation.from.as_deref().unwrap_or(&who)),
                 until = escape(&mail::day(invitation.expires_at)),

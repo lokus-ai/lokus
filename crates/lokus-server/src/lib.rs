@@ -194,7 +194,7 @@ pub fn router(app: Arc<App>) -> Router {
             post(invites::resend),
         )
         .route("/v1/invites/mine", get(invites::mine))
-        .route("/join/{code}", get(invites::page))
+        .route("/join/{code}", get(invites::page).post(invites::agree))
         .route("/brand/lokus.png", get(invites::logo))
         .route("/brand/invitation.jpg", get(invites::picture))
         .route("/v1/workspaces/{id}/audit", get(list_audit))
@@ -264,6 +264,10 @@ async fn create_workspace(
 
 async fn list_workspaces(State(app): State<Arc<App>>, headers: HeaderMap) -> Result<Json<Value>> {
     let me = app.caller(&headers).await?;
+    // An invitation said yes to on its page counts from the moment its person signs in.
+    if let Some(email) = me.email.as_deref() {
+        app.store.join_agreed(email, &me.user)?;
+    }
     Ok(Json(json!(app.store.workspaces_of(&me.user)?)))
 }
 

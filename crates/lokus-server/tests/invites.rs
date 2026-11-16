@@ -225,6 +225,147 @@ async fn an_invitation_is_emailed_and_waits_for_the_person_it_names() {
     assert_eq!(mail.lock().unwrap().len(), 1);
 }
 
+/// Saying yes on the invitation's page: bob presses Join there, signed in to nothing, and the
+/// workspace is his the next time Lokus asks the relay anything as him. Opening the page alone
+/// joins nobody, and the page offers the download for every system, the reader's own first.
+#[tokio::test]
+async fn pressing_join_on_the_page_is_enough() {
+    let (relay, _mail) = mailing_relay().await;
+    let releases = Store::open(&relay._dir.path().join("relay.sqlite")).unwrap();
+    let at = "https://files.example/v2.0.0-alpha.11";
+    for (platform, file) in [
+        ("darwin-aarch64", "Lokus_aarch64.app.tar.gz"),
+        ("darwin-x86_64", "Lokus_x86_64.app.tar.gz"),
+        ("windows-x86_64", "Lokus_2.0.0-alpha.11_x64-setup.exe"),
+        ("linux-x86_64", "Lokus_2.0.0-alpha.11_amd64.AppImage"),
+    ] {
+        releases
+            .put_release("2.0.0-alpha.11", platform, &format!("{at}/{file}"), "sig")
+            .unwrap();
+    }
+    let id = relay.workspace("Acme").await;
+    let invites = format!("/v1/workspaces/{id}/invites");
+    let (_, made) = relay
+        .call(
+            "ta",
+            "POST",
+            &invites,
+            json!({ "role": "editor", "email": "bob@x.io" }),
+        )
+        .await;
+    let code = made["code"].as_str().unwrap().to_string();
+    let join = format!("{}/join/{code}", relay.url);
+    let read = |agent: &'static str| {
+        let request = relay.http.get(&join).header("user-agent", agent);
+        async move { request.send().await.unwrap().text().await.unwrap() }
+    };
+
+    let windows = read("Mozilla/5.0 (Windows NT 10.0; Win64; x64)").await;
+    for file in [
+        "Lokus_2.0.0-alpha.11_aarch64.dmg",
+        "Lokus_2.0.0-alpha.11_x86_64.dmg",
+        "Lokus_2.0.0-alpha.11_x64-setup.exe",
+        "Lokus_2.0.0-alpha.11_amd64.AppImage",
+    ] {
+        assert!(windows.contains(&format!("{at}/{file}")), "{file}");
+    }
+    let first = |page: &str| {
+        let from = page.find("<a class=\"button\" href=\"").unwrap();
+        page[from..].split('"').nth(3).unwrap().to_string()
+    };
+    assert!(first(&windows).ends_with("x64-setup.exe"));
+    assert!(windows.contains("Run anyway"));
+    assert!(first(&read("Mozilla/5.0 (X11; Linux x86_64)").await).ends_with(".AppImage"));
+    assert!(
+        first(&read("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)").await)
+            .ends_with("_aarch64.dmg")
+    );
+    assert!(
+        first(&read("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)").await)
+            .ends_with("_aarch64.dmg")
+    );
+
+    // Reading the page, as a mail program does by itself, joins nobody.
+    assert!(windows.contains("<form method=\"post\">"));
+    let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams, json!([]));
+    let (_, waiting) = relay
+        .call("tb", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(waiting.as_array().unwrap().len(), 1);
+
+    // Bob presses Join. He is signed in to nothing there, so the page only takes his word.
+    let pressed = relay.http.post(&join).send().await.unwrap();
+    assert_eq!(pressed.status(), 200);
+    let after = pressed.text().await.unwrap();
+    assert!(after.contains("You joined Acme"));
+    assert!(!after.contains("<form"));
+
+    // It is bob's and nobody else's, the next time Lokus asks as him, with nothing to press.
+    let (_, others) = relay.call("tc", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(others, json!([]));
+    let (_, teams) = relay.call("tb", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams[0]["id"], id.as_str());
+    let (_, waiting) = relay
+        .call("tb", "GET", "/v1/invites/mine", Value::Null)
+        .await;
+    assert_eq!(waiting, json!([]));
+    let (_, members) = relay
+        .call(
+            "ta",
+            "GET",
+            &format!("/v1/workspaces/{id}/members"),
+            Value::Null,
+        )
+        .await;
+    let bob = members
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["email"] == "bob@x.io")
+        .unwrap();
+    assert_eq!(bob["role"], "editor");
+    assert!(relay
+        .page(&format!("/join/{code}"))
+        .await
+        .contains("can no longer be used"));
+
+    // An invitation the owner took back after Join was pressed brings nobody in.
+    let (_, made) = relay
+        .call(
+            "ta",
+            "POST",
+            &invites,
+            json!({ "role": "viewer", "email": "carol@x.io" }),
+        )
+        .await;
+    let taken_back = made["code"].as_str().unwrap();
+    let press = format!("{}/join/{taken_back}", relay.url);
+    assert_eq!(relay.http.post(&press).send().await.unwrap().status(), 200);
+    let cancel = relay
+        .http
+        .delete(format!("{}{invites}/{taken_back}", relay.url))
+        .bearer_auth("ta")
+        .send()
+        .await
+        .unwrap();
+    assert!(cancel.status().is_success());
+    let (_, teams) = relay.call("tc", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams, json!([]));
+
+    // A bare link names nobody, so pressing brings nobody in: its code is still pasted.
+    let (_, made) = relay
+        .call("ta", "POST", &invites, json!({ "role": "viewer" }))
+        .await;
+    let bare = format!("{}/join/{}", relay.url, made["code"].as_str().unwrap());
+    let page = relay.http.post(&bare).send().await.unwrap();
+    let page = page.text().await.unwrap();
+    assert!(page.contains("Paste your code"));
+    assert!(!page.contains("<form"));
+    let (_, teams) = relay.call("tc", "GET", "/v1/workspaces", Value::Null).await;
+    assert_eq!(teams, json!([]));
+}
+
 #[tokio::test]
 async fn emailing_an_invitation_has_its_limits() {
     let (relay, mail) = mailing_relay().await;

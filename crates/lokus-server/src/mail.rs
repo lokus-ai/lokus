@@ -242,9 +242,9 @@ impl Letter {
              You would join as {role}.\n\n\
              Accept the invitation:\n{link}\n\n\
              How it works:\n\
-             1. Get Lokus for Mac. It is free.\n\
-             2. Sign in as {to}.\n\
-             3. Your invitation is waiting inside. Click Join.\n\n\
+             1. Open the link and press Join.\n\
+             2. Get Lokus for Mac, Windows or Linux. It is free. Already have it? Skip this.\n\
+             3. Sign in as {to}. {workspace} opens by itself.\n\n\
              The invitation works until {until}. Not expecting it? Ignore this email and nothing happens.\n"
         );
         let html = TEMPLATE
@@ -343,6 +343,7 @@ mod tests {
             email: Some("bob@x.io".into()),
             expires_at: 1_794_614_400,
             sent_at: None,
+            agreed_at: None,
         };
         let letter = Letter::of(&invitation, "https://relay.example/join/abc");
         assert!(!letter.html.contains("<script>"));

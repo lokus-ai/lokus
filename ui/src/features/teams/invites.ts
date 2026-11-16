@@ -42,7 +42,8 @@ export interface Made {
 }
 
 const LATER = "lokus.invites.later";
-const AGAIN = 60_000;
+/** Coming back to the window asks again after this long: someone who pressed Join on the invitation page is not kept waiting. */
+const AGAIN = 10_000;
 /** The pages setup makes. A folder holding only these has nothing of the person's own in it. */
 const STARTER = ["Customers.md", "Tasks.md", "Assistant.md"];
 

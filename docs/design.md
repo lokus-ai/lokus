@@ -300,7 +300,7 @@ engine in `lokus-sync`, which writes the file.
 |---|---|
 | `workspaces` | id, name, who created it and when |
 | `members` | workspace, user, email, role, when they joined |
-| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often |
+| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often, and when the person it names pressed Join on its page |
 | `updates` | the edit log: a running number, workspace, note id, the edit, who made it and when |
 | `blobs` | attachments under the hash of their bytes, with size, who stored them and when |
 | `audit` | who changed who may do what; kept even after a workspace is deleted |
@@ -482,8 +482,9 @@ safe:
 ### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
 
 An owner types an address under Settings, Team. The relay emails that person from
-`noreply@lokusmd.com`; they sign in to Lokus with that address and the invitation is waiting.
-Nobody copies or pastes a code.
+`noreply@lokusmd.com`; they press Join on the page the email opens, and the workspace comes to
+every computer where they are signed in to Lokus with that address. Nobody copies or pastes a
+code, and someone who already has Lokus presses nothing inside it.
 
 - **Sending.** `POST /v1/workspaces/{id}/invites` with an `email` makes the invite and sends
   it through Resend's HTTP API (`crates/lokus-server/src/mail.rs`). The relay needs
@@ -491,10 +492,23 @@ Nobody copies or pastes a code.
   invites go out as links as before. A reply to the email goes to the owner who invited.
 - **The email** (`assets/invitation.html`) says who invited whom to what, as what, with one
   button and the three steps after it. It is the app's own colours, light and dark.
-- **The link** opens `/join/{code}` on the relay: the same facts, the installers for the newest
-  build, which address to sign in with, and the code for someone who signs in under another.
-- **Waiting.** `GET /v1/invites/mine` gives the invitations addressed to the signed-in
-  person's email. The app asks on sign-in and when the window is returned to. In first-run
+- **The link** opens `/join/{code}` on the relay: the same facts, a Join button, the installers
+  for the newest build (both kinds of Mac, Windows, Linux; the reader's own system first, with
+  the one thing that system asks when opening it), which address to sign in with, and the code
+  for someone who signs in under another.
+- **Join on the page.** The button posts to `/join/{code}`, which only notes that the person
+  the invitation names said yes (`agreed_at`): the page is signed in to nothing, so nobody
+  joins yet. The next time Lokus asks the relay for that person's workspaces or invitations
+  (`GET /v1/workspaces`, `GET /v1/invites/mine`), signed in with the invited address, the
+  invitation is used and they are a member; `bringTeams` then gives the workspace a folder as
+  for any team they are in. So it needs no new app: every copy that brings teams by itself
+  does it. Opening the link joins nobody, because mail programs open links by themselves; an
+  invitation cancelled or run out after the press brings nobody in; a bare link (no address)
+  has no button, since it names nobody.
+- **Waiting.** Someone who signs in without pressing Join on the page is still asked inside
+  the app: `GET /v1/invites/mine` gives the invitations addressed to the signed-in
+  person's email. The app asks on sign-in and when the window is returned to (at most every
+  ten seconds). In first-run
   setup it is the step after signing in, and joining skips the questions about pages (those
   are the team's). Afterwards it is a card, and stays under Settings, Team if put away.
 - **Where the workspace lands.** A folder that holds the person's own notes is never merged
@@ -506,7 +520,7 @@ Nobody copies or pastes a code.
   by a person is escaped.
 - **What it rests on.** "Waiting for you" trusts the address in the sign-in, so email
   confirmation must stay on in Supabase. The code in the link still works for whoever holds
-  it, once, as before.
+  it, once, as before; pressing Join with it can only bring in the address it was sent to.
 - **Not built.** A `lokus://` link that opens the app from the email (the app has no link
   scheme yet); telling the owner when an invitation is declined.
 

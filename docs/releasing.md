@@ -162,4 +162,4 @@ try a change to `deploy/release/desktop.sh` without releasing. Not tested there:
 next, sign-in through the browser.
 
 Not tested: a download through a browser on someone else's Mac;
-an app sitting in `/Applications` owned by another user; the release workflow in CI.
+an app sitting in `/Applications` owned by another user.
