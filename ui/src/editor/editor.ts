@@ -216,8 +216,21 @@ export class Editor {
   /** Swap in another note's state; returns the state being replaced. */
   swap(next: EditorState): EditorState {
     const previous = this.view.state;
-    this.view.setState(next);
+    try {
+      this.view.setState(next);
+    } catch (e) {
+      // A note that cannot be drawn leaves the one on screen as it was. Left half switched, the
+      // note on screen was saved with the other note's text.
+      this.view.setState(previous);
+      throw e;
+    }
     return previous;
+  }
+
+  /** A note's state with the text the note has now, for a tab that was behind another while a teammate typed. */
+  caughtUp(state: EditorState, text: string): EditorState {
+    const had = state.doc.toString();
+    return had === text ? state : state.update({ changes: differing(had, text) }).state;
   }
 
   /**
