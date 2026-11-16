@@ -98,8 +98,10 @@ shortcuts, plugins and AI tools.
   makes the workspace behind it inert. Dismissal restores the previous focus; follow-on
   news/sign-in dialogs replace Settings and keep their own focus, including before a vault.
   Editor commands reject a note hidden by Graph, a file
-  viewer or Settings. Mark, heading and link commands accept an optional `path` matching the
-  current note; a delayed menu action cannot edit a different note after navigation.
+  viewer or Settings. Native menu actions send a command ID, not a captured note path;
+  formatting targets the currently focused visible note at execution. Context callers can
+  supply an optional captured `path` to mark, heading and link commands; a mismatch with the
+  current note is rejected instead of editing that different note.
   Menus never substitute note formatting for system clipboard operations.
   Placement follows [Apple's menu-bar guidance](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar)
   ([readable HIG text](https://appstoreguidelines.com/human-interface-guidelines/version/17/the-menu-bar/))
