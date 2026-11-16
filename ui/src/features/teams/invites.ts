@@ -179,27 +179,28 @@ export async function bringTeams(): Promise<void> {
   }
 }
 
+/** Everything a look is: what is waiting, then the teams with no folder here. In this order: an invitation joined by the first is a team the second brings. */
+export const lookForTeams = () => void lookForInvites().finally(() => void bringTeams());
+
 /** Ask when someone signs in, and again when they come back to the window after a while. */
 export function watchInvites(setup: () => boolean): void {
   if (!HOME) return;
   settingUp = setup;
   let who = app.get().account?.id ?? null;
-  // In this order: an invitation joined by the first is a team the second brings.
-  const look = () => void lookForInvites().finally(() => void bringTeams());
-  look();
+  lookForTeams();
   app.subscribe(() => {
     const now = app.get().account?.id ?? null;
     if (now === who) return;
     who = now;
     // A team folder opened while signed out was refused: the sign-in is what it was waiting for.
     if (now && app.get().sync.status === "refused") void resumeSync();
-    look();
+    lookForTeams();
   });
   let due = 0;
   window.addEventListener("focus", () => {
     // Asked a moment ago: asked again when the moment is over, not dropped.
     const wait = asked + AGAIN - Date.now();
-    if (wait <= 0) look();
-    else if (!due) due = window.setTimeout(() => ((due = 0), look()), wait);
+    if (wait <= 0) lookForTeams();
+    else if (!due) due = window.setTimeout(() => ((due = 0), lookForTeams()), wait);
   });
 }
