@@ -155,9 +155,10 @@ it.
 Windows and Linux: every pull request into `main` (a release), and any other one labelled
 `desktop`, starts the real app on a Windows and a Linux machine of GitHub's and uses it alone and in a team against a relay started beside it (notes both ways,
 typing, an attachment, rename, delete, the relay going away and coming back, catching up after
-being closed), then builds the installer and the AppImage the way a release does and opens
-them (`checks/desktop-smoke.mjs`, the `desktop` job in `.github/workflows/ci.yml`). Not tested
-there: a person's own Windows or Linux computer, an update from one published version to the
+being closed) (`checks/desktop-smoke.mjs`, the `desktop` job in `.github/workflows/ci.yml`).
+The installer and the AppImage are built and opened by the release itself, before anything is
+put out, and by that job only when it is run by hand (Actions, CI, Run workflow): the way to
+try a change to `deploy/release/desktop.sh` without releasing. Not tested there: a person's own Windows or Linux computer, an update from one published version to the
 next, sign-in through the browser.
 
 Not tested: a download through a browser on someone else's Mac;
