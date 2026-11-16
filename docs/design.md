@@ -93,6 +93,8 @@ Small things that make it a daily driver, all plain commands over plain files:
   A link to a web page, `[words](https://…)`, opens in the browser on a click, as a link to a
   note opens the note (Option-click or the arrow keys to change it). Only `https` addresses.
   A picture, `![words](file)`, is shown when its file name has brackets in it too.
+  A link whose address is on the line below, or a picture written over two lines, stays as text.
+  A note that cannot be drawn does not open, and the note on screen stays as it was.
 - **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
   cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
   a new row past the last one, and a right-click adds or removes a row or a column. A link in a
@@ -105,6 +107,11 @@ Small things that make it a daily driver, all plain commands over plain files:
 - **Daily note:** `Daily/YYYY-MM-DD.md`, created on first use from `Templates/Daily.md` if present.
 - **Templates:** any note in `Templates/`; `{{date}}`, `{{time}}` and `{{title}}` are filled in.
 - **Trash:** deleting moves a file to `.lokus/trash/`; "Restore from the trash" puts it back.
+  A note a teammate deletes while it is open here closes its tab and says so, so nobody goes on
+  typing into a note that is gone; it is in this computer's trash too. The graph or a file in
+  front stays in front. A note that is not shared, with words not yet in its file, keeps its tab,
+  and saving brings it back. Known limit: in a shared note, keys typed in the instant between the
+  delete arriving and the tab closing (about a tenth of a second) reach no file.
 - **Version history:** when a note is overwritten (by you, a teammate's edit or the assistant) its
   old text is kept in `.lokus/history/`, at most one copy every five minutes and fifty per note.
   "Version history" restores one; what it replaces is kept too. History is per device and does
@@ -314,6 +321,9 @@ beside it, "name (local copy)", so no text is merged or lost. A viewer's device 
 for the team: it shows the second note once an editor's device has named it. A note the viewer
 made itself, which the team has never seen, is the one that steps aside there. A tab open on a
 note that sync moves goes with the note.
+
+A shared note whose tab is behind another still takes what teammates type. Its tab shows that
+text the moment it comes forward, and a click on the tab already on screen changes nothing.
 
 A device that was away can get several renames as one change (two notes that swapped names, a
 note given the name of one that was deleted). The note in the way steps aside until its own
