@@ -205,13 +205,45 @@ export const money = (value: Cell | undefined): string =>
 
 const stem = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
+/**
+ * Slack writes a mention as `<@U123|Pavan>`, a link as `<https://x|shown>` and bold as `*this*`.
+ * The same words as markdown, or as one plain line for a title, so a message reads here the way
+ * it does in Slack. The note keeps what Slack sent.
+ */
+export function fromSlack(text: string, plain = false): string {
+  const mark = (with_: string) => (_: string, lead: string, inner: string) => `${lead}${plain ? "" : with_}${inner}${plain ? "" : with_}`;
+  const entities = (part: string) => part.replace(/&(lt|gt|amp);/g, (_, name: string) => ({ lt: "<", gt: ">", amp: "&" })[name]!);
+  const words = (part: string) =>
+    part
+      .replace(/<!date\^[^<>|]*\|([^<>]*)>/g, "$1")
+      .replace(/<([@#!])([^<>|\s]+)(?:\|([^<>]*))?>/g, (_, kind: string, id: string, shown?: string) => {
+        const name = (shown || id.split("^")[0]).replace(/^[@#]/, "");
+        return `${kind === "#" ? "#" : "@"}${name}`;
+      })
+      .replace(/<((?:https?:\/\/|mailto:)[^<>|\s]+)(?:\|([^<>]*))?>/g, (_, url: string, shown?: string) => {
+        const bare = url.replace(/^mailto:/, "");
+        const label = shown && shown !== bare ? shown : "";
+        if (plain) return label || bare;
+        // Only a secure web address can be followed, so any other keeps its address in sight.
+        if (!url.startsWith("https://")) return label ? `${label} (${bare})` : bare;
+        return `[${(label || bare).replace(/[[\]\\]/g, "\\$&")}](${url.replace(/[()]/g, (c) => (c === "(" ? "%28" : "%29"))})`;
+      })
+      .replace(/(^|[\s(\[{>"'])\*(?=\S)([^*\n]*[^*\s])\*(?![\w*])/g, mark("**"))
+      .replace(/(^|[\s(\[{>"'])~(?=\S)([^~\n]*[^~\s])~(?![\w~])/g, mark("~~"));
+  // Code is shown as it was typed: Slack's marks are turned only outside it.
+  const parts = plain ? [text] : text.split(/(```[\s\S]*?```|`[^`\n]+`)/);
+  return parts.map((part, i) => entities(i % 2 ? part : words(part))).join("");
+}
+
 function toItem(row: Row): Item {
   const time = Date.parse(show(row.props.at));
+  const source = show(row.props.source);
+  const title = show(row.props.title) || row.title || stem(row.path);
   return {
     path: row.path,
-    title: show(row.props.title) || row.title || stem(row.path),
+    title: source.toLowerCase() === "slack" ? fromSlack(title, true) : title,
     kind: show(row.props.kind) || "event",
-    source: show(row.props.source),
+    source,
     from: show(row.props.from),
     status: show(row.props.status),
     field: show(row.props.field),
@@ -289,10 +321,11 @@ export function needsAttention(schema: Schema, c: Customer): boolean {
   return health === "risk" || (health !== "good" && reasons(schema, c.props, c.open, c.last, c.waiting).length > 0) || daysSince(c.last) >= QUIET;
 }
 
-/** What an item says: its note's own text, without the properties block. Empty when it has none. */
-export async function readBody(path: string): Promise<string> {
-  const note = await runCore<{ text: string }>("note.read", { path });
-  return note.text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+/** What an item says, as markdown: its note's own text, without the properties block. Empty when it has none. */
+export async function readBody(item: Pick<Item, "path" | "source">): Promise<string> {
+  const note = await runCore<{ text: string }>("note.read", { path: item.path });
+  const body = note.text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
+  return item.source.toLowerCase() === "slack" ? fromSlack(body) : body;
 }
 
 /** Someone at a customer: a note marked `type: person` whose `customer` names the customer. */

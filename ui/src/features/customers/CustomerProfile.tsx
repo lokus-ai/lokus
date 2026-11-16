@@ -25,7 +25,7 @@ import {
   waitingSince,
 } from "./data";
 import { ago, cap, readBody } from "./data";
-import { Field, FieldMenu, HealthPicker, ItemRow, KIND_ICON_OF, Person as Face, Value } from "./parts";
+import { Field, FieldMenu, HealthPicker, ItemRow, KIND_ICON_OF, Person as Face, Said, Value } from "./parts";
 
 interface Props {
   /** The customer's note. What happened with them is the notes in the folder of the same name. */
@@ -71,7 +71,7 @@ export function Conversation({ thread, onOpen }: { thread: Thread; onOpen(path: 
   useEffect(() => {
     if (!open) return;
     let current = true;
-    void Promise.all(thread.messages.map(async (m) => [m.path, (await readBody(m.path).catch(() => "")) || m.title] as const)).then(
+    void Promise.all(thread.messages.map(async (m) => [m.path, (await readBody(m).catch(() => "")) || m.title] as const)).then(
       (all) => current && setSaid(Object.fromEntries(all)),
     );
     return () => {
@@ -101,7 +101,7 @@ export function Conversation({ thread, onOpen }: { thread: Thread; onOpen(path: 
                 {!m.inbound && <i>us</i>}
                 <time>{ago(m.at)}</time>
               </span>
-              <p>{said[m.path] ?? m.title}</p>
+              <Said text={said[m.path] ?? m.title} />
             </div>
           ))}
         </div>

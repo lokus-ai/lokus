@@ -13,7 +13,7 @@
 .cm-editor .cm-code-first { border-radius: var(--radius-md) var(--radius-md) 0 0; padding-top: 6px; color: var(--fg-3); }
 .cm-editor .cm-code-last { border-radius: 0 0 var(--radius-md) var(--radius-md); padding-bottom: 6px; color: var(--fg-3); }
 .cm-editor .cm-link, .cm-editor .cm-wikilink { color: var(--accent); text-decoration: underline; text-decoration-color: var(--selection); text-underline-offset: 3px; }
-.cm-editor .cm-wikilink { cursor: pointer; }
+.cm-editor .cm-wikilink, .cm-editor .cm-link[data-target] { cursor: pointer; }
 .cm-editor .cm-highlight { background: var(--highlight); border-radius: 2px; }
 .cm-editor .cm-list-mark, .cm-editor .cm-bullet { color: var(--fg-3); }
 .cm-editor .cm-task-box { margin: 0 6px 0 0; width: 15px; height: 15px; vertical-align: -2px; accent-color: var(--accent); cursor: pointer; }
@@ -32,6 +32,7 @@
 .cm-editor .cm-table th { background: var(--bg-sidebar); font-weight: 600; white-space: nowrap; }
 .cm-editor .cm-table td:first-child { white-space: nowrap; }
 .cm-editor .cm-table .cm-wikilink { cursor: pointer; }
+.cm-editor .cm-table th:focus, .cm-editor .cm-table td:focus { outline: 2px solid var(--accent); outline-offset: -2px; white-space: pre-wrap; }
 .cm-editor .cm-table code { font-family: var(--font-mono); font-size: 0.9em; background: var(--code-bg); border-radius: var(--radius-xs); padding: 0.1em 0.3em; }
 
 /* Slash menu */

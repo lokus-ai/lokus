@@ -10,7 +10,7 @@ import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import type { Awareness } from "y-protocols/awareness";
 import { type Text as YText, UndoManager } from "yjs";
 
-import { livePreview } from "./livePreview";
+import { differing, livePreview } from "./livePreview";
 import { insertLink, readFrontmatter, setFrontmatterKey, setHeading, toggleMark } from "./markdownCommands";
 import { markdownPairs, typeText } from "./pairs";
 import { completions } from "./slash";
@@ -220,13 +220,12 @@ export class Editor {
     return previous;
   }
 
-  /** Replace the text after an outside change, keeping the cursor near where it was. */
+  /**
+   * Take the text after an outside change. Only the part that differs is replaced, so the cursor,
+   * and a table cell being typed in, stay where they are.
+   */
   replaceText(text: string): void {
-    const head = Math.min(this.view.state.selection.main.head, text.length);
-    this.view.dispatch({
-      changes: { from: 0, to: this.view.state.doc.length, insert: text },
-      selection: { anchor: head },
-    });
+    if (text !== this.text) this.view.dispatch({ changes: differing(this.text, text) });
   }
 
   mark(mark: string): void {
