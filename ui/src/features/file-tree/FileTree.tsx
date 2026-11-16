@@ -1,7 +1,8 @@
 /** @part-of ui.file-tree */
-import { type MouseEvent, useEffect, useState } from "react";
+import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { Entry } from "../../bridge/core";
+import { registerCommands, unregisterCommands } from "../../shell/commands";
 import { Icon } from "../../shell/Icon";
 
 interface Props {
@@ -10,8 +11,9 @@ interface Props {
   onOpen(path: string): void;
   onNewNote(folder: string): void;
   onNewFolder(path: string): void;
-  onRename(from: string, to: string): void;
+  onRename(from: string, to: string): Promise<boolean>;
   onDelete(path: string): void;
+  onReveal(): void;
 }
 
 interface Menu {
@@ -47,10 +49,60 @@ function NameInput({ initial, depth, onDone }: { initial: string; depth: number;
   );
 }
 
-export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRename, onDelete }: Props) {
-  const [open, setOpen] = useState<Set<string>>(() => new Set());
+export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRename, onDelete, onReveal }: Props) {
+  const [open, setOpen] = useState<Map<string, boolean>>(() => new Map());
+  const tree = useRef<HTMLElement>(null);
+  const [revealRequest, setRevealRequest] = useState(0);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
+
+  useLayoutEffect(() => {
+    if (!revealRequest) return;
+    const frame = requestAnimationFrame(() => {
+      const row = tree.current?.querySelector<HTMLElement>(".tree-row.active");
+      row?.focus({ preventScroll: true });
+      row?.scrollIntoView({ block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [revealRequest]);
+
+  useEffect(() => {
+    registerCommands([
+      {
+        id: "tree.collapseAll",
+        title: "Collapse all folders",
+        run() {
+          const closed = new Map<string, boolean>();
+          const collapse = (items: Entry[]) => {
+            for (const entry of items) {
+              if (entry.kind !== "folder") continue;
+              closed.set(entry.path, false);
+              collapse(entry.children ?? []);
+            }
+          };
+          collapse(entries);
+          setOpen(closed);
+          setMenu(null);
+          setEditing(null);
+        },
+      },
+      {
+        id: "tree.revealActive",
+        title: "Reveal active file in sidebar",
+        run() {
+          if (!active) return;
+          setOpen((prev) => {
+            const next = new Map(prev);
+            for (let folder = parentOf(active); folder; folder = parentOf(folder)) next.set(folder, true);
+            return next;
+          });
+          onReveal();
+          setRevealRequest((request) => request + 1);
+        },
+      },
+    ]);
+    return () => unregisterCommands(["tree.collapseAll", "tree.revealActive"]);
+  }, [entries, active, onReveal]);
 
   useEffect(() => {
     if (!menu) return;
@@ -63,12 +115,11 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
     };
   }, [menu]);
 
-  const expand = (path: string) => setOpen((prev) => new Set(prev).add(path));
+  const expand = (path: string) => setOpen((prev) => new Map(prev).set(path, true));
   const toggle = (path: string) =>
     setOpen((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(path)) next.add(path);
-      return next;
+      const expanded = prev.get(path) ?? Boolean(active?.startsWith(`${path}/`));
+      return new Map(prev).set(path, !expanded);
     });
   const showMenu = (e: MouseEvent, entry: Entry | null) => {
     e.preventDefault();
@@ -76,11 +127,22 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
     setMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
-  const finishRename = (entry: Entry, value: string | null) => {
+  const finishRename = async (entry: Entry, value: string | null) => {
     setEditing(null);
     if (!value) return;
     const name = entry.kind === "note" ? `${value.replace(/\.md$/i, "")}.md` : value;
-    if (name !== entry.name) onRename(entry.path, join(parentOf(entry.path), name));
+    if (name === entry.name) return;
+    const to = join(parentOf(entry.path), name);
+    if (!(await onRename(entry.path, to)) || entry.kind !== "folder") return;
+    setOpen((prev) => {
+      const next = new Map(prev);
+      for (const [path, expanded] of prev) {
+        if (path !== entry.path && !path.startsWith(`${entry.path}/`)) continue;
+        next.delete(path);
+        next.set(`${to}${path.slice(entry.path.length)}`, expanded);
+      }
+      return next;
+    });
   };
   const finishFolder = (parent: string, value: string | null) => {
     setEditing(null);
@@ -99,12 +161,13 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
           return <NameInput key={entry.path} initial={initial} depth={depth} onDone={(v) => finishRename(entry, v)} />;
         }
         if (entry.kind === "folder") {
-          const expanded = open.has(entry.path) || Boolean(active?.startsWith(`${entry.path}/`));
+          const expanded = open.get(entry.path) ?? Boolean(active?.startsWith(`${entry.path}/`));
           return (
             <div key={entry.path}>
               <button
                 className="tree-row"
                 style={indent}
+                aria-expanded={expanded}
                 onClick={() => toggle(entry.path)}
                 onContextMenu={(e) => showMenu(e, entry)}
               >
@@ -140,7 +203,7 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
   };
 
   return (
-    <nav className="tree" onContextMenu={(e) => showMenu(e, null)}>
+    <nav ref={tree} className="tree" aria-label="Files" onContextMenu={(e) => showMenu(e, null)}>
       {entries.length === 0 && !editing && <p className="tree-empty">This vault is empty. Right-click to add a note.</p>}
       {rows(entries, 0, "")}
       {menu && (
