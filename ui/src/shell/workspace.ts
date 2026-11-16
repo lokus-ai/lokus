@@ -676,7 +676,9 @@ export async function closeTab(path: string): Promise<void> {
     app.set({ tabs: rest });
     return;
   }
-  const next = rest[Math.min(index, rest.length - 1)] ?? null;
+  // Under the graph or a file in front, the tab that takes the note's place is another note.
+  const from = view === "note" ? rest : rest.filter(isNotePath);
+  const next = from[Math.min(index, from.length - 1)] ?? null;
   app.set({ tabs: rest, active: null, properties: {} });
   if (next) go(next);
   // The graph or a file in front of the note stays in front.
@@ -783,7 +785,12 @@ function closeGone(path: string): void {
   // Words not yet in the file stay: saving them brings the note back for everyone.
   if (session && !session.shared && textOf(path) !== session.saved) return;
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
-  void closeTab(path).then(() => notify(`“${name}” was deleted on another computer. It is in the vault trash`));
+  const { active, view } = app.get();
+  void closeTab(path).then(() => {
+    // Keys still coming for the note that left do not go into the one that came forward.
+    if (active === path && view === "note") editor?.view.contentDOM.blur();
+    notify(`“${name}” was deleted on another computer. It is in the vault trash`);
+  });
 }
 
 /** Rename or move a note or a folder; open tabs follow it. */

@@ -108,7 +108,10 @@ Small things that make it a daily driver, all plain commands over plain files:
 - **Templates:** any note in `Templates/`; `{{date}}`, `{{time}}` and `{{title}}` are filled in.
 - **Trash:** deleting moves a file to `.lokus/trash/`; "Restore from the trash" puts it back.
   A note a teammate deletes while it is open here closes its tab and says so, so nobody goes on
-  typing into a note that is gone; it is in this computer's trash too.
+  typing into a note that is gone; it is in this computer's trash too. The graph or a file in
+  front stays in front. A note that is not shared, with words not yet in its file, keeps its tab,
+  and saving brings it back. Known limit: in a shared note, keys typed in the instant between the
+  delete arriving and the tab closing (about a tenth of a second) reach no file.
 - **Version history:** when a note is overwritten (by you, a teammate's edit or the assistant) its
   old text is kept in `.lokus/history/`, at most one copy every five minutes and fifty per note.
   "Version history" restores one; what it replaces is kept too. History is per device and does

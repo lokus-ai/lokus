@@ -243,7 +243,11 @@ function Tabs() {
             </button>
           </div>
         ) : (
-        <div key={path} className={`tab${(view === "note" && path === active) || (view === "file" && path === file) ? " active" : ""}`} onMouseDown={() => void openNote(path)}>
+        <div key={path} className={`tab${(view === "note" && path === active) || (view === "file" && path === file) ? " active" : ""}`} onMouseDown={(e) => {
+          // The click leaves the keyboard in the note, the one on screen or the one coming forward.
+          if (view === "note" && active && isNotePath(path)) e.preventDefault();
+          void openNote(path);
+        }}>
           {!isNotePath(path) ? (
             <Icon name="file" size={14} />
           ) : isPicture(icons.current[path]) ? (
