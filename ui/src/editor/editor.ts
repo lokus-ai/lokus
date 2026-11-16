@@ -227,6 +227,12 @@ export class Editor {
     return previous;
   }
 
+  /** A note's state with the text the note has now, for a tab that was behind another while a teammate typed. */
+  caughtUp(state: EditorState, text: string): EditorState {
+    const had = state.doc.toString();
+    return had === text ? state : state.update({ changes: differing(had, text) }).state;
+  }
+
   /**
    * Take the text after an outside change. Only the part that differs is replaced, so the cursor,
    * and a table cell being typed in, stay where they are.
