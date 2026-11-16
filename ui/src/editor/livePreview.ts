@@ -88,6 +88,14 @@ class Picture extends WidgetType {
   }
 }
 
+/** The address a link or a picture names: `\(` in it is a bracket, not a backslash and a bracket. */
+function address(state: EditorState, url: { from: number; to: number }): string {
+  return state
+    .sliceDoc(url.from, url.to)
+    .replace(/^<|>$/g, "")
+    .replace(/\\([!-/:-@[-`{-~])/g, "$1");
+}
+
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
 
 const INLINE_PARENTS = new Set(["StrongEmphasis", "Emphasis", "Strikethrough", "InlineCode", "Link", "Image"]);
@@ -180,10 +188,12 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           return;
         }
         if (name === "Image") {
-          const m = /^!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)$/.exec(state.sliceDoc(node.from, node.to));
-          const url = m ? hooks.resolveImage(m[2]) : null;
-          if (m && url && !touches(state, node.from, node.to)) {
-            out.push(Decoration.replace({ widget: new Picture(url, m[1]) }).range(node.from, node.to));
+          // The file is the one the Markdown names, so a name with brackets or spaces in it is still found.
+          const named = node.node.getChild("URL");
+          const url = named ? hooks.resolveImage(address(state, named)) : null;
+          if (named && url && !touches(state, node.from, node.to)) {
+            const text = state.sliceDoc(node.from, named.from);
+            out.push(Decoration.replace({ widget: new Picture(url, text.slice(2, text.lastIndexOf("]("))) }).range(node.from, node.to));
           }
           return false;
         }
@@ -193,8 +203,7 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0;
           // Folded to its words, a link to a web page is followed with a click, as a link to a note is.
           const url = folded ? node.node.getChild("URL") : null;
-          // The address is what the Markdown names: `\(` in it is a bracket, not a backslash and a bracket.
-          const web = url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, "").replace(/\\([!-/:-@[-`{-~])/g, "$1") : "";
+          const web = url ? address(state, url) : "";
           out.push(Decoration.mark({ class: "cm-link", attributes: web.startsWith("https://") ? { "data-target": web } : undefined }).range(node.from, node.to));
           if (folded) {
             out.push(hide.range(node.from, node.from + 1));
