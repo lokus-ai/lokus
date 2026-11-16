@@ -197,7 +197,8 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
         if (name === "Link") {
           const text = state.sliceDoc(node.from, node.to);
           const close = text.lastIndexOf("](");
-          const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0;
+          // An address written on the line below stays as text: a line break cannot be folded away here.
+          const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0 && !text.slice(close).includes("\n");
           // Folded to its words, a link to a web page is followed with a click, as a link to a note is.
           const url = folded ? node.node.getChild("URL") : null;
           const web = url ? address(state, url) : "";
