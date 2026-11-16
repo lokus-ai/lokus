@@ -188,14 +188,16 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           return false;
         }
         if (name === "Link") {
-          out.push(Decoration.mark({ class: "cm-link" }).range(node.from, node.to));
-          if (!touches(state, node.from, node.to)) {
-            const text = state.sliceDoc(node.from, node.to);
-            const close = text.lastIndexOf("](");
-            if (text.startsWith("[") && close > 0) {
-              out.push(hide.range(node.from, node.from + 1));
-              out.push(hide.range(node.from + close, node.to));
-            }
+          const text = state.sliceDoc(node.from, node.to);
+          const close = text.lastIndexOf("](");
+          const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0;
+          // Folded to its words, a link to a web page is followed with a click, as a link to a note is.
+          const url = folded ? node.node.getChild("URL") : null;
+          const web = url ? state.sliceDoc(url.from, url.to).replace(/^<|>$/g, "") : "";
+          out.push(Decoration.mark({ class: "cm-link", attributes: web.startsWith("https://") ? { "data-target": web } : undefined }).range(node.from, node.to));
+          if (folded) {
+            out.push(hide.range(node.from, node.from + 1));
+            out.push(hide.range(node.from + close, node.to));
           }
           return;
         }
@@ -286,14 +288,62 @@ function cellContent(cell: HTMLElement, text: string): void {
   }
 }
 
-const cells = (row: string) =>
-  row
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .split(/(?<!\\)\|/)
-    .map((c) => c.trim().replace(/\\\|/g, "|"));
+/** What a line of a table starts with when the table sits in a quote or a list: `> ` or its indent. */
+const lead = (row: string) => /^[ \t]*(>[ \t]*)*/.exec(row)![0];
 
+/** Where each cell of a row sits in its line: the text between two bars, spacing included. */
+function cellSpans(row: string): { from: number; to: number }[] {
+  const bars = [...row.matchAll(/(?<!\\)\|/g)].map((m) => m.index);
+  const edges = [lead(row).length - 1, ...bars, row.length];
+  const spans = edges.slice(1).map((to, i) => ({ from: edges[i] + 1, to }));
+  if (!row.slice(spans[0].from, spans[0].to).trim()) spans.shift();
+  const last = spans[spans.length - 1];
+  if (last && !row.slice(last.from, last.to).trim()) spans.pop();
+  return spans;
+}
+
+const cells = (row: string) => cellSpans(row).map((s) => row.slice(s.from, s.to).trim().replace(/\\\|/g, "|"));
+
+/** A table's rows as the text of their cells, without the line of dashes under the heading. */
+function grid(source: string): string[][] {
+  const rows = source.split("\n").map(cells);
+  const width = rows[0].length;
+  return rows.filter((_, i) => i !== 1).map((row) => Array.from({ length: width }, (_, col) => row[col] ?? ""));
+}
+
+const rowLine = (texts: string[]) => `| ${texts.map((t) => t.replace(/\s*\n\s*/g, " ").trim().replace(/(?<!\\)\|/g, "\\|")).join(" | ")} |`;
+
+type TableBox = HTMLElement & { widget: Table };
+const cellAt = (wrap: HTMLElement, row: number, col: number) =>
+  wrap.querySelector("table")?.rows[row]?.cells[col] as HTMLElement | undefined;
+
+function caretToEnd(cell: HTMLElement): void {
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  range.collapse(false);
+  const selection = getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+/** The one stretch of `old` that has to be replaced to make it `next`. */
+export function differing(old: string, next: string): { from: number; to: number; insert: string } {
+  let start = 0;
+  while (start < next.length && start < old.length && next[start] === old[start]) start++;
+  let end = 0;
+  while (end < next.length - start && end < old.length - start && next.at(-1 - end) === old.at(-1 - end)) end++;
+  // An emoji is two units: one that both texts share is not cut in half.
+  const half = (at: number, low: number) => (old.charCodeAt(at) & 0xfc00) === low;
+  if (start && half(start - 1, 0xd800)) start--;
+  if (end && half(old.length - end, 0xdc00)) end--;
+  return { from: start, to: old.length - end, insert: next.slice(start, next.length - end) };
+}
+
+/**
+ * A table is edited as a table: a click in a cell types into that cell, and each keystroke is
+ * written into the cell's markdown. The cell being typed in shows its own markdown; the rest
+ * stay rendered. Moving the caret into the table with the arrow keys still shows it as text.
+ */
 class Table extends WidgetType {
   constructor(
     readonly source: string,
@@ -304,35 +354,244 @@ class Table extends WidgetType {
   eq(other: Table) {
     return other.source === this.source && other.from === this.from;
   }
+
   toDOM(view: EditorView) {
-    const lines = this.source.split("\n").filter((l) => l.trim());
-    const align = cells(lines[1] ?? "").map((c) =>
-      c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "",
-    );
-    const wrap = document.createElement("div");
+    const wrap = document.createElement("div") as unknown as TableBox;
     wrap.className = "cm-table";
-    const table = wrap.appendChild(document.createElement("table"));
-    lines.forEach((line, i) => {
-      if (i === 1) return;
-      const tr = table.appendChild(document.createElement("tr"));
-      cells(line).forEach((text, col) => {
-        const cell = tr.appendChild(document.createElement(i === 0 ? "th" : "td"));
-        if (align[col]) cell.style.textAlign = align[col];
-        cellContent(cell, text);
-      });
-    });
-    // Clicking the table puts the cursor in its markdown, which reveals it.
+    wrap.widget = this;
+    wrap.appendChild(document.createElement("table"));
+    this.draw(wrap, view);
+    if (view.state.readOnly) return wrap;
+
+    const place = (cell: HTMLElement) => {
+      const tr = cell.parentElement as HTMLTableRowElement;
+      return { row: tr.rowIndex, col: (cell as HTMLTableCellElement).cellIndex };
+    };
+    const edit = (row: number, col: number) => {
+      const cell = cellAt(wrap, row, col);
+      if (!cell) return;
+      cell.focus();
+      caretToEnd(cell);
+    };
     wrap.addEventListener("mousedown", (e) => {
-      if ((e.target as HTMLElement).closest(".cm-wikilink")) return;
+      const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
+      if (!cell || e.button !== 0 || document.activeElement === cell) return;
+      if (!wrap.widget.ignoreEvent(e)) return;
+      // The cell is about to show its markdown, so the caret goes where the click landed in that.
       e.preventDefault();
-      view.dispatch({ selection: { anchor: this.from + 2 } });
-      view.focus();
+      cell.focus();
+      const at = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+      if (at && cell.contains(at.startContainer)) {
+        getSelection()?.removeAllRanges();
+        getSelection()?.addRange(at);
+      } else caretToEnd(cell);
+    });
+    wrap.addEventListener("focusin", (e) => {
+      const cell = e.target as HTMLElement;
+      const { row, col } = place(cell);
+      cell.textContent = grid(wrap.widget.source)[row]?.[col] ?? "";
+    });
+    wrap.addEventListener("focusout", (e) => {
+      const cell = e.target as HTMLElement;
+      if (!cell.isConnected) return;
+      const { row, col } = place(cell);
+      cell.replaceChildren();
+      cellContent(cell, grid(wrap.widget.source)[row]?.[col] ?? "");
+    });
+    wrap.addEventListener("input", (e) => {
+      const cell = e.target as HTMLElement;
+      const { row, col } = place(cell);
+      wrap.widget.write(view, row, col, cell.textContent ?? "");
+    });
+    wrap.addEventListener("keydown", (e) => {
+      const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
+      if (!cell || e.isComposing) return;
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
+        // Select all is the cell's, not the note's: the next key replaces what is in this cell.
+        e.preventDefault();
+        getSelection()?.selectAllChildren(cell);
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const { row, col } = place(cell);
+      const rows = grid(wrap.widget.source);
+      const width = rows[0].length;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        view.focus();
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        const back = e.key === "Tab" && e.shiftKey;
+        let next = e.key === "Enter" ? { row: row + 1, col } : { row, col: col + (back ? -1 : 1) };
+        if (next.col < 0) next = { row: row - 1, col: width - 1 };
+        if (next.col >= width) next = { row: row + 1, col: 0 };
+        if (next.row < 0) return;
+        // Past the last row there is a new one, as in any table.
+        if (next.row >= rows.length) wrap.widget.change(view, (lines) => lines.push(lead(lines[1]) + rowLine(Array(width).fill(""))));
+        edit(next.row, next.col);
+      }
+    });
+    wrap.addEventListener("contextmenu", (e) => {
+      const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
+      if (!cell) return;
+      e.preventDefault();
+      const { row, col } = place(cell);
+      tableMenu(e.clientX, e.clientY, row, grid(wrap.widget.source)[0].length, (how) => {
+        wrap.widget.change(view, (lines) => how(lines, row === 0 ? 0 : row + 1, col));
+        // The keyboard goes back to the note, so undo takes back what was just chosen.
+        view.focus();
+      });
     });
     return wrap;
   }
-  ignoreEvent() {
-    return false;
+
+  /** Fill the table in, leaving a cell that is being typed in as the person has it. */
+  private draw(wrap: HTMLElement, view: EditorView, before?: string): void {
+    const lines = this.source.split("\n");
+    const align = cells(lines[1] ?? "").map((c) =>
+      c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "",
+    );
+    const table = wrap.querySelector("table")!;
+    const rows = grid(this.source);
+    const typing = document.activeElement?.closest(".cm-table") === wrap ? (document.activeElement as HTMLElement) : null;
+    const same = table.rows.length === rows.length && [...table.rows].every((tr) => tr.cells.length === rows[0].length);
+    if (!same) {
+      // Rows or columns came or went: build it again, and keep typing in the row the person was in.
+      // That row is known by what it held. When it is gone, the next key goes nowhere, not into
+      // the row that took its place.
+      let was: { row: number; col: number } | null = null;
+      if (typing && before !== undefined) {
+        const at = (typing.parentElement as HTMLTableRowElement).rowIndex;
+        const held = grid(before)[at]?.join("\n");
+        const found = rows
+          .map((row, i) => (row.join("\n") === held ? i : -1))
+          .filter((i) => i >= 0)
+          .sort((a, b) => Math.abs(a - at) - Math.abs(b - at))[0];
+        if (found !== undefined) was = { row: found, col: (typing as HTMLTableCellElement).cellIndex };
+      }
+      table.replaceChildren();
+      rows.forEach((row, i) => {
+        const tr = table.appendChild(document.createElement("tr"));
+        row.forEach(() => {
+          const cell = tr.appendChild(document.createElement(i === 0 ? "th" : "td"));
+          if (!view.state.readOnly) cell.contentEditable = "plaintext-only";
+        });
+      });
+      const again = was && cellAt(wrap, was.row, was.col);
+      if (again) {
+        again.focus();
+        caretToEnd(again);
+      }
+    }
+    rows.forEach((row, i) =>
+      row.forEach((text, col) => {
+        const cell = table.rows[i].cells[col];
+        cell.style.textAlign = align[col] ?? "";
+        if (cell === document.activeElement) {
+          // Own typing already matches. Anything else is a teammate's change to this cell: show it,
+          // or the next key pressed would write the old text back over theirs.
+          const has = (cell.textContent ?? "").replace(/\s*\n\s*/g, " ").trim().replace(/\\\|/g, "|");
+          if (has !== text) {
+            cell.textContent = text;
+            caretToEnd(cell);
+          }
+          return;
+        }
+        cell.replaceChildren();
+        cellContent(cell, text);
+      }),
+    );
   }
+
+  updateDOM(dom: HTMLElement, view: EditorView) {
+    const before = (dom as TableBox).widget.source;
+    (dom as TableBox).widget = this;
+    this.draw(dom, view, before);
+    return true;
+  }
+
+  /** Put what was typed into one cell's markdown, touching nothing else in the table. */
+  write(view: EditorView, row: number, col: number, typed: string): void {
+    const text = typed.replace(/\s*\n\s*/g, " ").replace(/(?<!\\)\|/g, "\\|");
+    this.change(view, (lines) => {
+      const n = row === 0 ? 0 : row + 1;
+      const texts = cells(lines[n]);
+      const span = cellSpans(lines[n])[col];
+      // A row shorter than the heading gets the cells it was missing.
+      while (texts.length < col) texts.push("");
+      texts[col] = typed;
+      const whole = lead(lines[n]) + rowLine(texts);
+      if (!span) {
+        lines[n] = whole;
+        return;
+      }
+      const old = lines[n].slice(span.from, span.to);
+      const pad = old.trim() ? [/^\s*/.exec(old)![0], /\s*$/.exec(old)![0]] : [" ", " "];
+      const [before, after] = [lines[n].slice(0, span.from), lines[n].slice(span.to)];
+      const line = before + (pad[0] || (before.length > lead(lines[n]).length ? " " : "")) + text.trim() + (pad[1] || (after ? " " : "")) + after;
+      // A row written without its outer bars cannot hold an empty first or last cell: it gets them.
+      lines[n] = cells(line).length === texts.length ? line : whole;
+    });
+  }
+
+  /** Change the table's lines and write only the part that differs. */
+  change(view: EditorView, how: (lines: string[]) => void): void {
+    const lines = this.source.split("\n");
+    how(lines);
+    const next = lines.join("\n");
+    // A table that is no longer what this was drawn from (another note, a teammate) is left alone.
+    if (next === this.source || view.state.sliceDoc(this.from, this.from + this.source.length) !== this.source) return;
+    const { from, to, insert } = differing(this.source, next);
+    view.dispatch({ changes: { from: this.from + from, to: this.from + to, insert }, userEvent: "input.type" });
+  }
+
+  /** A click on a link follows it; everything else in the table is the table's own. */
+  ignoreEvent(e: Event) {
+    const link = e.type === "mousedown" && (e.target as HTMLElement).closest?.(".cm-wikilink");
+    return !(link && !(e as MouseEvent).altKey && !(e as MouseEvent).shiftKey && (e as MouseEvent).button === 0);
+  }
+}
+
+type Reshape = (lines: string[], line: number, col: number) => void;
+const eachRow = (lines: string[], how: (texts: string[], i: number) => string[]) =>
+  lines.forEach((line, i) => (lines[i] = lead(line) + rowLine(how(cells(line), i))));
+const RESHAPES: [string, Reshape, ("body" | "wide")?][] = [
+  ["Add row above", (lines, at) => lines.splice(at, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill(""))), "body"],
+  ["Add row below", (lines, at) => lines.splice(Math.max(at, 1) + 1, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill("")))],
+  ["Add column left", (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col, 0, i === 1 ? "---" : ""))],
+  ["Add column right", (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col + 1, 0, i === 1 ? "---" : ""))],
+  ["Delete row", (lines, at) => lines.splice(at, 1), "body"],
+  ["Delete column", (lines, _, col) => eachRow(lines, (t) => t.toSpliced(col, 1)), "wide"],
+  ["Delete table", (lines) => lines.splice(0)],
+];
+
+/** Right-click in a table: add or remove a row or a column. */
+function tableMenu(x: number, y: number, row: number, width: number, run: (how: Reshape) => void): void {
+  const menu = document.body.appendChild(document.createElement("div"));
+  menu.className = "menu";
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  const close = () => {
+    menu.remove();
+    removeEventListener("mousedown", away, true);
+    removeEventListener("keydown", close, true);
+  };
+  const away = (e: Event) => menu.contains(e.target as Node) || close();
+  addEventListener("mousedown", away, true);
+  addEventListener("keydown", close, true);
+  for (const [label, how, where] of RESHAPES) {
+    // The heading row stays where it is, and a table keeps at least one column.
+    if ((where === "body" && row === 0) || (where === "wide" && width < 2)) continue;
+    const item = menu.appendChild(document.createElement("button"));
+    item.textContent = label;
+    if (label.startsWith("Delete")) item.className = "danger";
+    item.addEventListener("click", () => {
+      close();
+      run(how);
+    });
+  }
+  menu.style.left = `${Math.max(4, Math.min(x, innerWidth - menu.offsetWidth - 4))}px`;
+  menu.style.top = `${Math.max(4, Math.min(y, innerHeight - menu.offsetHeight - 4))}px`;
 }
 
 class Properties extends WidgetType {
@@ -508,7 +767,7 @@ function linkClicks(open: (target: string, newTab: boolean) => void) {
   return EditorView.domEventHandlers({
     mousedown(event) {
       if (event.button !== 0 || event.altKey || event.shiftKey) return false;
-      const link = (event.target as HTMLElement).closest<HTMLElement>(".cm-wikilink");
+      const link = (event.target as HTMLElement).closest<HTMLElement>(".cm-wikilink, .cm-link[data-target]");
       const target = link?.dataset.target;
       if (!link || !target || link.textContent?.includes("[[")) return false;
       event.preventDefault();
