@@ -195,7 +195,11 @@ export function watchInvites(setup: () => boolean): void {
     if (now && app.get().sync.status === "refused") void resumeSync();
     look();
   });
+  let due = 0;
   window.addEventListener("focus", () => {
-    if (Date.now() - asked > AGAIN) look();
+    // Asked a moment ago: asked again when the moment is over, not dropped.
+    const wait = asked + AGAIN - Date.now();
+    if (wait <= 0) look();
+    else if (!due) due = window.setTimeout(() => ((due = 0), look()), wait);
   });
 }
