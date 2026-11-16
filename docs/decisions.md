@@ -163,13 +163,16 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 - **Date:** 2026-11-16 (UTC).
 - **Change:** Active-file parents were forced open on every render. Manual closure now wins
-  through edits and tab changes; a separate sidebar button and `tree.collapseAll` close all
+  through edits, tab changes and successful sidebar folder renames (including nested
+  folder choices); a separate sidebar button and `tree.collapseAll` close all
   folders in the open workspace, recursively. `tree.revealActive` explicitly reopens the
   active file's parents and focuses its row. Only tree presentation changes; tabs, files and
   team connections remain intact. Choices reset when the workspace changes.
 - **Why:** Reproduced in the real macOS app: clicking `Projects/Alpha` or `Projects` left
   `Projects/Alpha/Active.md` visible, while an unrelated folder collapsed normally. The
   render expression forced active ancestors open regardless of the manual state.
+  Real-app review also reproduced a closed folder reopening after a rename because the
+  explicit choices still used its old path; they now follow a successful sidebar rename.
 - **Decided by:** Pratham, 2026-11-16: "Also, I cannot close the folder in which I have a
   file open. I don't know why. Also, there is no button to collapse all the folders."
   Devin chose explicit reveal and workspace-scoped choices within that folder-collapse

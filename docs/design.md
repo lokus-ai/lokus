@@ -89,7 +89,8 @@ and fails unless every file is byte-identical.
 Small things that make it a daily driver, all plain commands over plain files:
 
 - **Folders in the sidebar:** opening a file shows its parents unless the person has closed
-  them. A manually closed folder stays closed through edits and tab changes. The separate
+  them. A manually closed folder stays closed through edits, tab changes and renaming it
+  in the sidebar; its nested folder choices follow the rename too. The separate
   **Collapse all folders** sidebar button and `tree.collapseAll` command close every folder
   in the open workspace, including nested folders, without closing files, changing text or
   stopping sync. `tree.revealActive` (**Reveal active file in sidebar**) reopens the active

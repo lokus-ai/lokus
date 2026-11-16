@@ -11,7 +11,7 @@ interface Props {
   onOpen(path: string): void;
   onNewNote(folder: string): void;
   onNewFolder(path: string): void;
-  onRename(from: string, to: string): void;
+  onRename(from: string, to: string): Promise<boolean>;
   onDelete(path: string): void;
   onReveal(): void;
 }
@@ -127,11 +127,22 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
     setMenu({ x: e.clientX, y: e.clientY, entry });
   };
 
-  const finishRename = (entry: Entry, value: string | null) => {
+  const finishRename = async (entry: Entry, value: string | null) => {
     setEditing(null);
     if (!value) return;
     const name = entry.kind === "note" ? `${value.replace(/\.md$/i, "")}.md` : value;
-    if (name !== entry.name) onRename(entry.path, join(parentOf(entry.path), name));
+    if (name === entry.name) return;
+    const to = join(parentOf(entry.path), name);
+    if (!(await onRename(entry.path, to)) || entry.kind !== "folder") return;
+    setOpen((prev) => {
+      const next = new Map(prev);
+      for (const [path, expanded] of prev) {
+        if (path !== entry.path && !path.startsWith(`${entry.path}/`)) continue;
+        next.delete(path);
+        next.set(`${to}${path.slice(entry.path.length)}`, expanded);
+      }
+      return next;
+    });
   };
   const finishFolder = (parent: string, value: string | null) => {
     setEditing(null);

@@ -151,7 +151,7 @@ function Sidebar() {
           onOpen={pick}
           onNewNote={(folder) => void createNoteIn(folder)}
           onNewFolder={(path) => void createFolder(path)}
-          onRename={(from, to) => void renameEntry(from, to)}
+          onRename={renameEntry}
           onDelete={(path) => void deleteEntry(path)}
           onReveal={revealTree}
         />
