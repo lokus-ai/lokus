@@ -487,7 +487,7 @@ function watchSync(): void {
     else if (event.event === "kept_both") {
       moveOpen(event.path, event.moved_to);
       notify(`Kept your copy as “${event.moved_to}”`);
-    }
+    } else if (event.event === "trashed") closeGone(event.path);
   });
 }
 
@@ -597,9 +597,14 @@ function show(path: string): void {
   const next = sessions.get(path);
   if (!editor || !next) return;
   const previous = app.get().active;
-  const leaving = editor.swap(next.state);
-  const old = previous ? sessions.get(previous) : undefined;
-  if (old && previous !== path) old.state = leaving;
+  // The note already on screen keeps what was typed in it. One coming forward shows what a
+  // teammate typed while its tab was behind another.
+  if (previous !== path) {
+    if (next.shared) next.state = editor.caughtUp(next.state, next.shared.text.toString());
+    const leaving = editor.swap(next.state);
+    const old = previous ? sessions.get(previous) : undefined;
+    if (old) old.state = leaving;
+  }
   app.set((s) => ({ active: path, view: "note", tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
   syncProperties();
   syncPeers();
@@ -767,6 +772,16 @@ function moveOpen(from: string, to: string): void {
     file: s.file ? moved(s.file) : null,
     dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
   }));
+}
+
+/** A note deleted on another computer leaves the screen, so nobody goes on typing into a note that is gone. */
+function closeGone(path: string): void {
+  if (!app.get().tabs.includes(path)) return;
+  const session = sessions.get(path);
+  // Words not yet in the file stay: saving them brings the note back for everyone.
+  if (session && !session.shared && textOf(path) !== session.saved) return;
+  const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
+  void closeTab(path).then(() => notify(`“${name}” was deleted on another computer. It is in the vault trash`));
 }
 
 /** Rename or move a note or a folder; open tabs follow it. */
