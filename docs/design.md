@@ -698,7 +698,8 @@ today. Checked against the live servers on 2026-11-13:
 
 GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
 support a personal access token without registering the host app; browser OAuth still needs a
-registered GitHub or OAuth app. GitHub's Connect screen therefore asks for one token, links to
+registered GitHub or OAuth app. First-run setup and Settings reuse the same GitHub Connect
+screen: it asks for one token, links to
 GitHub's token creation page, and checks tool discovery before saving it in the existing OS
 keychain (`mcp:github`). The token's repository access and permissions determine what works;
 Lokus neither widens them nor copies a token from another app. Checking uses only the entered

@@ -18,8 +18,9 @@ interface Offered {
   asks: boolean;
 }
 
-function TokenConnection({ connector, onCancel, onConnected }: {
+export function TokenConnection({ connector, from = "settings", onCancel, onConnected }: {
   connector: Connector;
+  from?: "settings" | "setup";
   onCancel(): void;
   onConnected(server: McpServer, tools: Offered[]): void;
 }) {
@@ -55,11 +56,11 @@ function TokenConnection({ connector, onCancel, onConnected }: {
       await saveMcpToken(server, token);
       if (!active.current) return;
       setToken("");
-      track("connection_added", { service: connector.id, from: "settings" });
+      track("connection_added", { service: connector.id, from });
       onConnected(server, offered);
     } catch (e) {
       if (!active.current) return;
-      track("connection_failed", { service: connector.id, from: "settings" });
+      track("connection_failed", { service: connector.id, from });
       setError(saving ? "Could not save the connection on this device. Try again." : message(e));
       setPhase("idle");
     }
