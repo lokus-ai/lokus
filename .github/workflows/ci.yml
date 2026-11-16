@@ -38,11 +38,14 @@ jobs:
 
   # Lokus on Windows and on Linux: the tests, then the real app started and used through its
   # dev channel (a folder, notes, and a team folder kept in step with a teammate through a
-  # relay started on the runner), then what people would download (the Windows installer, the
-  # Linux AppImage), built the way a release builds it, installed and opened. The pictures
-  # and the downloads are kept. It takes about forty minutes, so it runs when asked for
-  # (Actions, CI, Run workflow), on a pull request labelled "desktop", and on every pull
-  # request into main (that is a release), not on every push.
+  # relay started on the runner). The pictures are kept. It takes about fifteen minutes, so it
+  # runs when asked for (Actions, CI, Run workflow), on a pull request labelled "desktop", and
+  # on every pull request into main (that is a release), not on every push.
+  #
+  # What people would download (the Windows installer, the Linux AppImage) is built, installed
+  # and opened here only on a run by hand (Run workflow). A release does the same with the
+  # real files before it puts anything out, so doing it on the pull request too was twelve
+  # minutes spent twice.
   desktop:
     if: github.event_name == 'workflow_dispatch' || github.base_ref == 'main' || contains(github.event.pull_request.labels.*.name, 'desktop')
     strategy:
@@ -90,12 +93,13 @@ jobs:
       # this run and thrown away with it; the real one is only in the release environment.
       # The version is shaped like the ones that go out (2.0.0-alpha.9), file names and all.
       - name: Build what people would download
+        if: github.event_name == 'workflow_dispatch'
         run: |
           set -e
           pnpm tauri signer generate --ci -w "$RUNNER_TEMP/throwaway.key" >/dev/null
           TAURI_SIGNING_PRIVATE_KEY="$(cat "$RUNNER_TEMP/throwaway.key")" sh deploy/release/desktop.sh 0.0.1-alpha.1 https://relay.lokusmd.com
       - name: Install it and open it (Windows)
-        if: runner.os == 'Windows'
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'Windows'
         run: |
           set -e
           cmd //c "$(cygpath -w dist-release/0.0.1-alpha.1/Lokus_0.0.1-alpha.1_x64-setup.exe) /S"
@@ -103,7 +107,7 @@ jobs:
           echo "installed: $APP"
           node checks/desktop-smoke.mjs "$APP"
       - name: Open it (Linux)
-        if: runner.os == 'Linux'
+        if: github.event_name == 'workflow_dispatch' && runner.os == 'Linux'
         run: |
           set -e
           chmod +x dist-release/0.0.1-alpha.1/*.AppImage
@@ -114,6 +118,7 @@ jobs:
           name: desktop-smoke-${{ runner.os }}
           path: desktop-smoke/
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           name: lokus-installer-${{ runner.os }}
           path: dist-release/0.0.1-alpha.1/
