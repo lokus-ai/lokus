@@ -415,17 +415,20 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
  * Keep this conversation on this device, so it can be found and continued later. It goes in the
  * folder that is never synced: a conversation is the person's own until they choose to share it.
  */
-function keep(): void {
+function keep(): Promise<unknown> {
   const items = settle(chat.get().items);
   const first = items.find((i) => i.kind === "user");
-  if (!first || first.kind !== "user") return;
+  if (!first || first.kind !== "user") return saving;
   // While a reply is still being worked on, the request it answers is kept beside it, so a
   // conversation cut off by the app closing can be told apart from a finished one and resumed.
   const root = vaultRoot;
   const saved = { id: chatId, title: first.text, updated: Date.now(), body: { items, history, ...(unanswered ? { unanswered } : {}) } };
-  saving = saving.catch(() => {}).then(() => runCore("chats.save", saved, root));
-  // Background saves have no caller; explicit loads/deletes/vault switches still await failures.
-  void saving.catch(() => {});
+  const persisted = saving.then(() => runCore("chats.save", saved, root));
+  // Drain failed writes too; only the caller requiring this snapshot must refuse on its error.
+  saving = persisted.catch((e) => {
+    if (root === vaultRoot) notify(e instanceof Error ? e.message : String(e));
+  });
+  return persisted;
 }
 
 /** The request being answered right now; null between replies. */
@@ -600,8 +603,8 @@ export function stop(): void {
   stopReply(true);
 }
 
-function stopReply(preserve: boolean): void {
-  if (!requestId) return;
+function stopReply(preserve: boolean): Promise<unknown> {
+  if (!requestId) return saving;
   track("action", { feature: "assistant", action: "stopped" });
   void aiStop(requestId);
   requestId = null;
@@ -609,7 +612,7 @@ function stopReply(preserve: boolean): void {
   if (unanswered) interrupted(unanswered, "The user stopped this reply before it was finished.");
   unanswered = null;
   chat.set((s) => ({ busy: false, items: [...settle(s.items), { kind: "notice", text: "Stopped." }] }));
-  if (preserve) keep();
+  return preserve ? keep() : saving;
 }
 
 /** Allow this change and every further change of the same kind until the current request is done. */
@@ -650,9 +653,7 @@ export function newChat(): void {
 
 registerChatFlush(async () => {
   ++opening;
-  if (chat.get().busy) stopReply(true);
-  else keep();
-  await saving;
+  await (chat.get().busy ? stopReply(true) : keep());
 });
 
 // Panels may unmount freely; a different workspace must never inherit this conversation.
