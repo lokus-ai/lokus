@@ -92,9 +92,11 @@ Small things that make it a daily driver, all plain commands over plain files:
   `![[Note#Heading]]` embeds just that part. "Go to a heading" lists the open note's headings.
   A link to a web page, `[words](https://…)`, opens in the browser on a click, as a link to a
   note opens the note (Option-click or the arrow keys to change it). Only `https` addresses.
+  A picture, `![words](file)`, is shown when its file name has brackets in it too.
 - **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
   cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
-  a new row past the last one, and a right-click adds or removes a row or a column. Each
+  a new row past the last one, and a right-click adds or removes a row or a column. A link in a
+  cell, to a note or to a web page, reads as its words and opens on a click. Each
   keystroke changes only that cell's text in the file, so the note is still a plain markdown
   table. When the file changes outside the app, only the part that differs is replaced in the
   open note, so the cell being typed in keeps the keyboard. If the row being typed in is itself
