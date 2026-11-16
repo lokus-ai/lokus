@@ -288,10 +288,13 @@ function cellContent(cell: HTMLElement, text: string): void {
   }
 }
 
+/** What a line of a table starts with when the table sits in a quote or a list: `> ` or its indent. */
+const lead = (row: string) => /^[ \t]*(>[ \t]*)*/.exec(row)![0];
+
 /** Where each cell of a row sits in its line: the text between two bars, spacing included. */
 function cellSpans(row: string): { from: number; to: number }[] {
   const bars = [...row.matchAll(/(?<!\\)\|/g)].map((m) => m.index);
-  const edges = [-1, ...bars, row.length];
+  const edges = [lead(row).length - 1, ...bars, row.length];
   const spans = edges.slice(1).map((to, i) => ({ from: edges[i] + 1, to }));
   if (!row.slice(spans[0].from, spans[0].to).trim()) spans.shift();
   const last = spans[spans.length - 1];
@@ -389,7 +392,14 @@ class Table extends WidgetType {
     });
     wrap.addEventListener("keydown", (e) => {
       const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
-      if (!cell || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (!cell || e.isComposing) return;
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
+        // Select all is the cell's, not the note's: the next key replaces what is in this cell.
+        e.preventDefault();
+        getSelection()?.selectAllChildren(cell);
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
       const { row, col } = place(cell);
       const rows = grid(wrap.widget.source);
       const width = rows[0].length;
@@ -404,7 +414,7 @@ class Table extends WidgetType {
         if (next.col >= width) next = { row: row + 1, col: 0 };
         if (next.row < 0) return;
         // Past the last row there is a new one, as in any table.
-        if (next.row >= rows.length) wrap.widget.change(view, (lines) => lines.push(rowLine(Array(width).fill(""))));
+        if (next.row >= rows.length) wrap.widget.change(view, (lines) => lines.push(lead(lines[1]) + rowLine(Array(width).fill(""))));
         edit(next.row, next.col);
       }
     });
@@ -476,17 +486,22 @@ class Table extends WidgetType {
     const text = typed.replace(/\s*\n\s*/g, " ").replace(/(?<!\\)\|/g, "\\|");
     this.change(view, (lines) => {
       const n = row === 0 ? 0 : row + 1;
+      const texts = cells(lines[n]);
       const span = cellSpans(lines[n])[col];
+      // A row shorter than the heading gets the cells it was missing.
+      while (texts.length < col) texts.push("");
+      texts[col] = typed;
+      const whole = lead(lines[n]) + rowLine(texts);
       if (!span) {
-        // A row shorter than the heading gets the cells it was missing.
-        const texts = cells(lines[n]);
-        while (texts.length < col) texts.push("");
-        lines[n] = rowLine([...texts, typed]);
+        lines[n] = whole;
         return;
       }
       const old = lines[n].slice(span.from, span.to);
       const pad = old.trim() ? [/^\s*/.exec(old)![0], /\s*$/.exec(old)![0]] : [" ", " "];
-      lines[n] = lines[n].slice(0, span.from) + (pad[0] || " ") + text.trim() + (pad[1] || " ") + lines[n].slice(span.to);
+      const [before, after] = [lines[n].slice(0, span.from), lines[n].slice(span.to)];
+      const line = before + (pad[0] || (before.length > lead(lines[n]).length ? " " : "")) + text.trim() + (pad[1] || (after ? " " : "")) + after;
+      // A row written without its outer bars cannot hold an empty first or last cell: it gets them.
+      lines[n] = cells(line).length === texts.length ? line : whole;
     });
   }
 
@@ -499,6 +514,10 @@ class Table extends WidgetType {
     while (start < next.length && start < this.source.length && next[start] === this.source[start]) start++;
     let end = 0;
     while (end < next.length - start && end < this.source.length - start && next.at(-1 - end) === this.source.at(-1 - end)) end++;
+    // An emoji is two units: one that both texts share is not cut in half.
+    const half = (at: number, low: number) => (this.source.charCodeAt(at) & 0xfc00) === low;
+    if (start && half(start - 1, 0xd800)) start--;
+    if (end && half(this.source.length - end, 0xdc00)) end--;
     // A table that is no longer what this was drawn from (another note, a teammate) is left alone.
     if (next === this.source || view.state.sliceDoc(this.from, this.from + this.source.length) !== this.source) return;
     view.dispatch({
@@ -516,10 +535,10 @@ class Table extends WidgetType {
 
 type Reshape = (lines: string[], line: number, col: number) => void;
 const eachRow = (lines: string[], how: (texts: string[], i: number) => string[]) =>
-  lines.forEach((line, i) => (lines[i] = rowLine(how(cells(line), i))));
+  lines.forEach((line, i) => (lines[i] = lead(line) + rowLine(how(cells(line), i))));
 const RESHAPES: [string, Reshape, ("body" | "wide")?][] = [
-  ["Add row above", (lines, at) => lines.splice(at, 0, rowLine(Array(cells(lines[0]).length).fill(""))), "body"],
-  ["Add row below", (lines, at) => lines.splice(Math.max(at, 1) + 1, 0, rowLine(Array(cells(lines[0]).length).fill("")))],
+  ["Add row above", (lines, at) => lines.splice(at, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill(""))), "body"],
+  ["Add row below", (lines, at) => lines.splice(Math.max(at, 1) + 1, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill("")))],
   ["Add column left", (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col, 0, i === 1 ? "---" : ""))],
   ["Add column right", (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col + 1, 0, i === 1 ? "---" : ""))],
   ["Delete row", (lines, at) => lines.splice(at, 1), "body"],

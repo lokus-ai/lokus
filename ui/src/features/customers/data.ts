@@ -212,22 +212,27 @@ const stem = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
  */
 export function fromSlack(text: string, plain = false): string {
   const mark = (with_: string) => (_: string, lead: string, inner: string) => `${lead}${plain ? "" : with_}${inner}${plain ? "" : with_}`;
-  return text
-    .replace(/<([@#!])([^<>|\s]+)(?:\|([^<>]*))?>/g, (_, kind: string, id: string, shown?: string) => {
-      const name = (shown || id.split("^")[0]).replace(/^[@#]/, "");
-      return `${kind === "#" ? "#" : "@"}${name}`;
-    })
-    .replace(/<((?:https?:\/\/|mailto:)[^<>|\s]+)(?:\|([^<>]*))?>/g, (_, url: string, shown?: string) => {
-      const bare = url.replace(/^mailto:/, "");
-      const label = shown && shown !== bare ? shown : "";
-      if (plain) return label || bare;
-      // Only a secure web address can be followed, so any other keeps its address in sight.
-      if (!url.startsWith("https://")) return label ? `${label} (${bare})` : bare;
-      return `[${(label || bare).replace(/[[\]\\]/g, "\\$&")}](${url.replace(/[()]/g, (c) => (c === "(" ? "%28" : "%29"))})`;
-    })
-    .replace(/(^|[\s(\[{>"'])\*(?=\S)([^*\n]*[^*\s])\*(?![\w*])/g, mark("**"))
-    .replace(/(^|[\s(\[{>"'])~(?=\S)([^~\n]*[^~\s])~(?![\w~])/g, mark("~~"))
-    .replace(/&(lt|gt|amp);/g, (_, name: string) => ({ lt: "<", gt: ">", amp: "&" })[name]!);
+  const entities = (part: string) => part.replace(/&(lt|gt|amp);/g, (_, name: string) => ({ lt: "<", gt: ">", amp: "&" })[name]!);
+  const words = (part: string) =>
+    part
+      .replace(/<!date\^[^<>|]*\|([^<>]*)>/g, "$1")
+      .replace(/<([@#!])([^<>|\s]+)(?:\|([^<>]*))?>/g, (_, kind: string, id: string, shown?: string) => {
+        const name = (shown || id.split("^")[0]).replace(/^[@#]/, "");
+        return `${kind === "#" ? "#" : "@"}${name}`;
+      })
+      .replace(/<((?:https?:\/\/|mailto:)[^<>|\s]+)(?:\|([^<>]*))?>/g, (_, url: string, shown?: string) => {
+        const bare = url.replace(/^mailto:/, "");
+        const label = shown && shown !== bare ? shown : "";
+        if (plain) return label || bare;
+        // Only a secure web address can be followed, so any other keeps its address in sight.
+        if (!url.startsWith("https://")) return label ? `${label} (${bare})` : bare;
+        return `[${(label || bare).replace(/[[\]\\]/g, "\\$&")}](${url.replace(/[()]/g, (c) => (c === "(" ? "%28" : "%29"))})`;
+      })
+      .replace(/(^|[\s(\[{>"'])\*(?=\S)([^*\n]*[^*\s])\*(?![\w*])/g, mark("**"))
+      .replace(/(^|[\s(\[{>"'])~(?=\S)([^~\n]*[^~\s])~(?![\w~])/g, mark("~~"));
+  // Code is shown as it was typed: Slack's marks are turned only outside it.
+  const parts = plain ? [text] : text.split(/(```[\s\S]*?```|`[^`\n]+`)/);
+  return parts.map((part, i) => entities(i % 2 ? part : words(part))).join("");
 }
 
 function toItem(row: Row): Item {
