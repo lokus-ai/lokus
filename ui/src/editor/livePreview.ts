@@ -270,9 +270,13 @@ const inline = (hooks: PreviewHooks) =>
     { decorations: (plugin) => plugin.decorations },
   );
 
+/** `[words](address)` in a table cell, not a picture: the address may hold `(1)` or `\)`, and a "title" may follow it. */
+const CELL_LINK = /(?<!!)\[[^\]]+\]\((?:\\.|[^()\s\\]|\((?:\\.|[^()\s\\])*\))+(?:\s+"[^"]*")?\)/;
+const WHOLE_CELL_LINK = new RegExp(`^${CELL_LINK.source}$`);
+
 /** Inline marks inside a table cell: bold, italic, code, strikethrough, links. */
 function cellContent(cell: HTMLElement, text: string): void {
-  const parts = text.split(/(`[^`]+`|\[\[[^\]]+\]\]|(?<!!)\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\)|\*\*[^*]+\*\*|~~[^~]+~~|\*[^*]+\*)/);
+  const parts = text.split(new RegExp(`(\`[^\`]+\`|\\[\\[[^\\]]+\\]\\]|${CELL_LINK.source}|\\*\\*[^*]+\\*\\*|~~[^~]+~~|\\*[^*]+\\*)`));
   for (const part of parts) {
     const wrap = (tag: string, inner: string) => {
       const el = document.createElement(tag);
@@ -287,10 +291,10 @@ function cellContent(cell: HTMLElement, text: string): void {
       link.dataset.target = target.trim();
       link.textContent = (shown ?? target).trim();
       cell.append(link);
-    } else if (/^\[[^\]]+\]\(.+\)$/.test(part)) {
+    } else if (WHOLE_CELL_LINK.test(part)) {
       // A web link reads as its words and opens its address, as it does in a sentence.
       const at = part.indexOf("](");
-      const web = plain(part.slice(at + 2, -1));
+      const web = plain(part.slice(at + 2, -1).replace(/\s+"[^"]*"$/, ""));
       const link = document.createElement("span");
       link.className = "cm-link";
       if (web.startsWith("https://")) link.dataset.target = web;
