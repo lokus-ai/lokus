@@ -667,7 +667,6 @@ export async function closeTab(path: string): Promise<void> {
   }
   await save(path);
   const { tabs, active, view, file } = app.get();
-  const index = tabs.indexOf(path);
   const rest = tabs.filter((t) => t !== path);
   const closing = sessions.get(path)?.shared;
   if (closing) closeShared(closing);
@@ -677,8 +676,9 @@ export async function closeTab(path: string): Promise<void> {
     return;
   }
   // Under the graph or a file in front, the tab that takes the note's place is another note.
-  const from = view === "note" ? rest : rest.filter(isNotePath);
-  const next = from[Math.min(index, from.length - 1)] ?? null;
+  const among = view === "note" ? tabs : tabs.filter(isNotePath);
+  const from = among.filter((t) => t !== path);
+  const next = from[Math.min(among.indexOf(path), from.length - 1)] ?? null;
   app.set({ tabs: rest, active: null, properties: {} });
   if (next) go(next);
   // The graph or a file in front of the note stays in front.
