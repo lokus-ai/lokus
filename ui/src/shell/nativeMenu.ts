@@ -9,7 +9,7 @@ import { app, getEditor, notify } from "./workspace";
 function available(command: NativeCommand): boolean {
   const state = app.get();
   if (!state.ready) return false;
-  if (command.id === "settings.open") return !onboarding.get().open;
+  if (command.id === "settings.open") return !onboarding.get().open && !state.accountDialog && !state.palette && (!!state.settings || !document.querySelector(".overlay, [role=dialog]"));
   if (state.settings || state.palette || state.accountDialog || onboarding.get().open || document.querySelector(".overlay, [role=dialog]")) return false;
   if (command.id === "note.close") return state.tabs.length > 0 || !isMainWindow();
   if (command.scope === "app") return true;

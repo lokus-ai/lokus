@@ -487,6 +487,7 @@ export function App() {
   const ready = useStore(app, (s) => s.ready);
   const vault = useStore(app, (s) => s.vault);
   const settings = useStore(app, (s) => s.settings);
+  const accountDialog = useStore(app, (s) => s.accountDialog);
   const onboardingOpen = useStore(onboarding, (s) => s.open);
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
   return (
@@ -516,6 +517,15 @@ export function App() {
           </Suspense>
         </Boundary>
       )}
+      {accountDialog && (
+        <AccountDialog
+          onClose={() => app.set({ accountDialog: false })}
+          onDone={(account) => {
+            identify(account.id);
+            app.set({ account, accountDialog: false });
+          }}
+        />
+      )}
     </>
   );
 }
@@ -530,7 +540,6 @@ function Workspace() {
   const file = useStore(app, (s) => s.file);
   const version = useStore(app, (s) => s.version);
   const open = useCallback((path: string) => void openNote(path), []);
-  const accountDialog = useStore(app, (s) => s.accountDialog);
   const settings = useStore(app, (s) => s.settings);
   const notice = useStore(app, (s) => s.notice);
 
@@ -558,15 +567,6 @@ function Workspace() {
       <Panel />
       {palette === "search" && <SearchPalette onOpen={open} onClose={() => app.set({ palette: null })} />}
       {palette && palette !== "search" && <Palette key={palette} mode={palette} />}
-      {accountDialog && (
-        <AccountDialog
-          onClose={() => app.set({ accountDialog: false })}
-          onDone={(account) => {
-            identify(account.id);
-            app.set({ account, accountDialog: false });
-          }}
-        />
-      )}
       <NoticedDrawer />
       <UpdateCard />
       <WhatsNew />
