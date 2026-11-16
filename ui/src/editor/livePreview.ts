@@ -191,7 +191,8 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           // The file is the one the Markdown names, so a name with brackets or spaces in it is still found.
           const named = node.node.getChild("URL");
           const url = named ? hooks.resolveImage(address(state, named)) : null;
-          if (named && url && !touches(state, node.from, node.to)) {
+          // A picture written over two lines stays as text: a line break cannot be folded away here.
+          if (named && url && !touches(state, node.from, node.to) && !state.sliceDoc(node.from, node.to).includes("\n")) {
             const text = state.sliceDoc(node.from, named.from);
             out.push(Decoration.replace({ widget: new Picture(url, text.slice(2, text.lastIndexOf("]("))) }).range(node.from, node.to));
           }
