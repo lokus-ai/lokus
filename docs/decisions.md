@@ -154,3 +154,55 @@ question was open, nobody answered, and a default was taken: those are the easie
 | 2026-11-14 | The app chooses its encryption provider itself, at start-up | Sync died silently whenever its socket was the first secure connection the app made: two providers are built in and rustls panics rather than pick. Proven by running the release build from a terminal with a real sign-in; debug builds and local relays (no TLS) never showed it | Claude (root cause from the release build's own output) | Leaving it to whichever library connected first |
 | 2026-11-14 | A crash inside the sync connection is reported and logged; each computer keeps `sync.log` | The crash above left the app saying "Connecting" with nothing anywhere to say why | Claude (default) | — |
 | 2026-11-15 | A version is released by merging a pull request into main that changes `VERSION`, and no other way; the release keys sit in an environment only main can use | Pratham: "this is an open source project… make it so that it only triggers when a PR is merged". Only the two admins can merge; forks get no secrets; a branch workflow cannot read an environment limited to main | Pratham | A button anyone with write access can press |
+
+## Amendments
+
+These blocks complete the decision records for the changes entering alpha.12. The dates are
+the original decision dates, not the date of this backfill. The rows above remain unchanged;
+`docs/design.md` describes the current system in place.
+
+### Build the installer once
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** Pull requests into `main` still test and use the app on Windows and Linux, but no
+  longer also build the installer and AppImage. Releases build, install and open those files
+  before publication; a manual desktop run retains the same installer checks.
+- **Why:** The alpha.11 Windows check took 27.7 minutes, including 12.9 minutes building and
+  opening an installer that the release built again. The revised check measured 14.4 minutes.
+- **Decided by:** Pratham, "sure" (2026-11-16), approving the proposed removal of the duplicate
+  installer build; Devin retained the manual run within that change.
+- **PR:** [#584](https://github.com/lokus-ai/lokus/pull/584), merged as
+  `97b37ed`; record completed by [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #584 to restore installer checks before merging as well as during release.
+
+### Accept an invitation from its email page
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** The invitation page offers Windows and Linux downloads beside both Macs. Pressing
+  Join records the recipient's consent; the updated app, signed in as that recipient, accepts
+  the invitation and creates the team folder without another click. Merely opening the link
+  does not accept it. The page does not launch the app; older apps retain their own Join button.
+- **Why:** The page offered only Mac downloads and required an installed-app user to find the
+  invitation again. Review also showed that the inviter must not be able to record consent
+  using the ordinary invitation code, so the emailed page uses a separate recipient key.
+- **Decided by:** Pratham, "the email invite doesnt have windows as option to download then also if user already downloaded if click on link shouldnt it open lokus or like u know just add them there or something"
+  (2026-11-16). Devin chose explicit page consent, the recipient key, and app-side joining
+  rather than a new link scheme, within that request.
+- **PR:** [#585](https://github.com/lokus-ai/lokus/pull/585), merged as
+  `ea5bde61b141ef6a2692e198068fddf863df942b`; record completed by
+  [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #585 in the app and relay; leave stored invitation columns intact and resume in-app confirmation.
+
+### Enter a provider key during setup
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** "I have a Claude or OpenAI key" opens the key form in place, in first-run setup
+  and the assistant panel, instead of trying to open Settings behind setup.
+- **Why:** The button was reported as greyed out on Windows; the same inert flow was reproduced
+  on Mac because Settings was not displayed before a folder existed.
+- **Decided by:** Pratham, "also in onboardin the openai api thingy was greyed out for windows"
+  (2026-11-16), reported the defect. Devin chose the shared inline form within the repair mandate.
+- **PR:** [#586](https://github.com/lokus-ai/lokus/pull/586), merged as
+  `993cdc13d7143a22fe64ee5d91728ed8c55ce81c`; record completed by
+  [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #586 to restore the Settings route, including its first-run limitation.
