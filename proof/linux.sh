@@ -53,12 +53,26 @@ see() {
   done
   return 1
 }
+# The button's own words are white on blue, which the reader cannot make out. The sentence
+# above it and the word Later can be read: the button starts at the sentence's left edge,
+# on Later's line.
+button() {
+  import -window root out/now.png
+  convert out/now.png -resize 200% -colorspace Gray out/big.png
+  tesseract out/big.png out/ocr --psm 11 tsv > /dev/null 2>&1
+  awk -F'\t' -v a="$1" -v b="$2" '
+    prev == a && $12 == b { left = px }
+    $12 == "Later" { y = $8 + $10 / 2 }
+    { prev = $12; px = $7 }
+    END { if (left && y) print int(left / 2 + 50), int(y / 2) }' out/ocr.tsv > out/at.txt
+  [ -s out/at.txt ]
+}
 press() {
   for i in $(seq 1 "$3"); do
-    if see "$1" "$2"; then
+    if button "$1" "$2"; then
       cp out/now.png "out/$4.png"
       read -r X Y < out/at.txt
-      echo "$(date -u +%T) $1 $2 at $X,$Y"
+      echo "$(date -u +%T) the button under '$1 $2' at $X,$Y"
       xdotool mousemove "$X" "$Y" click 1
       return 0
     fi
@@ -68,9 +82,9 @@ press() {
   cut -f12 out/ocr.tsv | tr '\n' ' ' | cut -c1-1500
   return 1
 }
-press Update now 45 1-offered || { echo "FAIL: no update offered on screen"; exit 1; }
+press Your notes 45 1-offered || { echo "FAIL: no update offered on screen"; exit 1; }
 sleep 2; import -window root out/2-downloading.png
-press Restart now 150 3-ready || { echo "FAIL: the update did not reach Restart now"; exit 1; }
+press Restart Lokus 150 3-ready || { echo "FAIL: the update did not reach Restart now"; exit 1; }
 sleep 15
 import -window root out/4-after.png
 pgrep -af Lokus | cut -c1-200 | tee out/processes-after.txt
