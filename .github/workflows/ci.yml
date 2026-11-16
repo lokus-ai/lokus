@@ -34,6 +34,11 @@ jobs:
           powershell -Command "(Get-Item '$(cygpath -w "$APP")').VersionInfo | Format-List ProductVersion,FileVersion" | tee out/version-before.txt
           sha256sum "$APP" | tee out/exe-before.sha256
           "$APP" > out/app.log 2>&1 &
+          sleep 15
+          powershell -Command "Get-CimInstance Win32_Process | Where-Object { \$_.Name -like 'msedgewebview2*' -or \$_.Name -like 'lokus*' } | ForEach-Object { \$_.Name + ' ' + \$_.ProcessId + ' ' + \$_.CommandLine.Substring(0, [Math]::Min(700, \$_.CommandLine.Length)) }" | tee out/webview-processes.txt
+          netstat -ano | grep -i listen | grep -E ":92[0-9][0-9]" || echo "nothing listens on 92xx"
+          curl -s -m 5 http://127.0.0.1:9222/json/version || echo "no answer on 127.0.0.1:9222"
+          curl -s -m 5 http://localhost:9222/json/version || echo "no answer on localhost:9222"
           node proof/windows.mjs
           sleep 3
           powershell -Command "(Get-Item '$(cygpath -w "$APP")').VersionInfo | Format-List ProductVersion,FileVersion" | tee out/version-after.txt
