@@ -89,12 +89,8 @@ class Picture extends WidgetType {
 }
 
 /** The address a link or a picture names: `\(` in it is a bracket, not a backslash and a bracket. */
-function address(state: EditorState, url: { from: number; to: number }): string {
-  return state
-    .sliceDoc(url.from, url.to)
-    .replace(/^<|>$/g, "")
-    .replace(/\\([!-/:-@[-`{-~])/g, "$1");
-}
+const plain = (written: string) => written.replace(/^<|>$/g, "").replace(/\\([!-/:-@[-`{-~])/g, "$1");
+const address = (state: EditorState, url: { from: number; to: number }) => plain(state.sliceDoc(url.from, url.to));
 
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i;
 
@@ -274,9 +270,9 @@ const inline = (hooks: PreviewHooks) =>
     { decorations: (plugin) => plugin.decorations },
   );
 
-/** Inline marks inside a table cell: bold, italic, code, strikethrough. */
+/** Inline marks inside a table cell: bold, italic, code, strikethrough, links. */
 function cellContent(cell: HTMLElement, text: string): void {
-  const parts = text.split(/(`[^`]+`|\[\[[^\]]+\]\]|\*\*[^*]+\*\*|~~[^~]+~~|\*[^*]+\*)/);
+  const parts = text.split(/(`[^`]+`|\[\[[^\]]+\]\]|(?<!!)\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\)|\*\*[^*]+\*\*|~~[^~]+~~|\*[^*]+\*)/);
   for (const part of parts) {
     const wrap = (tag: string, inner: string) => {
       const el = document.createElement(tag);
@@ -290,6 +286,15 @@ function cellContent(cell: HTMLElement, text: string): void {
       link.className = "cm-wikilink";
       link.dataset.target = target.trim();
       link.textContent = (shown ?? target).trim();
+      cell.append(link);
+    } else if (/^\[[^\]]+\]\(.+\)$/.test(part)) {
+      // A web link reads as its words and opens its address, as it does in a sentence.
+      const at = part.indexOf("](");
+      const web = plain(part.slice(at + 2, -1));
+      const link = document.createElement("span");
+      link.className = "cm-link";
+      if (web.startsWith("https://")) link.dataset.target = web;
+      cellContent(link, part.slice(1, at));
       cell.append(link);
     } else if (/^`.+`$/.test(part)) wrap("code", part.slice(1, -1));
     else if (/^\*\*.+\*\*$/.test(part)) wrap("strong", part.slice(2, -2));
@@ -558,7 +563,7 @@ class Table extends WidgetType {
 
   /** A click on a link follows it; everything else in the table is the table's own. */
   ignoreEvent(e: Event) {
-    const link = e.type === "mousedown" && (e.target as HTMLElement).closest?.(".cm-wikilink");
+    const link = e.type === "mousedown" && (e.target as HTMLElement).closest?.(".cm-wikilink, .cm-link[data-target]");
     return !(link && !(e as MouseEvent).altKey && !(e as MouseEvent).shiftKey && (e as MouseEvent).button === 0);
   }
 }
