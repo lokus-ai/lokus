@@ -251,8 +251,8 @@ pub async fn ai_mcp_login(server: McpServer) -> Result<(), Value> {
 }
 
 #[tauri::command(async)]
-pub fn ai_mcp_logout(name: String) {
-    lokus_ai::mcp_login::sign_out(&name);
+pub fn ai_mcp_logout(name: String) -> Result<(), Value> {
+    lokus_ai::mcp_login::sign_out(&name).map_err(|e| e.body())
 }
 
 /// Sign in with ChatGPT in the person's browser.

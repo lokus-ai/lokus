@@ -13,7 +13,7 @@ use rmcp::transport::auth::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::config::{forget, keep, kept, McpServer};
+use crate::config::{forget, forget_checked, keep, kept, McpServer};
 use crate::error::{AiError, Result};
 
 const WAIT: Duration = Duration::from_secs(300);
@@ -52,8 +52,8 @@ pub fn signed_in(server: &str) -> bool {
     kept(&account(server)).is_some()
 }
 
-pub fn sign_out(server: &str) {
-    forget(&account(server));
+pub fn sign_out(server: &str) -> Result<()> {
+    forget_checked(&account(server))
 }
 
 fn failed(server: &McpServer) -> impl Fn(AuthError) -> AiError + '_ {

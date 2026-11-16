@@ -720,7 +720,7 @@ credential without switching on a connection the person switched off. Existing O
 custom-server connections keep their own sign-in flows; tool
 annotations and the assistant's existing approval gate still govern writes.
 Disconnect clears the in-memory OAuth session even if the keychain is unavailable, but keeps
-the server entry until bearer-token deletion succeeds; an uncleared token must not follow a
+the server entry until OAuth and bearer-token deletion succeed; an uncleared token must not follow a
 reused server name to a different address.
 
 A server that is not listed can be added by its address. A plugin can still bring its own.

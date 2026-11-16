@@ -317,10 +317,16 @@ pub fn kept(account: &str) -> Option<String> {
 }
 
 pub fn forget(account: &str) {
-    let _ = set_secret(account, "");
+    let _ = forget_checked(account);
+}
+
+/// Clear fallback memory even when persisted credentials cannot be removed.
+pub fn forget_checked(account: &str) -> Result<()> {
+    let removed = set_secret(account, "");
     if let Ok(mut memory) = MEMORY.lock() {
         memory.remove(account);
     }
+    removed
 }
 
 #[cfg(test)]

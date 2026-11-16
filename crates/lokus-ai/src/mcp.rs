@@ -106,7 +106,7 @@ pub fn save_token(dir: &std::path::Path, mut server: McpServer, token: &str) -> 
         })?;
         return Err(error);
     }
-    crate::mcp_login::sign_out(&server.name);
+    let _ = crate::mcp_login::sign_out(&server.name);
     Ok(())
 }
 
