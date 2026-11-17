@@ -247,6 +247,18 @@ export function attachEditor(parent: HTMLElement): void {
     notePaths: () => allNotes(),
     saveFile,
     snippets: () => app.get().plugins.flatMap((p) => (p.enabled ? (p.manifest?.contributes.snippets ?? []) : [])),
+    menuContext() {
+      const { active: path, vault } = app.get();
+      if (!path || !vault) return null;
+      return {
+        path,
+        valid: () => {
+          const now = app.get();
+          return now.active === path && now.vault?.root === vault.root && now.view === "note" && !now.settings && !now.palette && !now.accountDialog;
+        },
+        subscribe: app.subscribe,
+      };
+    },
   });
 }
 
