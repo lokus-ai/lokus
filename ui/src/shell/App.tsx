@@ -499,7 +499,32 @@ export function App() {
   const settings = useStore(app, (s) => s.settings);
   const accountDialog = useStore(app, (s) => s.accountDialog);
   const settingsOpen = !!settings;
-  const settingsFocus = useMemo(() => settingsOpen ? document.activeElement : null, [settingsOpen]);
+  const settingsFocus = useMemo(() => {
+    if (!settingsOpen) return null;
+    const element = document.activeElement;
+    const selection = getSelection();
+    if (!(element instanceof HTMLElement) || !element.isContentEditable || !selection?.anchorNode || !selection.focusNode ||
+      !element.contains(selection.anchorNode) || !element.contains(selection.focusNode)) return { element, selection: null };
+    const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
+    const text = element.textContent;
+    const anchorText = anchorNode.textContent, focusText = focusNode.textContent;
+    const { active, view, vault } = app.get();
+    return {
+      element,
+      selection: {
+        anchorNode, anchorOffset, focusNode, focusOffset,
+        valid: () => {
+          const now = app.get();
+          return now.active === active && now.view === view && now.vault?.root === vault?.root &&
+            element.isContentEditable && element.textContent === text &&
+            element.contains(anchorNode) && element.contains(focusNode) &&
+            anchorNode.textContent === anchorText && focusNode.textContent === focusText &&
+            anchorOffset <= (anchorNode instanceof CharacterData ? anchorNode.length : anchorNode.childNodes.length) &&
+            focusOffset <= (focusNode instanceof CharacterData ? focusNode.length : focusNode.childNodes.length);
+        },
+      },
+    };
+  }, [settingsOpen]);
   const onboardingOpen = useStore(onboarding, (s) => s.open);
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
   return (

@@ -303,7 +303,16 @@ const PAGES: { id: string; title: string; icon: IconName; body: () => ReactNode 
 ];
 
 interface Props {
-  returnFocus: Element | null;
+  returnFocus: {
+    element: Element | null;
+    selection: {
+      anchorNode: Node;
+      anchorOffset: number;
+      focusNode: Node;
+      focusOffset: number;
+      valid(): boolean;
+    } | null;
+  } | null;
   page: string;
   onPage(page: string): void;
   onClose(): void;
@@ -317,7 +326,12 @@ export default function SettingsView({ page, returnFocus, onPage, onClose }: Pro
     return () => {
       // Wait for inert to clear, without taking focus from a follow-on dialog.
       requestAnimationFrame(() => {
-        if (returnFocus instanceof HTMLElement && returnFocus.isConnected && !document.querySelector(".overlay, [role=dialog]")) returnFocus.focus();
+        if (!returnFocus || document.querySelector(".overlay, [role=dialog]")) return;
+        const { element, selection } = returnFocus;
+        if (!(element instanceof HTMLElement) || !element.isConnected || !element.getClientRects().length ||
+          element.closest("[inert]") || getComputedStyle(element).visibility !== "visible" || (selection && !selection.valid())) return;
+        element.focus();
+        if (document.activeElement === element && selection?.valid()) getSelection()?.setBaseAndExtent(selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset);
       });
     };
   }, [returnFocus]);
