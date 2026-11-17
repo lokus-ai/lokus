@@ -9,6 +9,7 @@ import { analyticsCommands } from "../features/analytics/commands";
 import { COVERS } from "../features/page-header/Cover";
 import { ICONS } from "../features/page-header/PageHeader";
 import { type Command, isMac, registerCommands } from "./commands";
+import { dismissContextMenu } from "./contextMenu";
 import {
   app,
   chooseVault,
@@ -84,7 +85,12 @@ export function registerAllCommands(): void {
       id: "settings.open",
       title: "Settings",
       keys: "Mod-,",
-      run: (a) => app.set((s) => ({ settings: typeof a.page === "string" ? a.page : s.settings ? null : "appearance" })),
+      run: (a) => {
+        const current = app.get().settings;
+        const settings = typeof a.page === "string" ? a.page : current ? null : "appearance";
+        if (settings && !current) dismissContextMenu(true);
+        app.set({ settings });
+      },
     },
     {
       id: "ai.open",

@@ -97,6 +97,8 @@ shortcuts, plugins and AI tools.
   Settings opens even without a vault, focuses its controls, keeps Tab within the dialog and
   makes the workspace behind it inert. Dismissal restores the previous focus; follow-on
   news/sign-in dialogs replace Settings and keep their own focus, including before a vault.
+  When opened over a still-valid command menu, Settings first dismisses it and restores its
+  captured target, so that target becomes the return focus. Invalidated targets are not restored.
   Editor commands reject a note hidden by Graph, a file
   viewer or Settings. Native menu actions send a command ID, not a captured note path;
   formatting targets the currently focused visible note at execution. Context callers can
