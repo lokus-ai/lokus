@@ -438,6 +438,14 @@ let keeping = 0;
 /** Saves finish in order; loading or deleting waits for already captured writes. */
 let saving: Promise<unknown> = Promise.resolve();
 const deleting = new Set<string>();
+const DELETING = "Wait for this conversation to finish deleting.";
+
+/** Keep recoverable progress active until deletion succeeds or fails. External root changes already happened. */
+function canLeaveChat(): boolean {
+  if (app.get().vault?.root !== vaultRoot || !deleting.has(JSON.stringify([vaultRoot, chatId]))) return true;
+  notify(DELETING);
+  return false;
+}
 
 /** Save as it goes, a moment after each step, so little is lost if the app closes mid-reply. */
 function keepSoon(): void {
@@ -463,6 +471,7 @@ export async function openChat(id: string): Promise<void> {
   track("action", { feature: "assistant", action: "chat_reopened" });
   const ticket = ++opening;
   const root = vaultRoot;
+  if (!canLeaveChat()) return;
   if (deleting.has(JSON.stringify([root, id]))) return;
   if (id === chatId) {
     chat.set({ history: false });
@@ -482,6 +491,7 @@ export async function openChat(id: string): Promise<void> {
     }
   }
   if (ticket !== opening || root !== vaultRoot) return;
+  if (!canLeaveChat()) return;
   leaveChat();
   asked.clear();
   chatId = id;
@@ -587,13 +597,14 @@ export async function shareChat(): Promise<void> {
 
 /** Start a new conversation that carries on from a shared one. */
 export async function continueShared(path: string): Promise<void> {
+  if (!canLeaveChat()) return;
   track("action", { feature: "assistant", action: "shared_chat_continued" });
   const root = vaultRoot;
   const ticket = ++opening;
   const note = await runCore<Note>("note.read", { path }, root);
   if (root !== vaultRoot || ticket !== opening) return;
   const body = note.text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "").trim();
-  newChat();
+  if (!newChat()) return;
   carried = body.length > CARRY_LIMIT ? body.slice(body.length - CARRY_LIMIT) : body;
   const name = path.split("/").pop()!.replace(/\.md$/i, "");
   chat.set({ items: [{ kind: "notice", text: `Carrying on from “${name}”. The assistant has read it; ask your next question.` }] });
@@ -637,7 +648,8 @@ function leaveChat(preserve = true): void {
   unanswered = null;
 }
 
-export function newChat(): void {
+export function newChat(): boolean {
+  if (!canLeaveChat()) return false;
   track("action", { feature: "assistant", action: "new_chat" });
   ++opening;
   leaveChat();
@@ -650,9 +662,11 @@ export function newChat(): void {
   carried = null;
   seen = null;
   chat.set({ items: [], busy: false, history: false, draft: draftFor(chatId) });
+  return true;
 }
 
 registerChatFlush(async () => {
+  if (!canLeaveChat()) throw new Error(DELETING);
   ++opening;
   await (chat.get().busy ? stopReply(true) : keep());
 });

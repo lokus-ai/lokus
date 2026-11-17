@@ -220,10 +220,10 @@ export async function check(reason = "This is a routine look.", asked = false): 
 
 /** "Do it": hand what the finding proposed to the assistant, in the open, where each change is asked about. */
 export async function act(item: Noticed, learn: boolean): Promise<void> {
+  if (!newChat()) return;
   track("action", { feature: "noticed", action: "do_it", learn });
   await resolve(item, "done", learn);
   noticed.set({ open: false });
-  newChat();
   app.set({ panel: { kind: "ai" } });
   await ask(`Do this, which you proposed after noticing it on your own:\n\n${item.action || item.recommend}\n\nWhat you noticed: ${item.title}. ${item.summary ?? ""}`);
 }
