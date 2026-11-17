@@ -178,3 +178,5 @@ Windows reopened automatically after Update now; Linux used Restart now. Both ve
 new process opened showing alpha.11. Windows also reported
 alpha.11 in the installed executable's version; the Linux AppImage hash matched the published
 alpha.11 file. This was a one-off check on GitHub runners, not a check every release runs.
+It proves that alpha.10-to-alpha.11 update, not publication or update acceptance of alpha.12
+or any later version.

@@ -572,7 +572,7 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
 
-### Releases and news (built; published builds and in-app updates checked on macOS, Windows and Linux)
+### Releases and news (built)
 
 The relay also answers every copy of the app, signed in or not: `GET /v1/app/update/{target}/{arch}/{version}`
 (the newest build for that platform, or 204) and `GET /v1/app/news` (posts, newest first). Tables
@@ -580,6 +580,8 @@ The relay also answers every copy of the app, signed in or not: `GET /v1/app/upd
 Publishing needs `LOKUS_PUBLISH_KEY`. The app installs a download only if it carries our
 signature for that version. The window's side is `ui/src/features/updates/`; the steps a person
 goes through, how to publish, and what was tested are in `docs/releasing.md`.
+Published-build and in-app update checks are recorded there by version and platform; they are
+historical evidence, not acceptance of a later release.
 
 ## 7. Plugins (built)
 
