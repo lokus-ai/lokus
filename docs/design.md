@@ -137,7 +137,16 @@ Small things that make it a daily driver, all plain commands over plain files:
   A note that cannot be drawn does not open, and the note on screen stays as it was.
 - **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
   cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
-  a new row past the last one, and a right-click adds or removes a row or a column. A link in a
+  a new row past the last one, and a right-click adds or removes a row or a column. Shift+F10 or
+  the Menu key opens the same command menu from a cell. Arrow keys, Home and End move through
+  its actions; Enter or Space chooses one. The target cell stays outlined while its menu is
+  open. Escape or Tab dismisses it and restores the cell's
+  selection. The menu stays inside the window and closes on outside focus/click, window blur,
+  scrolling, resize, or a change to the captured note, document, selection or editable state.
+  It never applies an old action to a replacement row or hidden note. Header deletion and
+  deletion of the last column are not offered. The existing table actions use named commands
+  and the shared `ui/src/shell/contextMenu.ts` presentation; ordinary inputs and source text
+  retain native menus. No clipboard bridge or native popup is added. A link in a
   cell, to a note or to a web page, reads as its words and opens on a click. Each
   keystroke changes only that cell's text in the file, so the note is still a plain markdown
   table. When the file changes outside the app, only the part that differs is replaced in the
@@ -640,7 +649,7 @@ the API.
 Checked by `checks/flows/plugins.sh`, which installs a hostile fixture plugin in the real app and
 confirms that everything it must not be able to do is refused.
 
-## 8. AI and MCP (built; untried against a real provider)
+## 8. AI and MCP (built; MCP discovery and workflow reads tried with GitHub)
 
 `lokus-ai` holds all of it; the UI is a chat panel and a settings section.
 
@@ -666,6 +675,9 @@ confirms that everything it must not be able to do is refused.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
+  The initialize handshake advertises the SDK's latest initialize-compatible protocol, not a
+  newer protocol that no longer supports that handshake. A saved bearer token takes precedence
+  over OAuth for that server; OAuth-only servers keep their existing sign-in and refresh path.
   Tokens live in the keychain (in memory until the app quits if the keychain is unavailable).
   Not built: local (stdio) servers.
 - `lokus ai --vault DIR q=...` asks one question from a terminal.
@@ -718,10 +730,11 @@ shelf: the instructions list each by name with one line, and the assistant calls
 for the ones it needs. Tools a conversation has used stay loaded for the rest of it. Each
 request's make-up is measured and sent with its trace (`chars_tools_<service>` and so on).
 
-### Connections (the catalog is built; signing in to a real service is untried)
+### Connections
 
 A connector is a tool server (MCP) that a service runs itself. Settings, Connections lists them
-by name: Connect signs the person in with that service in the browser and the assistant gains
+by name: Connect signs the person in with that service in the browser (or asks for its supported
+personal access token) and the assistant gains
 its tools, named `mcp__<id>__<tool>`. Each can be switched off or disconnected. Anything that
 changes something asks first unless the person has turned asking off.
 
@@ -730,7 +743,26 @@ today. Checked against the live servers on 2026-11-13:
 
 | Ready now | Waiting for Lokus to be registered with the service | Not built |
 |---|---|---|
-| Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | GitHub, Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+
+GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
+support a personal access token without registering the host app; browser OAuth still needs a
+registered GitHub or OAuth app. First-run setup and Settings reuse the same GitHub Connect
+screen: it asks for one token, links to
+GitHub's token creation page, and checks tool discovery before saving it in the existing OS
+keychain (`mcp:github`). The token's repository access and permissions determine what works;
+Lokus neither widens them nor copies a token from another app. Checking uses only the entered
+token, never an older token or OAuth grant, and times out after 20 seconds. Cancelling that check
+or leaving the screen saves nothing. Saving requires the keychain; a rejected token or failed
+save never reports success. A token replacement stops if the old credential cannot be read;
+if saving settings fails, the previous token is restored (or the new one removed). A connected
+GitHub row offers Update token for an expired or revoked
+credential without switching on a connection the person switched off. Existing OAuth and
+custom-server connections keep their own sign-in flows; tool
+annotations and the assistant's existing approval gate still govern writes.
+Disconnect clears the in-memory OAuth session even if the keychain is unavailable, but keeps
+the server entry until OAuth and bearer-token deletion succeed; an uncleared token must not follow a
+reused server name to a different address.
 
 A server that is not listed can be added by its address. A plugin can still bring its own.
 

@@ -1,8 +1,9 @@
 /** @part-of ui.connections */
 import { track } from "../../bridge/analytics";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
+import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, saveAiConfig, saveMcpToken, setAiSecret } from "../../bridge/ai";
+import { openWeb } from "../../bridge/updates";
 import { Icon } from "../../shell/Icon";
 import { notify } from "../../shell/workspace";
 import { WorkspaceKeys } from "../customers/DataDoor";
@@ -15,6 +16,86 @@ interface Offered {
   name: string;
   description: string;
   asks: boolean;
+}
+
+export function TokenConnection({ connector, from = "settings", onCancel, onConnected }: {
+  connector: Connector;
+  from?: "settings" | "setup";
+  onCancel(): void;
+  onConnected(server: McpServer, tools: Offered[]): void;
+}) {
+  const [token, setToken] = useState("");
+  const [phase, setPhase] = useState<"idle" | "checking" | "saving">("idle");
+  const [error, setError] = useState<string | null>(null);
+  const active = useRef(true);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    active.current = true;
+    return () => { active.current = false; };
+  }, []);
+  useEffect(() => {
+    if (phase === "checking") cancelButton.current?.focus();
+  }, [phase]);
+  const cancel = useCallback(() => {
+    if (phase === "saving") return;
+    active.current = false;
+    setToken("");
+    onCancel();
+  }, [phase, onCancel]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      cancel();
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+  }, [cancel]);
+  const submit = async () => {
+    if (!token.trim() || phase !== "idle") return;
+    setPhase("checking");
+    setError(null);
+    const server = { name: connector.id, url: connector.url, enabled: true };
+    let saving = false;
+    try {
+      const offered = await checkMcp(server, token);
+      if (!active.current) return;
+      saving = true;
+      setPhase("saving");
+      await saveMcpToken(server, token);
+      if (!active.current) return;
+      setToken("");
+      track("connection_added", { service: connector.id, from });
+      onConnected(server, offered);
+    } catch (e) {
+      if (!active.current) return;
+      track("connection_failed", { service: connector.id, from });
+      setError(saving ? "Could not save the connection on this device. Try again." : message(e));
+      setPhase("idle");
+    }
+  };
+  return (
+    <div className="conn">
+      <form className="conn-list" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="conn-line">
+          <Logo id={connector.id} name={connector.name} />
+          <div className="conn-main"><strong>Connect {connector.name}</strong><small>{connector.about}</small></div>
+        </div>
+        <div className="conn-own">
+          <label htmlFor="connection-token">Personal access token</label>
+          <input id="connection-token" type="password" autoFocus autoComplete="off" spellCheck={false} value={token} disabled={phase !== "idle"} onChange={(e) => setToken(e.target.value)} />
+          <button className="settings-button" disabled={!token.trim() || phase !== "idle"} type="submit">{phase === "checking" ? "Checking…" : phase === "saving" ? "Saving…" : "Connect"}</button>
+          <button ref={cancelButton} className="link" type="button" disabled={phase === "saving"} onClick={cancel}>Cancel</button>
+        </div>
+        <div className="conn-detail">
+          <button className="link" type="button" onClick={() => openWeb(connector.token_url!)}>Create a token</button>
+          <p>Only the repositories and permissions you choose · Saved in your device’s keychain</p>
+          {error && <p className="settings-hint error" role="alert">{error}</p>}
+        </div>
+      </form>
+    </div>
+  );
 }
 
 /**
@@ -34,6 +115,7 @@ export function Connections() {
   const [adding, setAdding] = useState(false);
   const [api, setApi] = useState({ name: "", url: "", key: "", about: "" });
   const [addingApi, setAddingApi] = useState(false);
+  const [tokenConnection, setTokenConnection] = useState<Connector | null>(null);
 
   const reload = useCallback(() => aiSettings().then(setSettings, (e) => setNote(message(e))), []);
   useEffect(() => {
@@ -63,6 +145,10 @@ export function Connections() {
   };
   const connect = async (c: Connector) => {
     setNote(null);
+    if (c.token_url) {
+      setTokenConnection(c);
+      return;
+    }
     setBusy(c.id);
     const server = { name: c.id, url: c.url, enabled: true };
     try {
@@ -80,9 +166,15 @@ export function Connections() {
     setBusy(null);
   };
   const disconnect = async (name: string) => {
-    await mcpLogout(name).catch(() => {});
-    await setAiSecret("mcp", name, "").catch(() => {});
-    await save({ mcp: config.mcp.filter((s) => s.name !== name) });
+    setNote(null);
+    try {
+      await mcpLogout(name);
+      await setAiSecret("mcp", name, "");
+      await saveAiConfig({ ...config, mcp: config.mcp.filter((s) => s.name !== name) });
+      setTools((t) => { const next = { ...t }; delete next[name]; return next; });
+    } catch {
+      setNote("Could not finish disconnecting. Try again.");
+    }
     await reload();
   };
   const apis = config.apis ?? [];
@@ -132,6 +224,7 @@ export function Connections() {
     const offered = tools[server.name];
     const isOpen = open === server.name;
     const needsSignIn = !plugin && !signedIn(server.name);
+    const connector = catalog.find((c) => c.id === id);
     return (
       <div key={server.name} className={`conn-row linked${isOpen ? " open" : ""}`}>
         <div className="conn-line">
@@ -154,8 +247,8 @@ export function Connections() {
             </small>
           </button>
           {needsSignIn && (
-            <button className="settings-button" onClick={() => void mcpLogin(server).then(reload, (e) => setNote(message(e)))}>
-              Sign in
+            <button className="settings-button" onClick={() => connector?.token_url ? setTokenConnection(connector) : void mcpLogin(server).then(reload, (e) => setNote(message(e)))}>
+              {connector?.token_url ? "Connect" : "Sign in"}
             </button>
           )}
           {!plugin && <Toggle on={server.enabled} label={`Let the assistant use ${name}`} onChange={(enabled) => void save({ mcp: config.mcp.map((m) => (m.name === server.name ? { ...m, enabled } : m)) })} />}
@@ -180,6 +273,7 @@ export function Connections() {
             )}
             {!plugin && (
               <div className="conn-detail-foot">
+                {connector?.token_url && <button className="link" onClick={() => setTokenConnection(connector)}>Update token</button>}
                 <button className="link" onClick={() => void look(server)}>
                   Check again
                 </button>
@@ -193,6 +287,20 @@ export function Connections() {
       </div>
     );
   };
+
+  if (tokenConnection) return (
+    <TokenConnection
+      connector={tokenConnection}
+      onCancel={() => setTokenConnection(null)}
+      onConnected={(server, offered) => {
+        setTokenConnection(null);
+        setTools((t) => ({ ...t, [server.name]: offered }));
+        setOpen(server.name);
+        void reload();
+        notify(`${tokenConnection.name} is connected`);
+      }}
+    />
+  );
 
   return (
     <div className="conn">
