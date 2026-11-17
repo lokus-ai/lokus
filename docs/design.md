@@ -105,7 +105,16 @@ Small things that make it a daily driver, all plain commands over plain files:
   A note that cannot be drawn does not open, and the note on screen stays as it was.
 - **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
   cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
-  a new row past the last one, and a right-click adds or removes a row or a column. A link in a
+  a new row past the last one, and a right-click adds or removes a row or a column. Shift+F10 or
+  the Menu key opens the same command menu from a cell. Arrow keys, Home and End move through
+  its actions; Enter or Space chooses one. The target cell stays outlined while its menu is
+  open. Escape or Tab dismisses it and restores the cell's
+  selection. The menu stays inside the window and closes on outside focus/click, window blur,
+  scrolling, resize, or a change to the captured note, document, selection or editable state.
+  It never applies an old action to a replacement row or hidden note. Header deletion and
+  deletion of the last column are not offered. The existing table actions use named commands
+  and the shared `ui/src/shell/contextMenu.ts` presentation; ordinary inputs and source text
+  retain native menus. No clipboard bridge or native popup is added. A link in a
   cell, to a note or to a web page, reads as its words and opens on a click. Each
   keystroke changes only that cell's text in the file, so the note is still a plain markdown
   table. When the file changes outside the app, only the part that differs is replaced in the
