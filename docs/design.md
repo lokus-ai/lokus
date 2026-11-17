@@ -658,6 +658,9 @@ confirms that everything it must not be able to do is refused.
   and no transcript is written to another workspace. Stop also cancels while context is
   loading, before a provider request starts. Late loads/replies cannot undo a newer choice
   or reopen a deleted conversation.
+  This window declines new sends and additional workspace switches until its current switch
+  finishes or fails; drafts and imports remain with their conversation. A pending deletion
+  cannot be re-saved by the switch. Failed deletion keeps the draft and reply progress for retry.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.

@@ -3,7 +3,7 @@ import { aiActDone, type AiOutcome, aiApprove, type AiEvent, aiSend, aiSettings,
 import { type Entry, type Note, runCore } from "../../bridge/core";
 import { traceChat, track } from "../../bridge/analytics";
 import { createStore, type Store } from "../../shell/store";
-import { allFiles, app, getEditor, notify, openNote, refreshTree, registerChatFlush, showGraph } from "../../shell/workspace";
+import { allFiles, app, getEditor, isSwitchingVault, notify, openNote, refreshTree, registerChatFlush, showGraph } from "../../shell/workspace";
 
 /** One thing shown in the conversation. */
 export type Item =
@@ -346,7 +346,7 @@ function traced(id: string, began: number, question: string, outcome: AiOutcome 
 export async function ask(text: string, mentions: string[] = [], files: string[] = []): Promise<boolean> {
   // A file sent with no words is still a question: what is this?
   const question = text.trim() || (files.length ? (files.length === 1 ? "Take a look at this file." : "Take a look at these files.") : "");
-  if (!question || chat.get().busy || !vaultRoot || deleting.has(JSON.stringify([vaultRoot, chatId]))) return false;
+  if (!question || chat.get().busy || !vaultRoot || isSwitchingVault() || deleting.has(JSON.stringify([vaultRoot, chatId]))) return false;
   if (!listening) {
     listening = true;
     onAiEvent((id, event) => id === requestId && onEvent(event));
@@ -416,6 +416,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
  * folder that is never synced: a conversation is the person's own until they choose to share it.
  */
 function keep(): Promise<unknown> {
+  if (deleting.has(JSON.stringify([vaultRoot, chatId]))) return saving;
   const items = settle(chat.get().items);
   const first = items.find((i) => i.kind === "user");
   if (!first || first.kind !== "user") return saving;
@@ -518,12 +519,12 @@ export async function forgetChat(id: string): Promise<void> {
     await saving;
     await runCore("chats.delete", { id }, root);
   } catch (e) {
+    deleting.delete(key);
     if (root === vaultRoot && id === chatId) keep();
     notify(e instanceof Error ? e.message : String(e));
     return;
-  } finally {
-    deleting.delete(key);
   }
+  deleting.delete(key);
   vaultDrafts(root).delete(id);
   if (root === vaultRoot && id === chatId) newChat();
 }
