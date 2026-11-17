@@ -612,6 +612,8 @@ export async function continueShared(path: string): Promise<void> {
 }
 
 export function stop(): void {
+  // A handoff may still be preparing, before there is a provider request to stop.
+  if (!requestId) ++opening;
   stopReply(true);
 }
 
@@ -646,6 +648,19 @@ function leaveChat(preserve = true): void {
   requestId = null;
   window.clearTimeout(keeping);
   unanswered = null;
+}
+
+/** A delayed handoff may act only in the conversation it prepared, without replacing newer work. */
+export function captureChat(): { root: string | undefined; current(): boolean } {
+  const root = vaultRoot, id = chatId, ticket = opening;
+  const { draft, items } = chat.get();
+  return {
+    root,
+    current: () => {
+      const state = chat.get();
+      return root === vaultRoot && root === app.get().vault?.root && id === chatId && ticket === opening && state.draft === draft && state.items === items && !state.busy && !isSwitchingVault();
+    },
+  };
 }
 
 export function newChat(): boolean {

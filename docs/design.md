@@ -702,7 +702,13 @@ What it finds goes through two tools into `.lokus/noticed/` (never synced):
 
 "Do it" hands the action to the assistant in the open, where each change is asked about, and
 writes what was chosen under "How we handle things" in `Assistant.md`, which every request and
-every look is shown. Not built: looking while the app is closed, system notifications, a
+every look is shown. This handoff belongs to the conversation and workspace it opened. If
+the person changes conversations or workspaces, starts another reply, or stops it before
+the reply starts, the delayed action is canceled. A draft typed in that same conversation
+stays unsent while the original action proceeds. Recording the choice and refreshing the
+findings use the original workspace; a failed resolution shows an error and does not start
+the action. A choice already recorded is not undone when the later handoff is canceled.
+Not built: looking while the app is closed, system notifications, a
 team's own admin API as a connection (it works today only if that API is offered as an MCP
 server), GitHub.
 
