@@ -106,28 +106,41 @@ impl Vault {
     /// copy of a shared folder has its own; a folder copied by hand takes its original's along.
     pub fn id(&self) -> Result<String> {
         let file = self.root.join(META_DIR).join("id");
-        let known = |text: String| Some(text.trim().to_string()).filter(|id| !id.is_empty());
-        if let Some(id) = fs::read_to_string(&file).ok().and_then(known) {
+        // Only what this app writes counts: 32 hex digits in a plain file. A folder that came
+        // from somewhere else cannot name an id of its choosing, or point this at another file.
+        let read = || {
+            let plain = fs::symlink_metadata(&file).is_ok_and(|m| m.is_file());
+            let text = plain.then(|| fs::read_to_string(&file).ok()).flatten()?;
+            let id = text.trim();
+            (id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit())).then(|| id.to_string())
+        };
+        if let Some(id) = read() {
             return Ok(id);
         }
         fs::create_dir_all(self.root.join(META_DIR))?;
         let id = uuid::Uuid::new_v4().simple().to_string();
         // Made only if it is not there: of two that ask at once, both get the one that landed.
-        match fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&file)
-        {
-            Ok(mut made) => made.write_all(id.as_bytes())?,
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                if let Some(id) = fs::read_to_string(&file).ok().and_then(known) {
+        // Whatever else sits at that name is taken away itself, never written through.
+        for _ in 0..2 {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&file)
+            {
+                Ok(mut made) => {
+                    made.write_all(id.as_bytes())?;
                     return Ok(id);
                 }
-                fs::write(&file, &id)?;
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if let Some(id) = read() {
+                        return Ok(id);
+                    }
+                    fs::remove_file(&file)?;
+                }
+                Err(e) => return Err(e.into()),
             }
-            Err(e) => return Err(e.into()),
         }
-        Ok(id)
+        Err(CoreError::NotFound(file.display().to_string()))
     }
 
     pub fn name(&self) -> String {
@@ -580,6 +593,18 @@ mod tests {
         assert_eq!(Vault::open(&new).unwrap().id().unwrap(), id);
         fs::create_dir(&old).unwrap();
         assert_ne!(Vault::open(&old).unwrap().id().unwrap(), id);
+        // A folder from elsewhere cannot pick its id, or have another file written through a link.
+        let other = dir.path().join("other.txt");
+        fs::write(&other, "mine").unwrap();
+        fs::write(old.join(".lokus/id"), "-").unwrap();
+        assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
+        #[cfg(unix)]
+        {
+            fs::remove_file(old.join(".lokus/id")).unwrap();
+            std::os::unix::fs::symlink(&other, old.join(".lokus/id")).unwrap();
+            assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
+            assert_eq!(fs::read_to_string(&other).unwrap(), "mine");
+        }
     }
 
     fn vault() -> (tempfile::TempDir, Vault) {
