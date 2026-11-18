@@ -175,6 +175,8 @@ export default function TasksBoard({ version, onOpen }: Props) {
     try {
       const latest = await loadTasks();
       if (app.get().active !== board || app.get().vault?.root !== root || app.get().view !== "note" || app.get().properties.view !== "tasks" || app.get().sync.role === "viewer") return;
+      // One-per-line column lists are not read here; refuse rather than rewrite and drop them.
+      if (/^order:[ \t]*\n[ \t]+-/m.test((getEditor()?.text ?? "").slice(0, 20_000))) return notify("This board lists its columns one per line. Write them as order: [a, b] to change columns here.");
       const current = columnOrder(app.get().properties.order);
       if (from && !columnsOf(latest, current).includes(from)) return notify("That column changed elsewhere. Try again.");
       if (from && (STATUSES.includes(from) || latest.some((t) => t.status === from))) return notify("Move all tasks out of this custom column before renaming or removing it.");

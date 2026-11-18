@@ -120,10 +120,7 @@ export function readFrontmatter(text: string): Frontmatter {
       if (m[2].startsWith('"')) {
         try { value = JSON.parse(m[2]) as string; } catch { /* Preserve non-JSON YAML scalars. */ }
       }
-      // A block list reads as the flow list it is equivalent to.
-      const items: string[] = [];
-      for (let item; !m[2] && (item = /^[ \t]+-[ \t]+(.*?)[ \t]*$/.exec(lines[i + 1] ?? "")); i++) items.push(/^["']/.test(item[1]) || !item[1].includes(",") ? item[1] : JSON.stringify(item[1]));
-      values[m[1]] = items.length ? `[${items.join(", ")}]` : value;
+      values[m[1]] = value;
     }
   }
   return { end: bodyEnd + close[0].length, values };
