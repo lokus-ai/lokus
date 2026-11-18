@@ -306,11 +306,10 @@ interface Props {
   returnFocus: {
     element: Element | null;
     selection: {
-      anchorNode: Node;
-      anchorOffset: number;
-      focusNode: Node;
-      focusOffset: number;
-      valid(): boolean;
+      anchor: number;
+      focus: number;
+      text: string;
+      owned(): boolean;
     } | null;
   } | null;
   page: string;
@@ -329,9 +328,22 @@ export default function SettingsView({ page, returnFocus, onPage, onClose }: Pro
         if (!returnFocus || document.querySelector(".overlay, [role=dialog]")) return;
         const { element, selection } = returnFocus;
         if (!(element instanceof HTMLElement) || !element.isConnected || !element.getClientRects().length ||
-          element.closest("[inert]") || getComputedStyle(element).visibility !== "visible" || (selection && !selection.valid())) return;
+          element.closest("[inert]") || getComputedStyle(element).visibility !== "visible" || (selection && !selection.owned())) return;
         element.focus();
-        if (document.activeElement === element && selection?.valid()) getSelection()?.setBaseAndExtent(selection.anchorNode, selection.anchorOffset, selection.focusNode, selection.focusOffset);
+        // A selection returns only to the same text in the same target; a stale one is dropped.
+        if (!selection || document.activeElement !== element || !element.isContentEditable || element.textContent !== selection.text) return;
+        const at = (offset: number): [Node, number] | null => {
+          const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+          let left = offset;
+          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+            const length = (node as Text).length;
+            if (left <= length) return [node, left];
+            left -= length;
+          }
+          return offset === 0 ? [element, 0] : null;
+        };
+        const anchor = at(selection.anchor), focus = at(selection.focus);
+        if (anchor && focus) getSelection()?.setBaseAndExtent(anchor[0], anchor[1], focus[0], focus[1]);
       });
     };
   }, [returnFocus]);

@@ -505,22 +505,23 @@ export function App() {
     const selection = getSelection();
     if (!(element instanceof HTMLElement) || !element.isContentEditable || !selection?.anchorNode || !selection.focusNode ||
       !element.contains(selection.anchorNode) || !element.contains(selection.focusNode)) return { element, selection: null };
-    const { anchorNode, anchorOffset, focusNode, focusOffset } = selection;
-    const text = element.textContent;
-    const anchorText = anchorNode.textContent, focusText = focusNode.textContent;
+    // Offsets, not nodes: a table cell redraws its children whenever it loses or takes focus.
+    const offset = (node: Node, end: number) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.setEnd(node, end);
+      return range.toString().length;
+    };
     const { active, view, vault } = app.get();
     return {
       element,
       selection: {
-        anchorNode, anchorOffset, focusNode, focusOffset,
-        valid: () => {
+        anchor: offset(selection.anchorNode, selection.anchorOffset),
+        focus: offset(selection.focusNode, selection.focusOffset),
+        text: element.textContent ?? "",
+        owned: () => {
           const now = app.get();
-          return now.active === active && now.view === view && now.vault?.root === vault?.root &&
-            element.isContentEditable && element.textContent === text &&
-            element.contains(anchorNode) && element.contains(focusNode) &&
-            anchorNode.textContent === anchorText && focusNode.textContent === focusText &&
-            anchorOffset <= (anchorNode instanceof CharacterData ? anchorNode.length : anchorNode.childNodes.length) &&
-            focusOffset <= (focusNode instanceof CharacterData ? focusNode.length : focusNode.childNodes.length);
+          return now.active === active && now.view === view && now.vault?.root === vault?.root;
         },
       },
     };
