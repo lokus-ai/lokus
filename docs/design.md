@@ -409,7 +409,8 @@ been, so a note made as "Untitled" and given its title offline never meets a tea
   drops the connection and opens a new one, and what either side missed arrives then. While
   what it missed is still arriving the wait is ten minutes: that comes as one message, heard
   only when all of it is here, and a team's whole history over a slow link takes longer than 50
-  seconds.
+  seconds. That one message may be up to 1 GB; the 16 MB a websocket takes by default
+  refused a team's history once it had grown past that.
 
 **What the relay refuses**
 
@@ -609,7 +610,7 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
 
-### Releases and news (built; tested on macOS with three local releases; Windows and Linux are built and opened in CI)
+### Releases and news (built)
 
 The relay also answers every copy of the app, signed in or not: `GET /v1/app/update/{target}/{arch}/{version}`
 (the newest build for that platform, or 204) and `GET /v1/app/news` (posts, newest first). Tables
@@ -617,6 +618,8 @@ The relay also answers every copy of the app, signed in or not: `GET /v1/app/upd
 Publishing needs `LOKUS_PUBLISH_KEY`. The app installs a download only if it carries our
 signature for that version. The window's side is `ui/src/features/updates/`; the steps a person
 goes through, how to publish, and what was tested are in `docs/releasing.md`.
+Published-build and in-app update checks are recorded there by version and platform; they are
+historical evidence, not acceptance of a later release.
 
 ## 7. Plugins (built)
 
