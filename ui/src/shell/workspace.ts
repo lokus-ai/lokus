@@ -679,7 +679,10 @@ export async function boot(): Promise<void> {
   onVaultOpened((vault) => {
     if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);
   });
-  onVaultClosed((root) => putAway(root));
+  // A window holding a note that could not be saved keeps it on screen, so the words can still be copied out.
+  onVaultClosed((root) => {
+    if (!unsaved()) putAway(root);
+  });
   // Signing in or out in another window is noticed when this one is next looked at.
   window.addEventListener("focus", () => {
     void currentAccount().then((account) => {
