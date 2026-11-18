@@ -92,7 +92,12 @@ export function columnOrder(value: string | undefined): string[] {
     const parsed: unknown = JSON.parse(value);
     if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === "string");
   } catch { /* Older boards may use a plain comma-separated order. */ }
-  return value.replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+  const items = value.replace(/^\[|\]$/g, "").match(/\s*(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^,]*)\s*(?:,|$)/g) ?? [];
+  return items.map((raw) => {
+    const s = raw.replace(/,$/, "").trim();
+    if (s.startsWith('"')) try { return String(JSON.parse(s)); } catch { /* Keep the text as written. */ }
+    return /^'.*'$/.test(s) ? s.slice(1, -1).replaceAll("''", "'") : s;
+  }).filter(Boolean);
 }
 
 /** The columns a board shows: the usual ones, then any other status the tasks use. */
