@@ -66,6 +66,15 @@ const QUIET: Duration = Duration::from_secs(50);
 /// The longest a pull may take to arrive. What a device missed comes as one message, heard only
 /// once all of it is here; a team's whole history over a slow link takes longer than `QUIET`.
 const PULL_WAIT: Duration = Duration::from_secs(600);
+/// The largest message taken from the relay. A pull is one message holding everything missed,
+/// and the library's 16 MiB default refused a team's history once it grew past that.
+const LARGEST: usize = 1024 * 1024 * 1024;
+
+fn roomy() -> tokio_tungstenite::tungstenite::protocol::WebSocketConfig {
+    tokio_tungstenite::tungstenite::protocol::WebSocketConfig::default()
+        .max_message_size(Some(LARGEST))
+        .max_frame_size(Some(LARGEST))
+}
 
 /// What the app can ask a running connection to do.
 pub enum Nudge {
@@ -323,7 +332,7 @@ async fn session(
     // ever, with the app saying "Connecting" and nothing to retry.
     let (socket, _) = tokio::time::timeout(
         CONNECT,
-        tokio_tungstenite::connect_async(socket_url(config)),
+        tokio_tungstenite::connect_async_with_config(socket_url(config), Some(roomy()), false),
     )
     .await
     .map_err(|_| Error::Net("the relay did not answer in time".into()))?
