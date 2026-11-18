@@ -50,12 +50,15 @@ pub fn signed_in(server: &McpServer) -> bool {
 
 /// Forget the workspace's own sign-in to a server; one it shared is left to the others.
 pub fn sign_out(dir: &std::path::Path, root: &str, name: &str) -> Result<()> {
-    let own = McpServer {
-        name: name.to_string(),
-        url: String::new(),
-        enabled: true,
-        keys: root.to_string(),
-    };
+    let own = Config::own(
+        root,
+        McpServer {
+            name: name.to_string(),
+            url: String::new(),
+            enabled: true,
+            keys: String::new(),
+        },
+    );
     forget_checked(&oauth_account(&own))?;
     Config::let_go(dir, root, "mcp", name)
 }

@@ -108,8 +108,7 @@ pub fn open_vault(app: &AppHandle, path: &str, root: Option<&str>) -> Result<Val
         let _ = std::fs::write(file, vault.root().to_string_lossy().as_bytes());
     }
     vaults::remember(app, vault.root());
-    // What was connected before a folder was open (first-run setup) is this workspace's.
-    ai::hand_on(app, &[vault.root().to_string_lossy().to_string()]);
+    ai::opened(app, vault);
     let _ = app.emit("vault:opened", &info);
     Ok(info)
 }

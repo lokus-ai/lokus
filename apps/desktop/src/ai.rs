@@ -39,15 +39,31 @@ fn load(app: &AppHandle) -> Result<Config, Value> {
     Ok(Config::load(&config_dir(app)?))
 }
 
-/// The folder a workspace's connections are kept by.
+/// The open folder, as the window names it.
 fn root_of(core: &lokus_core::Core) -> String {
     core.vault.root().to_string_lossy().to_string()
+}
+
+/// What a workspace's connections are kept by: the folder's own id, which goes with the folder
+/// when it is moved or renamed.
+fn id_of(core: &lokus_core::Core) -> Result<String, Value> {
+    core.vault.id().map_err(|e| fail("config", e))
+}
+
+/// The id of the folder the window names; no folder, no id.
+fn id_at(root: &str) -> Result<String, Value> {
+    if root.is_empty() {
+        return Ok(String::new());
+    }
+    lokus_core::Vault::open(root)
+        .and_then(|vault| vault.id())
+        .map_err(|e| fail("config", e))
 }
 
 /// Set while connections from before they belonged to a workspace could not be handed on.
 static OWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Give connections made before any workspace was open to these workspaces. If the settings
+/// Give connections from before they belonged to a workspace to these folders. If the settings
 /// cannot be written they stay where they were, and the next folder opened tries again for
 /// every workspace on the computer, so a failed first start loses nobody's connections.
 pub fn hand_on(app: &AppHandle, roots: &[String]) {
@@ -59,12 +75,28 @@ pub fn hand_on(app: &AppHandle, roots: &[String]) {
     } else {
         roots
     };
+    let ids: Vec<String> = roots.iter().filter_map(|root| id_at(root).ok()).collect();
     let done = config_dir(app)
         .map_err(|_| "no settings folder".to_string())
-        .and_then(|dir| Config::hand_on(&dir, roots).map_err(|e| e.to_string()));
+        .and_then(|dir| Config::hand_on(&dir, &ids).map_err(|e| e.to_string()));
     OWED.store(done.is_err(), Ordering::Relaxed);
     if let Err(e) = done {
         eprintln!("connections could not be given to their workspaces: {e}");
+    }
+}
+
+/// A folder was opened: what an older install left goes to it if nothing has had it yet, and
+/// what was connected with no folder open (first-run setup) becomes this workspace's.
+pub fn opened(app: &AppHandle, vault: &lokus_core::Vault) {
+    hand_on(app, &[vault.root().to_string_lossy().to_string()]);
+    let settled = config_dir(app)
+        .map_err(|_| "no settings folder".to_string())
+        .and_then(|dir| {
+            let id = vault.id().map_err(|e| e.to_string())?;
+            Config::settle(&dir, &id).map_err(|e| e.to_string())
+        });
+    if let Err(e) = settled {
+        eprintln!("connections made during setup could not be given to the workspace: {e}");
     }
 }
 
@@ -75,7 +107,7 @@ fn settle(app: &AppHandle, root: &str) {
         return;
     }
     if let Some(core) = app.state::<Shell>().core() {
-        hand_on(app, &[root_of(&core)]);
+        opened(app, &core.vault);
     }
 }
 
@@ -84,6 +116,7 @@ fn plugin_servers(core: Option<&lokus_core::Core>) -> Vec<McpServer> {
     let Some(core) = core else {
         return Vec::new();
     };
+    let keys = core.vault.id().unwrap_or_default();
     lokus_core::plugins::list(&core.vault)
         .unwrap_or_default()
         .into_iter()
@@ -94,7 +127,7 @@ fn plugin_servers(core: Option<&lokus_core::Core>) -> Vec<McpServer> {
             name: s.name,
             url: s.url,
             enabled: true,
-            keys: root_of(core),
+            keys: keys.clone(),
         })
         .collect()
 }
@@ -117,7 +150,8 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
     }
     let core = app.state::<Shell>().core();
     let root = core.as_deref().map(root_of).unwrap_or_default();
-    let config = load(&app)?.seen_from(&root);
+    let at = core.as_deref().map(id_of).transpose()?.unwrap_or_default();
+    let config = load(&app)?.seen_from(&at);
     let names = |keep: &dyn Fn(&McpServer) -> bool| -> Vec<&str> {
         config
             .mcp
@@ -141,7 +175,7 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
 
 #[tauri::command(async)]
 pub fn ai_settings_save(app: AppHandle, config: Seen) -> Result<(), Value> {
-    Config::put(&config_dir(&app)?, &config.root, config.config).map_err(|e| e.body())
+    Config::put(&config_dir(&app)?, &id_at(&config.root)?, config.config).map_err(|e| e.body())
 }
 
 /// Store or (with an empty value) remove a provider key, or the key of one of the
@@ -158,8 +192,14 @@ pub fn ai_secret_set(
         ("provider", "anthropic") => key_account(Provider::Anthropic),
         ("provider", "openai") => key_account(Provider::OpenAi),
         ("mcp" | "api", name) if !name.is_empty() => {
-            return lokus_ai::config::set_key(&config_dir(&app)?, &root, &kind, name, value.trim())
-                .map_err(|e| e.body())
+            return lokus_ai::config::set_key(
+                &config_dir(&app)?,
+                &id_at(&root)?,
+                &kind,
+                name,
+                value.trim(),
+            )
+            .map_err(|e| e.body())
         }
         _ => return Err(fail("bad_args", "unknown secret")),
     };
@@ -191,7 +231,7 @@ pub async fn ai_mcp_check(
     token: Option<String>,
     root: String,
 ) -> Result<Vec<Value>, Value> {
-    let server = load(&app)?.place(&root, server);
+    let server = load(&app)?.place(&id_at(&root)?, server);
     let connection = match token {
         Some(token) => lokus_ai::mcp::check_token(&server, &token)
             .await
@@ -220,7 +260,8 @@ pub fn ai_mcp_token_save(
     token: String,
     root: String,
 ) -> Result<(), Value> {
-    lokus_ai::mcp::save_token(&config_dir(&app)?, &root, server, &token).map_err(|e| e.body())?;
+    lokus_ai::mcp::save_token(&config_dir(&app)?, &id_at(&root)?, server, &token)
+        .map_err(|e| e.body())?;
     settle(&app, &root);
     Ok(())
 }
@@ -258,9 +299,9 @@ pub async fn ai_send(
             json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
         );
     }
-    let root = open;
+    let at = core.as_deref().map(id_of).transpose()?.unwrap_or_default();
     let request = Request {
-        config: load(&app)?.seen_from(&root),
+        config: load(&app)?.seen_from(&at),
         messages,
         extra_servers: plugin_servers(core.as_deref()),
         core,
@@ -338,24 +379,21 @@ pub fn ai_connectors() -> Vec<lokus_ai::catalog::Connector> {
 /// among that workspace's connections. The sign-in is that workspace's own, also when it had
 /// been using one shared with others.
 #[tauri::command]
-pub async fn ai_mcp_login(
-    app: AppHandle,
-    mut server: McpServer,
-    root: String,
-) -> Result<(), Value> {
+pub async fn ai_mcp_login(app: AppHandle, server: McpServer, root: String) -> Result<(), Value> {
     let show = |url: &str| {
         let _ = open::that(url);
     };
-    server.keys = root.clone();
+    let at = id_at(&root)?;
+    let server = Config::own(&at, server);
     lokus_ai::mcp_login::login(&server, show)
         .await
         .map_err(|e| e.body())?;
     let dir = config_dir(&app)?;
-    Config::let_go(&dir, &root, "mcp", &server.name).map_err(|e| e.body())?;
-    let mut seen = Config::load(&dir).seen_from(&root);
+    Config::let_go(&dir, &at, "mcp", &server.name).map_err(|e| e.body())?;
+    let mut seen = Config::load(&dir).seen_from(&at);
     if !seen.mcp.iter().any(|s| s.name == server.name) {
         seen.mcp.push(server);
-        Config::put(&dir, &root, seen).map_err(|e| e.body())?;
+        Config::put(&dir, &at, seen).map_err(|e| e.body())?;
     }
     settle(&app, &root);
     Ok(())
@@ -363,7 +401,7 @@ pub async fn ai_mcp_login(
 
 #[tauri::command(async)]
 pub fn ai_mcp_logout(app: AppHandle, name: String, root: String) -> Result<(), Value> {
-    lokus_ai::mcp_login::sign_out(&config_dir(&app)?, &root, &name).map_err(|e| e.body())
+    lokus_ai::mcp_login::sign_out(&config_dir(&app)?, &id_at(&root)?, &name).map_err(|e| e.body())
 }
 
 /// Sign in with ChatGPT in the person's browser.

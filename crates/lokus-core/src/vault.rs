@@ -101,6 +101,35 @@ impl Vault {
         &self.root
     }
 
+    /// What this folder is known by wherever it is moved or renamed to: a random id kept in
+    /// `.lokus/id`, made the first time it is asked for. It is never synced, so each computer's
+    /// copy of a shared folder has its own; a folder copied by hand takes its original's along.
+    pub fn id(&self) -> Result<String> {
+        let file = self.root.join(META_DIR).join("id");
+        let known = |text: String| Some(text.trim().to_string()).filter(|id| !id.is_empty());
+        if let Some(id) = fs::read_to_string(&file).ok().and_then(known) {
+            return Ok(id);
+        }
+        fs::create_dir_all(self.root.join(META_DIR))?;
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        // Made only if it is not there: of two that ask at once, both get the one that landed.
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file)
+        {
+            Ok(mut made) => made.write_all(id.as_bytes())?,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if let Some(id) = fs::read_to_string(&file).ok().and_then(known) {
+                    return Ok(id);
+                }
+                fs::write(&file, &id)?;
+            }
+            Err(e) => return Err(e.into()),
+        }
+        Ok(id)
+    }
+
     pub fn name(&self) -> String {
         self.root
             .file_name()
@@ -539,6 +568,19 @@ pub(crate) fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_folder_keeps_its_id_when_it_is_renamed() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = (dir.path().join("School"), dir.path().join("Uni"));
+        fs::create_dir(&old).unwrap();
+        let id = Vault::open(&old).unwrap().id().unwrap();
+        assert_eq!(Vault::open(&old).unwrap().id().unwrap(), id);
+        fs::rename(&old, &new).unwrap();
+        assert_eq!(Vault::open(&new).unwrap().id().unwrap(), id);
+        fs::create_dir(&old).unwrap();
+        assert_ne!(Vault::open(&old).unwrap().id().unwrap(), id);
+    }
 
     fn vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();

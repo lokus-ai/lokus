@@ -105,11 +105,23 @@ pub struct Config {
     /// The team's own systems, called as they are: an address, and where to start.
     #[serde(default)]
     pub apis: Vec<OwnApi>,
-    /// Each workspace's connections, by its folder. In the saved file `mcp` and `apis` above
-    /// hold only what was connected with no workspace open (first-run setup, and everything
-    /// from before connections belonged to a workspace), until `hand_on` gives them one.
+    /// Each workspace's connections, by the folder's id (`Vault::id`, which moves with the
+    /// folder). In the saved file `mcp` and `apis` above hold only what an install from before
+    /// connections belonged to a workspace left there, until `hand_on` gives it to them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub workspaces: BTreeMap<String, Workspace>,
+}
+
+/// Where connections made with no workspace open wait for the next folder that is opened.
+const WAITING: &str = "-";
+
+/// The place a workspace's connections and keys are kept under; with none open, the waiting one.
+fn place(at: &str) -> &str {
+    if at.is_empty() {
+        WAITING
+    } else {
+        at
+    }
 }
 
 /// One workspace's connections.
@@ -159,47 +171,53 @@ impl Config {
         fs::rename(tmp, dir.join(FILE)).map_err(failed)
     }
 
-    /// Whose keys a connection in `root` uses.
-    fn keys(&self, root: &str, kind: &str, name: &str) -> String {
+    /// Whose keys a connection of the workspace `at` uses.
+    fn keys(&self, at: &str, kind: &str, name: &str) -> String {
         let shares = self
             .workspaces
-            .get(root)
+            .get(place(at))
             .is_some_and(|w| w.shared.contains(&format!("{kind}:{name}")));
         if shares {
             String::new()
         } else {
-            root.to_string()
+            place(at).to_string()
         }
     }
 
-    /// A tool server as the workspace `root` reaches it. What the window sends names no keys.
-    pub fn place(&self, root: &str, mut server: McpServer) -> McpServer {
-        server.keys = self.keys(root, "mcp", &server.name);
+    /// A tool server as the workspace `at` reaches it. What the window sends names no keys.
+    pub fn place(&self, at: &str, mut server: McpServer) -> McpServer {
+        server.keys = self.keys(at, "mcp", &server.name);
+        server
+    }
+
+    /// A tool server with keys of the workspace's own, whatever it used before.
+    pub fn own(at: &str, mut server: McpServer) -> McpServer {
+        server.keys = place(at).to_string();
         server
     }
 
     /// The settings as one workspace has them: the model, and that workspace's connections.
-    /// With no workspace (`root` empty) the connections are the ones waiting for one.
-    pub fn seen_from(&self, root: &str) -> Config {
+    /// `at` is the workspace's id; empty means none is open, and the connections are the ones
+    /// waiting for one.
+    pub fn seen_from(&self, at: &str) -> Config {
+        let own = self.workspaces.get(place(at)).cloned().unwrap_or_default();
         let mut seen = Config {
+            mcp: own.mcp,
+            apis: own.apis,
             workspaces: BTreeMap::new(),
             ..self.clone()
         };
-        if !root.is_empty() {
-            let own = self.workspaces.get(root).cloned().unwrap_or_default();
-            (seen.mcp, seen.apis) = (own.mcp, own.apis);
-        }
         for server in &mut seen.mcp {
-            server.keys = self.keys(root, "mcp", &server.name);
+            server.keys = self.keys(at, "mcp", &server.name);
         }
         for api in &mut seen.apis {
-            api.keys = self.keys(root, "api", &api.name);
+            api.keys = self.keys(at, "api", &api.name);
         }
         seen
     }
 
-    /// Save what one workspace sees: the model for the app, the connections for `root` alone.
-    pub fn put(dir: &Path, root: &str, seen: Config) -> Result<()> {
+    /// Save what one workspace sees: the model for the app, the connections for `at` alone.
+    pub fn put(dir: &Path, at: &str, seen: Config) -> Result<()> {
         let mut now = Self::load(dir);
         let Config { mcp, apis, .. } = seen.clone();
         now = Config {
@@ -208,33 +226,29 @@ impl Config {
             workspaces: now.workspaces,
             ..seen
         };
-        if root.is_empty() {
-            (now.mcp, now.apis) = (mcp, apis);
-        } else {
-            let own = now.workspaces.entry(root.to_string()).or_default();
-            own.shared.retain(|shared| {
-                mcp.iter().any(|s| *shared == format!("mcp:{}", s.name))
-                    || apis.iter().any(|a| *shared == format!("api:{}", a.name))
-            });
-            (own.mcp, own.apis) = (mcp, apis);
-            if own.mcp.is_empty() && own.apis.is_empty() {
-                now.workspaces.remove(root);
-            }
+        let own = now.workspaces.entry(place(at).to_string()).or_default();
+        own.shared.retain(|shared| {
+            mcp.iter().any(|s| *shared == format!("mcp:{}", s.name))
+                || apis.iter().any(|a| *shared == format!("api:{}", a.name))
+        });
+        (own.mcp, own.apis) = (mcp, apis);
+        if own.mcp.is_empty() && own.apis.is_empty() {
+            now.workspaces.remove(place(at));
         }
         now.save(dir)
     }
 
-    /// Give the connections that are waiting for a workspace to each of `roots`, and stop
-    /// holding them. Their keys stay where they are, under the name alone: nothing in the
+    /// Give the connections from before they belonged to a workspace to each of `ids`, and
+    /// stop holding them. Their keys stay where they are, under the name alone: nothing in the
     /// keychain is read, copied or removed. A workspace that has one of that name keeps its own.
-    pub fn hand_on(dir: &Path, roots: &[String]) -> Result<()> {
+    pub fn hand_on(dir: &Path, ids: &[String]) -> Result<()> {
         let mut now = Self::load(dir);
-        if roots.is_empty() || (now.mcp.is_empty() && now.apis.is_empty()) {
+        if ids.is_empty() || (now.mcp.is_empty() && now.apis.is_empty()) {
             return Ok(());
         }
         let (mcp, apis) = (std::mem::take(&mut now.mcp), std::mem::take(&mut now.apis));
-        for root in roots {
-            let own = now.workspaces.entry(root.clone()).or_default();
+        for id in ids {
+            let own = now.workspaces.entry(id.clone()).or_default();
             for server in &mcp {
                 if !own.mcp.iter().any(|s| s.name == server.name) {
                     own.mcp.push(server.clone());
@@ -251,13 +265,62 @@ impl Config {
         now.save(dir)
     }
 
-    /// The workspace `root` stops using the keys kept under the name alone for one connection
+    /// Give what was connected with no workspace open (first-run setup) to the workspace `at`,
+    /// keys and all. A connection `at` already has by that name stays, and the waiting one is
+    /// dropped. The keys are the app's own, made moments ago under the waiting place, so moving
+    /// them asks nobody anything.
+    pub fn settle(dir: &Path, at: &str) -> Result<()> {
+        let mut now = Self::load(dir);
+        if at.is_empty() {
+            return Ok(());
+        }
+        let Some(waiting) = now.workspaces.remove(WAITING) else {
+            return Ok(());
+        };
+        let own = now.workspaces.entry(at.to_string()).or_default();
+        let (mut moved, mut left) = (Vec::new(), Vec::new());
+        for server in waiting.mcp {
+            if own.mcp.iter().any(|s| s.name == server.name) {
+                left.push(("mcp", server.name));
+            } else {
+                moved.push(("mcp", server.name.clone()));
+                own.mcp.push(server);
+            }
+        }
+        for api in waiting.apis {
+            if own.apis.iter().any(|a| a.name == api.name) {
+                left.push(("api", api.name));
+            } else {
+                moved.push(("api", api.name.clone()));
+                own.apis.push(api);
+            }
+        }
+        for (kind, name) in &moved {
+            let pairs = accounts(kind, name, WAITING)
+                .into_iter()
+                .zip(accounts(kind, name, at));
+            for (from, to) in pairs {
+                if let Some(value) = kept(&from) {
+                    keep(&to, &value);
+                }
+            }
+        }
+        now.save(dir)?;
+        for (kind, name) in moved.iter().chain(&left) {
+            for account in accounts(kind, name, WAITING) {
+                forget(&account);
+            }
+        }
+        Ok(())
+    }
+
+    /// The workspace `at` stops using the keys kept under the name alone for one connection
     /// (`kind` is `mcp` or `api`): it has its own now, or none. They are removed once no
     /// workspace uses them.
-    pub fn let_go(dir: &Path, root: &str, kind: &str, name: &str) -> Result<()> {
+    pub fn let_go(dir: &Path, at: &str, kind: &str, name: &str) -> Result<()> {
         let mut now = Self::load(dir);
         let shared = format!("{kind}:{name}");
-        let Some(own) = now.workspaces.get_mut(root) else {
+        let Some(own) = now.workspaces.get_mut(place(at)) else {
             return Ok(());
         };
         if !own.shared.contains(&shared) {
@@ -265,11 +328,12 @@ impl Config {
         }
         own.shared.retain(|s| *s != shared);
         now.save(dir)?;
-        let waiting = match kind {
+        // Not yet handed on: some workspace is still to be given it.
+        let owed = match kind {
             "mcp" => now.mcp.iter().any(|s| s.name == name),
             _ => now.apis.iter().any(|a| a.name == name),
         };
-        if waiting || now.workspaces.values().any(|w| w.shared.contains(&shared)) {
+        if owed || now.workspaces.values().any(|w| w.shared.contains(&shared)) {
             return Ok(());
         }
         for account in accounts(kind, name, "") {
@@ -419,7 +483,7 @@ pub fn key_account(provider: Provider) -> String {
     format!("ai:{}", provider.id())
 }
 
-/// A connection's entry in the keychain: under the name alone, or the name and the workspace.
+/// A connection's entry in the keychain: under the name alone, or the name and the workspace's id.
 fn account(kind: &str, name: &str, keys: &str) -> String {
     if keys.is_empty() {
         format!("{kind}:{name}")
@@ -450,11 +514,11 @@ pub fn oauth_account(server: &McpServer) -> String {
     account("mcp-oauth", &server.name, &server.keys)
 }
 
-/// Keep (or, with an empty value, remove) the key of one of `root`'s connections. The
-/// workspace's own entry is written; one it shared with other workspaces is left to them.
-pub fn set_key(dir: &Path, root: &str, kind: &str, name: &str, value: &str) -> Result<()> {
-    set_secret(&account(kind, name, root), value)?;
-    Config::let_go(dir, root, kind, name)
+/// Keep (or, with an empty value, remove) the key of one of the workspace `at`'s connections.
+/// The workspace's own entry is written; one it shared with other workspaces is left to them.
+pub fn set_key(dir: &Path, at: &str, kind: &str, name: &str, value: &str) -> Result<()> {
+    set_secret(&account(kind, name, place(at)), value)?;
+    Config::let_go(dir, at, kind, name)
 }
 
 /// The key for a provider: the keychain first, then the usual environment
@@ -566,6 +630,23 @@ mod tests {
         let now = Config::load(dir);
         assert!(now.seen_from(&b).mcp.is_empty());
         assert_eq!(now.seen_from(&a).mcp.len(), 1);
+        // Connected with no workspace open: it waits under keys of its own, never the ones
+        // the workspaces above still share, and goes to the next folder opened, once.
+        let mut seen = Config::load(dir).seen_from("");
+        assert!(seen.mcp.is_empty());
+        seen.mcp = vec![server("slack", "https://z")];
+        Config::put(dir, "", seen).unwrap();
+        let waiting = Config::load(dir).seen_from("");
+        assert_eq!(oauth_account(&waiting.mcp[0]), "mcp-oauth:slack@-");
+        Config::settle(dir, "/w/d").unwrap();
+        let now = Config::load(dir);
+        assert!(now.seen_from("").mcp.is_empty());
+        let in_d = now.seen_from("/w/d");
+        assert_eq!(in_d.mcp[0].url, "https://z");
+        assert_eq!(oauth_account(&in_d.mcp[0]), "mcp-oauth:slack@/w/d");
+        assert_eq!(mcp_account(&now.seen_from(&a).mcp[0]), "mcp:slack");
+        Config::settle(dir, "/w/e").unwrap();
+        assert!(Config::load(dir).seen_from("/w/e").mcp.is_empty());
         // Nothing that names a key's place is written to the file.
         assert!(!std::fs::read_to_string(dir.join(FILE))
             .unwrap()

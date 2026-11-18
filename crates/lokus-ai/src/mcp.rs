@@ -85,18 +85,13 @@ pub async fn check_token(server: &McpServer, token: &str) -> Result<Connection> 
 /// Commit an already checked token and its server together, for the workspace `root`; a
 /// settings failure restores the previous credential, so updating a token cannot break a
 /// working connection on disk failure.
-pub fn save_token(
-    dir: &std::path::Path,
-    root: &str,
-    mut server: McpServer,
-    token: &str,
-) -> Result<()> {
+pub fn save_token(dir: &std::path::Path, root: &str, server: McpServer, token: &str) -> Result<()> {
     let token = token.trim();
     if token.is_empty() {
         return Err(AiError::Config("Enter a personal access token.".into()));
     }
     // The workspace's own entry, also when it had been using one shared with others.
-    server.keys = root.to_string();
+    let mut server = Config::own(root, server);
     let account = mcp_account(&server);
     let previous = read_secret(&account)?;
     let mut seen = Config::load(dir).seen_from(root);
