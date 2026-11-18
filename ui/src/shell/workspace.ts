@@ -457,7 +457,8 @@ const HELD = 30_000;
  */
 function countSync(event: Parameters<typeof trackSync>[0], props: Record<string, string | number> = {}): void {
   const held = episode.pulled > 0 && Date.now() - episode.pulled >= HELD;
-  if (held) episode.pulled = 0;
+  // A drop ends the stretch being timed, held or not, so the retries after it are not taken for time up.
+  if (held || event === "sync_offline" || event === "sync_refused") episode.pulled = 0;
   trackSync(event, app.get().sync.workspace, props, held);
 }
 /** The workspace being left or deleted from here, so the relay's own word of it is not answered twice. */
