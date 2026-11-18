@@ -129,7 +129,17 @@ export async function join(w: Waiting, where: "here" | "new"): Promise<void> {
   invited.set({ joining: w.code });
   try {
     await relay<{ workspace: string }>(HOME, token, "POST", `/v1/invites/${w.code}/accept`);
-    if (!root) await setVault((root = (await defaultVault(true, w.name)).root));
+    if (!root) {
+      // Found first; made and opened only after this window has saved and the assistant has kept its reply.
+      const at = await defaultVault(false, w.name);
+      root = at.root;
+      await setVault(at.root, async () => {
+        const made = await defaultVault(true, w.name);
+        root = made.root;
+        return made;
+      });
+      if (app.get().vault?.root !== root) throw new Error("Changes could not be saved. Retry before opening the team's folder.");
+    }
     await connectSync(HOME, w.workspace, null, root);
     track("action", { feature: "team", action: "invite_accepted", where, role: w.role });
     notify(`You joined ${w.name}`);
@@ -200,8 +210,13 @@ export async function bringTeams(): Promise<void> {
         await saveAll();
         // A note that could not be written keeps its folder on screen; the teams wait for the next look.
         if (unsaved()) return;
-        const { root } = await defaultVault(true, name);
-        await setVault(root);
+        let root = at.root;
+        await setVault(at.root, async () => {
+          const made = await defaultVault(true, name);
+          root = made.root;
+          return made;
+        });
+        if (app.get().vault?.root !== root) return;
         if (!had) await connectSync(HOME, w.id, null, root);
         track("action", { feature: "team", action: "team_brought" });
         notify(`${w.name} is on this computer now`);

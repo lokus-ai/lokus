@@ -19,6 +19,7 @@ import {
   openVault,
   pickFolder,
   runCore,
+  setWindowRoot,
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
@@ -110,6 +111,9 @@ export const app = createStore<AppState>({
   notice: null,
 });
 
+// First listener, so every later one already runs against the folder this window shows.
+app.subscribe(() => setWindowRoot(app.get().vault?.root));
+
 interface Session {
   root: string;
   state: EditorState;
@@ -178,6 +182,7 @@ function toBase64(file: File): Promise<string> {
 /** Save a pasted or dropped file in an `attachments` folder beside the open note. */
 export async function saveFile(file: File): Promise<string | null> {
   const { active } = app.get();
+  const root = app.get().vault?.root;
   if (!active) return null;
   if (file.size > MAX_ATTACHMENT) {
     notify(`${file.name || "That file"} is larger than 25 MB`);
@@ -193,7 +198,7 @@ export async function saveFile(file: File): Promise<string | null> {
   let name = `${base}${extension}`;
   for (let n = 2; taken.has(`${folder}attachments/${name}`); n++) name = `${base} ${n}${extension}`;
   try {
-    await runCore("file.write", { path: `${folder}attachments/${name}`, base64: await toBase64(file) });
+    await runCore("file.write", { path: `${folder}attachments/${name}`, base64: await toBase64(file) }, root);
     await refreshTree();
     return encodeURI(`attachments/${name}`);
   } catch (e) {
@@ -746,7 +751,8 @@ async function enterVault(vault: VaultInfo): Promise<boolean> {
   return true;
 }
 
-export async function setVault(path: string): Promise<void> {
+/** `create` makes and opens a folder that does not exist yet, after this window has saved and flushed. */
+export async function setVault(path: string, create?: () => Promise<VaultInfo>): Promise<void> {
   if (switching) return;
   const previous = app.get().vault;
   const connection = savedSync();
@@ -777,7 +783,7 @@ export async function setVault(path: string): Promise<void> {
   try {
     await flushChat?.();
     const current = await currentVault();
-    const next = await openVault(path, current?.root === path ? current.root : previous?.root);
+    const next = create ? await create() : await openVault(path, current?.root === path ? current.root : previous?.root);
     if (await enterVault(next)) {
       track("vault_opened");
     } else if (previous) {
@@ -978,8 +984,9 @@ export async function createNote(name?: string): Promise<void> {
   const active = app.get().active;
   const folder = !name && active?.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
   const path = name ? `${name.replace(/\.md$/i, "")}.md` : uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: "" });
+    await runCore("note.create", { path, text: "" }, root);
     track("note_created");
     await refreshTree();
     await openNote(path);
@@ -991,9 +998,10 @@ export async function createNote(name?: string): Promise<void> {
 /** Open the customers list, making its note the first time. */
 export async function openCustomers(): Promise<void> {
   const path = "Customers.md";
+  const root = app.get().vault?.root;
   try {
     if (!allFiles().includes(path)) {
-      await runCore("note.create", { path, text: "---\nview: customers\nsource: customers\n---\n" });
+      await runCore("note.create", { path, text: "---\nview: customers\nsource: customers\n---\n" }, root);
       await refreshTree();
     }
     await openNote(path);
@@ -1005,9 +1013,10 @@ export async function openCustomers(): Promise<void> {
 /** Open the task board, making its note the first time. */
 export async function openTasks(): Promise<void> {
   const path = "Tasks.md";
+  const root = app.get().vault?.root;
   try {
     if (!allFiles().includes(path)) {
-      await runCore("note.create", { path, text: "---\nview: tasks\n---\n" });
+      await runCore("note.create", { path, text: "---\nview: tasks\n---\n" }, root);
       await refreshTree();
     }
     await openNote(path);
@@ -1113,8 +1122,9 @@ export async function deleteEntry(path: string): Promise<boolean> {
 }
 
 export async function createFolder(path: string): Promise<void> {
+  const root = app.get().vault?.root;
   try {
-    await runCore("folder.create", { path });
+    await runCore("folder.create", { path }, root);
     await refreshTree();
   } catch (e) {
     report(e);
@@ -1124,9 +1134,10 @@ export async function createFolder(path: string): Promise<void> {
 /** A new note as a database row, optionally with one property set. It is not opened. */
 export async function createRow(folder: string, key?: string, value?: string): Promise<string | null> {
   const path = uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: "" });
-    if (key && value !== undefined) await runCore("props.set", { path, key, value });
+    await runCore("note.create", { path, text: "" }, root);
+    if (key && value !== undefined) await runCore("props.set", { path, key, value }, root);
     track("note_created");
     await refreshTree();
     return path;
@@ -1138,8 +1149,9 @@ export async function createRow(folder: string, key?: string, value?: string): P
 
 export async function createNoteIn(folder: string): Promise<void> {
   const path = uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: "" });
+    await runCore("note.create", { path, text: "" }, root);
     track("note_created");
     await refreshTree();
     await openNote(path);
@@ -1200,19 +1212,20 @@ function fillTemplate(text: string, title: string): string {
   return text.replace(/\{\{\s*(date|time|title)\s*\}\}/g, (_, key: string) => values[key]);
 }
 
-async function templateText(path: string | null, title: string): Promise<string> {
+async function templateText(path: string | null, title: string, root: string | undefined): Promise<string> {
   if (!path) return "";
-  const note = await runCore<Note>("note.read", { path }).catch(() => null);
+  const note = await runCore<Note>("note.read", { path }, root).catch(() => null);
   return note ? fillTemplate(note.text, title) : "";
 }
 
 /** Open today's note, creating it (from `Templates/Daily.md` if there is one) on first use. */
 export async function openDailyNote(): Promise<void> {
   const path = `${DAILY_FOLDER}/${today()}.md`;
+  const root = app.get().vault?.root;
   try {
     if (!allNotes().includes(path)) {
       const template = allNotes().find((p) => p.toLowerCase() === `${TEMPLATE_FOLDER}/daily.md`.toLowerCase()) ?? null;
-      await runCore("note.create", { path, text: await templateText(template, today()) });
+      await runCore("note.create", { path, text: await templateText(template, today(), root) }, root);
       track("note_created");
       await refreshTree();
     }
@@ -1229,8 +1242,9 @@ export async function createFromTemplate(template: string): Promise<void> {
   const active = app.get().active;
   const folder = active?.includes("/") && !active.startsWith(`${TEMPLATE_FOLDER}/`) ? active.slice(0, active.lastIndexOf("/")) : "";
   const path = uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: await templateText(template, "Untitled") });
+    await runCore("note.create", { path, text: await templateText(template, "Untitled", root) }, root);
     track("note_created");
     await refreshTree();
     await openNote(path);
@@ -1247,16 +1261,19 @@ export interface NoteVersion {
 /** Earlier versions of the open note, newest first. */
 export async function versions(): Promise<NoteVersion[]> {
   const { active } = app.get();
-  return active ? runCore<NoteVersion[]>("history.list", { path: active }) : [];
+  if (!active) return [];
+  // Say why the list is empty when another folder is serving, rather than "no versions".
+  return runCore<NoteVersion[]>("history.list", { path: active }, app.get().vault?.root).catch((e) => (report(e), []));
 }
 
 /** Bring back an earlier version of the open note. What it replaces becomes a version too. */
 export async function restoreVersion(at: number): Promise<void> {
   const { active } = app.get();
   if (!active) return;
+  const root = app.get().vault?.root;
   try {
     await save(active);
-    await runCore("history.restore", { path: active, at });
+    await runCore("history.restore", { path: active, at }, root);
     notify("Restored. The text it replaced is in the history too.");
   } catch (e) {
     report(e);
@@ -1269,11 +1286,12 @@ export interface TrashedFile {
   deleted_at: number;
 }
 
-export const trashed = () => runCore<TrashedFile[]>("trash.list");
+export const trashed = () => runCore<TrashedFile[]>("trash.list", {}, app.get().vault?.root).catch((e): TrashedFile[] => (report(e), []));
 
 export async function restoreFromTrash(id: string): Promise<void> {
+  const root = app.get().vault?.root;
   try {
-    const { path } = await runCore<{ path: string }>("trash.restore", { id });
+    const { path } = await runCore<{ path: string }>("trash.restore", { id }, root);
     await refreshTree();
     if (/\.md$/i.test(path)) await openNote(path);
     else notify(`Restored ${path}`);
@@ -1287,7 +1305,7 @@ async function loadNote(target: string): Promise<string | null> {
   if (!path) return null;
   if (sessions.has(path)) return textOf(path);
   try {
-    return toEditor((await runCore<Note>("note.read", { path })).text);
+    return toEditor((await runCore<Note>("note.read", { path }, app.get().vault?.root)).text);
   } catch {
     return null;
   }

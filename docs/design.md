@@ -336,6 +336,14 @@ The team's work, kept the way customers are: one note each.
   private/shared writers reject another root, and stale completion cannot move a new vault's
   tabs or trigger caller follow-up. Tree refresh reads that captured root and discards results
   after the UI changes vaults. Shared rename preserves the existing document identity.
+  Every core command a window sends names the folder that window shows: the bridge adds it to
+  any call that does not carry one, and Rust refuses the call when another folder is open. A
+  window left on its folder by a refused switch therefore neither reads nor writes the folder
+  another window opened, whichever feature made the call. A call that captured its folder
+  before waiting still sends that one. A window with no folder open sends none. A new folder
+  made from the sidebar, a team invitation, a team brought to this computer or first-run setup
+  is created and opened only after this window has saved its notes and the assistant has kept
+  its reply in progress.
   Incoming sync events carry the serving vault's root: another vault's same-ID text, presence,
   rename, trash, role or new-data notice cannot change the retained session or current workspace.
   A shared document without a materialized file refuses local updates before changing sync state

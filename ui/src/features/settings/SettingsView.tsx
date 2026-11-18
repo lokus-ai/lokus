@@ -7,7 +7,7 @@ import { type InstalledPlugin, pickFolder, type PluginManifest, runCore } from "
 import { Icon, type IconName } from "../../shell/Icon";
 import { noteFont, type Preferences, preferences, setPreference } from "../../shell/preferences";
 import { useStore } from "../../shell/store";
-import { app, applyLayout } from "../../shell/workspace";
+import { app, applyLayout, notify } from "../../shell/workspace";
 import { loadPlugins, pluginSettings, setPluginSetting } from "../plugins/host";
 import { Connections } from "../connections/Connections";
 import { WatchSettings } from "../noticed/NoticedList";
@@ -109,10 +109,11 @@ function permission(p: string): string {
 
 function PluginSettings({ manifest }: { manifest: PluginManifest }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
-  useEffect(() => void pluginSettings(manifest).then(setValues), [manifest]);
+  const said = (e: unknown) => notify(e instanceof Error ? e.message : String(e));
+  useEffect(() => void pluginSettings(manifest).then(setValues, said), [manifest]);
   const change = (key: string, value: unknown) => {
     setValues((v) => ({ ...v, [key]: value }));
-    void setPluginSetting(manifest, key, value);
+    void setPluginSetting(manifest, key, value).catch(said);
   };
   return (
     <>

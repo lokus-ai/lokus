@@ -25,10 +25,20 @@ export interface VaultInfo {
   root: string;
 }
 
-/** Run a core command against the open vault. */
+let windowRoot: string | undefined;
+
+/** The shell names the folder this window shows; a core call that names none is held to it. */
+export function setWindowRoot(root: string | undefined): void {
+  windowRoot = root;
+}
+
+/**
+ * Run a core command against this window's vault. Rust refuses it when another folder is the
+ * one open, so a window left on its folder never reads or writes the folder another window opened.
+ */
 export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>, root?: string): Promise<T> {
   try {
-    return await invoke<T>("core_run", { name, args: args ?? null, root });
+    return await invoke<T>("core_run", { name, args: args ?? null, root: root ?? windowRoot });
   } catch (raw) {
     throw toCoreError(raw);
   }
