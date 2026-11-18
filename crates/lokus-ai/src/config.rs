@@ -295,12 +295,23 @@ impl Config {
                 own.apis.push(api);
             }
         }
+        // Keys first, and all of them, before anything is given away: a keychain that will not
+        // be read or written leaves the connection waiting with its keys, for the next folder.
         for (kind, name) in &moved {
             let pairs = accounts(kind, name, WAITING)
                 .into_iter()
                 .zip(accounts(kind, name, at));
             for (from, to) in pairs {
-                if let Some(value) = kept(&from) {
+                let value = match read_secret(&from) {
+                    Ok(found) => found.or_else(|| kept(&from)),
+                    Err(e) => Some(kept(&from).ok_or(e)?),
+                };
+                let Some(value) = value else { continue };
+                if let Err(e) = set_secret(&to, &value) {
+                    // A browser sign-in may live in memory until the app quits; a token may not.
+                    if !to.starts_with("mcp-oauth:") {
+                        return Err(e);
+                    }
                     keep(&to, &value);
                 }
             }
