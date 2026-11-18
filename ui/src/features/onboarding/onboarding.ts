@@ -156,7 +156,11 @@ export function jobs(a: Answers, joining: Waiting | null = null): Job[] {
     list.push({
       id: "folder",
       says: a.folder ? "Opening the folder you chose" : joining ? `Making a folder for ${joining.name} in Documents` : "Making a home for your notes in Documents",
-      run: async () => setVault(a.folder || (await defaultVault(true, joining?.name)).root),
+      run: async () => {
+        if (a.folder) return setVault(a.folder);
+        const at = await defaultVault(false, joining?.name);
+        await setVault(at.root, () => defaultVault(true, joining?.name));
+      },
     });
   }
   if (joining) {

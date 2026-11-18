@@ -19,6 +19,7 @@ import {
   openVault,
   pickFolder,
   runCore,
+  setWindowRoot,
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
@@ -109,6 +110,9 @@ export const app = createStore<AppState>({
   peers: [],
   notice: null,
 });
+
+// First listener, so every later one already runs against the folder this window shows.
+app.subscribe(() => setWindowRoot(app.get().vault?.root));
 
 interface Session {
   root: string;
