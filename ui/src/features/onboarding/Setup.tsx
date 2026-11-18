@@ -252,15 +252,17 @@ export default function Onboarding() {
   const [offer, setOffer] = useState<Waiting | null>(null);
   const [answer, setAnswer] = useState<"join" | "own" | "">("");
   useEffect(() => {
-    if (hadVault.current || offer || !waiting[0]) return;
-    // One they pressed Join for on its page in a browser is not asked about again.
-    const agreed = waiting.find((w) => w.agreed_at);
-    setOffer(agreed ?? waiting[0]);
+    if (hadVault.current || !waiting[0]) return;
+    // One they pressed Join for on its page in a browser is not asked about again; that holds
+    // for the one already on screen too, as long as they have not answered it here.
+    const agreed = offer ? waiting.find((w) => w.code === offer.code && w.agreed_at) : waiting.find((w) => w.agreed_at);
+    if (offer && (!agreed || answer)) return;
+    if (!offer) setOffer(agreed ?? waiting[0]);
     if (!agreed) return;
     setAnswer("join");
     // The questions about pages are the team's now: someone in the middle of them moves past.
     setStep((at) => (at === "uses" || at === "aim" || at === "team" ? "look" : at));
-  }, [waiting, offer]);
+  }, [waiting, offer, answer]);
   const joining = offer && answer === "join" ? offer : null;
   const order = useMemo<Step[]>(
     () => [
