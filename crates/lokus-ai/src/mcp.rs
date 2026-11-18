@@ -115,7 +115,8 @@ pub fn save_token(
         return Err(error);
     }
     let _ = crate::mcp_login::sign_out(dir, root, &server.name);
-    Ok(())
+    // Its own token now, whatever became of the sign-in: no longer the one it shared.
+    Config::let_go(dir, root, "mcp", &server.name)
 }
 
 async fn connect_using(server: &McpServer, token: Option<&str>) -> Result<Connection> {
