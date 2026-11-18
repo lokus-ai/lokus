@@ -295,9 +295,14 @@ impl Config {
             for (from, to) in pairs {
                 match read_raw(&from) {
                     Ok(value) => found.push((to, value.or_else(|| kept(&from)))),
-                    Err(keyring::Error::NoStorageAccess(_)) => return false,
-                    // No keychain here at all: a sign-in may still be held in memory.
-                    Err(_) => found.push((to, kept(&from))),
+                    // Not shown. Where there is no keychain at all a sign-in is held in
+                    // memory and that is all there is; where there is one, it said no (locked,
+                    // or the person refused) and what it holds is not known.
+                    Err(_) => match kept(&from) {
+                        Some(value) => found.push((to, Some(value))),
+                        None if keychain_answers() => return false,
+                        None => found.push((to, None)),
+                    },
                 }
             }
             for (to, value) in found {
@@ -413,6 +418,14 @@ fn entry_raw(account: &str) -> keyring::Result<keyring::Entry> {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| SERVICE.to_string());
     keyring::Entry::new(&service, account)
+}
+
+/// Whether there is a keychain to ask: one that knows nothing of a name nobody uses is there.
+fn keychain_answers() -> bool {
+    matches!(
+        entry_raw("probe").map(|e| e.get_password()),
+        Ok(Ok(_) | Err(keyring::Error::NoEntry))
+    )
 }
 
 fn entry(account: &str) -> Result<keyring::Entry> {
