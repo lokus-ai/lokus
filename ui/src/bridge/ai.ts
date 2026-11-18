@@ -100,8 +100,8 @@ export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logo
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
-/** `briefing` is the conversation's standing context; send the same text for every message of a chat. */
-export const aiSend = (chat: string, messages: unknown[], briefing: string) => call<AiOutcome>("ai_send", { chat, messages, briefing });
+/** `briefing` is the conversation's standing context; send the same text for every message of a chat. `root` is the workspace it was asked in: if another is open by now, the request is refused. */
+export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string) => call<AiOutcome>("ai_send", { chat, messages, briefing, root });
 /** Tell the assistant what happened when the window carried out one of its app tools. */
 export const aiActDone = (id: string, ok: boolean, result: string) => call<void>("ai_act_done", { id, ok, result });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });

@@ -361,6 +361,8 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
   const note = app.get().active;
   chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: text.trim(), note: note ?? undefined, files: files.length ? files : undefined }] }));
   const sending = freshId();
+  // The workspace the question is asked in: its notes and its connections answer it, or nothing does.
+  const asked = vaultRoot;
   requestId = sending;
   let pending: { role: string; content: unknown } | null = null;
   let began = 0;
@@ -379,7 +381,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     if (sending !== requestId) return false;
     briefing = context;
     began = Date.now();
-    const outcome = await aiSend(sending, [...history, message], briefing);
+    const outcome = await aiSend(sending, [...history, message], briefing, asked);
     if (sending !== requestId) return false;
     traced(sending, began, question, outcome, "");
     history = [...history, message, ...outcome.messages];

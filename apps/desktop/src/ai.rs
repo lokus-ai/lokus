@@ -200,6 +200,7 @@ pub async fn ai_send(
     chat: String,
     messages: Vec<Value>,
     briefing: String,
+    root: Option<String>,
 ) -> Result<Value, Value> {
     // App tools run in the window: it is told what to do and answers through `ai_act_done`.
     let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
@@ -217,7 +218,14 @@ pub async fn ai_send(
     // The workspace is taken once: its notes, its plugins and its connections go together, and
     // a folder opened while this runs changes none of them.
     let core = app.state::<Shell>().core();
-    let root = core.as_deref().map(root_of).unwrap_or_default();
+    let open = core.as_deref().map(root_of).unwrap_or_default();
+    // A question asked in one workspace is never answered with another's notes or connections.
+    if root.is_some_and(|asked| asked != open) {
+        return Err(
+            json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+        );
+    }
+    let root = open;
     let request = Request {
         config: load(&app)?.seen_from(&root),
         messages,
