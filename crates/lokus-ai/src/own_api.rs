@@ -194,7 +194,7 @@ pub async fn call(config: &Config, write: bool, input: &Value) -> Result<String,
     let mut request = http
         .request(method.clone(), url.clone())
         .header("accept", "application/json");
-    if let Some(key) = secret(&api_account(&api.name)).filter(|k| !k.is_empty()) {
+    if let Some(key) = secret(&api_account(api)).filter(|k| !k.is_empty()) {
         request = request.bearer_auth(key);
     }
     if write && method != Method::DELETE || input["body"].is_object() {
@@ -261,6 +261,7 @@ mod tests {
             url: url.into(),
             about: "Start with GET /v1/admin.".into(),
             enabled: true,
+            keys: String::new(),
         }
     }
 

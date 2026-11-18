@@ -1,31 +1,32 @@
 /** @part-of ui.shell */
 import type { EditorState } from "@codemirror/state";
 
-import { identify, track, reportError } from "../bridge/analytics";
+import { identify, track, trackSync, reportError } from "../bridge/analytics";
 import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
 import {
-  closeWindow,
   CoreError,
   currentVault,
   type Entry,
+  forgetVault,
+  listVaults,
   type InstalledPlugin,
-  isMainWindow,
   type Eol,
   type Note,
-  onCloseTab,
   onIndexReady,
   onVaultChanged,
+  onVaultClosed,
   onVaultOpened,
   openVault,
   pickFolder,
   runCore,
+  setWindowRoot,
   vaultFileUrl,
   type VaultInfo,
 } from "../bridge/core";
 import { openWeb } from "../bridge/updates";
-import { syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
+import { relay, syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
-import { closeShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
+import { closeShared, flushShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
 import { preferences } from "./preferences";
 
@@ -47,6 +48,7 @@ export interface AppState {
   tabs: string[];
   active: string | null;
   dirty: Record<string, boolean>;
+  saves: Record<string, "unsaved" | "saving" | "saved" | "failed">;
   /** Frontmatter of the active note (icon, cover, …). */
   properties: Record<string, string>;
   /** A note that changed on disk while it had unsaved edits here. */
@@ -88,6 +90,7 @@ export const app = createStore<AppState>({
   tabs: [],
   active: null,
   dirty: {},
+  saves: {},
   properties: {},
   conflict: null,
   palette: null,
@@ -108,7 +111,11 @@ export const app = createStore<AppState>({
   notice: null,
 });
 
+// First listener, so every later one already runs against the folder this window shows.
+app.subscribe(() => setWindowRoot(app.get().vault?.root));
+
 interface Session {
+  root: string;
   state: EditorState;
   /** Editor text at the last read or save. */
   saved: string;
@@ -116,6 +123,8 @@ interface Session {
   hash: string;
   /** Set while the note is edited through its shared document. */
   shared?: Shared;
+  saving?: Promise<void>;
+  taskChanges?: () => boolean;
 }
 
 const SAVE_DELAY = 600;
@@ -173,6 +182,7 @@ function toBase64(file: File): Promise<string> {
 /** Save a pasted or dropped file in an `attachments` folder beside the open note. */
 export async function saveFile(file: File): Promise<string | null> {
   const { active } = app.get();
+  const root = app.get().vault?.root;
   if (!active) return null;
   if (file.size > MAX_ATTACHMENT) {
     notify(`${file.name || "That file"} is larger than 25 MB`);
@@ -188,7 +198,7 @@ export async function saveFile(file: File): Promise<string | null> {
   let name = `${base}${extension}`;
   for (let n = 2; taken.has(`${folder}attachments/${name}`); n++) name = `${base} ${n}${extension}`;
   try {
-    await runCore("file.write", { path: `${folder}attachments/${name}`, base64: await toBase64(file) });
+    await runCore("file.write", { path: `${folder}attachments/${name}`, base64: await toBase64(file) }, root);
     await refreshTree();
     return encodeURI(`attachments/${name}`);
   } catch (e) {
@@ -226,7 +236,11 @@ export function renderMarkdown(parent: HTMLElement, text: string): () => void {
 }
 
 export function attachEditor(parent: HTMLElement): void {
-  if (editor) return;
+  if (editor) {
+    // The page went with its folder (the last workspace was left) and this is a new one: the editor moves onto it.
+    if (editor.view.dom.parentElement !== parent) parent.appendChild(editor.view.dom);
+    return;
+  }
   editor = new Editor(parent, {
     onChange(text) {
       const path = app.get().active;
@@ -237,7 +251,8 @@ export function attachEditor(parent: HTMLElement): void {
         syncProperties();
         return;
       }
-      setDirty(path, text !== session.saved);
+      setDirty(path, Boolean(session.saving) || text !== session.saved);
+      setSaveState(path, session.saving ? "saving" : text !== session.saved ? "unsaved" : "saved");
       syncProperties();
       if (text !== session.saved) scheduleSave(path);
     },
@@ -266,6 +281,10 @@ function setDirty(path: string, dirty: boolean): void {
   if (Boolean(app.get().dirty[path]) !== dirty) app.set((s) => ({ dirty: { ...s.dirty, [path]: dirty } }));
 }
 
+function setSaveState(path: string, state: AppState["saves"][string]): void {
+  if (app.get().saves[path] !== state) app.set((s) => ({ saves: { ...s.saves, [path]: state } }));
+}
+
 function syncProperties(): void {
   const next = getEditor()?.properties() ?? {};
   if (JSON.stringify(next) !== JSON.stringify(app.get().properties)) app.set({ properties: next });
@@ -288,23 +307,36 @@ function scheduleSave(path: string): void {
 export async function save(path: string, force = false): Promise<void> {
   window.clearTimeout(saveTimers.get(path));
   const session = sessions.get(path);
+  if (!session) return;
+  if (session.shared) {
+    await flushShared(session.shared).catch(report);
+    return;
+  }
+  while (session.saving) await session.saving;
+  if (sessions.get(path) !== session) return;
   const text = textOf(path);
-  if (!session || session.shared || text === null || (text === session.saved && !force)) return;
-  try {
+  if (text === null || (text === session.saved && !force)) return;
+  setSaveState(path, "saving");
+  session.saving = (async () => { try {
     const written = await runCore<{ hash: string }>("note.write", {
       path,
       text,
       eol: session.eol,
       expected_hash: force ? null : session.hash,
-    });
+    }, session.root);
+    if (sessions.get(path) !== session || app.get().vault?.root !== session.root) return;
     session.hash = written.hash;
     session.saved = text;
     setDirty(path, textOf(path) !== text);
+    setSaveState(path, textOf(path) !== text ? "unsaved" : "saved");
     if (app.get().conflict === path) app.set({ conflict: null });
   } catch (e) {
+    if (sessions.get(path) !== session || app.get().vault?.root !== session.root) return;
+    setSaveState(path, "failed");
     if (e instanceof CoreError && e.code === "conflict") app.set({ conflict: path });
     else report(e);
-  }
+  } })().finally(() => { session.saving = undefined; });
+  await session.saving;
 }
 
 export async function saveAll(): Promise<void> {
@@ -313,7 +345,20 @@ export async function saveAll(): Promise<void> {
 
 /** Whether an open note holds text that is not on disk. */
 export function unsaved(): boolean {
-  return [...sessions].some(([path, session]) => !session.shared && textOf(path) !== session.saved);
+  return [...sessions.keys()].some(hasUnsaved);
+}
+
+export function hasUnsaved(path: string): boolean {
+  const session = sessions.get(path);
+  return Boolean(session && (session.taskChanges?.() || (session.shared ? session.shared.pending.length : session.saving || textOf(path) !== session.saved)));
+}
+
+/** Keep the board mounted while its existing inline writer holds a change. */
+export function retainTaskChanges(path: string, root: string, pending: () => boolean): () => void {
+  const session = sessions.get(path);
+  if (!session || session.root !== root || app.get().vault?.root !== root) return () => {};
+  session.taskChanges = pending;
+  return () => { if (session.taskChanges === pending) session.taskChanges = undefined; };
 }
 
 export const SIDEBAR_MIN = 200;
@@ -342,11 +387,13 @@ function watchWidth(): void {
 
 /** Move an open note onto its shared document once the note is synced. */
 async function share(path: string): Promise<void> {
+  const root = app.get().vault?.root;
   const session = sessions.get(path);
-  if (!session || session.shared || !editor) return;
+  if (!root || !session || session.shared || !editor) return;
   await save(path);
-  const shared = await openShared(path);
-  if (!shared || sessions.get(path) !== session) return;
+  if (hasUnsaved(path)) return;
+  const shared = await openShared(path, root);
+  if (!shared || sessions.get(path) !== session || app.get().vault?.root !== root) return;
   session.shared = shared;
   session.state = editor.createSharedState(shared.text, shared.awareness);
   session.saved = shared.text.toString();
@@ -361,14 +408,20 @@ async function share(path: string): Promise<void> {
 /** Back to plain files, when sync stops. */
 async function unshareAll(): Promise<void> {
   for (const [path, session] of sessions) {
-    if (!session.shared || !editor) continue;
-    const text = session.shared.text.toString();
-    closeShared(session.shared);
+    const shared = session.shared;
+    if (!shared || !editor) continue;
+    if (shared.saving) await shared.saving.catch(() => {});
+    if (shared.pending.length) continue;
+    const note = await runCore<Note>("note.read", { path }, session.root).catch(() => null);
+    if (!note || sessions.get(path) !== session || app.get().vault?.root !== session.root || session.shared !== shared || shared.pending.length) continue;
+    const text = shared.text.toString();
+    closeShared(shared);
     session.shared = undefined;
     session.state = editor.createState(text);
-    session.saved = text;
-    const note = await runCore<Note>("note.read", { path }).catch(() => null);
-    if (note) Object.assign(session, { eol: note.eol, hash: note.hash });
+    session.saved = toEditor(note.text);
+    Object.assign(session, { eol: note.eol, hash: note.hash });
+    setDirty(path, text !== session.saved);
+    setSaveState(path, text !== session.saved ? "failed" : "saved");
     if (app.get().active === path) editor.swap(session.state);
   }
   app.set({ peers: [] });
@@ -385,15 +438,13 @@ export function syncedWith(root: string): string | null {
   }
 }
 
-const STOPPED = "lokus.sync.stopped";
-
-/** The teams whose syncing this person stopped on this computer. Those are not started again for them. */
-export function stoppedSync(): string[] {
-  try {
-    return (JSON.parse(localStorage.getItem(STOPPED) ?? "null") as string[] | null) ?? [];
-  } catch {
-    return [];
-  }
+/**
+ * Remember that a folder belongs to a team, without opening it. It connects when it is opened.
+ * Used for a folder whose syncing was stopped by an earlier version: being in the team is what
+ * decides, so it is put back with nobody asked.
+ */
+export function keepSync(root: string, server: string, workspace: string): void {
+  if (!localStorage.getItem(`lokus.sync:${root}`)) localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token: null }));
 }
 
 /** Start syncing this vault with a team workspace. */
@@ -404,19 +455,46 @@ let stopSignIns: (() => void) | null = null;
 let retriedSignIn = false;
 /** The latest request to connect, so a retry for an older one does nothing. */
 let lastAsk = "";
+/** The connection, for what is counted about it: when it last came online, and when its first pull came in. */
+let episode = { online: 0, pulled: 0 };
+/** A connection held when its first pull is in and it stayed up this long after; one that drops sooner is still failing. */
+const HELD = 30_000;
+/**
+ * Count one thing about the connection. Each is counted once per team (see `trackSync`), so a
+ * connection that comes up and drops every few seconds says so once. After one that held, what
+ * happens next is new and is counted again.
+ */
+function countSync(event: Parameters<typeof trackSync>[0], props: Record<string, string | number> = {}): void {
+  const held = episode.pulled > 0 && Date.now() - episode.pulled >= HELD;
+  // A drop ends the stretch being timed, held or not, so the retries after it are not taken for time up.
+  if (held || event === "sync_offline" || event === "sync_refused") episode.pulled = 0;
+  trackSync(event, app.get().sync.workspace, props, held);
+}
+/** The workspace being left or deleted from here, so the relay's own word of it is not answered twice. */
+let leaving: string | null = null;
 
 export async function connectSync(server: string, workspace: string, token: string | null, root = app.get().vault?.root ?? ""): Promise<void> {
+  if (app.get().vault?.root !== root) return;
+  const previous = savedSync();
+  const connected = app.get().sync;
+  const ownsConnection = () => {
+    const current = savedSync();
+    const sync = app.get().sync;
+    return app.get().vault?.root === root && current?.server === previous?.server && current?.workspace === previous?.workspace &&
+      sync.server === connected.server && sync.workspace === connected.workspace;
+  };
   const useToken = token ?? (await accessToken());
+  if (!ownsConnection()) return;
   if (!useToken) {
-    app.set({ sync: { status: "refused", reason: "Sign in first" } });
+    app.set({ sync: { ...app.get().sync, status: "refused", reason: "Sign in first" } });
     return;
   }
   await saveAll();
+  if (!ownsConnection()) return;
+  const reconnecting = previous?.server === server && previous.workspace === workspace && connected.server === server && connected.workspace === workspace;
+  if (unsaved() && !reconnecting) return notify("Changes could not be saved. Retry before changing the sync connection.");
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
   localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
-  localStorage.setItem(STOPPED, JSON.stringify(stoppedSync().filter((w) => w !== workspace)));
-  // Another folder was opened while this waited: this one starts when it is opened again.
-  if ((app.get().vault?.root ?? "") !== root) return;
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -443,13 +521,16 @@ export async function connectSync(server: string, workspace: string, token: stri
   }, 30_000);
   await syncConnect(server, workspace, useToken, root).catch((e) => {
     // Refused because another folder was opened meanwhile: that folder is not the one to say so.
-    if ((app.get().vault?.root ?? "") === root) app.set({ sync: { status: "refused", reason: String(e?.message ?? e) } });
+    if (lastAsk !== asking || app.get().vault?.root !== root) return;
+    countSync("sync_refused", { reason: String(e?.message ?? e) });
+    app.set({ sync: { ...app.get().sync, status: "refused", reason: String(e?.message ?? e) } });
   });
 }
 
+/** Stop the connection for now. Nothing remembers it as stopped: the folder connects again when it is next opened. */
 export async function disconnectSync(): Promise<void> {
-  const was = savedSync()?.workspace;
-  if (was) localStorage.setItem(STOPPED, JSON.stringify([...stoppedSync().filter((w) => w !== was), was]));
+  await saveAll();
+  if (unsaved()) return notify("Changes could not be saved. Retry before disconnecting.");
   localStorage.removeItem(syncKey());
   stopSignIns?.();
   stopSignIns = null;
@@ -458,8 +539,70 @@ export async function disconnectSync(): Promise<void> {
   app.set({ sync: { status: "off" } });
 }
 
+/**
+ * This person is no longer in the team a folder synced with (they left, it was deleted, or an
+ * owner removed them): stop syncing, take the folder off the workspace list and show another
+ * workspace, or the start page when there is none. The folder and its notes stay on disk.
+ */
+export async function dropWorkspace(root: string, said: string): Promise<void> {
+  if (!localStorage.getItem(`lokus.sync:${root}`)) return;
+  if (app.get().vault?.root !== root) {
+    localStorage.removeItem(`lokus.sync:${root}`);
+    await forgetVault(root);
+    return notify(said);
+  }
+  await saveAll();
+  if (unsaved()) return notify("Changes could not be saved. Retry before leaving this workspace.");
+  // A reply still being written is put in its conversation while the folder is still open.
+  try {
+    await flushChat?.();
+  } catch {
+    return notify("The conversation could not be saved. Retry before leaving this workspace.");
+  }
+  localStorage.removeItem(`lokus.sync:${root}`);
+  stopSignIns?.();
+  stopSignIns = null;
+  await syncDisconnect();
+  await unshareAll();
+  app.set({ sync: { status: "off" }, settings: null });
+  const next = (await listVaults()).find((v) => v.root !== root);
+  if (next) await setVault(next.root).catch(report);
+  // Still on it: there was no other workspace, or the other could not be opened.
+  await forgetVault(root);
+  putAway(root);
+  notify(said);
+}
+
+/** The folder on screen was closed for good, here or in another window: show the start page. */
+function putAway(root: string): void {
+  if (app.get().vault?.root !== root) return;
+  for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
+  sessions.clear();
+  app.set({ vault: null, tree: [], tabs: [], view: "note", active: null, dirty: {}, saves: {}, properties: {}, conflict: null, peers: [], settings: null, sync: { status: "off" } });
+}
+
+/** Leave or delete the open team workspace: `ask` tells the relay, and when it agrees the workspace goes from this device. */
+export async function leaveWorkspace(ask: () => Promise<boolean>, said: (name: string) => string): Promise<void> {
+  const vault = app.get().vault;
+  if (!vault) return;
+  leaving = vault.root;
+  try {
+    if (await ask()) await dropWorkspace(vault.root, said(vault.name));
+  } finally {
+    leaving = null;
+  }
+}
+
 function watchSync(): void {
-  startCollab(syncPeers);
+  startCollab(syncPeers, (shared) => {
+    for (const [path, session] of sessions) {
+      if (session.shared !== shared) continue;
+      setDirty(path, shared.pending.length > 0);
+      setSaveState(path, shared.failed ? "failed" : shared.pending.length ? "saving" : "saved");
+      if (!shared.pending.length) session.saved = shared.text.toString();
+      if (shared.failed) notify("Changes could not be saved to this device. Retry saving before closing the note.");
+    }
+  });
   // Teammates see who is signed in on this cursor from the moment of signing in, wherever it happens.
   let named = "You";
   app.subscribe(() => {
@@ -467,9 +610,13 @@ function watchSync(): void {
     if (name !== named) setIdentity((named = name));
   });
   onSyncEvent((event) => {
+    if (event.root !== app.get().vault?.root) return;
     const { sync } = app.get();
     if (event.event === "online") {
-      if (app.get().sync.status !== "online") track("sync_connected", { role: event.role });
+      if (sync.status !== "online") {
+        countSync("sync_connected", { role: event.role });
+        episode = { online: Date.now(), pulled: 0 };
+      }
       if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
       retriedSignIn = false;
       app.set({ sync: { ...sync, status: "online", role: event.role, user: event.user, reason: undefined } });
@@ -477,22 +624,44 @@ function watchSync(): void {
       notify(event.role === "viewer" ? "An owner made you a viewer here. Changes you make now stay on this device." : `You are now ${event.role === "owner" ? "an owner" : "an editor"} of this workspace.`);
       app.set({ sync: { ...sync, role: event.role } });
     } else if (event.event === "skipped") notify(`Did not write “${event.path}”: another device named a place outside this vault.`);
-    else if (event.event === "offline" && sync.status !== "off") app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
+    else if (event.event === "offline" && sync.status !== "off") {
+      countSync("sync_offline", { reason: event.reason });
+      app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
+    }
     else if (event.event === "refused") {
       void (async () => {
         // A sign-in that ran out while the computer slept is answered once with a fresh one.
         const saved = savedSync();
-        const root = app.get().vault?.root;
+        const root = event.root;
         const fresh = saved?.token === null && !retriedSignIn ? await accessToken().catch(() => null) : null;
+        if (app.get().vault?.root !== root) return;
         if (saved && fresh && fresh !== syncSignIn) {
           retriedSignIn = true;
           await connectSync(saved.server, saved.workspace, null, root);
           return;
         }
+        // Leaving or deleting from here makes the relay close this connection: that is not a failure.
+        if (leaving !== root) countSync("sync_refused", { reason: event.reason });
+        // Refused because the team is gone or this person is no longer in it: the relay's list of
+        // their teams says so. Then the workspace goes from this device, and nothing retries.
+        const token = saved && leaving !== root ? (saved.token ?? (await accessToken().catch(() => null))) : null;
+        const mine = saved && token ? await relay<{ id: string }[]>(saved.server, token, "GET", "/v1/workspaces").catch(() => null) : null;
+        if (app.get().vault?.root !== root) return;
+        if (saved && mine && !mine.some((w) => w.id === saved.workspace)) {
+          await dropWorkspace(root, `${app.get().vault?.name ?? "This workspace"} was deleted, or you were removed from it. Its notes stay on this computer.`);
+          // Still here: something unsaved could not be written, so the folder was kept. It reads as refused, as it is.
+          if (app.get().vault?.root !== root) return;
+        }
         void unshareAll();
-        app.set({ sync: { status: "refused", reason: event.reason } });
+        app.set({ sync: { ...app.get().sync, status: "refused", reason: event.reason } });
       })();
-    } else if (event.event === "pulled") for (const path of sessions.keys()) void share(path);
+    } else if (event.event === "pulled") {
+      if (!episode.pulled && episode.online) {
+        countSync("sync_first_pull", { edits: event.edits, seconds: Math.round((Date.now() - episode.online) / 100) / 10 });
+        episode.pulled = Date.now();
+      }
+      for (const path of sessions.keys()) void share(path);
+    }
     else if (event.event === "published" || event.event === "wrote") void share(event.path);
     // Sync moved a file (a teammate renamed it, or another note took its name): its tab goes with it.
     else if (event.event === "renamed") moveOpen(event.from, event.to);
@@ -524,18 +693,13 @@ export async function boot(): Promise<void> {
   watchSync();
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
-  onCloseTab(() => {
-    // Cmd+W closes the tab showing and nothing more. With no tab left it closes an extra
-    // window, but never the last one: that would quit Lokus, which is what Cmd+Q is for.
-    const { active, view, file } = app.get();
-    if (view === "graph") closeGraph();
-    else if (view === "file" && file) void closeTab(file);
-    else if (active) void closeTab(active);
-    else if (!isMainWindow()) closeWindow();
-  });
   // Every window shows the same folder: when another window opens a different one, follow it.
   onVaultOpened((vault) => {
     if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);
+  });
+  // A window holding a note that could not be saved keeps it on screen, so the words can still be copied out.
+  onVaultClosed((root) => {
+    if (!unsaved()) putAway(root);
   });
   // Signing in or out in another window is noticed when this one is next looked at.
   window.addEventListener("focus", () => {
@@ -566,21 +730,66 @@ export function applyLayout(): void {
 
 /** This window is the one changing folder, so it does not also follow its own change. */
 let switching = false;
+export const isSwitchingVault = (): boolean => switching;
+let flushChat: (() => Promise<void>) | undefined;
 
-async function enterVault(vault: VaultInfo): Promise<void> {
-  for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
-  sessions.clear();
-  app.set({ vault, tabs: [], view: "note", active: null, dirty: {}, properties: {}, conflict: null, sync: { status: "off" }, peers: [] });
-  await refreshTree();
-  await resumeSync();
+/** The assistant drains its existing writer before this window opens another vault. */
+export function registerChatFlush(flush: () => Promise<void>): void {
+  flushChat = flush;
 }
 
-export async function setVault(path: string): Promise<void> {
+async function enterVault(vault: VaultInfo): Promise<boolean> {
+  if (unsaved()) {
+    notify("Changes could not be saved. Keep this window open and retry before switching folders.");
+    return false;
+  }
+  for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
+  sessions.clear();
+  app.set({ vault, tabs: [], view: "note", active: null, dirty: {}, saves: {}, properties: {}, conflict: null, sync: { status: "off" }, peers: [] });
+  await refreshTree();
+  await resumeSync();
+  return true;
+}
+
+/** `create` makes and opens a folder that does not exist yet, after this window has saved and flushed. */
+export async function setVault(path: string, create?: () => Promise<VaultInfo>): Promise<void> {
+  if (switching) return;
+  const previous = app.get().vault;
+  const connection = savedSync();
+  const reconnect = async () => {
+    if (!previous || !connection || app.get().vault !== previous) return;
+    const current = savedSync();
+    if (current?.server !== connection.server || current.workspace !== connection.workspace) {
+      throw new Error("The sync connection changed. Open the original team before retrying.");
+    }
+    await connectSync(connection.server, connection.workspace, connection.token, previous.root);
+  };
+  if (previous?.root === path) {
+    switching = true;
+    try {
+      const current = await currentVault();
+      if (current?.root === path) return;
+      await openVault(path, current?.root);
+      await reconnect();
+    } finally {
+      switching = false;
+    }
+    return;
+  }
   await saveAll();
+  if (switching || app.get().vault !== previous) return;
+  if (unsaved()) return notify("Changes could not be saved. Retry before switching folders.");
   switching = true;
   try {
-    await enterVault(await openVault(path));
-    track("vault_opened");
+    await flushChat?.();
+    const current = await currentVault();
+    const next = create ? await create() : await openVault(path, current?.root === path ? current.root : previous?.root);
+    if (await enterVault(next)) {
+      track("vault_opened");
+    } else if (previous) {
+      await openVault(previous.root, next.root);
+      await reconnect();
+    }
   } finally {
     switching = false;
   }
@@ -591,9 +800,11 @@ export async function chooseVault(): Promise<void> {
   if (path) await setVault(path).catch(report);
 }
 
-export async function refreshTree(): Promise<void> {
+export async function refreshTree(vault = app.get().vault): Promise<void> {
+  if (!vault || app.get().vault !== vault) return;
   // What the assistant noticed is kept in a folder of its own; it is shown under Noticed, not as files.
-  const tree = await runCore<Entry[]>("vault.tree");
+  const tree = await runCore<Entry[]>("vault.tree", {}, vault.root);
+  if (app.get().vault !== vault) return;
   app.set({ tree: tree.filter((e) => !(e.kind === "folder" && e.path === "noticed")) });
 }
 
@@ -609,6 +820,9 @@ function show(path: string): void {
   const next = sessions.get(path);
   if (!editor || !next) return;
   const { active: previous, view } = app.get();
+  if (previous && previous !== path && sessions.get(previous)?.taskChanges?.()) {
+    return notify("Finish saving or cancel the failed task change before leaving this board.");
+  }
   // The note already on screen keeps what was typed in it. One coming forward shows what a
   // teammate typed while its tab was behind another.
   if (previous !== path) {
@@ -672,17 +886,24 @@ function go(tab: string): void {
 }
 
 export async function openNote(path: string): Promise<void> {
+  const root = app.get().vault?.root;
+  if (!root) return;
   if (!isNotePath(path)) return openFile(path);
+  const active = app.get().active;
+  if (active && active !== path && sessions.get(active)?.taskChanges?.()) {
+    return notify("Finish saving or cancel the failed task change before leaving this board.");
+  }
   // The editor mounts with the first render after a vault opens.
   for (let i = 0; !editor && i < 50; i++) await new Promise((r) => window.setTimeout(r, 20));
   if (!editor) return;
   try {
     if (!sessions.has(path)) {
-      const note = await runCore<Note>("note.read", { path });
+      const note = await runCore<Note>("note.read", { path }, root);
       const text = toEditor(note.text);
-      const shared = app.get().sync.status === "off" ? null : await openShared(path);
+      const shared = app.get().sync.status === "off" ? null : await openShared(path, root);
+      if (app.get().vault?.root !== root) return;
       const state = shared ? editor.createSharedState(shared.text, shared.awareness) : editor.createState(text);
-      sessions.set(path, { state, saved: text, eol: note.eol, hash: note.hash, shared: shared ?? undefined });
+      sessions.set(path, { root, state, saved: text, eol: note.eol, hash: note.hash, shared: shared ?? undefined });
       track("note_opened");
       track("page_opened", { kind: pageKind(path) });
     }
@@ -705,6 +926,7 @@ export async function closeTab(path: string): Promise<void> {
     return;
   }
   await save(path);
+  if (hasUnsaved(path)) return notify("Changes could not be saved. Retry before closing this note.");
   const { tabs, active, view, file } = app.get();
   const rest = tabs.filter((t) => t !== path);
   const closing = sessions.get(path)?.shared;
@@ -762,8 +984,9 @@ export async function createNote(name?: string): Promise<void> {
   const active = app.get().active;
   const folder = !name && active?.includes("/") ? active.slice(0, active.lastIndexOf("/")) : "";
   const path = name ? `${name.replace(/\.md$/i, "")}.md` : uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: "" });
+    await runCore("note.create", { path, text: "" }, root);
     track("note_created");
     await refreshTree();
     await openNote(path);
@@ -775,9 +998,10 @@ export async function createNote(name?: string): Promise<void> {
 /** Open the customers list, making its note the first time. */
 export async function openCustomers(): Promise<void> {
   const path = "Customers.md";
+  const root = app.get().vault?.root;
   try {
     if (!allFiles().includes(path)) {
-      await runCore("note.create", { path, text: "---\nview: customers\nsource: customers\n---\n" });
+      await runCore("note.create", { path, text: "---\nview: customers\nsource: customers\n---\n" }, root);
       await refreshTree();
     }
     await openNote(path);
@@ -789,9 +1013,10 @@ export async function openCustomers(): Promise<void> {
 /** Open the task board, making its note the first time. */
 export async function openTasks(): Promise<void> {
   const path = "Tasks.md";
+  const root = app.get().vault?.root;
   try {
     if (!allFiles().includes(path)) {
-      await runCore("note.create", { path, text: "---\nview: tasks\n---\n" });
+      await runCore("note.create", { path, text: "---\nview: tasks\n---\n" }, root);
       await refreshTree();
     }
     await openNote(path);
@@ -819,15 +1044,15 @@ function moveOpen(from: string, to: string): void {
     active: s.active ? moved(s.active) : null,
     file: s.file ? moved(s.file) : null,
     dirty: Object.fromEntries(Object.entries(s.dirty).map(([path, d]) => [moved(path), d])),
+    saves: Object.fromEntries(Object.entries(s.saves).map(([path, state]) => [moved(path), state])),
   }));
 }
 
 /** A note deleted on another computer leaves the screen, so nobody goes on typing into a note that is gone. */
 function closeGone(path: string): void {
   if (!app.get().tabs.includes(path)) return;
-  const session = sessions.get(path);
-  // Words not yet in the file stay: saving them brings the note back for everyone.
-  if (session && !session.shared && textOf(path) !== session.saved) return;
+  // Keep unsaved words. A deleted shared document refuses retry; saving never resurrects it.
+  if (hasUnsaved(path)) return;
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
   const { active, view } = app.get();
   void closeTab(path).then(() => {
@@ -840,13 +1065,21 @@ function closeGone(path: string): void {
 /** Rename or move a note or a folder; open tabs follow it. */
 export async function renameEntry(from: string, to: string): Promise<boolean> {
   if (from === to) return true;
+  const vault = app.get().vault;
+  if (!vault) return false;
   try {
     await saveAll();
+    if (app.get().vault !== vault) return false;
+    if (unsaved()) {
+      notify("Changes could not be saved. Retry before renaming.");
+      return false;
+    }
     // A shared vault renames through sync, which keeps each note's shared document with it.
-    if (!(await syncRename(from, to))) await runCore("note.rename", { from, to });
+    if (!(await syncRename(from, to, vault.root))) await runCore("note.rename", { from, to }, vault.root);
+    if (app.get().vault !== vault) return false;
     moveOpen(from, to);
-    await refreshTree();
-    return true;
+    await refreshTree(vault);
+    return app.get().vault === vault;
   } catch (e) {
     report(e);
     return false;
@@ -854,28 +1087,44 @@ export async function renameEntry(from: string, to: string): Promise<boolean> {
 }
 
 /** Move a note or a folder to the vault trash; its tabs close. */
-export async function deleteEntry(path: string): Promise<void> {
+export async function deleteEntry(path: string): Promise<boolean> {
+  const root = app.get().vault?.root;
+  if (!root) return false;
   try {
-    for (const open of [...sessions.keys()].filter((p) => under(p, path))) {
+    const opened = [...sessions.keys()].filter((p) => under(p, path));
+    await Promise.all(opened.map((p) => save(p)));
+    if (app.get().vault?.root !== root) return false;
+    if (opened.some(hasUnsaved)) {
+      notify("Changes could not be saved. Retry before moving this note to the trash.");
+      return false;
+    }
+    await runCore("note.delete", { path }, root);
+    if (app.get().vault?.root !== root) return true;
+    for (const open of opened) {
+      if (hasUnsaved(open)) continue;
       window.clearTimeout(saveTimers.get(open));
+      const shared = sessions.get(open)?.shared;
+      if (shared) closeShared(shared);
       sessions.delete(open);
     }
     const { tabs, active } = app.get();
-    const rest = tabs.filter((t) => !under(t, path));
-    const lostActive = Boolean(active && under(active, path));
-    await runCore("note.delete", { path });
+    const rest = tabs.filter((t) => !under(t, path) || sessions.has(t));
+    const lostActive = Boolean(active && !rest.includes(active));
     app.set({ tabs: rest, ...(lostActive ? { active: null, properties: {} } : {}) });
     if (lostActive && rest.length) show(rest[rest.length - 1]);
     await refreshTree();
     notify("Moved to the vault trash");
+    return true;
   } catch (e) {
     report(e);
+    return false;
   }
 }
 
 export async function createFolder(path: string): Promise<void> {
+  const root = app.get().vault?.root;
   try {
-    await runCore("folder.create", { path });
+    await runCore("folder.create", { path }, root);
     await refreshTree();
   } catch (e) {
     report(e);
@@ -885,9 +1134,10 @@ export async function createFolder(path: string): Promise<void> {
 /** A new note as a database row, optionally with one property set. It is not opened. */
 export async function createRow(folder: string, key?: string, value?: string): Promise<string | null> {
   const path = uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: "" });
-    if (key && value !== undefined) await runCore("props.set", { path, key, value });
+    await runCore("note.create", { path, text: "" }, root);
+    if (key && value !== undefined) await runCore("props.set", { path, key, value }, root);
     track("note_created");
     await refreshTree();
     return path;
@@ -899,8 +1149,9 @@ export async function createRow(folder: string, key?: string, value?: string): P
 
 export async function createNoteIn(folder: string): Promise<void> {
   const path = uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: "" });
+    await runCore("note.create", { path, text: "" }, root);
     track("note_created");
     await refreshTree();
     await openNote(path);
@@ -935,6 +1186,7 @@ export async function openLink(target: string, newTab = false): Promise<void> {
   if (replaces && from && app.get().active === match) {
     // The note that was being read gives its place in the tab strip to the one it linked to.
     await save(from);
+    if (hasUnsaved(from)) return notify("The previous note stays open because its changes could not be saved.");
     const closing = sessions.get(from)?.shared;
     if (closing) closeShared(closing);
     sessions.delete(from);
@@ -960,19 +1212,20 @@ function fillTemplate(text: string, title: string): string {
   return text.replace(/\{\{\s*(date|time|title)\s*\}\}/g, (_, key: string) => values[key]);
 }
 
-async function templateText(path: string | null, title: string): Promise<string> {
+async function templateText(path: string | null, title: string, root: string | undefined): Promise<string> {
   if (!path) return "";
-  const note = await runCore<Note>("note.read", { path }).catch(() => null);
+  const note = await runCore<Note>("note.read", { path }, root).catch(() => null);
   return note ? fillTemplate(note.text, title) : "";
 }
 
 /** Open today's note, creating it (from `Templates/Daily.md` if there is one) on first use. */
 export async function openDailyNote(): Promise<void> {
   const path = `${DAILY_FOLDER}/${today()}.md`;
+  const root = app.get().vault?.root;
   try {
     if (!allNotes().includes(path)) {
       const template = allNotes().find((p) => p.toLowerCase() === `${TEMPLATE_FOLDER}/daily.md`.toLowerCase()) ?? null;
-      await runCore("note.create", { path, text: await templateText(template, today()) });
+      await runCore("note.create", { path, text: await templateText(template, today(), root) }, root);
       track("note_created");
       await refreshTree();
     }
@@ -989,8 +1242,9 @@ export async function createFromTemplate(template: string): Promise<void> {
   const active = app.get().active;
   const folder = active?.includes("/") && !active.startsWith(`${TEMPLATE_FOLDER}/`) ? active.slice(0, active.lastIndexOf("/")) : "";
   const path = uniquePath(folder, "Untitled");
+  const root = app.get().vault?.root;
   try {
-    await runCore("note.create", { path, text: await templateText(template, "Untitled") });
+    await runCore("note.create", { path, text: await templateText(template, "Untitled", root) }, root);
     track("note_created");
     await refreshTree();
     await openNote(path);
@@ -1007,16 +1261,19 @@ export interface NoteVersion {
 /** Earlier versions of the open note, newest first. */
 export async function versions(): Promise<NoteVersion[]> {
   const { active } = app.get();
-  return active ? runCore<NoteVersion[]>("history.list", { path: active }) : [];
+  if (!active) return [];
+  // Say why the list is empty when another folder is serving, rather than "no versions".
+  return runCore<NoteVersion[]>("history.list", { path: active }, app.get().vault?.root).catch((e) => (report(e), []));
 }
 
 /** Bring back an earlier version of the open note. What it replaces becomes a version too. */
 export async function restoreVersion(at: number): Promise<void> {
   const { active } = app.get();
   if (!active) return;
+  const root = app.get().vault?.root;
   try {
     await save(active);
-    await runCore("history.restore", { path: active, at });
+    await runCore("history.restore", { path: active, at }, root);
     notify("Restored. The text it replaced is in the history too.");
   } catch (e) {
     report(e);
@@ -1029,11 +1286,12 @@ export interface TrashedFile {
   deleted_at: number;
 }
 
-export const trashed = () => runCore<TrashedFile[]>("trash.list");
+export const trashed = () => runCore<TrashedFile[]>("trash.list", {}, app.get().vault?.root).catch((e): TrashedFile[] => (report(e), []));
 
 export async function restoreFromTrash(id: string): Promise<void> {
+  const root = app.get().vault?.root;
   try {
-    const { path } = await runCore<{ path: string }>("trash.restore", { id });
+    const { path } = await runCore<{ path: string }>("trash.restore", { id }, root);
     await refreshTree();
     if (/\.md$/i.test(path)) await openNote(path);
     else notify(`Restored ${path}`);
@@ -1047,7 +1305,7 @@ async function loadNote(target: string): Promise<string | null> {
   if (!path) return null;
   if (sessions.has(path)) return textOf(path);
   try {
-    return toEditor((await runCore<Note>("note.read", { path })).text);
+    return toEditor((await runCore<Note>("note.read", { path }, app.get().vault?.root)).text);
   } catch {
     return null;
   }
@@ -1059,12 +1317,14 @@ async function onDiskChange(paths: string[]): Promise<void> {
   for (const path of paths) {
     const session = sessions.get(path);
     if (!session || session.shared) continue; // a shared note gets outside edits through its document
+    const hash = session.hash;
     let note: Note;
     try {
-      note = await runCore<Note>("note.read", { path });
+      note = await runCore<Note>("note.read", { path }, session.root);
     } catch {
       continue; // removed or unreadable; the tab keeps what it has
     }
+    if (sessions.get(path) !== session || app.get().vault?.root !== session.root || session.hash !== hash || session.saving) continue;
     if (note.hash === session.hash) continue; // our own save
     if (textOf(path) !== session.saved) {
       app.set({ conflict: path });
@@ -1084,7 +1344,10 @@ async function onDiskChange(paths: string[]): Promise<void> {
 export async function reloadFromDisk(path: string): Promise<void> {
   const session = sessions.get(path);
   if (!session || !editor) return;
-  const note = await runCore<Note>("note.read", { path });
+  if (session.shared?.pending.length) return notify("Retry saving shared changes before reloading this note.");
+  const before = textOf(path);
+  const note = await runCore<Note>("note.read", { path }, session.root);
+  if (sessions.get(path) !== session || app.get().vault?.root !== session.root || textOf(path) !== before || session.shared?.pending.length) return;
   const text = toEditor(note.text);
   Object.assign(session, { saved: text, eol: note.eol, hash: note.hash });
   if (path === app.get().active) editor.replaceText(text);

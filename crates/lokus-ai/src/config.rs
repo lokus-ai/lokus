@@ -1,7 +1,9 @@
 //! @part-of ai
 //! Assistant settings (a small JSON file in the app's config folder) and
-//! secrets (the OS keychain). Settings never contain a key.
+//! secrets (the OS keychain). Settings never contain a key. The model is the person's, for the
+//! whole app; a connection belongs to one workspace, the folder it was made in.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
@@ -75,6 +77,10 @@ pub struct McpServer {
     pub url: String,
     #[serde(default = "yes")]
     pub enabled: bool,
+    /// Whose keys this connection uses: the workspace's folder, or nothing for keys kept under
+    /// the name alone. Never saved and never taken from the window; `Config` fills it in.
+    #[serde(skip)]
+    pub keys: String,
 }
 
 fn yes() -> bool {
@@ -99,6 +105,37 @@ pub struct Config {
     /// The team's own systems, called as they are: an address, and where to start.
     #[serde(default)]
     pub apis: Vec<OwnApi>,
+    /// Each workspace's connections, by the folder's id (`Vault::id`, which moves with the
+    /// folder). In the saved file `mcp` and `apis` above hold only what an install from before
+    /// connections belonged to a workspace left there, until `hand_on` gives it to them.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub workspaces: BTreeMap<String, Workspace>,
+}
+
+/// Where connections made with no workspace open wait for the next folder that is opened.
+const WAITING: &str = "-";
+
+/// The place a workspace's connections and keys are kept under; with none open, the waiting one.
+fn place(at: &str) -> &str {
+    if at.is_empty() {
+        WAITING
+    } else {
+        at
+    }
+}
+
+/// One workspace's connections.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Workspace {
+    #[serde(default)]
+    pub mcp: Vec<McpServer>,
+    #[serde(default)]
+    pub apis: Vec<OwnApi>,
+    /// Connections here (`mcp:<name>`, `api:<name>`) whose keys are kept under the name alone,
+    /// where they were before connections belonged to a workspace. Other workspaces may be
+    /// using the same keys, so they are removed only when the last one lets go.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared: Vec<String>,
 }
 
 /// A team's own API: its product's admin or staff API. The key is kept in the keychain.
@@ -111,6 +148,9 @@ pub struct OwnApi {
     pub about: String,
     #[serde(default = "yes")]
     pub enabled: bool,
+    /// As `McpServer::keys`.
+    #[serde(skip)]
+    pub keys: String,
 }
 
 impl Config {
@@ -129,6 +169,218 @@ impl Config {
         let tmp = dir.join(format!("{FILE}.tmp"));
         fs::write(&tmp, text).map_err(failed)?;
         fs::rename(tmp, dir.join(FILE)).map_err(failed)
+    }
+
+    /// Whose keys a connection of the workspace `at` uses.
+    fn keys(&self, at: &str, kind: &str, name: &str) -> String {
+        let shares = self
+            .workspaces
+            .get(place(at))
+            .is_some_and(|w| w.shared.contains(&format!("{kind}:{name}")));
+        if shares {
+            String::new()
+        } else {
+            place(at).to_string()
+        }
+    }
+
+    /// A tool server as the workspace `at` reaches it. What the window sends names no keys.
+    pub fn place(&self, at: &str, mut server: McpServer) -> McpServer {
+        server.keys = self.keys(at, "mcp", &server.name);
+        server
+    }
+
+    /// A tool server with keys of the workspace's own, whatever it used before.
+    pub fn own(at: &str, mut server: McpServer) -> McpServer {
+        server.keys = place(at).to_string();
+        server
+    }
+
+    /// The settings as one workspace has them: the model, and that workspace's connections.
+    /// `at` is the workspace's id; empty means none is open, and the connections are the ones
+    /// waiting for one.
+    pub fn seen_from(&self, at: &str) -> Config {
+        let own = self.workspaces.get(place(at)).cloned().unwrap_or_default();
+        let mut seen = Config {
+            mcp: own.mcp,
+            apis: own.apis,
+            workspaces: BTreeMap::new(),
+            ..self.clone()
+        };
+        for server in &mut seen.mcp {
+            server.keys = self.keys(at, "mcp", &server.name);
+        }
+        for api in &mut seen.apis {
+            api.keys = self.keys(at, "api", &api.name);
+        }
+        seen
+    }
+
+    /// Save what one workspace sees: the model for the app, the connections for `at` alone.
+    pub fn put(dir: &Path, at: &str, seen: Config) -> Result<()> {
+        let mut now = Self::load(dir);
+        let Config { mcp, apis, .. } = seen.clone();
+        now = Config {
+            mcp: now.mcp,
+            apis: now.apis,
+            workspaces: now.workspaces,
+            ..seen
+        };
+        let own = now.workspaces.entry(place(at).to_string()).or_default();
+        own.shared.retain(|shared| {
+            mcp.iter().any(|s| *shared == format!("mcp:{}", s.name))
+                || apis.iter().any(|a| *shared == format!("api:{}", a.name))
+        });
+        (own.mcp, own.apis) = (mcp, apis);
+        if own.mcp.is_empty() && own.apis.is_empty() {
+            now.workspaces.remove(place(at));
+        }
+        now.save(dir)
+    }
+
+    /// Give the connections from before they belonged to a workspace to each of `ids`, and
+    /// stop holding them. Their keys stay where they are, under the name alone: nothing in the
+    /// keychain is read, copied or removed. A workspace that has one of that name keeps its own.
+    pub fn hand_on(dir: &Path, ids: &[String]) -> Result<()> {
+        let mut now = Self::load(dir);
+        if ids.is_empty() || (now.mcp.is_empty() && now.apis.is_empty()) {
+            return Ok(());
+        }
+        let (mcp, apis) = (std::mem::take(&mut now.mcp), std::mem::take(&mut now.apis));
+        for id in ids {
+            let own = now.workspaces.entry(id.clone()).or_default();
+            for server in &mcp {
+                if !own.mcp.iter().any(|s| s.name == server.name) {
+                    own.mcp.push(server.clone());
+                    own.shared.push(format!("mcp:{}", server.name));
+                }
+            }
+            for api in &apis {
+                if !own.apis.iter().any(|a| a.name == api.name) {
+                    own.apis.push(api.clone());
+                    own.shared.push(format!("api:{}", api.name));
+                }
+            }
+        }
+        now.save(dir)
+    }
+
+    /// Give what was connected with no workspace open (first-run setup) to the workspace `at`,
+    /// keys and all. A connection `at` already has by that name stays, and the waiting one is
+    /// dropped. The keys are the app's own, made moments ago under the waiting place, so moving
+    /// them asks nobody anything.
+    pub fn settle(dir: &Path, at: &str) -> Result<()> {
+        let mut now = Self::load(dir);
+        if at.is_empty() {
+            return Ok(());
+        }
+        let Some(waiting) = now.workspaces.remove(WAITING) else {
+            return Ok(());
+        };
+        let mut own = now.workspaces.remove(at).unwrap_or_default();
+        let mut still = Workspace::default();
+        let mut done = Vec::new();
+        // One connection at a time, its keys before the connection itself. A key the keychain
+        // would not show (locked, or the person said no) or would not take keeps the connection
+        // waiting, keys and all, and it moves when a later folder is opened.
+        let mut carry = |kind: &'static str, name: &str, taken: bool| -> bool {
+            if taken {
+                done.push((kind, name.to_string()));
+                return false;
+            }
+            let pairs = accounts(kind, name, WAITING)
+                .into_iter()
+                .zip(accounts(kind, name, at));
+            let (mut found, mut unread, mut in_memory) = (Vec::new(), false, false);
+            for (from, to) in pairs {
+                match read_raw(&from) {
+                    Ok(value) => found.push((to, value.or_else(|| kept(&from)))),
+                    // Not shown: locked, refused, or not there to ask just now. What it holds
+                    // is not known, unless the sign-in was never in it and is held in memory.
+                    Err(_) => match kept(&from) {
+                        Some(value) => {
+                            in_memory = true;
+                            found.push((to, Some(value)));
+                        }
+                        None => unread = true,
+                    },
+                }
+            }
+            // Could not read always means leave it waiting. The one exception is a sign-in made
+            // while there was no keychain: memory is then all there ever was of it.
+            if unread && !in_memory {
+                return false;
+            }
+            for (to, value) in found {
+                let Some(value) = value else { continue };
+                if set_secret(&to, &value).is_err() {
+                    // A browser sign-in may live in memory until the app quits; a token may not.
+                    if !to.starts_with("mcp-oauth:") {
+                        return false;
+                    }
+                    keep(&to, &value);
+                }
+            }
+            done.push((kind, name.to_string()));
+            true
+        };
+        for server in waiting.mcp {
+            let taken = own.mcp.iter().any(|s| s.name == server.name);
+            if carry("mcp", &server.name, taken) {
+                own.mcp.push(server);
+            } else if !taken {
+                still.mcp.push(server);
+            }
+        }
+        for api in waiting.apis {
+            let taken = own.apis.iter().any(|a| a.name == api.name);
+            if carry("api", &api.name, taken) {
+                own.apis.push(api);
+            } else if !taken {
+                still.apis.push(api);
+            }
+        }
+        if !(own.mcp.is_empty() && own.apis.is_empty()) {
+            now.workspaces.insert(at.to_string(), own);
+        }
+        if !(still.mcp.is_empty() && still.apis.is_empty()) {
+            now.workspaces.insert(WAITING.to_string(), still);
+        }
+        now.save(dir)?;
+        for (kind, name) in done {
+            for account in accounts(kind, &name, WAITING) {
+                forget(&account);
+            }
+        }
+        Ok(())
+    }
+
+    /// The workspace `at` stops using the keys kept under the name alone for one connection
+    /// (`kind` is `mcp` or `api`): it has its own now, or none. They are removed once no
+    /// workspace uses them.
+    pub fn let_go(dir: &Path, at: &str, kind: &str, name: &str) -> Result<()> {
+        let mut now = Self::load(dir);
+        let shared = format!("{kind}:{name}");
+        let Some(own) = now.workspaces.get_mut(place(at)) else {
+            return Ok(());
+        };
+        if !own.shared.contains(&shared) {
+            return Ok(());
+        }
+        own.shared.retain(|s| *s != shared);
+        now.save(dir)?;
+        // Not yet handed on: some workspace is still to be given it.
+        let owed = match kind {
+            "mcp" => now.mcp.iter().any(|s| s.name == name),
+            _ => now.apis.iter().any(|a| a.name == name),
+        };
+        if owed || now.workspaces.values().any(|w| w.shared.contains(&shared)) {
+            return Ok(());
+        }
+        for account in accounts(kind, name, "") {
+            forget(&account);
+        }
+        Ok(())
     }
 
     /// A ChatGPT plan with no model takes the first one the plan recommends; nobody is asked. A
@@ -166,12 +418,16 @@ impl Config {
 
 /// Scripted flows set `LOKUS_KEYCHAIN` so their stand-in sign-ins go to a keychain of their own.
 /// Without it, a flow's fake ChatGPT session overwrote the person's real one (2026-11-13).
-fn entry(account: &str) -> Result<keyring::Entry> {
+fn entry_raw(account: &str) -> keyring::Result<keyring::Entry> {
     let service = std::env::var("LOKUS_KEYCHAIN")
         .ok()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| SERVICE.to_string());
-    keyring::Entry::new(&service, account).map_err(|e| AiError::Keychain(e.to_string()))
+    keyring::Entry::new(&service, account)
+}
+
+fn entry(account: &str) -> Result<keyring::Entry> {
+    entry_raw(account).map_err(|e| AiError::Keychain(e.to_string()))
 }
 
 /// What the keychain answered for each account since the app started. The keychain is asked
@@ -216,6 +472,10 @@ pub fn secret(account: &str) -> Option<String> {
 /// Unlike an optional sign-in lookup, replacing a credential must stop if its old value
 /// cannot be read: a denied keychain prompt does not mean there is nothing to restore.
 pub fn read_secret(account: &str) -> Result<Option<String>> {
+    read_raw(account).map_err(|e| AiError::Keychain(e.to_string()))
+}
+
+fn read_raw(account: &str) -> keyring::Result<Option<String>> {
     // Held for the whole read. Without it, several parts of the app asking at the same moment
     // each put their own password prompt on screen for the same entry, one behind another, and
     // answering the first did not dismiss the rest (2026-11-13).
@@ -223,22 +483,17 @@ pub fn read_secret(account: &str) -> Result<Option<String>> {
     if let Some(known) = asked.get(account) {
         return Ok(known.clone());
     }
-    let read = entry(account).and_then(|e| match e.get_password() {
-        Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
-        Err(keyring::Error::NoEntry) => Ok(moved_in(account)),
-        // Refused or dismissed: that says nothing about whether a sign-in is saved.
-        Err(e) => Err(AiError::Keychain(e.to_string())),
-    });
-    match read {
-        Ok(found) => {
-            asked.insert(account.to_string(), found.clone());
-            Ok(found)
-        }
-        // Not remembered, so the next time it is needed the keychain is asked again. Remembering
-        // a refusal as "nothing saved" made every connected service look signed out until the
-        // app was restarted (2026-11-13).
-        Err(error) => Err(error),
-    }
+    // Not remembered when it fails, so the next time it is needed the keychain is asked again.
+    // Remembering a refusal as "nothing saved" made every connected service look signed out
+    // until the app was restarted (2026-11-13). Refused or dismissed says nothing about
+    // whether a sign-in is saved.
+    let found = match entry_raw(account)?.get_password() {
+        Ok(found) => Some(found).filter(|s| !s.is_empty()),
+        Err(keyring::Error::NoEntry) => moved_in(account),
+        Err(e) => return Err(e),
+    };
+    asked.insert(account.to_string(), found.clone());
+    Ok(found)
 }
 
 /// A development build that finds nothing in its own place looks once in the place it used
@@ -272,12 +527,42 @@ pub fn key_account(provider: Provider) -> String {
     format!("ai:{}", provider.id())
 }
 
-pub fn api_account(name: &str) -> String {
-    format!("api:{name}")
+/// A connection's entry in the keychain: under the name alone, or the name and the workspace's id.
+fn account(kind: &str, name: &str, keys: &str) -> String {
+    if keys.is_empty() {
+        format!("{kind}:{name}")
+    } else {
+        format!("{kind}:{name}@{keys}")
+    }
 }
 
-pub fn mcp_account(server: &str) -> String {
-    format!("mcp:{server}")
+/// Every entry a connection can have.
+fn accounts(kind: &str, name: &str, keys: &str) -> Vec<String> {
+    match kind {
+        "mcp" => vec![account("mcp", name, keys), account("mcp-oauth", name, keys)],
+        _ => vec![account(kind, name, keys)],
+    }
+}
+
+pub fn api_account(api: &OwnApi) -> String {
+    account("api", &api.name, &api.keys)
+}
+
+/// A tool server's pasted token.
+pub fn mcp_account(server: &McpServer) -> String {
+    account("mcp", &server.name, &server.keys)
+}
+
+/// A tool server's browser sign-in.
+pub fn oauth_account(server: &McpServer) -> String {
+    account("mcp-oauth", &server.name, &server.keys)
+}
+
+/// Keep (or, with an empty value, remove) the key of one of the workspace `at`'s connections.
+/// The workspace's own entry is written; one it shared with other workspaces is left to them.
+pub fn set_key(dir: &Path, at: &str, kind: &str, name: &str, value: &str) -> Result<()> {
+    set_secret(&account(kind, name, place(at)), value)?;
+    Config::let_go(dir, at, kind, name)
 }
 
 /// The key for a provider: the keychain first, then the usual environment
@@ -332,6 +617,93 @@ pub fn forget_checked(account: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn server(name: &str, url: &str) -> McpServer {
+        McpServer {
+            name: name.into(),
+            url: url.into(),
+            enabled: true,
+            keys: String::new(),
+        }
+    }
+
+    #[test]
+    fn a_connection_belongs_to_the_workspace_it_was_made_in() {
+        let dir = tempfile::tempdir().unwrap();
+        let (dir, a, b) = (dir.path(), "/w/a".to_string(), "/w/b".to_string());
+        // As an install from before connections belonged to a workspace left it.
+        std::fs::write(
+            dir.join(FILE),
+            r#"{"provider":"openai","model":"m","mcp":[{"name":"slack","url":"https://x"}]}"#,
+        )
+        .unwrap();
+        Config::hand_on(dir, &[a.clone(), b.clone()]).unwrap();
+        let now = Config::load(dir);
+        assert!(now.mcp.is_empty(), "handed on once, not kept");
+        // Both have it, on the keys that were already there.
+        for root in [&a, &b] {
+            let seen = now.seen_from(root);
+            assert_eq!(seen.mcp[0].url, "https://x");
+            assert_eq!(mcp_account(&seen.mcp[0]), "mcp:slack");
+            assert_eq!(oauth_account(&seen.mcp[0]), "mcp-oauth:slack");
+        }
+        // A workspace made later has none, and a second hand-on gives it none.
+        Config::hand_on(dir, &["/w/c".to_string()]).unwrap();
+        assert!(Config::load(dir).seen_from("/w/c").mcp.is_empty());
+
+        // B replaces its Slack: A is as it was, and B's keys are its own.
+        Config::let_go(dir, &b, "mcp", "slack").unwrap();
+        let mut seen = Config::load(dir).seen_from(&b);
+        seen.mcp = vec![server("slack", "https://y"), server("github", "https://g")];
+        seen.model = "n".into();
+        Config::put(dir, &b, seen).unwrap();
+        let now = Config::load(dir);
+        let (in_a, in_b) = (now.seen_from(&a), now.seen_from(&b));
+        assert_eq!(in_a.mcp.len(), 1);
+        assert_eq!(in_a.mcp[0].url, "https://x");
+        assert_eq!(mcp_account(&in_a.mcp[0]), "mcp:slack");
+        assert_eq!(in_b.mcp[0].url, "https://y");
+        assert_eq!(mcp_account(&in_b.mcp[0]), "mcp:slack@/w/b");
+        assert_eq!(oauth_account(&in_b.mcp[1]), "mcp-oauth:github@/w/b");
+        // The model is the person's, in every workspace.
+        assert_eq!(in_a.model, "n");
+        // B disconnects everything: A still has its own.
+        let mut seen = now.seen_from(&b);
+        seen.mcp.clear();
+        Config::put(dir, &b, seen).unwrap();
+        let now = Config::load(dir);
+        assert!(now.seen_from(&b).mcp.is_empty());
+        assert_eq!(now.seen_from(&a).mcp.len(), 1);
+        // Connected with no workspace open: it waits under keys of its own, never the ones
+        // the workspaces above still share, and goes to the next folder opened, once.
+        let mut seen = Config::load(dir).seen_from("");
+        assert!(seen.mcp.is_empty());
+        seen.mcp = vec![server("slack", "https://z")];
+        Config::put(dir, "", seen).unwrap();
+        let waiting = Config::load(dir).seen_from("");
+        assert_eq!(oauth_account(&waiting.mcp[0]), "mcp-oauth:slack@-");
+        // Signed in, as the app keeps it: in the keychain, or in memory where there is none.
+        // Without that, a keychain that cannot be read would leave it waiting (below).
+        keep(&oauth_account(&waiting.mcp[0]), "sign-in");
+        Config::settle(dir, "/w/d").unwrap();
+        let now = Config::load(dir);
+        assert!(now.seen_from("").mcp.is_empty());
+        let in_d = now.seen_from("/w/d");
+        assert_eq!(in_d.mcp[0].url, "https://z");
+        assert_eq!(oauth_account(&in_d.mcp[0]), "mcp-oauth:slack@/w/d");
+        assert_eq!(mcp_account(&now.seen_from(&a).mcp[0]), "mcp:slack");
+        Config::settle(dir, "/w/e").unwrap();
+        assert!(Config::load(dir).seen_from("/w/e").mcp.is_empty());
+        assert_eq!(
+            kept(&oauth_account(&in_d.mcp[0])).as_deref(),
+            Some("sign-in")
+        );
+        forget(&oauth_account(&in_d.mcp[0]));
+        // Nothing that names a key's place is written to the file.
+        assert!(!std::fs::read_to_string(dir.join(FILE))
+            .unwrap()
+            .contains("keys"));
+    }
 
     #[test]
     fn the_first_listed_model_is_taken_only_by_the_chatgpt_plan_that_listed_it() {

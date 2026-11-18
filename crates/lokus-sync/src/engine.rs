@@ -24,6 +24,9 @@ use crate::error::{Error, Result};
 
 /// The document that lists the workspace's notes: id -> path, or deleted.
 pub const MANIFEST: &str = "manifest";
+/// In a note's document, beside its text: what the text alone does not say.
+const META: &str = "meta";
+const EOL: &str = "eol";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 struct Entry {
@@ -86,7 +89,25 @@ struct Row {
     path: Option<String>,
 }
 
+/// The workspace a folder's sync state belongs to, read without starting an engine: `None` for a
+/// folder that never synced, and for one whose engine is running elsewhere and holds the file.
+pub fn bound(root: &std::path::Path) -> Option<String> {
+    let file = root.join(META_DIR).join("sync.sqlite");
+    if !file.is_file() {
+        return None;
+    }
+    let db = Connection::open_with_flags(file, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    db.query_row("SELECT value FROM meta WHERE key = 'workspace'", [], |r| {
+        r.get(0)
+    })
+    .ok()
+}
+
 impl Engine {
+    pub fn root(&self) -> &std::path::Path {
+        self.vault.root()
+    }
+
     pub fn open(vault: &Vault) -> Result<Self> {
         let dir = vault.root().join(META_DIR);
         fs::create_dir_all(&dir)?;
@@ -349,8 +370,37 @@ impl Engine {
         Some((to_editor(&text), eol))
     }
 
-    fn write_disk(&self, path: &str, text: &str) -> Result<()> {
-        let eol = self.read_disk(path).map(|(_, eol)| eol).unwrap_or(Eol::Lf);
+    /// The line ending the note's document carries for a device that has no file of it yet.
+    /// The text in the document is all `\n`, so without this a note written with `\r\n`
+    /// reached a teammate as `\n`.
+    fn carried_eol(doc: &Doc) -> Eol {
+        let meta = doc.get_or_insert_map(META);
+        match meta.get(&doc.transact(), EOL) {
+            Some(yrs::Out::Any(yrs::Any::String(s))) if &*s == "crlf" => Eol::Crlf,
+            _ => Eol::Lf,
+        }
+    }
+
+    /// Record the ending of this device's file in the document, when it says another. Only a
+    /// device whose own file was just edited says so; mixed endings say nothing.
+    fn carry_eol(doc: &Doc, eol: Eol) {
+        let name = match eol {
+            Eol::Crlf => "crlf",
+            Eol::Lf => "lf",
+            Eol::Mixed => return,
+        };
+        if Self::carried_eol(doc) != eol {
+            let meta = doc.get_or_insert_map(META);
+            meta.insert(&mut doc.transact_mut(), EOL, name);
+        }
+    }
+
+    /// A file that exists keeps its own line endings; a new one takes the document's.
+    fn write_disk(&self, path: &str, text: &str, doc: &Doc) -> Result<()> {
+        let eol = self
+            .read_disk(path)
+            .map(|(_, eol)| eol)
+            .unwrap_or_else(|| Self::carried_eol(doc));
         if self.vault.resolve(path)?.exists() {
             self.vault.write(path, text, eol, None)?;
         } else {
@@ -395,11 +445,11 @@ impl Engine {
         let mut paths: Vec<&String> = on_disk.iter().collect();
         paths.sort();
         for path in paths {
-            let Some((text, _)) = self.read_disk(path) else {
+            let Some((text, eol)) = self.read_disk(path) else {
                 continue;
             };
             if let Some(&id) = by_path.get(path.as_str()) {
-                self.ingest(id, path, &text)?;
+                self.ingest(id, path, &text, eol)?;
                 continue;
             }
             if !self.pulled()? {
@@ -444,6 +494,7 @@ impl Engine {
                 let mut txn = doc.transact_mut();
                 content.insert(&mut txn, 0, &text);
             }
+            Self::carry_eol(&doc, eol);
             let update = doc
                 .transact()
                 .encode_state_as_update_v1(&StateVector::default());
@@ -525,7 +576,7 @@ impl Engine {
 
     /// If the file differs from the last reconciled text, apply just that
     /// difference to the document.
-    fn ingest(&mut self, id: &str, path: &str, disk: &str) -> Result<()> {
+    fn ingest(&mut self, id: &str, path: &str, disk: &str, eol: Eol) -> Result<()> {
         let Some(row) = self.row(id)? else {
             return Ok(());
         };
@@ -546,14 +597,17 @@ impl Engine {
         }
         let before = doc.transact().state_vector();
         if base != disk {
-            let mut txn = doc.transact_mut();
-            apply_diff(&content, &mut txn, base, disk);
+            {
+                let mut txn = doc.transact_mut();
+                apply_diff(&content, &mut txn, base, disk);
+            }
+            Self::carry_eol(&doc, eol);
         }
         let merged = content.get_string(&doc.transact());
         let update = doc.transact().encode_diff_v1(&before);
         if merged != disk {
             // The document had moved on (a remote edit not yet on disk).
-            self.write_disk(path, &merged)?;
+            self.write_disk(path, &merged, &doc)?;
             self.events.push(Event::Wrote {
                 path: path.to_string(),
             });
@@ -574,17 +628,33 @@ impl Engine {
         let Some(row) = self.row(id)? else {
             return Err(Error::UnknownDoc(id.to_string()));
         };
+        let Some(path) = row.path.as_deref() else {
+            return Err(Error::UnknownDoc(id.to_string()));
+        };
         let doc = self.new_doc();
         apply(&doc, &row.state)?;
         apply(&doc, update)?;
         let text = doc
             .get_or_insert_text("content")
             .get_string(&doc.transact());
-        if let Some(path) = row.path.as_deref() {
-            self.write_disk(path, &text)?;
+        self.write_disk(path, &text, &doc)?;
+        // A note published before documents carried the ending, and edited only in the app.
+        let before = doc.transact().state_vector();
+        if let Some((_, eol)) = self.read_disk(path) {
+            Self::carry_eol(&doc, eol);
         }
-        self.save(id, &doc, Some(&text), row.path.as_deref())?;
-        self.queue(id, update.to_vec())
+        let said = doc.transact().encode_diff_v1(&before);
+        self.save(id, &doc, Some(&text), Some(path))?;
+        self.queue(id, update.to_vec())?;
+        if doc.transact().state_vector() != before {
+            // The open editor takes it too: its copy must not miss a step this device made.
+            self.events.push(Event::Ingested {
+                doc: id.to_string(),
+                data: encode(&said),
+            });
+            self.queue(id, said)?;
+        }
+        Ok(())
     }
 
     /// Take an edit from the relay and bring the files in line with it.
@@ -608,7 +678,7 @@ impl Engine {
         // Fold in any local edit that has not been picked up yet, so it is merged, not overwritten.
         let mut local = None;
         if let (Some(p), Some(row)) = (&path, &row) {
-            if let Some((disk, _)) = self.read_disk(p) {
+            if let Some((disk, eol)) = self.read_disk(p) {
                 let base = row.synced.clone().unwrap_or_default();
                 if disk != base {
                     let before = doc.transact().state_vector();
@@ -616,6 +686,7 @@ impl Engine {
                         let mut txn = doc.transact_mut();
                         apply_diff(&content, &mut txn, &base, &disk);
                     }
+                    Self::carry_eol(&doc, eol);
                     local = Some(doc.transact().encode_diff_v1(&before));
                 }
             }
@@ -632,7 +703,7 @@ impl Engine {
         }
         if let Some(p) = &path {
             if self.read_disk(p).map(|(disk, _)| disk) != Some(text.clone()) {
-                self.write_disk(p, &text)?;
+                self.write_disk(p, &text, &doc)?;
                 self.events.push(Event::Wrote { path: p.clone() });
             }
         }
@@ -680,8 +751,24 @@ impl Engine {
         self.save(MANIFEST, &manifest, None, None)?;
         self.materialize(&manifest)?;
         self.materialize_files(&manifest)?;
+        // A note's missed edits are taken as one, so its file is made once, from all of them:
+        // made from the first alone, it would miss a line ending the document was told later.
+        let mut notes: Vec<(&str, Vec<&[u8]>)> = Vec::new();
+        let mut at: HashMap<&str, usize> = HashMap::new();
         for (doc, data) in items.iter().filter(|(doc, _)| doc != MANIFEST) {
-            self.apply_remote(doc, data)?;
+            let i = *at.entry(doc).or_insert(notes.len());
+            if i == notes.len() {
+                notes.push((doc, Vec::new()));
+            }
+            notes[i].1.push(data);
+        }
+        for (doc, parts) in notes {
+            if let [one] = parts[..] {
+                self.apply_remote(doc, one)?;
+            } else {
+                let all = yrs::merge_updates_v1(&parts).map_err(|e| Error::Crdt(e.to_string()))?;
+                self.apply_remote(doc, &all)?;
+            }
         }
         Ok(())
     }
@@ -855,7 +942,7 @@ impl Engine {
                             to: target.clone(),
                         });
                     } else {
-                        self.write_disk(&target, &text)?;
+                        self.write_disk(&target, &text, &doc)?;
                         self.events.push(Event::Wrote {
                             path: target.clone(),
                         });
@@ -874,7 +961,7 @@ impl Engine {
                     };
                     // A file that already says this is left exactly as it is, line endings and all.
                     if self.read_disk(&target).map(|(disk, _)| disk).as_deref() != Some(&text) {
-                        self.write_disk(&target, &text)?;
+                        self.write_disk(&target, &text, &doc)?;
                         self.events.push(Event::Wrote {
                             path: target.clone(),
                         });
@@ -1137,6 +1224,49 @@ mod tests {
         // And it stays deleted: nothing resurrects it on later rounds.
         exchange(&mut a, &mut b);
         assert_eq!(a.read("Gone.md"), None);
+    }
+
+    #[test]
+    fn retained_edits_follow_renames_but_refuse_deleted_documents() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Task.md", "original\n");
+        exchange(&mut a, &mut b);
+        let id = a.engine.doc_id("Task.md").unwrap().unwrap();
+        let editor = Doc::new();
+        apply(&editor, &a.engine.state(&id).unwrap().unwrap()).unwrap();
+        let content = editor.get_or_insert_text("content");
+        let before = editor.transact().state_vector();
+        content.push(&mut editor.transact_mut(), "retained before rename\n");
+        let pending = editor.transact().encode_state_as_update_v1(&before);
+
+        b.engine.rename("Task.md", "Renamed.md").unwrap();
+        exchange(&mut a, &mut b);
+        a.engine.local_update(&id, &pending).unwrap();
+        exchange(&mut a, &mut b);
+        assert_eq!(a.read("Task.md"), None);
+        assert_eq!(a.read("Renamed.md"), b.read("Renamed.md"));
+        assert_eq!(
+            a.read("Renamed.md").as_deref(),
+            Some("original\nretained before rename\n")
+        );
+
+        let before = editor.transact().state_vector();
+        content.push(&mut editor.transact_mut(), "retained before deletion\n");
+        let pending = editor.transact().encode_state_as_update_v1(&before);
+        b.vault.delete("Renamed.md").unwrap();
+        exchange(&mut a, &mut b);
+        let state = a.engine.state(&id).unwrap();
+        assert!(a.engine.row(&id).unwrap().unwrap().path.is_none());
+        assert!(a.engine.outbox().unwrap().is_empty());
+        assert!(
+            matches!(a.engine.local_update(&id, &pending), Err(Error::UnknownDoc(doc)) if doc == id)
+        );
+        assert_eq!(a.engine.state(&id).unwrap(), state);
+        assert!(a.engine.outbox().unwrap().is_empty());
+        assert_eq!(a.read("Renamed.md"), None);
+        assert!(content
+            .get_string(&editor.transact())
+            .contains("retained before deletion"));
     }
 
     /// What broke for the first team to use Lokus: New note, type its title, then write.
@@ -1601,6 +1731,65 @@ mod tests {
                 assert_eq!(d.read("Old (local copy).md"), None);
             }
         }
+    }
+
+    #[test]
+    fn a_note_with_windows_line_endings_arrives_with_them() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Win.md", "one\r\ntwo\r\nthree");
+        b.write("Unix.md", "one\ntwo\n");
+        exchange(&mut a, &mut b);
+        assert_eq!(b.read("Win.md").as_deref(), Some("one\r\ntwo\r\nthree"));
+        assert_eq!(a.read("Unix.md").as_deref(), Some("one\ntwo\n"));
+        // A teammate's edit keeps them on both devices, with none mixed in.
+        b.write("Win.md", "one\r\nTWO\r\nthree");
+        exchange(&mut a, &mut b);
+        assert_eq!(a.read("Win.md").as_deref(), Some("one\r\nTWO\r\nthree"));
+
+        // Rewritten with other endings on one device: the other's file is not touched.
+        a.write("Win.md", "one\nTWO\nthree!");
+        exchange(&mut a, &mut b);
+        assert_eq!(b.read("Win.md").as_deref(), Some("one\r\nTWO\r\nthree!"));
+
+        // A device that joins later takes all it missed at once, and its file has the endings
+        // last written, though the note was first published with others.
+        let (mut d, mut c) = (device(), device());
+        d.write("Late.md", "one\ntwo\n");
+        d.engine.scan().unwrap();
+        d.write("Late.md", "one\r\ntwo\r\nthree\r\n");
+        d.engine.scan().unwrap();
+        let mut missed: Vec<(String, Vec<u8>)> = Vec::new();
+        for out in d.engine.outbox().unwrap() {
+            missed.push((out.doc, out.data));
+        }
+        c.engine.apply_pulled(&missed).unwrap();
+        assert_eq!(
+            c.read("Late.md").as_deref(),
+            Some("one\r\ntwo\r\nthree\r\n")
+        );
+    }
+
+    #[test]
+    fn a_line_ending_changed_while_away_is_said_when_merged_with_a_teammates_edit() {
+        // An edit made while away, merged with a teammate's as it arrives, says its ending too.
+        let (mut a, mut b) = (device(), device());
+        a.write("Away.md", "one\ntwo\n");
+        exchange(&mut a, &mut b);
+        a.write("Away.md", "one\r\ntwo\r\nfrom a\r\n");
+        b.write("Away.md", "from b\none\ntwo\n");
+        b.engine.scan().unwrap();
+        for out in b.engine.outbox().unwrap() {
+            a.engine.apply_remote(&out.doc, &out.data).unwrap();
+        }
+        exchange(&mut a, &mut b);
+        let id = b.engine.doc_id("Away.md").unwrap().unwrap();
+        let told = Doc::new();
+        apply(&told, &b.engine.state(&id).unwrap().unwrap()).unwrap();
+        assert_eq!(Engine::carried_eol(&told), Eol::Crlf);
+        assert_eq!(
+            a.read("Away.md").as_deref(),
+            Some("from b\r\none\r\ntwo\r\nfrom a\r\n")
+        );
     }
 
     #[test]

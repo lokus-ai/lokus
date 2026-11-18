@@ -8,8 +8,8 @@ import { aiSettings } from "../../bridge/ai";
 import { runCore } from "../../bridge/core";
 import { onSyncEvent } from "../../bridge/sync";
 import { createStore } from "../../shell/store";
-import { app, getEditor, notify, openNote, refreshTree } from "../../shell/workspace";
-import { ask, brief, newChat } from "../ai/chat";
+import { app, getEditor, isSwitchingVault, notify, openNote, refreshTree } from "../../shell/workspace";
+import { ask, brief, captureChat, newChat } from "../ai/chat";
 
 /**
  * The assistant working without being asked.
@@ -85,10 +85,10 @@ export function setWatchEvery(minutes: number): void {
   schedule();
 }
 
-export async function loadNoticed(): Promise<void> {
-  if (!app.get().vault) return;
-  const items = await runCore<Noticed[]>("noticed.list").catch(() => [] as Noticed[]);
-  noticed.set({ items });
+export async function loadNoticed(root = app.get().vault?.root): Promise<void> {
+  if (!root) return;
+  const items = await runCore<Noticed[]>("noticed.list", undefined, root).catch(() => [] as Noticed[]);
+  if (root === app.get().vault?.root) noticed.set({ items });
 }
 
 export const waiting = (items: Noticed[]) => items.filter((i) => i.state === "new");
@@ -172,7 +172,8 @@ async function myTurn(): Promise<boolean> {
 
 export async function check(reason = "This is a routine look.", asked = false): Promise<void> {
   const state = noticed.get();
-  if (state.checking || !app.get().vault) return;
+  const root = app.get().vault?.root;
+  if (state.checking || !root) return;
   if (!asked && !(await myTurn())) {
     // A teammate's Lokus has just looked. Count it as done here too, and show what it found.
     localStorage.setItem(CHECKED, String(Date.now()));
@@ -200,7 +201,7 @@ export async function check(reason = "This is a routine look.", asked = false): 
   let problem = "";
   try {
     const briefing = await brief();
-    const outcome = await aiSend(id, [{ role: "user", content: request(since, state.items, watches, reason) }], briefing);
+    const outcome = await aiSend(id, [{ role: "user", content: request(since, state.items, watches, reason) }], briefing, root);
     const { config } = await aiSettings();
     traceChat({ trace: id, provider: config.provider, model: outcome.model, seconds: (Date.now() - now) / 1000, rounds: outcome.rounds, inputTokens: outcome.input_tokens, outputTokens: outcome.output_tokens, tools: outcome.tools, stop: outcome.stop, error: "", made: { background: 1 }, question: "", answer: "" });
     const due = JSON.parse(localStorage.getItem(DUE) ?? "{}") as Record<string, number>;
@@ -220,19 +221,36 @@ export async function check(reason = "This is a routine look.", asked = false): 
 
 /** "Do it": hand what the finding proposed to the assistant, in the open, where each change is asked about. */
 export async function act(item: Noticed, learn: boolean): Promise<void> {
+  if (isSwitchingVault()) {
+    notify("Wait for the workspace to finish opening.");
+    return;
+  }
+  if (!newChat()) return;
+  const target = captureChat();
   track("action", { feature: "noticed", action: "do_it", learn });
-  await resolve(item, "done", learn);
+  if (!(await resolve(item, "done", learn, target.root))) return;
+  if (!target.current()) {
+    notify("The conversation changed, so this action was not started.");
+    return;
+  }
   noticed.set({ open: false });
-  newChat();
   app.set({ panel: { kind: "ai" } });
   await ask(`Do this, which you proposed after noticing it on your own:\n\n${item.action || item.recommend}\n\nWhat you noticed: ${item.title}. ${item.summary ?? ""}`);
 }
 
-export async function resolve(item: Noticed, state: "done" | "dismissed", learn: boolean): Promise<void> {
+export async function resolve(item: Noticed, state: "done" | "dismissed", learn: boolean, root = app.get().vault?.root): Promise<boolean> {
+  if (!root) return false;
   if (state === "dismissed") track("action", { feature: "noticed", action: "dismissed", kind: item.kind, learn });
-  const result = await runCore<{ learned: string | null }>("noticed.resolve", { id: item.id, state, learn }).catch(() => ({ learned: null }));
-  if (result.learned) notify("Remembered for next time");
-  await loadNoticed();
+  const result = await runCore<{ learned: string | null }>("noticed.resolve", { id: item.id, state, learn }, root).catch((e) => {
+    if (root === app.get().vault?.root) notify(e instanceof Error ? e.message : String(e));
+    return null;
+  });
+  if (root !== app.get().vault?.root) return false;
+  if (result?.learned) notify("Remembered for next time");
+  await loadNoticed(root);
+  if (root !== app.get().vault?.root) return false;
+  // The choice is recorded before it is learned from, so a failure may still have recorded it.
+  return Boolean(result) || noticed.get().items.some((i) => i.id === item.id && i.state === state);
 }
 
 /** Add a suggested piece of text to its note: under the heading it named, or at the end. */
@@ -266,8 +284,8 @@ const KINDS = "lokus.data.kinds";
  * person would otherwise do by hand: read a few, give the fields readable names, and choose
  * which ones the list shows.
  */
-async function newKind(kind: string): Promise<void> {
-  if (!kind || kind.includes(".")) return;
+async function newKind(kind: string, root: string): Promise<void> {
+  if (!kind || kind.includes(".") || app.get().vault?.root !== root) return;
   const known = JSON.parse(localStorage.getItem(KINDS) ?? "[]") as string[];
   if (known.includes(kind)) return;
   localStorage.setItem(KINDS, JSON.stringify([...known, kind]));
@@ -283,8 +301,8 @@ async function newKind(kind: string): Promise<void> {
       situation: "a new kind of data starts arriving from the team's own systems",
       action: `A new kind of record, "${kind}", has started arriving in the folder data/${kind}/ (list note: data/${label.replace(/^./, (c) => c.toUpperCase())} list.md). Read up to 8 of them. Then tell me, as a table: each field, what you think it means, its type and unit, and whether it belongs in the list. Say which fields you are unsure about. Name the 5 fields that matter most day to day and why. Do not change any notes yet; ask me before setting anything.`,
     },
-  }).catch(() => {});
-  await loadNoticed();
+  }, root).catch(() => {});
+  if (app.get().vault?.root === root) await loadNoticed();
 }
 
 let timer = 0;
@@ -342,22 +360,33 @@ export function startWatching(): void {
   }, 45_000);
   // Something pushed in from the team's own systems is a reason to look, once things settle.
   onSyncEvent((event) => {
+    const root = event.root;
+    if (root !== app.get().vault?.root) return;
     const fact = event as { event: string; path?: string };
-    if (fact.event === "fact" && fact.path?.startsWith("data/")) void newKind(fact.path.split("/")[1] ?? "");
+    if (fact.event === "fact" && fact.path?.startsWith("data/")) void newKind(fact.path.split("/")[1] ?? "", root);
     if (fact.event !== "fact" || watchEvery() === 0) return;
     window.clearTimeout(soon);
-    soon = window.setTimeout(() => void check("New customer information has just arrived from the team's own systems; start with what changed."), 90_000);
+    soon = window.setTimeout(() => {
+      if (app.get().vault?.root === root) void check("New customer information has just arrived from the team's own systems; start with what changed.");
+    }, 90_000);
   });
 }
 
 /** Make a watch for the person to change into their own, and open it. */
 export async function exampleWatch(): Promise<void> {
   const path = "watches/Example watch.md";
-  await runCore("note.create", {
-    path,
-    text: "---\ntype: watch\nevery: 60\n---\nCheck whether any customer has mentioned cancelling, pausing or a competitor since you last looked. If one has, tell me who, what they said and where.\n",
-  }).catch(() => {});
-  await refreshTree();
-  app.set({ settings: null });
-  await openNote(path);
+  try {
+    await runCore("note.create", {
+      path,
+      text: "---\ntype: watch\nevery: 60\n---\nCheck whether any customer has mentioned cancelling, pausing or a competitor since you last looked. If one has, tell me who, what they said and where.\n",
+    }).catch((e) => {
+      // An example that is already there is opened; another folder being open is said.
+      if ((e as { code?: string }).code === "vault_changed") throw e;
+    });
+    await refreshTree();
+    app.set({ settings: null });
+    await openNote(path);
+  } catch (e) {
+    notify(e instanceof Error ? e.message : String(e));
+  }
 }

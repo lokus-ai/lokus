@@ -25,18 +25,28 @@ export interface VaultInfo {
   root: string;
 }
 
-/** Run a core command against the open vault. */
-export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>): Promise<T> {
+let windowRoot: string | undefined;
+
+/** The shell names the folder this window shows; a core call that names none is held to it. */
+export function setWindowRoot(root: string | undefined): void {
+  windowRoot = root;
+}
+
+/**
+ * Run a core command against this window's vault. Rust refuses it when another folder is the
+ * one open, so a window left on its folder never reads or writes the folder another window opened.
+ */
+export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>, root?: string): Promise<T> {
   try {
-    return await invoke<T>("core_run", { name, args: args ?? null });
+    return await invoke<T>("core_run", { name, args: args ?? null, root: root ?? windowRoot });
   } catch (raw) {
     throw toCoreError(raw);
   }
 }
 
-export async function openVault(path: string): Promise<VaultInfo> {
+export async function openVault(path: string, root?: string): Promise<VaultInfo> {
   try {
-    return await invoke<VaultInfo>("vault_open", { path });
+    return await invoke<VaultInfo>("vault_open", { path, root });
   } catch (raw) {
     throw toCoreError(raw);
   }
@@ -72,6 +82,12 @@ export function onVaultOpened(handler: (vault: VaultInfo) => void): () => void {
   return () => void stop.then((off) => off());
 }
 
+/** A folder was closed for good (its workspace was left or deleted); every window is told. */
+export function onVaultClosed(handler: (root: string) => void): () => void {
+  const stop = listen<string>("vault:closed", (e) => handler(e.payload));
+  return () => void stop.then((off) => off());
+}
+
 export interface Entry {
   name: string;
   path: string;
@@ -91,13 +107,6 @@ export interface Note {
 /** A URL the window can load for a file inside the open vault. */
 export function vaultFileUrl(root: string, relative: string): string {
   return convertFileSrc(`${root}/${relative}`);
-}
-
-/** Cmd+W from the app menu. */
-export function onCloseTab(handler: () => void): () => void {
-  // Heard by this window only: with two windows open, Cmd+W closes a tab in the one in front.
-  const stop = getCurrentWindow().listen("menu:close-tab", handler);
-  return () => void stop.then((off) => off());
 }
 
 export function closeWindow(): void {

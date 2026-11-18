@@ -418,6 +418,29 @@ body:has(.task-card.carried) { cursor: grabbing; }
 .task-date label.late em { color: var(--danger); }
 .task-date input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 .task-date input[type="date"]::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.task-profile-fields { border: 0; margin: 0; min-width: 0; }
+.task-profile-actions, .task-card-actions, .task-column-actions, .task-column-edit { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.task-profile-actions { justify-content: space-between; margin-bottom: 12px; }
+.task-save { display: inline-flex; align-items: center; gap: 8px; color: var(--fg-3); font-size: var(--text-caption); }
+.task-save.unsaved, .task-save.saving { color: var(--warn); }
+.task-save.failed, .task-error { color: var(--danger); font-size: var(--text-caption); }
+.tasks > .task-save, .tasks > .task-error, .task-column-edit { margin: 8px 20px; }
+.task-inline { border: 0; margin: 0; padding: 4px 0; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.task-inline select { max-width: 100%; min-height: 28px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg); background: var(--bg); font: inherit; font-size: var(--text-small); }
+.task-inline:disabled, .tasks button:disabled, .task-profile-fields:disabled { opacity: 0.6; }
+.task-inline .task-date { max-width: 100%; }
+.task-inline .task-date em { display: none; }
+.task-inline .cust-menu { max-width: min(280px, 75vw); }
+.task-inline :focus-visible, .task-date:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.task-title { text-align: left; font-size: var(--text-small); font-weight: 500; line-height: 1.4; }
+.task-card-actions { justify-content: space-between; padding-top: 6px; border-top: 1px solid var(--border); font-size: var(--text-caption); }
+.task-card-actions > [role="status"] { overflow-wrap: anywhere; }
+.task-column-actions { padding: 0 4px 8px; font-size: var(--text-caption); }
+.task-row { height: auto; min-height: 38px; flex-wrap: wrap; padding: 8px; }
+.task-row-title { text-align: left; }
+.task-row .task-inline { flex-basis: 100%; }
+.task-row .task-card-actions { flex-basis: 100%; }
+.task-context-target { outline: 2px solid var(--accent); outline-offset: 2px; background: var(--bg-active); }
 .cust-more.shown { opacity: 0.7; }
 
 /* Profile: a person's picture or initial, wherever they appear */

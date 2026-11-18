@@ -8,6 +8,8 @@ mod ai;
 mod background;
 #[cfg(all(debug_assertions, desktop))]
 mod dev_channel;
+#[cfg(desktop)]
+mod menus;
 mod sync;
 mod updates;
 mod vaults;
@@ -54,11 +56,20 @@ pub fn run_core(shell: &Shell, name: &str, args: Value) -> Result<Value, Value> 
 }
 
 /// Open a folder as the vault, start watching it and remember it.
-pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
-    // Sync belongs to a vault; switching vaults ends it.
-    sync::stop_for(app);
+pub fn open_vault(app: &AppHandle, path: &str, root: Option<&str>) -> Result<Value, Value> {
     let core = Arc::new(Core::open(path).map_err(|e| error_value(&e))?);
     let vault = &core.vault;
+    let shell = app.state::<Shell>();
+    let mut open = shell.open.lock().map_err(|_| no_vault())?;
+    if root.is_some_and(|root| {
+        !open
+            .as_ref()
+            .is_some_and(|o| o.core.vault.root() == std::path::Path::new(root))
+    }) {
+        return Err(
+            json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+        );
+    }
     let emitter = app.clone();
     let indexer = core.clone();
     let handle = watch(vault, move |paths| {
@@ -70,6 +81,12 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
         let _ = emitter.emit("vault:changed", paths);
     })
     .map_err(|e| error_value(&e))?;
+    // The target is ready and still owns the expected root. Failed opens leave sync running.
+    sync::stop_for(app);
+    *open = Some(OpenVault {
+        core: core.clone(),
+        _watch: handle,
+    });
     let info = json!({ "name": vault.name(), "root": vault.root() });
     // Catch up with whatever changed while the app was closed, off the main path.
     let (catch_up, ready) = (core.clone(), app.clone());
@@ -91,15 +108,7 @@ pub fn open_vault(app: &AppHandle, path: &str) -> Result<Value, Value> {
         let _ = std::fs::write(file, vault.root().to_string_lossy().as_bytes());
     }
     vaults::remember(app, vault.root());
-    let shell = app.state::<Shell>();
-    if let Ok(mut open) = shell.open.lock() {
-        *open = Some(OpenVault {
-            core: core.clone(),
-            _watch: handle,
-        });
-        // A connection asked for the last folder may have started while this one opened.
-        sync::stop_for(app);
-    }
+    ai::opened(app, vault);
     let _ = app.emit("vault:opened", &info);
     Ok(info)
 }
@@ -112,13 +121,30 @@ fn last_vault_file(app: &AppHandle) -> Option<PathBuf> {
 }
 
 #[tauri::command(async)]
-fn core_run(shell: State<'_, Shell>, name: String, args: Option<Value>) -> Result<Value, Value> {
-    run_core(&shell, &name, args.unwrap_or(Value::Null))
+fn core_run(
+    shell: State<'_, Shell>,
+    name: String,
+    args: Option<Value>,
+    root: Option<String>,
+) -> Result<Value, Value> {
+    // Check and capture together. The Arc keeps this vault alive through execution without
+    // holding up a folder switch, and execution never looks up the current vault again.
+    let core = {
+        let open = shell.open.lock().map_err(|_| no_vault())?;
+        let core = &open.as_ref().ok_or_else(no_vault)?.core;
+        if root.is_some_and(|root| core.vault.root() != std::path::Path::new(&root)) {
+            return Err(
+                json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+            );
+        }
+        core.clone()
+    };
+    commands::run(&core, &name, args.unwrap_or(Value::Null)).map_err(|e| error_value(&e))
 }
 
 #[tauri::command(async)]
-fn vault_open(app: AppHandle, path: String) -> Result<Value, Value> {
-    open_vault(&app, &path)
+fn vault_open(app: AppHandle, path: String, root: Option<String>) -> Result<Value, Value> {
+    open_vault(&app, &path, root.as_deref())
 }
 
 /// The folder notes are kept in when someone does not want to choose one: Documents, Lokus.
@@ -155,7 +181,7 @@ fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Val
     std::fs::create_dir_all(&folder).map_err(
         |e| json!({ "code": "io", "message": format!("Could not make {}: {e}", folder.display()) }),
     )?;
-    open_vault(&app, &folder.to_string_lossy())
+    open_vault(&app, &folder.to_string_lossy(), None)
 }
 
 /// The vault that is open, reopening the last one on first call.
@@ -165,7 +191,7 @@ fn vault_current(app: AppHandle, shell: State<'_, Shell>) -> Option<Value> {
         return Some(json!({ "name": core.vault.name(), "root": core.vault.root() }));
     }
     let last = std::fs::read_to_string(last_vault_file(&app)?).ok()?;
-    open_vault(&app, last.trim()).ok()
+    open_vault(&app, last.trim(), None).ok()
 }
 
 /// How plugin frames address their files; the form differs by platform.
@@ -205,61 +231,6 @@ fn plugin_file(app: &AppHandle, uri_path: &str) -> tauri::http::Response<Vec<u8>
     response.unwrap_or_default()
 }
 
-/// The app menu. Cmd+W closes a tab, not the window, so it is our own item.
-#[cfg(desktop)]
-fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-    let close_tab = MenuItemBuilder::with_id("close-tab", "Close Tab")
-        .accelerator("CmdOrCtrl+W")
-        .build(app)?;
-    // The system's own "Close Window" also answers to Cmd+W, and it won: Cmd+W closed the
-    // window, and with it the app, instead of the tab. Ours takes Cmd+Shift+W.
-    let close_window = MenuItemBuilder::with_id("close-window", "Close Window")
-        .accelerator("CmdOrCtrl+Shift+W")
-        .build(app)?;
-    // Our own Quit: while Lokus stays in the menu bar, Command-Q puts it away and keeps it running.
-    let quit = MenuItemBuilder::with_id("quit", "Quit Lokus")
-        .accelerator("CmdOrCtrl+Q")
-        .build(app)?;
-    let app_menu = SubmenuBuilder::new(app, "Lokus")
-        .about(None)
-        .separator()
-        .services()
-        .separator()
-        .hide()
-        .hide_others()
-        .show_all()
-        .separator()
-        .item(&quit)
-        .build()?;
-    let new_window = MenuItemBuilder::with_id("new-window", "New Window")
-        .accelerator("CmdOrCtrl+Shift+N")
-        .build(app)?;
-    let file = SubmenuBuilder::new(app, "File")
-        .item(&new_window)
-        .separator()
-        .item(&close_tab)
-        .item(&close_window)
-        .build()?;
-    let edit = SubmenuBuilder::new(app, "Edit")
-        .undo()
-        .redo()
-        .separator()
-        .cut()
-        .copy()
-        .paste()
-        .select_all()
-        .build()?;
-    let window = SubmenuBuilder::new(app, "Window")
-        .minimize()
-        .maximize()
-        .fullscreen()
-        .build()?;
-    MenuBuilder::new(app)
-        .items(&[&app_menu, &file, &edit, &window])
-        .build()
-}
-
 /// Every command the window may call, written once. A development build adds the one that
 /// answers the terminal. There used to be two lists, and a command added to only the
 /// development one (the list of services to connect) was missing from the released app.
@@ -271,6 +242,7 @@ macro_rules! commands {
             vault_current,
             sync::sync_connect,
             sync::sync_disconnect,
+            sync::sync_bound,
             sync::sync_token,
             sync::sync_status,
             sync::sync_doc,
@@ -302,6 +274,10 @@ macro_rules! commands {
             updates::app_place,
             updates::app_quit,
             windows::window_new,
+            #[cfg(desktop)]
+            menus::menu_commands,
+            #[cfg(desktop)]
+            menus::menu_enabled,
             vault_default,
             vaults::vault_list,
             vaults::vault_forget,
@@ -329,21 +305,11 @@ pub fn run() {
             plugin_file(ctx.app_handle(), request.uri().path())
         });
     #[cfg(desktop)]
-    let builder = builder.menu(menu).on_menu_event(|app, event| {
-        match event.id().as_ref() {
-            "close-tab" => windows::tell_front(app, "menu:close-tab"),
-            "close-window" => windows::close_front(app),
-            "quit" => background::quit_or_put_away(app),
-            "new-window" => {
-                let app = app.clone();
-                // Off the menu's own thread: a window cannot be made from inside its handler.
-                tauri::async_runtime::spawn(async move {
-                    let _ = windows::open(&app);
-                });
-            }
-            _ => {}
-        }
-    });
+    let builder = builder
+        .manage(menus::State::default())
+        .menu(menus::build)
+        .on_menu_event(menus::on_menu_event)
+        .on_window_event(menus::on_window_event);
 
     #[cfg(all(debug_assertions, desktop))]
     let builder = builder
@@ -352,12 +318,15 @@ pub fn run() {
         .setup(|app| {
             dev_channel::start(app.handle().clone());
             background::start(app.handle());
+            ai::hand_on(app.handle(), &vaults::here(app.handle()));
             Ok(())
         });
 
     #[cfg(not(all(debug_assertions, desktop)))]
     let builder = builder.invoke_handler(commands!()).setup(|app| {
         background::start(app.handle());
+        // Connections from before they belonged to a workspace go to every workspace here.
+        ai::hand_on(app.handle(), &vaults::here(app.handle()));
         Ok(())
     });
 

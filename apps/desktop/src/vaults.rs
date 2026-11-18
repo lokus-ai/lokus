@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 fn file(app: &AppHandle) -> Option<PathBuf> {
     app.path()
@@ -40,20 +40,26 @@ pub fn remember(app: &AppHandle, root: &Path) {
     }
 }
 
-/// Every workspace still on this computer, in the order they were first opened. A folder that
-/// was deleted or moved drops out of the list by itself.
-#[tauri::command(async)]
-pub fn vault_list(app: AppHandle) -> Vec<Value> {
-    let known = read(&app);
+/// The folders of the workspaces still on this computer.
+pub fn here(app: &AppHandle) -> Vec<String> {
+    let known = read(app);
     let here: Vec<String> = known
         .iter()
         .filter(|root| Path::new(root).is_dir())
         .cloned()
         .collect();
     if here.len() != known.len() {
-        write(&app, &here);
+        write(app, &here);
     }
-    here.iter()
+    here
+}
+
+/// Every workspace still on this computer, in the order they were first opened. A folder that
+/// was deleted or moved drops out of the list by itself.
+#[tauri::command(async)]
+pub fn vault_list(app: AppHandle) -> Vec<Value> {
+    here(&app)
+        .iter()
         .map(|root| {
             let name = Path::new(root)
                 .file_name()
@@ -64,9 +70,25 @@ pub fn vault_list(app: AppHandle) -> Vec<Value> {
         .collect()
 }
 
-/// Take a workspace off the list. Its folder and everything in it stay where they are.
+/// Take a workspace off the list. Its folder and everything in it stay where they are. When it
+/// is the folder that is open, it is closed too, so the next start does not open it again.
 #[tauri::command(async)]
 pub fn vault_forget(app: AppHandle, root: String) {
+    let shell = app.state::<crate::Shell>();
+    if let Ok(mut open) = shell.open.lock() {
+        if open
+            .as_ref()
+            .is_some_and(|o| o.core.vault.root() == Path::new(&root))
+        {
+            crate::sync::stop_for(&app);
+            *open = None;
+            // Every window shows the same folder: each one puts it away.
+            let _ = app.emit("vault:closed", &root);
+            if let Some(last) = crate::last_vault_file(&app) {
+                let _ = std::fs::remove_file(last);
+            }
+        }
+    }
     let roots: Vec<String> = read(&app).into_iter().filter(|r| *r != root).collect();
     write(&app, &roots);
 }

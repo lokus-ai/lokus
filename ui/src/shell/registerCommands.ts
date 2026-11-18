@@ -1,5 +1,5 @@
 /** @part-of ui.shell */
-import { newWindow } from "../bridge/core";
+import { closeWindow, isMainWindow, newWindow } from "../bridge/core";
 import { aiSettings, saveAiConfig } from "../bridge/ai";
 import { identify } from "../bridge/analytics";
 import { runCore } from "../bridge/core";
@@ -9,6 +9,7 @@ import { analyticsCommands } from "../features/analytics/commands";
 import { COVERS } from "../features/page-header/Cover";
 import { ICONS } from "../features/page-header/PageHeader";
 import { type Command, isMac, registerCommands } from "./commands";
+import { dismissContextMenu } from "./contextMenu";
 import {
   app,
   chooseVault,
@@ -35,8 +36,9 @@ import {
 const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
 /** Editor commands need an open note; say so instead of failing silently. */
-function editor() {
-  const e = getEditor();
+function editor(path?: unknown) {
+  const { active, view, settings } = app.get();
+  const e = view === "note" && !settings && (path === undefined || path === active) ? getEditor() : null;
   if (!e) throw Object.assign(new Error("No note is open"), { code: "no_note" });
   return e;
 }
@@ -51,8 +53,8 @@ const mark = (id: string, title: string, keys: string, syntax: string): Command 
   id,
   title,
   keys,
-  run() {
-    editor().mark(syntax);
+  run(a) {
+    editor(a.path).mark(syntax);
     return editorState();
   },
 });
@@ -60,8 +62,8 @@ const mark = (id: string, title: string, keys: string, syntax: string): Command 
 const heading = (level: number): Command => ({
   id: level ? `editor.heading${level}` : "editor.paragraph",
   title: level ? `Heading ${level}` : "Normal text",
-  run() {
-    editor().heading(level);
+  run(a) {
+    editor(a.path).heading(level);
     return editorState();
   },
 });
@@ -83,7 +85,12 @@ export function registerAllCommands(): void {
       id: "settings.open",
       title: "Settings",
       keys: "Mod-,",
-      run: (a) => app.set((s) => ({ settings: typeof a.page === "string" ? a.page : s.settings ? null : "appearance" })),
+      run: (a) => {
+        const current = app.get().settings;
+        const settings = typeof a.page === "string" ? a.page : current ? null : "appearance";
+        if (settings && !current) dismissContextMenu(true);
+        app.set({ settings });
+      },
     },
     {
       id: "ai.open",
@@ -127,10 +134,14 @@ export function registerAllCommands(): void {
     },
     {
       id: "note.close",
-      title: "Close note",
+      title: "Close tab",
+      keys: "Mod-w",
       run: () => {
-        const { active } = app.get();
-        return active ? closeTab(active) : undefined;
+        const { active, view, file } = app.get();
+        if (view === "graph") return closeGraph();
+        if (view === "file" && file) return closeTab(file);
+        if (active) return closeTab(active);
+        if (!isMainWindow()) closeWindow();
       },
     },
     {
@@ -150,8 +161,8 @@ export function registerAllCommands(): void {
       id: "editor.insertLink",
       title: "Insert link",
       keys: "Mod-k",
-      run() {
-        editor().link();
+      run(a) {
+        editor(a.path).link();
         return editorState();
       },
     },

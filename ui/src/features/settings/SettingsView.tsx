@@ -1,5 +1,5 @@
 /** @part-of ui.settings */
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { type AiConfig, type AiSettings, aiSettings, chatgptLogin, chatgptLogout, saveAiConfig, setAiSecret } from "../../bridge/ai";
 import { analyticsEnabled, chatSharingEnabled, setAnalyticsEnabled, setChatSharing, track } from "../../bridge/analytics";
@@ -7,7 +7,7 @@ import { type InstalledPlugin, pickFolder, type PluginManifest, runCore } from "
 import { Icon, type IconName } from "../../shell/Icon";
 import { noteFont, type Preferences, preferences, setPreference } from "../../shell/preferences";
 import { useStore } from "../../shell/store";
-import { app, applyLayout } from "../../shell/workspace";
+import { app, applyLayout, notify } from "../../shell/workspace";
 import { loadPlugins, pluginSettings, setPluginSetting } from "../plugins/host";
 import { Connections } from "../connections/Connections";
 import { WatchSettings } from "../noticed/NoticedList";
@@ -109,10 +109,11 @@ function permission(p: string): string {
 
 function PluginSettings({ manifest }: { manifest: PluginManifest }) {
   const [values, setValues] = useState<Record<string, unknown>>({});
-  useEffect(() => void pluginSettings(manifest).then(setValues), [manifest]);
+  const said = (e: unknown) => notify(e instanceof Error ? e.message : String(e));
+  useEffect(() => void pluginSettings(manifest).then(setValues, said), [manifest]);
   const change = (key: string, value: unknown) => {
     setValues((v) => ({ ...v, [key]: value }));
-    void setPluginSetting(manifest, key, value);
+    void setPluginSetting(manifest, key, value).catch(said);
   };
   return (
     <>
@@ -303,13 +304,42 @@ const PAGES: { id: string; title: string; icon: IconName; body: () => ReactNode 
 ];
 
 interface Props {
+  returnFocus: {
+    element: Element | null;
+    selection: {
+      anchor: number;
+      focus: number;
+      text: string;
+      owned(): boolean;
+    } | null;
+  } | null;
   page: string;
   onPage(page: string): void;
   onClose(): void;
 }
 
 /** Settings open over the app as a dialog: pages on the left, the chosen page on the right. */
-export default function SettingsView({ page, onPage, onClose }: Props) {
+export default function SettingsView({ page, returnFocus, onPage, onClose }: Props) {
+  const dialog = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    dialog.current?.querySelector<HTMLButtonElement>(".settings-nav .active")?.focus();
+    return () => {
+      // Wait for inert to clear, without taking focus from a follow-on dialog.
+      requestAnimationFrame(() => {
+        if (!returnFocus || document.querySelector(".overlay, [role=dialog]")) return;
+        const { element, selection } = returnFocus;
+        if (!(element instanceof HTMLElement) || !element.isConnected || !element.getClientRects().length ||
+          element.closest("[inert]") || getComputedStyle(element).visibility !== "visible" || (selection && !selection.owned())) return;
+        element.focus();
+        // A selection returns only to the same plain text in the same target; a stale one is dropped.
+        // An editor of many lines keeps its own selection, which offsets in its text cannot tell apart.
+        const text = element.firstChild;
+        if (!selection || document.activeElement !== element || !element.isContentEditable || element.textContent !== selection.text ||
+          !(text instanceof Text) || element.childNodes.length !== 1) return;
+        getSelection()?.setBaseAndExtent(text, selection.anchor, text, selection.focus);
+      });
+    };
+  }, [returnFocus]);
   useEffect(() => track("settings_opened", { page }), [page]);
   const current = PAGES.find((p) => p.id === page) ?? PAGES[0];
   useEffect(() => {
@@ -319,7 +349,13 @@ export default function SettingsView({ page, onPage, onClose }: Props) {
   }, [onClose]);
   return (
     <div className="overlay" onMouseDown={onClose}>
-      <div className="settings-dialog" role="dialog" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()}>
+      <div ref={dialog} className="settings-dialog" role="dialog" aria-modal="true" aria-label="Settings" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => {
+        if (e.key !== "Tab") return;
+        const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex="0"]')].filter((el) => el.getClientRects().length > 0);
+        const first = controls[0], last = controls.at(-1);
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+      }}>
         <nav className="settings-nav">
           <p>Settings</p>
           {PAGES.map((p) => (

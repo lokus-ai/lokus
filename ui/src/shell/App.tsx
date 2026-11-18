@@ -1,6 +1,6 @@
 /** @part-of ui.shell */
 import { track } from "../bridge/analytics";
-import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { type CSSProperties, lazy, type PointerEvent, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { identify } from "../bridge/analytics";
 import { accountsAvailable } from "../bridge/auth";
@@ -478,6 +478,7 @@ function Panel() {
 }
 
 function Welcome() {
+  const notice = useStore(app, (s) => s.notice);
   return (
     <div className="welcome" data-tauri-drag-region>
       <h1>Lokus</h1>
@@ -485,6 +486,7 @@ function Welcome() {
       <button className="primary" onClick={() => void chooseVault()}>
         Open a folder
       </button>
+      {notice && <div className="toast">{notice}</div>}
     </div>
   );
 }
@@ -496,6 +498,36 @@ function Welcome() {
 export function App() {
   const ready = useStore(app, (s) => s.ready);
   const vault = useStore(app, (s) => s.vault);
+  const settings = useStore(app, (s) => s.settings);
+  const accountDialog = useStore(app, (s) => s.accountDialog);
+  const settingsOpen = !!settings;
+  const settingsFocus = useMemo(() => {
+    if (!settingsOpen) return null;
+    const element = document.activeElement;
+    const selection = getSelection();
+    if (!(element instanceof HTMLElement) || !element.isContentEditable || !selection?.anchorNode || !selection.focusNode ||
+      !element.contains(selection.anchorNode) || !element.contains(selection.focusNode)) return { element, selection: null };
+    // Offsets, not nodes: a table cell redraws its children whenever it loses or takes focus.
+    const offset = (node: Node, end: number) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.setEnd(node, end);
+      return range.toString().length;
+    };
+    const { active, view, vault } = app.get();
+    return {
+      element,
+      selection: {
+        anchor: offset(selection.anchorNode, selection.anchorOffset),
+        focus: offset(selection.focusNode, selection.focusOffset),
+        text: element.textContent ?? "",
+        owned: () => {
+          const now = app.get();
+          return now.active === active && now.view === view && now.vault?.root === vault?.root;
+        },
+      },
+    };
+  }, [settingsOpen]);
   const onboardingOpen = useStore(onboarding, (s) => s.open);
   if (!ready) return <div className="welcome" data-tauri-drag-region />;
   return (
@@ -518,6 +550,22 @@ export function App() {
       <Misplaced />
       {/* While setup is open it makes the offer itself, as one of its steps. */}
       {!onboardingOpen && isMainWindow() && <Invited />}
+      {settings && (
+        <Boundary name="Settings">
+          <Suspense fallback={null}>
+            <SettingsView page={settings} returnFocus={settingsFocus} onPage={(page) => app.set({ settings: page })} onClose={() => app.set({ settings: null })} />
+          </Suspense>
+        </Boundary>
+      )}
+      {accountDialog && (
+        <AccountDialog
+          onClose={() => app.set({ accountDialog: false })}
+          onDone={(account) => {
+            identify(account.id);
+            app.set({ account, accountDialog: false });
+          }}
+        />
+      )}
     </>
   );
 }
@@ -532,12 +580,11 @@ function Workspace() {
   const file = useStore(app, (s) => s.file);
   const version = useStore(app, (s) => s.version);
   const open = useCallback((path: string) => void openNote(path), []);
-  const accountDialog = useStore(app, (s) => s.accountDialog);
   const settings = useStore(app, (s) => s.settings);
   const notice = useStore(app, (s) => s.notice);
 
   return (
-    <div className={`app${narrow ? " narrow" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
+    <div className={`app${narrow ? " narrow" : ""}`} inert={!!settings} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
       <Sidebar />
       {narrow && sidebar && <div className="scrim" onMouseDown={() => app.set({ sidebar: false })} />}
       <main className="main">
@@ -560,22 +607,6 @@ function Workspace() {
       <Panel />
       {palette === "search" && <SearchPalette onOpen={open} onClose={() => app.set({ palette: null })} />}
       {palette && palette !== "search" && <Palette key={palette} mode={palette} />}
-      {accountDialog && (
-        <AccountDialog
-          onClose={() => app.set({ accountDialog: false })}
-          onDone={(account) => {
-            identify(account.id);
-            app.set({ account, accountDialog: false });
-          }}
-        />
-      )}
-      {settings && (
-        <Boundary name="Settings">
-          <Suspense fallback={null}>
-            <SettingsView page={settings} onPage={(page) => app.set({ settings: page })} onClose={() => app.set({ settings: null })} />
-          </Suspense>
-        </Boundary>
-      )}
       <NoticedDrawer />
       <UpdateCard />
       <WhatsNew />

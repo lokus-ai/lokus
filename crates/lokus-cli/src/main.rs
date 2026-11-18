@@ -296,10 +296,12 @@ fn ai(p: &Parsed) -> ExitCode {
                 name: "cli".into(),
                 url,
                 enabled: true,
+                keys: String::new(),
             })
             .into_iter()
             .collect(),
         apis: Vec::new(),
+        workspaces: Default::default(),
     };
     let request = lokus_ai::Request {
         config,

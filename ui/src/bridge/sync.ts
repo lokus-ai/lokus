@@ -1,6 +1,7 @@
 /** @part-of ui.bridge */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { toCoreError } from "./core";
 
 const toB64 = (bytes: Uint8Array) => {
   let text = "";
@@ -10,7 +11,7 @@ const toB64 = (bytes: Uint8Array) => {
 const fromB64 = (text: string) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 
 /** What the sync connection reports. */
-export type SyncEvent =
+export type SyncEvent = { root: string } & (
   | { event: "online"; role: "owner" | "editor" | "viewer"; user: string; conn: number }
   | { event: "role"; role: "owner" | "editor" | "viewer" }
   | { event: "skipped"; path: string }
@@ -21,16 +22,18 @@ export type SyncEvent =
   | { event: "renamed"; from: string; to: string }
   | { event: "kept_both"; path: string; moved_to: string }
   | { event: "remote" | "ingested"; doc: string; data: Uint8Array }
-  | { event: "presence"; conn: number; left: boolean; doc?: string; user?: string; email?: string; data?: Uint8Array };
+  | { event: "presence"; conn: number; left: boolean; doc?: string; user?: string; email?: string; data?: Uint8Array });
 
 export function onSyncEvent(handler: (event: SyncEvent) => void): () => void {
   const stop = listen<Record<string, unknown>>("sync:event", ({ payload }) => {
+    if (typeof payload.root !== "string") return;
     if (payload.event === "remote" || payload.event === "ingested") {
-      handler({ event: payload.event, doc: String(payload.doc), data: fromB64(String(payload.data)) });
+      handler({ event: payload.event, root: payload.root, doc: String(payload.doc), data: fromB64(String(payload.data)) });
     } else if (payload.event === "presence") {
       const m = payload.message as Record<string, unknown>;
       handler({
         event: "presence",
+        root: payload.root,
         conn: Number(m.conn),
         left: m.t === "bye",
         doc: m.doc as string | undefined,
@@ -62,26 +65,39 @@ export function syncStatus(): Promise<{ running: boolean; server?: string; works
   return invoke("sync_status");
 }
 
-/** The shared document behind a note, or null if the note is not synced. */
-export async function syncDoc(path: string): Promise<{ id: string; state: Uint8Array } | null> {
-  const found = await invoke<{ id: string; state: string } | null>("sync_doc", { path });
-  return found ? { id: found.id, state: fromB64(found.state) } : null;
+/** The team workspace a folder last synced with, or null for one that never did. */
+export function syncBound(root: string): Promise<string | null> {
+  return invoke<string | null>("sync_bound", { root }).catch(() => null);
 }
 
-export function syncLocal(id: string, update: Uint8Array): Promise<void> {
-  return invoke("sync_local", { id, update: toB64(update) });
+/** The shared document behind a note, or null if the note is not synced. */
+export async function syncDoc(path: string): Promise<{ id: string; state: Uint8Array; root: string } | null> {
+  const found = await invoke<{ id: string; state: string; root: string } | null>("sync_doc", { path });
+  return found ? { id: found.id, state: fromB64(found.state), root: found.root } : null;
+}
+
+export async function syncLocal(id: string, update: Uint8Array, root: string): Promise<void> {
+  try {
+    await invoke("sync_local", { id, update: toB64(update), root });
+  } catch (raw) {
+    throw toCoreError(raw);
+  }
 }
 
 /**
  * Rename a note or a folder in a shared vault, so the note keeps its shared document. Gives
  * false when the vault is not shared; the caller then renames it the ordinary way.
  */
-export function syncRename(from: string, to: string): Promise<boolean> {
-  return invoke<boolean>("sync_rename", { from, to });
+export async function syncRename(from: string, to: string, root: string): Promise<boolean> {
+  try {
+    return await invoke<boolean>("sync_rename", { from, to, root });
+  } catch (raw) {
+    throw toCoreError(raw);
+  }
 }
 
-export function syncAwareness(id: string, data: Uint8Array): void {
-  void invoke("sync_awareness", { id, data: toB64(data) });
+export function syncAwareness(id: string, data: Uint8Array, root: string): void {
+  void invoke("sync_awareness", { id, data: toB64(data), root }).catch(() => {});
 }
 
 /** One request to the relay's HTTP side. */

@@ -318,7 +318,7 @@ export class Editor {
   link(): void {
     this.view.dispatch(insertLink(this.view.state));
   }
-  setProperty(key: string, value: string | null): void {
+  setProperty(key: string, value: string | string[] | null): void {
     this.view.dispatch(setFrontmatterKey(this.view.state, key, value));
   }
   properties(): Record<string, string> {

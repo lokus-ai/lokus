@@ -49,6 +49,11 @@ fn key_of(line: &str) -> Option<(&str, &str)> {
 
 fn scalar(raw: &str) -> Value {
     let raw = raw.trim();
+    if raw.starts_with('"') {
+        if let Ok(text) = serde_json::from_str::<String>(raw) {
+            return Value::String(text);
+        }
+    }
     let unquoted = raw
         .strip_prefix('"')
         .and_then(|r| r.strip_suffix('"'))
@@ -76,14 +81,40 @@ pub fn read(text: &str) -> Map<String, Value> {
     for line in text[block.body].lines() {
         if let Some((key, value)) = key_of(line) {
             let parsed = match value.strip_prefix('[').and_then(|v| v.strip_suffix(']')) {
-                Some(inner) => Value::Array(
-                    inner
-                        .split(',')
-                        .map(str::trim)
-                        .filter(|s| !s.is_empty())
-                        .map(scalar)
-                        .collect(),
-                ),
+                Some(inner) => serde_json::from_str::<Vec<Value>>(value)
+                    .map(Value::Array)
+                    .unwrap_or_else(|_| {
+                        let mut quote = None;
+                        let mut escaped = false;
+                        let mut start = true;
+                        Value::Array(
+                            inner
+                                .split(|c| {
+                                    if escaped {
+                                        escaped = false;
+                                    } else if let Some(q) = quote {
+                                        if q == '"' && c == '\\' {
+                                            escaped = true;
+                                        } else if c == q {
+                                            quote = None;
+                                        }
+                                    } else if c == ',' {
+                                        start = true;
+                                        return true;
+                                    } else if !char::is_whitespace(c) {
+                                        if start && matches!(c, '\'' | '"') {
+                                            quote = Some(c);
+                                        }
+                                        start = false;
+                                    }
+                                    false
+                                })
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                                .map(scalar)
+                                .collect(),
+                        )
+                    }),
                 None => scalar(value),
             };
             out.insert(key.to_string(), parsed);
@@ -223,6 +254,34 @@ mod tests {
         assert_eq!(
             read(&set("x", "when", &json!("2026-11-12")))["when"],
             json!("2026-11-12")
+        );
+    }
+
+    #[test]
+    fn quoted_status_and_column_order_round_trip_without_changing_other_bytes() {
+        let status = "qa, [雪]: \"x\" \\done";
+        let text = set(NOTE, "status", &json!(status));
+        assert_eq!(read(&text)["status"], json!(status));
+        assert_eq!(set(&text, "status", &json!(status)), text);
+        let order = json!(["plain", status, "quote\" and slash\\", "雪"]);
+        assert_eq!(
+            read("---\norder: [it's plain, 'a, b', todo]\n---\n")["order"],
+            json!(["it's plain", "a, b", "todo"])
+        );
+        let text = set(&text, "order", &order);
+        assert_eq!(read(&text)["order"], order);
+        assert_eq!(set(&text, "order", &order), text);
+        assert!(text.ends_with("# Body\nstatus: not a property\n"));
+        assert!(text.contains("tags:\n  - a\n  - b\ndone: false\nestimate: 3\n"));
+        assert_eq!(read(&set(&text, "order", &json!([])))["order"], json!([]));
+        assert_eq!(
+            read("---\norder: [todo, \"in progress\", 2, true]\nraw: \"plain\\path\"\n---\n")
+                ["order"],
+            json!(["todo", "in progress", 2, true])
+        );
+        assert_eq!(
+            read("---\nraw: \"plain\\path\"\n---\n")["raw"],
+            json!("plain\\path")
         );
     }
 }

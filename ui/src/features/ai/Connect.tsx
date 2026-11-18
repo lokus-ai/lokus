@@ -51,8 +51,9 @@ export function ConnectModel({ onDone, from }: { onDone(): void; from: "panel" |
       const { config } = await aiSettings();
       // The address was typed for another provider: this key or sign-in is never sent there.
       // A ChatGPT plan and an OpenAI key name their models alike, so the model stays across
-      // that switch, as it does in Settings.
-      const model = provider !== "anthropic" && config.provider !== "anthropic" && !config.base_url ? config.model : "";
+      // that switch, as it does in Settings. Connecting the same provider again keeps it too.
+      const alike = provider === config.provider || (provider !== "anthropic" && config.provider !== "anthropic");
+      const model = alike && !config.base_url ? config.model : "";
       await saveAiConfig({ ...config, provider, model, base_url: "" });
       track("connection_added", { service: provider, from });
       onDone();

@@ -23,6 +23,7 @@ import { startUpdates } from "./features/updates/updates";
 import { App } from "./shell/App";
 import { installShortcuts, runCommand } from "./shell/commands";
 import { registerAllCommands } from "./shell/registerCommands";
+import { installNativeMenu } from "./shell/nativeMenu";
 import { boot, saveAll } from "./shell/workspace";
 
 void startAnalytics();
@@ -31,6 +32,7 @@ void aboutApp().then((a) => describe({ app_version: a.version, platform: a.platf
 describe({ density: preferences.get().density, detail: preferences.get().detail, layout: preferences.get().layout, theme: preferences.get().theme });
 registerAllCommands();
 installShortcuts();
+void installNativeMenu().catch((error) => console.error("Could not connect native menus", error));
 serveDevCommands(runCommand);
 startPlugins();
 if (DEV_CHANNEL) void import("./shell/devCommands").then((m) => m.registerDevCommands());

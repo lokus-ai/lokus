@@ -4,7 +4,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
-import { allNotes, app, connectSync, disconnectSync } from "../../shell/workspace";
+import { allNotes, app, connectSync, leaveWorkspace } from "../../shell/workspace";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
@@ -129,13 +129,15 @@ export function TeamSettings() {
     await loadTeam();
     return done;
   };
+  // Either one, once the relay agrees, takes the workspace off this device; its notes stay on disk.
   const leave = async () => {
-    if (current.user && (await change("DELETE", `/members/${encodeURIComponent(current.user)}`))) await disconnectSync();
+    const me = current.user;
+    if (me) await leaveWorkspace(async () => Boolean(await change("DELETE", `/members/${encodeURIComponent(me)}`)), (n) => `You left ${n}. Its notes stay on this computer.`);
     setConfirming(null);
   };
   const remove = async () => {
     if (!token) return;
-    if ((await attempt(() => relay<unknown>(server, token, "DELETE", base))) !== null) await disconnectSync();
+    await leaveWorkspace(async () => (await attempt(() => relay<unknown>(server, token, "DELETE", base))) !== null, (n) => `${n} was deleted for everyone. Its notes stay on this computer.`);
     setConfirming(null);
   };
   const owners = members.filter((m) => m.role === "owner").length;
@@ -234,13 +236,8 @@ export function TeamSettings() {
         <InvitedList />
 
 
-        <Row label="Stop syncing on this computer">
-          <button className="settings-button" onClick={() => void disconnectSync()}>
-            Stop syncing
-          </button>
-        </Row>
         {current.user && !(owner && owners === 1) && (
-          <Row label="Leave this workspace">
+          <Row label="Leave this workspace" hint="It goes from this app. Its notes stay on this computer.">
             {confirming === "leave" ? (
               <>
                 <button className="settings-button danger" onClick={() => void leave()}>
@@ -258,7 +255,7 @@ export function TeamSettings() {
           </Row>
         )}
         {owner && (
-          <Row label="Delete this workspace" hint="For everyone. Notes already on each computer stay.">
+          <Row label="Delete this workspace" hint="For everyone, and it goes from this app. Notes already on each computer stay.">
             {confirming === "delete" ? (
               <>
                 <button className="settings-button danger" onClick={() => void remove()}>
@@ -292,9 +289,10 @@ export function TeamSettings() {
         </Row>
       ) : (
         <>
-          {workspaces && workspaces.length > 0 && (
+          {/* With a Lokus account, a team's folder connects by itself. A relay of one's own knows nobody until its address and token are typed, so there the folder is pointed at a team by hand. */}
+          {ownServer && workspaces && workspaces.length > 0 && (
             <>
-              <h3>Your workspaces</h3>
+              <h3>Workspaces on this server</h3>
               <div className="settings-list">
                 {workspaces.map((w) => (
                   <div key={w.id} className="settings-item">

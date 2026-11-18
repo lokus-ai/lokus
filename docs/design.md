@@ -27,7 +27,7 @@ none of its code is carried over.
 | Editor | CodeMirror 6 | The markdown text is the document, so saving cannot corrupt a file; gives live preview |
 | Collaboration | Yjs in the editor, `yrs` in Rust | Same format on both sides; offline merge and live cursors |
 | Server | Supabase (auth, Postgres, storage) + one Rust websocket relay | Supabase alone cannot relay durable edits |
-| Analytics | PostHog | Product events only, with an opt-out; note content is never sent |
+| Analytics | PostHog | Product events and how sync is doing, with an opt-out; note content is never sent |
 
 ## 3. Repo layout
 
@@ -74,6 +74,40 @@ shortcuts, plugins and AI tools.
 - **Core commands** are registered in `lokus-core`. The Tauri shell exposes a single `run`
   entry that forwards to that registry.
 - **UI commands** (editor and shell actions) are registered in the UI.
+- **Desktop menus** present those same registered commands, not separate implementations.
+  On macOS, Lokus → Settings… uses Command-comma, after About and before Services. On Windows
+  and Linux, Settings is in Edit, Quit in File, and About in Help; Mac-only app items are absent.
+  File offers New Note, Today's Note, New Note from Template, New Window, Open Vault, Save,
+  Close Tab and Close Window. Edit keeps system clipboard actions and adds search
+  across notes. Format offers the existing marks, link, headings and normal text. View offers
+  the command palette, note/heading navigation, sidebar, assistant and graph; Window adds next
+  and previous tab to the supported system window controls. Predefined Undo/Redo and Fullscreen
+  appear only on macOS; Minimize/Maximize appear on macOS and Windows, not Linux, following
+  [Tauri's platform support](https://docs.rs/tauri/latest/tauri/menu/struct.PredefinedMenuItem.html).
+  Ordinary editing shortcuts still belong to the focused editor or input on every platform.
+  Unbuilt actions (such as print/export) and a
+  new folder prompt are not advertised; folder creation remains in the file tree.
+  Commands are sent only to the focused window. Unavailable items stay visible but disabled:
+  workspace commands need a vault and no dialog, note commands need a visible note, tab
+  navigation needs multiple tabs, and Format needs focus in the visible note's text editor
+  (not another input or frame). The bridge checks again before running a command. Native menu
+  accelerators own their shortcuts, so the UI and CodeMirror do not execute them a second time.
+  macOS Control-Tab/Control-Shift-Tab run through the same UI command route while cancelling the
+  native default, because WebKit otherwise consumes them for focus navigation.
+  Settings opens even without a vault, focuses its controls, keeps Tab within the dialog and
+  makes the workspace behind it inert. Dismissal restores the previous focus; follow-on
+  news/sign-in dialogs replace Settings and keep their own focus, including before a vault.
+  When opened over a still-valid command menu, Settings first dismisses it and restores its
+  captured target, so that target becomes the return focus. Invalidated targets are not restored.
+  Editor commands reject a note hidden by Graph, a file
+  viewer or Settings. Native menu actions send a command ID, not a captured note path;
+  formatting targets the currently focused visible note at execution. Context callers can
+  supply an optional captured `path` to mark, heading and link commands; a mismatch with the
+  current note is rejected instead of editing that different note.
+  Menus never substitute note formatting for system clipboard operations.
+  Placement follows [Apple's menu-bar guidance](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar)
+  ([readable HIG text](https://appstoreguidelines.com/human-interface-guidelines/version/17/the-menu-bar/))
+  and [Tauri's native-menu platform behavior](https://v2.tauri.app/learn/window-menu/).
 - **`lokus` CLI** runs any core command against a real vault:
   `lokus note.read --vault ~/notes '{"path":"Welcome.md"}'`.
 - **Dev channel** (debug builds only): a unix socket in the running app that runs any command,
@@ -268,6 +302,58 @@ The team's work, kept the way customers are: one note each.
 - **The board** has a column per status and cards dragged between them; **the list** is the same
   tasks grouped the same way. A card shows the number, priority, customer, labels, due date and
   whose it is. A task's own page shows those as properties, changed in place, above its text.
+- **Edit without leaving the board or list.** Status, priority, assignee and due date have inline
+  controls. They confirm only after the existing task writer succeeds; a failed change keeps
+  the saved value alongside the attempted field/value and offers Retry or Cancel change. In-flight
+  or failed inline edits keep their board open through note navigation, close and folder changes;
+  Cancel discards only that failed inline intent, never shared text or a running write, and remains
+  available to viewers. An unsaved open task must be saved first. The writer
+  checks the field's original parsed value, not its normalized display, and changes only supplied properties in the latest file,
+  preserving its body; explicit empty values clear a property. Clicked tasks are identified by
+  their path, not by a possibly duplicated number.
+- **Custom columns** use the board note's existing `order` property, an array of status names.
+  A board whose `order` is written one entry per line is left as written: column edits there
+  are refused with a message asking for the `order: [a, b]` form, rather than rewriting the list.
+  Empty custom columns survive reload and sync. Names are lowercase, one line, up to 30
+  characters; duplicate names are refused. Only empty custom columns can be renamed or removed;
+  populated columns require moving their tasks first. Built-in columns remain. The board's
+  editor changes this property through the same save path as its body, not a separate writer.
+  Quoted names preserve commas, quotes, backslashes and Unicode. Existing cached properties
+  rebuild automatically for corrected decoding, without rewriting notes or requiring user action.
+- **Save feedback** distinguishes unsaved, saving, locally saved and failed writes on task pages
+  and the board. A locally saved file is not a relay acknowledgement: offline edits can still
+  be saved on this device. Failed shared updates stay queued with their dependencies for retry.
+  Closing or replacing their tab, disconnecting sync or changing folders cannot discard them.
+  Saves and task mutations identify their original vault; a delayed operation cannot write to
+  a different folder's same-named note or shared document.
+  Edits arriving while a folder opens refuse that transition and keep their sessions. The original
+  native root is restored only if the opened target still owns it; a newer independent open is
+  not overwritten. If restoration fails, selecting the original folder again restores ownership
+  without resetting retained work. Reconnecting with pending edits requires the same captured
+  root, server and workspace. Failed target construction leaves the original sync link running;
+  stale conditional opens do not change the current root, link or remembered-folder settings.
+  File and folder renames also capture the original vault: failed saves refuse the rename,
+  private/shared writers reject another root, and stale completion cannot move a new vault's
+  tabs or trigger caller follow-up. Tree refresh reads that captured root and discards results
+  after the UI changes vaults. Shared rename preserves the existing document identity.
+  Every core command a window sends names the folder that window shows: the bridge adds it to
+  any call that does not carry one, and Rust refuses the call when another folder is open. A
+  window left on its folder by a refused switch therefore neither reads nor writes the folder
+  another window opened, whichever feature made the call. A call that captured its folder
+  before waiting still sends that one. A window with no folder open sends none. A new folder
+  made from the sidebar, a team invitation, a team brought to this computer or first-run setup
+  is created and opened only after this window has saved its notes and the assistant has kept
+  its reply in progress.
+  Incoming sync events carry the serving vault's root: another vault's same-ID text, presence,
+  rename, trash, role or new-data notice cannot change the retained session or current workspace.
+  A shared document without a materialized file refuses local updates before changing sync state
+  or the outbox. Pending words stay unsaved after peer deletion; Retry never resurrects the note.
+- **Context actions and trash.** Right-click a task to open it, focus its inline fields or move
+  that task to the vault trash; right-click a column to manage columns. These use the shared
+  command-menu presentation and capture the clicked target, invalidating on context changes,
+  including a board hidden behind Graph or a file. Delayed column actions recheck that visibility.
+  Task pages also expose trash directly. The existing note trash operation retains open sessions
+  until pending saves and deletion succeed. Viewer task controls are disabled.
 - **Tied to customers.** A task with `customer:` shows under Tasks on that customer's page, and
   one can be added from there. A fact pushed through the data door may carry a `task`.
 - **Kept in step by the assistant.** Its standing instructions tell it that when a customer
@@ -398,8 +484,39 @@ new one. Only one sync engine runs on a vault at a time: a second one (another w
 command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
 
 **Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
-change a role, remove someone, invite by email and cancel invitations, stop syncing, leave or delete.
-There is no separate team window.
+change a role, remove someone, invite by email and cancel invitations, leave or delete.
+There is no separate team window, and no way to stop syncing: a member's folder syncs.
+
+**Leaving, deleting, being removed.** When Leave or Delete succeeds, the connection ends, the
+folder is taken off this device's workspace list and the app shows the next workspace on the
+list, or the start page when there is none, where the same one sentence is shown (`dropWorkspace` in `ui/src/shell/workspace.ts`;
+`vault_forget` also closes the folder when it is the open one, so the next start does not open
+it again). The folder and its notes stay on disk, and the page and the notice say so. The same
+happens on another member's device: when its connection is refused it asks the relay which
+teams the person is in, and if this one is not among them it stops, says so once and drops the
+folder the same way; a team folder that is not open is dropped at the next look for teams, and so is one an
+earlier version left on the list after a Leave or Delete (it is named in that version's
+`lokus.sync.stopped`, which is read once and then removed). A
+refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped". A
+folder with words that could not be written to disk is not dropped: it stays open with the words
+on screen, says the save failed, and reads "Sync stopped" with the relay's reason, since its
+connection has ended and nothing retries; it goes from the list at the next start. The note
+editor is one object for the life of the window, and the page it sits on comes and goes with
+the folder, so the editor is put onto each new page (`attachEditor`).
+
+**Seeing sync fail without asking for a log.** Through the analytics bridge
+(`trackSync` in `ui/src/bridge/analytics.ts`) the app sends `sync_connected` (role),
+`sync_offline` and `sync_refused` (the reason) and `sync_first_pull` (edits, seconds from
+connected to pulled), each with the app version, the platform and the team's id. Each distinct
+event and reason goes once per team, and that memory outlives a reconnect: a relay that is down,
+or a connection that comes up and drops every three seconds, is one event per reason, not twenty
+a minute. It starts again only after a connection that held (its first pull is in and it stayed
+up 30 seconds), so a later failure is said once more. The same thing still repeating an hour
+later is sent again with `suppressed`, the number of repeats held back. Leaving or deleting a
+workspace from this device is not a failure and sends no `sync_refused`. The memory is in the
+window, not on disk. Reasons have paths and file names taken out and anything shaped like a
+sign-in replaced; no note, title, path or token is sent. The opt-out covers these too.
+`sync.log` on the device is unchanged.
 
 **Not built:** end-to-end encryption (whoever runs the relay can read the notes; see the
 decision log), attachments in a bucket, and limits on ordinary requests per account.
@@ -408,7 +525,11 @@ Checked by `crates/lokus-server/tests/relay.rs` against a real relay on a local 
 scripted flows: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`.
 
 Device and relay exchange only what the other is missing; after that edits are relayed live.
-Cursors and presence pass through memory and are never stored. A personal vault is local-only
+Cursors and presence pass through memory and are never stored. Each outgoing cursor, name,
+removal and new-peer reply carries its shared note's original vault root; the native boundary
+checks the captured connection's engine and drops stale presence rather than forwarding it to
+another folder's team. Presence delivery remains best-effort and cannot change note save state.
+A personal vault is local-only
 by default; turning sync on makes it a one-person workspace on the same pipeline.
 
 ### Files that are not notes (built; tried in the real app with a ChatGPT-plan model)
@@ -496,8 +617,14 @@ safe:
   screen. When a note there cannot be written (it changed on disk meanwhile), the folder
   stays on screen and the teams wait for the next look. A team that cannot be given a
   folder does not hold up the others.
-- A team whose syncing was stopped on this computer (Settings, Team, Stop syncing) is not
-  started again. "Sync this vault here" starts it.
+- Nothing turns a team's syncing off, and nothing has to be pressed to start it. A folder
+  that synced with a team before (its `.lokus/sync.sqlite` names the team; `sync_bound`) is
+  connected again when a member opens it, including one whose syncing an earlier version had
+  stopped. "Sync this vault here" is left only for a relay of one's own, which knows nobody
+  until its address and token are typed. Creating a team (Share) and joining by invitation
+  stay the person's own acts.
+- A folder kept for a team the person is no longer in is taken off the workspace list (see
+  "Leaving, deleting, being removed").
 - One connection is open at a time, the open folder's. With several teams the first is left
   on screen; the others sync when their folder is opened from the switcher.
 - First-run setup chooses the first folder itself; teams are brought when it closes. With
@@ -575,6 +702,17 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
 4. Do not publish local files until the first server sync completes, or stale devices bring
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
+6. The text in a note's document always uses `\n`. Beside it the document carries one word,
+   `crlf` or `lf` (map `meta`, key `eol`): the line ending of the file on the device that last
+   put an edit of its own into the document. A device that has no file of the note yet creates
+   it with that ending, so a note written with `\r\n`, with or without a final newline or a
+   byte-order mark, arrives byte-identical. A file that exists is never rewritten because of
+   this word: a device keeps the endings its own file has, whatever a teammate's file has, so
+   a person who rewrites a note with other endings changes only their own file and those made
+   after it. A document without the word means `\n`, which is what a build before this one
+   writes and reads; notes already synced with `\n` stay so. Mixed endings and a lone `\r`
+   are not carried: such a note arrives with `\n`, and the first edit by anyone unifies it on
+   the device that wrote it too.
 
 ### Releases and news (built)
 
@@ -636,6 +774,9 @@ confirms that everything it must not be able to do is refused.
   kept in one shape and translated on the way out.
 - **The address belongs to one provider.** It is typed for a compatible service; choosing
   another provider drops it, so a ChatGPT sign-in or a Claude key is never sent there.
+- **The chosen model stays with its provider.** Connecting the same provider again, or going
+  between a ChatGPT plan and an OpenAI key, keeps the model; any other change of provider, or a
+  typed address, clears it and the provider's default is used.
 - **Tools, in three groups.** Reading the vault (search, read a note in parts, list one folder,
   backlinks) never asks. Changing it (create, edit by exact-match replace, move, set a property)
   waits for the person to allow it unless they switch that off, as does any tool-server action
@@ -646,6 +787,31 @@ confirms that everything it must not be able to do is refused.
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
+  explicitly picked @ notes/folders and attached files. Each conversation in each workspace
+  has its own draft in this window's memory; Earlier conversations also lists messages not
+  sent yet, so New chat or a workspace switch leaves them reachable. Deleting a conversation
+  clears its draft. A successful answer clears the submitted draft only if it was not edited
+  while waiting; a failure, stop or model refusal keeps it. Sending waits for file imports.
+  An import belongs to the draft and vault where it started, even if the panel closes or the
+  conversation changes. If its vault is no longer open when the write starts, it reports an
+  error rather than writing into the new workspace. Drafts are not synced, shared between
+  windows or kept after an app restart. Imported files remain ordinary vault files when
+  removed from a draft or when a conversation is deleted.
+  Switching conversations or starting New chat saves unfinished reply progress before
+  leaving. Opening another workspace from this window waits for its captured transcript
+  save; a failed save refuses the switch. A workspace change already completed by another
+  window or initial setup may lose the latest unsaved reply text; its draft is still retained
+  and no transcript is written to another workspace. Stop also cancels while context is
+  loading, before a provider request starts. Late loads/replies cannot undo a newer choice
+  or reopen a deleted conversation.
+  This window declines new sends and additional workspace switches until its current switch
+  finishes or fails; drafts and imports remain with their conversation. A pending deletion
+  cannot be re-saved by the switch. Failed deletion keeps the draft and reply progress for retry.
+  While the current conversation's deletion is unresolved, New, opening another conversation,
+  carrying on from a shared conversation or Noticed, and an ordinary workspace switch are
+  declined with a message. This keeps recovery available if deletion fails; it does not block
+  resetting the panel after a workspace change that has already completed elsewhere.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
@@ -683,7 +849,12 @@ What it finds goes through two tools into `.lokus/noticed/` (never synced):
 
 "Do it" hands the action to the assistant in the open, where each change is asked about, and
 writes what was chosen under "How we handle things" in `Assistant.md`, which every request and
-every look is shown. Not built: looking while the app is closed, system notifications, a
+every look is shown. This handoff belongs to the conversation and workspace it opened. If
+the person changes conversations or workspaces, starts another reply, or stops it before
+the reply starts, the delayed action is canceled. A draft typed in that same conversation
+stays unsent while the original action proceeds. Recording the choice and refreshing the
+findings use the original workspace; a resolution that fails before the choice is recorded shows an error and does not start the action; if the choice was recorded and only writing what was learned failed, the error is shown and the action still starts. A choice already recorded is not undone when the later handoff is canceled.
+Not built: looking while the app is closed, system notifications, a
 team's own admin API as a connection (it works today only if that API is offered as an MCP
 server), GitHub.
 
@@ -706,6 +877,43 @@ request's make-up is measured and sent with its trace (`chars_tools_<service>` a
 
 ### Connections
 
+**A connection belongs to one workspace**, the folder it was made in: a tool server (named
+service or one added by address) and a team's own API alike. Two workspaces can each connect
+their own Slack or GitHub; connecting, replacing or disconnecting in one changes nothing in
+another, and a new workspace starts with none. The assistant's model, its key and the ChatGPT
+sign-in are the person's and stay the same in every workspace.
+
+- **Which workspace:** the folder's own id, a random value in `.lokus/id` made the first time
+  it is needed (`Vault::id`). It goes with the folder, so a folder that is moved or renamed
+  keeps its connections. It is never synced: each computer's copy of a shared folder has its
+  own. A folder copied by hand carries its original's id, so the copy and the original share
+  connections on that computer.
+- **Settings:** the one `ai.json` keeps, beside the model, `workspaces`: folder id → that
+  workspace's `mcp` and `apis`. `Config::seen_from` is the only reader and `Config::put` the
+  only writer; the window is shown one workspace's list with the folder it is for and sends
+  that folder back with every change, so a change made during a switch lands where it was
+  shown.
+- **Keys:** the same keychain service; the account carries the folder's id, not its path:
+  `mcp:<name>@<id>`, `mcp-oauth:<name>@<id>`, `api:<name>@<id>`. Never in a file or a log.
+- **A request** takes the open workspace once (`ai_send`): its notes, its plugins and its
+  connections go together, and a question asked in another folder is refused. Tool servers are
+  connected per request, so nothing is held over from the workspace before.
+- **Installs from before this:** at the first start, each connection in the top-level `mcp`
+  and `apis` lists is given to every workspace on the computer and marked as `shared`: it goes
+  on using the keychain entry it already had (`mcp:<name>`, no id). Nothing in the keychain is
+  read, copied or removed, so nobody signs in again and no prompt appears. One sign-in is
+  shared rather than copied because a copied browser sign-in dies the first time another copy
+  refreshes it. A workspace that connects again, updates its token or disconnects gets its own
+  entry (or none) and stops sharing; the old entry is removed when the last workspace has let
+  go. Nothing else is ever written to the top-level lists or to an entry without an id.
+- **With no folder open** (first-run setup) a connection waits under a place of its own
+  (`workspaces["-"]`, keys `…@-`), and it and its keys move to the next folder that is opened
+  (`Config::settle`). It never touches a sign-in that workspaces share.
+- **Going back to an older build loses them:** a build from before this reads and writes only
+  the top-level lists, so it shows no connections, and its first ordinary settings save (a
+  model change is enough) writes the file without `workspaces`. Every workspace's connections,
+  inherited ones included, then have to be connected again.
+
 A connector is a tool server (MCP) that a service runs itself. Settings, Connections lists them
 by name: Connect signs the person in with that service in the browser (or asks for its supported
 personal access token) and the assistant gains
@@ -724,7 +932,7 @@ support a personal access token without registering the host app; browser OAuth 
 registered GitHub or OAuth app. First-run setup and Settings reuse the same GitHub Connect
 screen: it asks for one token, links to
 GitHub's token creation page, and checks tool discovery before saving it in the existing OS
-keychain (`mcp:github`). The token's repository access and permissions determine what works;
+keychain (`mcp:github@<workspace id>`). The token's repository access and permissions determine what works;
 Lokus neither widens them nor copies a token from another app. Checking uses only the entered
 token, never an older token or OAuth grant, and times out after 20 seconds. Cancelling that check
 or leaving the screen saves nothing. Saving requires the keychain; a rejected token or failed
