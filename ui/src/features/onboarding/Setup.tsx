@@ -257,11 +257,13 @@ export default function Onboarding() {
     // for the one already on screen too, as long as they have not answered it here.
     const agreed = offer ? waiting.find((w) => w.code === offer.code && w.agreed_at) : waiting.find((w) => w.agreed_at);
     if (offer && (!agreed || answer)) return;
-    if (!offer) setOffer(agreed ?? waiting[0]);
+    // The agreed one replaces the one on screen, which takes its question out of the steps.
+    setOffer(agreed ?? waiting[0]);
     if (!agreed) return;
     setAnswer("join");
-    // The questions about pages are the team's now: someone in the middle of them moves past.
-    setStep((at) => (at === "uses" || at === "aim" || at === "team" ? "look" : at));
+    // The questions about pages are the team's now: someone in the middle of them, or on the
+    // question just answered in the browser, moves past.
+    setStep((at) => (at === "invited" || at === "uses" || at === "aim" || at === "team" ? "look" : at));
   }, [waiting, offer, answer]);
   const joining = offer && answer === "join" ? offer : null;
   const order = useMemo<Step[]>(
