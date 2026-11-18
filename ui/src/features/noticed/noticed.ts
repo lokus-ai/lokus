@@ -244,10 +244,12 @@ export async function resolve(item: Noticed, state: "done" | "dismissed", learn:
     if (root === app.get().vault?.root) notify(e instanceof Error ? e.message : String(e));
     return null;
   });
-  if (!result || root !== app.get().vault?.root) return false;
-  if (result.learned) notify("Remembered for next time");
+  if (root !== app.get().vault?.root) return false;
+  if (result?.learned) notify("Remembered for next time");
   await loadNoticed(root);
-  return root === app.get().vault?.root;
+  if (root !== app.get().vault?.root) return false;
+  // The choice is recorded before it is learned from, so a failure may still have recorded it.
+  return Boolean(result) || noticed.get().items.some((i) => i.id === item.id && i.state === state);
 }
 
 /** Add a suggested piece of text to its note: under the heading it named, or at the end. */
