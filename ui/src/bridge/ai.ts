@@ -30,6 +30,8 @@ export interface AiConfig {
   mcp: McpServer[];
   /** The team's own systems, called as they are. */
   apis?: OwnApi[];
+  /** The workspace folder `mcp` and `apis` belong to; empty when no workspace is open. Send it back as it came. */
+  root: string;
 }
 
 /** A team's own API: its address, and a few words for the assistant on where to start. */
@@ -43,6 +45,8 @@ export interface OwnApi {
 /** Settings as the window sees them. Keys stay in the keychain; only whether one exists is known here. */
 export interface AiSettings {
   config: AiConfig;
+  /** The name of the workspace the connections belong to. */
+  workspace: string;
   keys: { anthropic: boolean; openai: boolean; chatgpt: boolean };
   /** Names of tool servers that have a token stored. */
   tokens: string[];
@@ -83,20 +87,21 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 
 export const aiSettings = () => call<AiSettings>("ai_settings");
 export const saveAiConfig = (config: AiConfig) => call<void>("ai_settings_save", { config });
-/** Store a provider key or tool-server token in the keychain; an empty value removes it. */
-export const setAiSecret = (kind: "provider" | "mcp" | "api", name: string, value: string) => call<void>("ai_secret_set", { kind, name, value });
+/** Store a provider key, or a key of one of the workspace `root`'s connections, in the keychain; an empty value removes it. */
+export const setAiSecret = (kind: "provider" | "mcp" | "api", name: string, value: string, root = "") => call<void>("ai_secret_set", { kind, name, value, root });
 export const aiModels = () => call<string[]>("ai_models");
-export const checkMcp = (server: McpServer, token?: string) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server, token });
-export const saveMcpToken = (server: McpServer, token: string) => call<void>("ai_mcp_token_save", { server, token });
-/** Sign in to a tool server in the browser; resolves when the browser has come back. */
+// A connection belongs to one workspace: `root` is the folder of the one it is made, checked or removed in.
+export const checkMcp = (root: string, server: McpServer, token?: string) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server, token, root });
+export const saveMcpToken = (root: string, server: McpServer, token: string) => call<void>("ai_mcp_token_save", { server, token, root });
 export const aiConnectors = () => call<Connector[]>("ai_connectors");
-export const mcpLogin = (server: McpServer) => call<void>("ai_mcp_login", { server });
-export const mcpLogout = (name: string) => call<void>("ai_mcp_logout", { name });
+/** Sign in to a tool server in the browser and keep it among `root`'s connections; resolves when the browser has come back. */
+export const mcpLogin = (root: string, server: McpServer) => call<void>("ai_mcp_login", { server, root });
+export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logout", { name, root });
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
-/** `briefing` is the conversation's standing context; send the same text for every message of a chat. */
-export const aiSend = (chat: string, messages: unknown[], briefing: string) => call<AiOutcome>("ai_send", { chat, messages, briefing });
+/** `briefing` is the conversation's standing context; send the same text for every message of a chat. `root` is the workspace it was asked in: if another is open by now, the request is refused. */
+export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string) => call<AiOutcome>("ai_send", { chat, messages, briefing, root });
 /** Tell the assistant what happened when the window carried out one of its app tools. */
 export const aiActDone = (id: string, ok: boolean, result: string) => call<void>("ai_act_done", { id, ok, result });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });

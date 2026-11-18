@@ -514,6 +514,7 @@ export default function Onboarding() {
   } else if (step === "tools") {
     ask = tokenConnection ? (
       <TokenConnection
+        root={vault?.root ?? ""}
         connector={tokenConnection}
         from="setup"
         onCancel={() => setTokenConnection(null)}

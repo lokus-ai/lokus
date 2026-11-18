@@ -1,5 +1,5 @@
 /** @part-of ui.onboarding */
-import { aiSettings, type Connector, mcpLogin, saveAiConfig } from "../../bridge/ai";
+import { aiSettings, type Connector, mcpLogin } from "../../bridge/ai";
 import { track } from "../../bridge/analytics";
 import { defaultVault, runCore } from "../../bridge/core";
 import type { IconName } from "../../shell/Icon";
@@ -121,15 +121,16 @@ export function leaveOnboarding(skipped: boolean, at = ""): void {
 /** Sign in to a service in the browser and keep it among the assistant's connections. */
 export async function connectService(c: Connector): Promise<void> {
   const server = { name: c.id, url: c.url, enabled: true };
+  // The workspace is taken once, so a sign-in that outlasts a switch still lands where it began.
+  // Rust keeps the connection with the sign-in.
+  const { root } = (await aiSettings()).config;
   try {
-    await mcpLogin(server);
+    await mcpLogin(root, server);
   } catch (e) {
     track("connection_failed", { service: c.id, from: "setup" });
     throw e;
   }
   track("connection_added", { service: c.id, from: "setup" });
-  const { config } = await aiSettings();
-  if (!config.mcp.some((s) => s.name === c.id)) await saveAiConfig({ ...config, mcp: [...config.mcp, server] });
 }
 
 const label = (options: Option[], id: string) => options.find((o) => o.id === id)?.label ?? id;
