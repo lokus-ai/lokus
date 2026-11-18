@@ -135,6 +135,11 @@ impl Vault {
                     if let Some(id) = read() {
                         return Ok(id);
                     }
+                    // Its own file that cannot be read just now is still its id: fail rather
+                    // than give the folder a new one and leave what was kept under the old.
+                    if fs::symlink_metadata(&file).is_ok_and(|m| m.is_file()) {
+                        fs::read_to_string(&file)?;
+                    }
                     fs::remove_file(&file)?;
                 }
                 Err(e) => return Err(e.into()),
