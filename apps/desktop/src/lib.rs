@@ -243,6 +243,7 @@ macro_rules! commands {
             vault_current,
             sync::sync_connect,
             sync::sync_disconnect,
+            sync::sync_bound,
             sync::sync_token,
             sync::sync_status,
             sync::sync_doc,

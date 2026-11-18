@@ -65,6 +65,11 @@ export function syncStatus(): Promise<{ running: boolean; server?: string; works
   return invoke("sync_status");
 }
 
+/** The team workspace a folder last synced with, or null for one that never did. */
+export function syncBound(root: string): Promise<string | null> {
+  return invoke<string | null>("sync_bound", { root }).catch(() => null);
+}
+
 /** The shared document behind a note, or null if the note is not synced. */
 export async function syncDoc(path: string): Promise<{ id: string; state: Uint8Array; root: string } | null> {
   const found = await invoke<{ id: string; state: string; root: string } | null>("sync_doc", { path });
