@@ -206,8 +206,8 @@ export default function TasksBoard({ version, onOpen }: Props) {
       row?.querySelector<HTMLSelectElement>("select")?.focus();
     },
     "tasks.trash": (args) => { const task = all.find((t) => t.path === args.path); if (task) return remove(task); },
-    "tasks.column.add": () => setColumnEdit({ from: null, value: "" }),
-    "tasks.column.rename": (args) => { if (typeof args.status === "string" && statuses.includes(args.status) && !STATUSES.includes(args.status) && !all.some((t) => t.status === args.status)) setColumnEdit({ from: args.status, value: args.status }); },
+    "tasks.column.add": (args) => typeof args.name === "string" ? writeColumn(null, args.name) : setColumnEdit({ from: null, value: "" }),
+    "tasks.column.rename": (args) => { if (typeof args.status === "string" && statuses.includes(args.status) && !STATUSES.includes(args.status) && !all.some((t) => t.status === args.status)) return typeof args.name === "string" ? writeColumn(args.status, args.name) : setColumnEdit({ from: args.status, value: args.status }); },
     "tasks.column.remove": (args) => { if (typeof args.status === "string") return writeColumn(args.status, null); },
   };
   useEffect(() => {
