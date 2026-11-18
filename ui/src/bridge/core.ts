@@ -72,6 +72,12 @@ export function onVaultOpened(handler: (vault: VaultInfo) => void): () => void {
   return () => void stop.then((off) => off());
 }
 
+/** A folder was closed for good (its workspace was left or deleted); every window is told. */
+export function onVaultClosed(handler: (root: string) => void): () => void {
+  const stop = listen<string>("vault:closed", (e) => handler(e.payload));
+  return () => void stop.then((off) => off());
+}
+
 export interface Entry {
   name: string;
   path: string;

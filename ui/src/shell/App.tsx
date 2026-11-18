@@ -478,6 +478,7 @@ function Panel() {
 }
 
 function Welcome() {
+  const notice = useStore(app, (s) => s.notice);
   return (
     <div className="welcome" data-tauri-drag-region>
       <h1>Lokus</h1>
@@ -485,6 +486,7 @@ function Welcome() {
       <button className="primary" onClick={() => void chooseVault()}>
         Open a folder
       </button>
+      {notice && <div className="toast">{notice}</div>}
     </div>
   );
 }
