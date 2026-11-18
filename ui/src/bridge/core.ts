@@ -26,9 +26,9 @@ export interface VaultInfo {
 }
 
 /** Run a core command against the open vault. */
-export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>): Promise<T> {
+export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>, root?: string): Promise<T> {
   try {
-    return await invoke<T>("core_run", { name, args: args ?? null });
+    return await invoke<T>("core_run", { name, args: args ?? null, root });
   } catch (raw) {
     throw toCoreError(raw);
   }
