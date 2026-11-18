@@ -8,12 +8,12 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 static NEXT: AtomicU32 = AtomicU32::new(1);
 
 /// The window the person is looking at.
-fn focused(app: &AppHandle) -> Option<tauri::WebviewWindow> {
+pub fn focused(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     app.webview_windows()
         .into_values()
         .find(|w| w.is_focused().unwrap_or(false))
@@ -50,18 +50,6 @@ pub fn open(app: &AppHandle) -> Result<String, Value> {
 #[tauri::command]
 pub async fn window_new(app: AppHandle) -> Result<String, Value> {
     open(&app)
-}
-
-/// A menu command meant for one window goes to the one in front, not to all of them.
-pub fn tell_front(app: &AppHandle, event: &str) {
-    match focused(app) {
-        Some(front) => {
-            let _ = app.emit_to(front.label(), event, ());
-        }
-        None => {
-            let _ = app.emit(event, ());
-        }
-    }
 }
 
 /// Close the window in front.

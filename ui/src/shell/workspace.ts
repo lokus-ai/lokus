@@ -4,15 +4,12 @@ import type { EditorState } from "@codemirror/state";
 import { identify, track, reportError } from "../bridge/analytics";
 import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
 import {
-  closeWindow,
   CoreError,
   currentVault,
   type Entry,
   type InstalledPlugin,
-  isMainWindow,
   type Eol,
   type Note,
-  onCloseTab,
   onIndexReady,
   onVaultChanged,
   onVaultOpened,
@@ -591,15 +588,6 @@ export async function boot(): Promise<void> {
   watchSync();
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
-  onCloseTab(() => {
-    // Cmd+W closes the tab showing and nothing more. With no tab left it closes an extra
-    // window, but never the last one: that would quit Lokus, which is what Cmd+Q is for.
-    const { active, view, file } = app.get();
-    if (view === "graph") closeGraph();
-    else if (view === "file" && file) void closeTab(file);
-    else if (active) void closeTab(active);
-    else if (!isMainWindow()) closeWindow();
-  });
   // Every window shows the same folder: when another window opens a different one, follow it.
   onVaultOpened((vault) => {
     if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);
@@ -633,6 +621,13 @@ export function applyLayout(): void {
 
 /** This window is the one changing folder, so it does not also follow its own change. */
 let switching = false;
+export const isSwitchingVault = (): boolean => switching;
+let flushChat: (() => Promise<void>) | undefined;
+
+/** The assistant drains its existing writer before this window opens another vault. */
+export function registerChatFlush(flush: () => Promise<void>): void {
+  flushChat = flush;
+}
 
 async function enterVault(vault: VaultInfo): Promise<boolean> {
   if (unsaved()) {
@@ -676,6 +671,7 @@ export async function setVault(path: string): Promise<void> {
   if (unsaved()) return notify("Changes could not be saved. Retry before switching folders.");
   switching = true;
   try {
+    await flushChat?.();
     const current = await currentVault();
     const next = await openVault(path, current?.root === path ? current.root : previous?.root);
     if (await enterVault(next)) {

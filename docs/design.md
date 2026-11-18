@@ -74,6 +74,40 @@ shortcuts, plugins and AI tools.
 - **Core commands** are registered in `lokus-core`. The Tauri shell exposes a single `run`
   entry that forwards to that registry.
 - **UI commands** (editor and shell actions) are registered in the UI.
+- **Desktop menus** present those same registered commands, not separate implementations.
+  On macOS, Lokus → Settings… uses Command-comma, after About and before Services. On Windows
+  and Linux, Settings is in Edit, Quit in File, and About in Help; Mac-only app items are absent.
+  File offers New Note, Today's Note, New Note from Template, New Window, Open Vault, Save,
+  Close Tab and Close Window. Edit keeps system clipboard actions and adds search
+  across notes. Format offers the existing marks, link, headings and normal text. View offers
+  the command palette, note/heading navigation, sidebar, assistant and graph; Window adds next
+  and previous tab to the supported system window controls. Predefined Undo/Redo and Fullscreen
+  appear only on macOS; Minimize/Maximize appear on macOS and Windows, not Linux, following
+  [Tauri's platform support](https://docs.rs/tauri/latest/tauri/menu/struct.PredefinedMenuItem.html).
+  Ordinary editing shortcuts still belong to the focused editor or input on every platform.
+  Unbuilt actions (such as print/export) and a
+  new folder prompt are not advertised; folder creation remains in the file tree.
+  Commands are sent only to the focused window. Unavailable items stay visible but disabled:
+  workspace commands need a vault and no dialog, note commands need a visible note, tab
+  navigation needs multiple tabs, and Format needs focus in the visible note's text editor
+  (not another input or frame). The bridge checks again before running a command. Native menu
+  accelerators own their shortcuts, so the UI and CodeMirror do not execute them a second time.
+  macOS Control-Tab/Control-Shift-Tab run through the same UI command route while cancelling the
+  native default, because WebKit otherwise consumes them for focus navigation.
+  Settings opens even without a vault, focuses its controls, keeps Tab within the dialog and
+  makes the workspace behind it inert. Dismissal restores the previous focus; follow-on
+  news/sign-in dialogs replace Settings and keep their own focus, including before a vault.
+  When opened over a still-valid command menu, Settings first dismisses it and restores its
+  captured target, so that target becomes the return focus. Invalidated targets are not restored.
+  Editor commands reject a note hidden by Graph, a file
+  viewer or Settings. Native menu actions send a command ID, not a captured note path;
+  formatting targets the currently focused visible note at execution. Context callers can
+  supply an optional captured `path` to mark, heading and link commands; a mismatch with the
+  current note is rejected instead of editing that different note.
+  Menus never substitute note formatting for system clipboard operations.
+  Placement follows [Apple's menu-bar guidance](https://developer.apple.com/design/human-interface-guidelines/the-menu-bar)
+  ([readable HIG text](https://appstoreguidelines.com/human-interface-guidelines/version/17/the-menu-bar/))
+  and [Tauri's native-menu platform behavior](https://v2.tauri.app/learn/window-menu/).
 - **`lokus` CLI** runs any core command against a real vault:
   `lokus note.read --vault ~/notes '{"path":"Welcome.md"}'`.
 - **Dev channel** (debug builds only): a unix socket in the running app that runs any command,
@@ -694,6 +728,31 @@ confirms that everything it must not be able to do is refused.
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
+  explicitly picked @ notes/folders and attached files. Each conversation in each workspace
+  has its own draft in this window's memory; Earlier conversations also lists messages not
+  sent yet, so New chat or a workspace switch leaves them reachable. Deleting a conversation
+  clears its draft. A successful answer clears the submitted draft only if it was not edited
+  while waiting; a failure, stop or model refusal keeps it. Sending waits for file imports.
+  An import belongs to the draft and vault where it started, even if the panel closes or the
+  conversation changes. If its vault is no longer open when the write starts, it reports an
+  error rather than writing into the new workspace. Drafts are not synced, shared between
+  windows or kept after an app restart. Imported files remain ordinary vault files when
+  removed from a draft or when a conversation is deleted.
+  Switching conversations or starting New chat saves unfinished reply progress before
+  leaving. Opening another workspace from this window waits for its captured transcript
+  save; a failed save refuses the switch. A workspace change already completed by another
+  window or initial setup may lose the latest unsaved reply text; its draft is still retained
+  and no transcript is written to another workspace. Stop also cancels while context is
+  loading, before a provider request starts. Late loads/replies cannot undo a newer choice
+  or reopen a deleted conversation.
+  This window declines new sends and additional workspace switches until its current switch
+  finishes or fails; drafts and imports remain with their conversation. A pending deletion
+  cannot be re-saved by the switch. Failed deletion keeps the draft and reply progress for retry.
+  While the current conversation's deletion is unresolved, New, opening another conversation,
+  carrying on from a shared conversation or Noticed, and an ordinary workspace switch are
+  declined with a message. This keeps recovery available if deletion fails; it does not block
+  resetting the panel after a workspace change that has already completed elsewhere.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
@@ -731,7 +790,12 @@ What it finds goes through two tools into `.lokus/noticed/` (never synced):
 
 "Do it" hands the action to the assistant in the open, where each change is asked about, and
 writes what was chosen under "How we handle things" in `Assistant.md`, which every request and
-every look is shown. Not built: looking while the app is closed, system notifications, a
+every look is shown. This handoff belongs to the conversation and workspace it opened. If
+the person changes conversations or workspaces, starts another reply, or stops it before
+the reply starts, the delayed action is canceled. A draft typed in that same conversation
+stays unsent while the original action proceeds. Recording the choice and refreshing the
+findings use the original workspace; a resolution that fails before the choice is recorded shows an error and does not start the action; if the choice was recorded and only writing what was learned failed, the error is shown and the action still starts. A choice already recorded is not undone when the later handoff is canceled.
+Not built: looking while the app is closed, system notifications, a
 team's own admin API as a connection (it works today only if that API is offered as an MCP
 server), GitHub.
 

@@ -7,7 +7,7 @@ import { Icon } from "../../shell/Icon";
 import { Logo as ServiceLogo } from "../connections/logos";
 import { Logo as CustomerLogo } from "../customers/parts";
 import { useStore } from "../../shell/store";
-import { app, openNote, renderMarkdown } from "../../shell/workspace";
+import { app, notify, openNote, renderMarkdown } from "../../shell/workspace";
 import { Row, Toggle } from "../settings/parts";
 import { act, addToNote, check, exampleWatch, type Noticed, noticed, resolve, setWatchEvery, waiting, watchEvery } from "./noticed";
 
@@ -57,7 +57,7 @@ export function FindingRow({ item, open, onToggle }: { item: Noticed; open?: boo
       return;
     }
     setBusy(true);
-    void act(item, true);
+    void act(item, true).catch((e) => notify(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false));
   };
   return (
     <article className={`nt-row ${item.urgency ?? "fyi"}${open ? " open" : ""}`}>

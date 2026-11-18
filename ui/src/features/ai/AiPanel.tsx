@@ -12,7 +12,7 @@ import { aiSettings, saveAiConfig } from "../../bridge/ai";
 import { Logo } from "../connections/logos";
 import { type Customer, loadCustomers, show as shown, threads, tone } from "../customers/data";
 import { fileName, fileTag, kindOf } from "../files/files";
-import { answer, answerAll, ask, attached, attachFile, chat, detach, forgetChat, type Item, type Kept, keptChats, openChat, reply, stop } from "./chat";
+import { answer, answerAll, attachFile, chat, detach, forgetChat, type Item, type Kept, type Target, keptChats, openChat, reply, sendDraft, stop } from "./chat";
 import { ModelPicker } from "./ModelPicker";
 
 const TOOLS: Record<string, (input: Record<string, unknown>) => string> = {
@@ -346,12 +346,6 @@ function blocks(items: Item[], busy: boolean): Block[] {
   return out;
 }
 
-/** A note or folder that can be pointed at with @. A folder's path ends in "/". */
-interface Target {
-  path: string;
-  name: string;
-}
-
 const noteName = (path: string) => path.split("/").pop()!.replace(/\.md$/i, "");
 
 function folders(entries: Entry[], out: Target[] = []): Target[] {
@@ -378,12 +372,13 @@ export function AiPanel() {
   const busy = useStore(chat, (s) => s.busy);
   const history = useStore(chat, (s) => s.history);
   const note = useStore(app, (s) => s.active);
-  const [draft, setDraft] = useState("");
+  const composer = useStore(chat, (s) => s.draft);
+  const { text: draft, mentions, files, importing } = useStore(composer, (s) => s);
+  const setDraft = (text: string) => composer.set({ text });
   const tree = useStore(app, (s) => s.tree);
-  /** What has been pointed at with @ for the message being written. */
-  const [mentions, setMentions] = useState<Target[]>([]);
   /** The `@word` under the caret and which suggestion is highlighted; null when not picking. */
   const [picking, setPicking] = useState<{ from: number; query: string; at: number } | null>(null);
+  useEffect(() => setPicking(null), [composer]);
   const scroll = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   /** Things worth doing right now, read from the customers; offered before the first question. */
@@ -440,19 +435,14 @@ export function AiPanel() {
     return [...starts, ...holds].slice(0, 8);
   }, [picking, targets]);
 
-  const files = useStore(attached, (s) => s.files);
   const picker = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const take = (list: FileList | File[] | null | undefined) => {
     for (const file of Array.from(list ?? [])) void attachFile(file);
   };
   const send = () => {
-    if ((!draft.trim() && !files.length) || busy) return;
-    // Only what is still written in the message counts as pointed at.
-    void ask(draft, mentions.filter((m) => draft.includes(`@${m.name}`)).map((m) => m.path), files);
-    attached.set({ files: [] });
-    setDraft("");
-    setMentions([]);
+    if ((!draft.trim() && !files.length) || busy || importing) return;
+    void sendDraft();
     setPicking(null);
   };
   const track = (text: string, caret: number) => {
@@ -465,7 +455,7 @@ export function AiPanel() {
     const caret = el?.selectionStart ?? draft.length;
     const next = `${draft.slice(0, picking.from)}@${target.name} ${draft.slice(caret)}`;
     setDraft(next);
-    setMentions((m) => (m.some((x) => x.path === target.path) ? m : [...m, target]));
+    composer.set((s) => ({ mentions: s.mentions.some((x) => x.path === target.path) ? s.mentions : [...s.mentions, target] }));
     setPicking(null);
     const place = picking.from + target.name.length + 2;
     requestAnimationFrame(() => {
@@ -609,7 +599,7 @@ export function AiPanel() {
             <Icon name="stop" size={11} />
           </button>
         ) : (
-          <button className="ai-send" title="Send (Enter)" onClick={send} disabled={!draft.trim() && !files.length}>
+          <button className="ai-send" title={importing ? "Attaching files…" : "Send (Enter)"} onClick={send} disabled={!!importing || (!draft.trim() && !files.length)}>
             <Icon name="send" size={15} />
           </button>
         )}
