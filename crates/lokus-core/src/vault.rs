@@ -138,7 +138,7 @@ impl Vault {
                     // Its own file that cannot be read just now is still its id: fail rather
                     // than give the folder a new one and leave what was kept under the old.
                     if fs::symlink_metadata(&file).is_ok_and(|m| m.is_file()) {
-                        fs::read_to_string(&file)?;
+                        fs::read(&file)?;
                     }
                     fs::remove_file(&file)?;
                 }
@@ -602,6 +602,8 @@ mod tests {
         let other = dir.path().join("other.txt");
         fs::write(&other, "mine").unwrap();
         fs::write(old.join(".lokus/id"), "-").unwrap();
+        assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
+        fs::write(old.join(".lokus/id"), [0xff, 0xfe]).unwrap();
         assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
         #[cfg(unix)]
         {
