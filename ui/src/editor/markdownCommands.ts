@@ -122,7 +122,7 @@ export function readFrontmatter(text: string): Frontmatter {
       }
       // A block list reads as the flow list it is equivalent to.
       const items: string[] = [];
-      for (let item; !m[2] && (item = /^[ \t]+-[ \t]+(.*?)[ \t]*$/.exec(lines[i + 1] ?? "")); i++) items.push(item[1]);
+      for (let item; !m[2] && (item = /^[ \t]+-[ \t]+(.*?)[ \t]*$/.exec(lines[i + 1] ?? "")); i++) items.push(/^["']/.test(item[1]) || !item[1].includes(",") ? item[1] : JSON.stringify(item[1]));
       values[m[1]] = items.length ? `[${items.join(", ")}]` : value;
     }
   }
