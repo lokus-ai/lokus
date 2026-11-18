@@ -295,8 +295,10 @@ impl Config {
                 own.apis.push(api);
             }
         }
-        // Keys first, and all of them, before anything is given away: a keychain that will not
-        // be read or written leaves the connection waiting with its keys, for the next folder.
+        // Keys first, before anything is given away. A key that cannot be read is left where
+        // it is rather than removed; a token that cannot be written leaves the connection
+        // waiting, keys and all, for the next folder.
+        let mut unread = Vec::new();
         for (kind, name) in &moved {
             let pairs = accounts(kind, name, WAITING)
                 .into_iter()
@@ -304,7 +306,10 @@ impl Config {
             for (from, to) in pairs {
                 let value = match read_secret(&from) {
                     Ok(found) => found.or_else(|| kept(&from)),
-                    Err(e) => Some(kept(&from).ok_or(e)?),
+                    Err(_) => kept(&from).or_else(|| {
+                        unread.push(from.clone());
+                        None
+                    }),
                 };
                 let Some(value) = value else { continue };
                 if let Err(e) = set_secret(&to, &value) {
@@ -319,7 +324,9 @@ impl Config {
         now.save(dir)?;
         for (kind, name) in moved.iter().chain(&left) {
             for account in accounts(kind, name, WAITING) {
-                forget(&account);
+                if !unread.contains(&account) {
+                    forget(&account);
+                }
             }
         }
         Ok(())
