@@ -277,56 +277,68 @@ impl Config {
         let Some(waiting) = now.workspaces.remove(WAITING) else {
             return Ok(());
         };
-        let own = now.workspaces.entry(at.to_string()).or_default();
-        let (mut moved, mut left) = (Vec::new(), Vec::new());
-        for server in waiting.mcp {
-            if own.mcp.iter().any(|s| s.name == server.name) {
-                left.push(("mcp", server.name));
-            } else {
-                moved.push(("mcp", server.name.clone()));
-                own.mcp.push(server);
+        let mut own = now.workspaces.remove(at).unwrap_or_default();
+        let mut still = Workspace::default();
+        let mut done = Vec::new();
+        // One connection at a time, its keys before the connection itself. A key the keychain
+        // would not show (locked, or the person said no) or would not take keeps the connection
+        // waiting, keys and all, and it moves when a later folder is opened.
+        let mut carry = |kind: &'static str, name: &str, taken: bool| -> bool {
+            if taken {
+                done.push((kind, name.to_string()));
+                return false;
             }
-        }
-        for api in waiting.apis {
-            if own.apis.iter().any(|a| a.name == api.name) {
-                left.push(("api", api.name));
-            } else {
-                moved.push(("api", api.name.clone()));
-                own.apis.push(api);
-            }
-        }
-        // Keys first, before anything is given away. A key that cannot be read is left where
-        // it is rather than removed; a token that cannot be written leaves the connection
-        // waiting, keys and all, for the next folder.
-        let mut unread = Vec::new();
-        for (kind, name) in &moved {
             let pairs = accounts(kind, name, WAITING)
                 .into_iter()
                 .zip(accounts(kind, name, at));
+            let mut found = Vec::new();
             for (from, to) in pairs {
-                let value = match read_secret(&from) {
-                    Ok(found) => found.or_else(|| kept(&from)),
-                    Err(_) => kept(&from).or_else(|| {
-                        unread.push(from.clone());
-                        None
-                    }),
-                };
+                match read_raw(&from) {
+                    Ok(value) => found.push((to, value.or_else(|| kept(&from)))),
+                    Err(keyring::Error::NoStorageAccess(_)) => return false,
+                    // No keychain here at all: a sign-in may still be held in memory.
+                    Err(_) => found.push((to, kept(&from))),
+                }
+            }
+            for (to, value) in found {
                 let Some(value) = value else { continue };
-                if let Err(e) = set_secret(&to, &value) {
+                if set_secret(&to, &value).is_err() {
                     // A browser sign-in may live in memory until the app quits; a token may not.
                     if !to.starts_with("mcp-oauth:") {
-                        return Err(e);
+                        return false;
                     }
                     keep(&to, &value);
                 }
             }
+            done.push((kind, name.to_string()));
+            true
+        };
+        for server in waiting.mcp {
+            let taken = own.mcp.iter().any(|s| s.name == server.name);
+            if carry("mcp", &server.name, taken) {
+                own.mcp.push(server);
+            } else if !taken {
+                still.mcp.push(server);
+            }
+        }
+        for api in waiting.apis {
+            let taken = own.apis.iter().any(|a| a.name == api.name);
+            if carry("api", &api.name, taken) {
+                own.apis.push(api);
+            } else if !taken {
+                still.apis.push(api);
+            }
+        }
+        if !(own.mcp.is_empty() && own.apis.is_empty()) {
+            now.workspaces.insert(at.to_string(), own);
+        }
+        if !(still.mcp.is_empty() && still.apis.is_empty()) {
+            now.workspaces.insert(WAITING.to_string(), still);
         }
         now.save(dir)?;
-        for (kind, name) in moved.iter().chain(&left) {
-            for account in accounts(kind, name, WAITING) {
-                if !unread.contains(&account) {
-                    forget(&account);
-                }
+        for (kind, name) in done {
+            for account in accounts(kind, &name, WAITING) {
+                forget(&account);
             }
         }
         Ok(())
@@ -395,12 +407,16 @@ impl Config {
 
 /// Scripted flows set `LOKUS_KEYCHAIN` so their stand-in sign-ins go to a keychain of their own.
 /// Without it, a flow's fake ChatGPT session overwrote the person's real one (2026-11-13).
-fn entry(account: &str) -> Result<keyring::Entry> {
+fn entry_raw(account: &str) -> keyring::Result<keyring::Entry> {
     let service = std::env::var("LOKUS_KEYCHAIN")
         .ok()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| SERVICE.to_string());
-    keyring::Entry::new(&service, account).map_err(|e| AiError::Keychain(e.to_string()))
+    keyring::Entry::new(&service, account)
+}
+
+fn entry(account: &str) -> Result<keyring::Entry> {
+    entry_raw(account).map_err(|e| AiError::Keychain(e.to_string()))
 }
 
 /// What the keychain answered for each account since the app started. The keychain is asked
@@ -445,6 +461,10 @@ pub fn secret(account: &str) -> Option<String> {
 /// Unlike an optional sign-in lookup, replacing a credential must stop if its old value
 /// cannot be read: a denied keychain prompt does not mean there is nothing to restore.
 pub fn read_secret(account: &str) -> Result<Option<String>> {
+    read_raw(account).map_err(|e| AiError::Keychain(e.to_string()))
+}
+
+fn read_raw(account: &str) -> keyring::Result<Option<String>> {
     // Held for the whole read. Without it, several parts of the app asking at the same moment
     // each put their own password prompt on screen for the same entry, one behind another, and
     // answering the first did not dismiss the rest (2026-11-13).
@@ -452,22 +472,17 @@ pub fn read_secret(account: &str) -> Result<Option<String>> {
     if let Some(known) = asked.get(account) {
         return Ok(known.clone());
     }
-    let read = entry(account).and_then(|e| match e.get_password() {
-        Ok(found) => Ok(Some(found).filter(|s| !s.is_empty())),
-        Err(keyring::Error::NoEntry) => Ok(moved_in(account)),
-        // Refused or dismissed: that says nothing about whether a sign-in is saved.
-        Err(e) => Err(AiError::Keychain(e.to_string())),
-    });
-    match read {
-        Ok(found) => {
-            asked.insert(account.to_string(), found.clone());
-            Ok(found)
-        }
-        // Not remembered, so the next time it is needed the keychain is asked again. Remembering
-        // a refusal as "nothing saved" made every connected service look signed out until the
-        // app was restarted (2026-11-13).
-        Err(error) => Err(error),
-    }
+    // Not remembered when it fails, so the next time it is needed the keychain is asked again.
+    // Remembering a refusal as "nothing saved" made every connected service look signed out
+    // until the app was restarted (2026-11-13). Refused or dismissed says nothing about
+    // whether a sign-in is saved.
+    let found = match entry_raw(account)?.get_password() {
+        Ok(found) => Some(found).filter(|s| !s.is_empty()),
+        Err(keyring::Error::NoEntry) => moved_in(account),
+        Err(e) => return Err(e),
+    };
+    asked.insert(account.to_string(), found.clone());
+    Ok(found)
 }
 
 /// A development build that finds nothing in its own place looks once in the place it used
