@@ -414,7 +414,11 @@ been, so a note made as "Untitled" and given its title offline never meets a tea
   runs out.
 - A socket that has gone silent is not trusted. The app asks the relay to answer every 20
   seconds; after 50 seconds of hearing nothing (a laptop that slept, a network that changed) it
-  drops the connection and opens a new one, and what either side missed arrives then.
+  drops the connection and opens a new one, and what either side missed arrives then. While
+  what it missed is still arriving the wait is ten minutes: that comes as one message, heard
+  only when all of it is here, and a team's whole history over a slow link takes longer than 50
+  seconds. That one message may be up to 1 GB; the 16 MB a websocket takes by default
+  refused a team's history once it had grown past that.
 
 **What the relay refuses**
 
