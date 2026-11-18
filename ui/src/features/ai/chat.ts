@@ -159,7 +159,8 @@ export async function brief(): Promise<string> {
   );
   // Which services are connected, so it reaches for them without being told their names.
   const connected = await aiSettings().then(
-    (s) => [...s.config.mcp.filter((m) => m.enabled), ...s.plugin_servers].map((m) => m.name),
+    // Only this workspace's: another one opened meanwhile has its own.
+    (s) => (s.config.root === (vault?.root ?? "") ? [...s.config.mcp.filter((m) => m.enabled), ...s.plugin_servers].map((m) => m.name) : []),
     () => [] as string[],
   );
   if (connected.length) {
@@ -361,6 +362,8 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
   const note = app.get().active;
   chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: text.trim(), note: note ?? undefined, files: files.length ? files : undefined }] }));
   const sending = freshId();
+  // The workspace the question is asked in: its notes and its connections answer it, or nothing does.
+  const from = vaultRoot;
   requestId = sending;
   let pending: { role: string; content: unknown } | null = null;
   let began = 0;
@@ -379,7 +382,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     if (sending !== requestId) return false;
     briefing = context;
     began = Date.now();
-    const outcome = await aiSend(sending, [...history, message], briefing);
+    const outcome = await aiSend(sending, [...history, message], briefing, from);
     if (sending !== requestId) return false;
     traced(sending, began, question, outcome, "");
     history = [...history, message, ...outcome.messages];

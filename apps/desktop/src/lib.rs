@@ -108,6 +108,7 @@ pub fn open_vault(app: &AppHandle, path: &str, root: Option<&str>) -> Result<Val
         let _ = std::fs::write(file, vault.root().to_string_lossy().as_bytes());
     }
     vaults::remember(app, vault.root());
+    ai::opened(app, vault);
     let _ = app.emit("vault:opened", &info);
     Ok(info)
 }
@@ -317,12 +318,15 @@ pub fn run() {
         .setup(|app| {
             dev_channel::start(app.handle().clone());
             background::start(app.handle());
+            ai::hand_on(app.handle(), &vaults::here(app.handle()));
             Ok(())
         });
 
     #[cfg(not(all(debug_assertions, desktop)))]
     let builder = builder.invoke_handler(commands!()).setup(|app| {
         background::start(app.handle());
+        // Connections from before they belonged to a workspace go to every workspace here.
+        ai::hand_on(app.handle(), &vaults::here(app.handle()));
         Ok(())
     });
 
