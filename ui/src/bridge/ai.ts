@@ -93,8 +93,8 @@ export const aiModels = () => call<string[]>("ai_models");
 // A connection belongs to one workspace: `root` is the folder of the one it is made, checked or removed in.
 export const checkMcp = (root: string, server: McpServer, token?: string) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server, token, root });
 export const saveMcpToken = (root: string, server: McpServer, token: string) => call<void>("ai_mcp_token_save", { server, token, root });
-/** Sign in to a tool server in the browser; resolves when the browser has come back. */
 export const aiConnectors = () => call<Connector[]>("ai_connectors");
+/** Sign in to a tool server in the browser and keep it among `root`'s connections; resolves when the browser has come back. */
 export const mcpLogin = (root: string, server: McpServer) => call<void>("ai_mcp_login", { server, root });
 export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logout", { name, root });
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */

@@ -44,10 +44,38 @@ fn root_of(core: &lokus_core::Core) -> String {
     core.vault.root().to_string_lossy().to_string()
 }
 
-/// Give connections made before any workspace was open to these workspaces.
+/// Set while connections from before they belonged to a workspace could not be handed on.
+static OWED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Give connections made before any workspace was open to these workspaces. If the settings
+/// cannot be written they stay where they were, and the next folder opened tries again for
+/// every workspace on the computer, so a failed first start loses nobody's connections.
 pub fn hand_on(app: &AppHandle, roots: &[String]) {
-    if let Ok(dir) = config_dir(app) {
-        let _ = Config::hand_on(&dir, roots);
+    use std::sync::atomic::Ordering;
+    let all;
+    let roots = if OWED.load(Ordering::Relaxed) {
+        all = crate::vaults::here(app);
+        &all
+    } else {
+        roots
+    };
+    let done = config_dir(app)
+        .map_err(|_| "no settings folder".to_string())
+        .and_then(|dir| Config::hand_on(&dir, roots).map_err(|e| e.to_string()));
+    OWED.store(done.is_err(), Ordering::Relaxed);
+    if let Err(e) = done {
+        eprintln!("connections could not be given to their workspaces: {e}");
+    }
+}
+
+/// A connection made with no workspace open goes to the one open by the time it is made:
+/// first-run setup can open its folder while a sign-in is still in the browser.
+fn settle(app: &AppHandle, root: &str) {
+    if !root.is_empty() {
+        return;
+    }
+    if let Some(core) = app.state::<Shell>().core() {
+        hand_on(app, &[root_of(&core)]);
     }
 }
 
@@ -84,6 +112,9 @@ pub struct Seen {
 /// the open workspace's; `config.root` says which, and comes back with every change.
 #[tauri::command(async)]
 pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
+    if OWED.load(std::sync::atomic::Ordering::Relaxed) {
+        hand_on(&app, &[]);
+    }
     let core = app.state::<Shell>().core();
     let root = core.as_deref().map(root_of).unwrap_or_default();
     let config = load(&app)?.seen_from(&root);
@@ -189,7 +220,9 @@ pub fn ai_mcp_token_save(
     token: String,
     root: String,
 ) -> Result<(), Value> {
-    lokus_ai::mcp::save_token(&config_dir(&app)?, &root, server, &token).map_err(|e| e.body())
+    lokus_ai::mcp::save_token(&config_dir(&app)?, &root, server, &token).map_err(|e| e.body())?;
+    settle(&app, &root);
+    Ok(())
 }
 
 /// Run one request. Progress arrives as `ai:event` messages tagged with the
@@ -301,8 +334,9 @@ pub fn ai_connectors() -> Vec<lokus_ai::catalog::Connector> {
     lokus_ai::catalog::all()
 }
 
-/// Sign in to a tool server in the person's browser, for the workspace `root`. The sign-in is
-/// that workspace's own, also when it had been using one shared with others.
+/// Sign in to a tool server in the person's browser, for the workspace `root`, and keep it
+/// among that workspace's connections. The sign-in is that workspace's own, also when it had
+/// been using one shared with others.
 #[tauri::command]
 pub async fn ai_mcp_login(
     app: AppHandle,
@@ -316,7 +350,15 @@ pub async fn ai_mcp_login(
     lokus_ai::mcp_login::login(&server, show)
         .await
         .map_err(|e| e.body())?;
-    Config::let_go(&config_dir(&app)?, &root, "mcp", &server.name).map_err(|e| e.body())
+    let dir = config_dir(&app)?;
+    Config::let_go(&dir, &root, "mcp", &server.name).map_err(|e| e.body())?;
+    let mut seen = Config::load(&dir).seen_from(&root);
+    if !seen.mcp.iter().any(|s| s.name == server.name) {
+        seen.mcp.push(server);
+        Config::put(&dir, &root, seen).map_err(|e| e.body())?;
+    }
+    settle(&app, &root);
+    Ok(())
 }
 
 #[tauri::command(async)]

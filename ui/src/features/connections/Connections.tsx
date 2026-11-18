@@ -164,7 +164,6 @@ export function Connections() {
     try {
       await mcpLogin(root, server);
       track("connection_added", { service: c.id, from: "settings" });
-      if (!added(c.id)) await save({ mcp: [...config.mcp, server] });
       await reload();
       notify(`${c.name} is connected`);
       setOpen(c.id);
