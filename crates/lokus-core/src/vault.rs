@@ -86,6 +86,17 @@ pub struct FidelityReport {
     pub not_text: Vec<String>,
 }
 
+/// Whether a failed link says the drive has no links at all, not that this one went wrong.
+/// The standard library names only some of the ways a system says so: macOS answers 45 or 102,
+/// Linux 95 or "not permitted", Windows "invalid function" (1) on FAT drives.
+fn no_links(e: &std::io::Error) -> bool {
+    use std::io::ErrorKind::{PermissionDenied, Unsupported};
+    let code = e.raw_os_error();
+    matches!(e.kind(), Unsupported | PermissionDenied)
+        || (cfg!(unix) && matches!(code, Some(45 | 95 | 102)))
+        || (cfg!(windows) && code == Some(1))
+}
+
 impl Vault {
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref();
@@ -117,35 +128,74 @@ impl Vault {
         if let Some(id) = read() {
             return Ok(id);
         }
+        // One at a time inside this app, and whoever waited reads what the first one made.
+        static MAKING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _one = MAKING.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(id) = read() {
+            return Ok(id);
+        }
         fs::create_dir_all(self.root.join(META_DIR))?;
         let id = uuid::Uuid::new_v4().simple().to_string();
-        // Made only if it is not there: of two that ask at once, both get the one that landed.
-        // Whatever else sits at that name is taken away itself, never written through.
-        for _ in 0..2 {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&file)
-            {
-                Ok(mut made) => {
-                    made.write_all(id.as_bytes())?;
-                    return Ok(id);
+        // Against another app on the same folder: written whole beside it, then given its name
+        // only if nothing has that name, so one lands, every other reads that one and nobody
+        // sees a half-made file. Whatever else sits at that name is taken away itself, never
+        // written through.
+        let mine = self.root.join(META_DIR).join(format!("id.{id}"));
+        fs::write(&mine, &id)?;
+        let mut linked = true;
+        let mut landed = Err(CoreError::NotFound(file.display().to_string()));
+        for _ in 0..3 {
+            let made = if linked {
+                fs::hard_link(&mine, &file)
+            } else {
+                // A drive that cannot link (exFAT, FAT: "not supported", or "not permitted" on
+                // Linux): the name is made only if it is not there, then filled.
+                fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&file)
+                    .and_then(|mut made| made.write_all(id.as_bytes()))
+            };
+            match made {
+                Ok(()) => {
+                    landed = Ok(id.clone());
+                    break;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    if let Some(id) = read() {
-                        return Ok(id);
+                    // An empty one may be another app's, on a drive without links, about to be
+                    // filled: give it a moment before it is taken for a broken one.
+                    let mut theirs = read();
+                    for _ in 0..100 {
+                        if theirs.is_some() || fs::metadata(&file).map_or(true, |m| m.len() > 0) {
+                            break;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                        theirs = read();
+                    }
+                    // Once more: it may have been filled between the two looks.
+                    if let Some(theirs) = theirs.or_else(read) {
+                        landed = Ok(theirs);
+                        break;
                     }
                     // Its own file that cannot be read just now is still its id: fail rather
                     // than give the folder a new one and leave what was kept under the old.
-                    if fs::symlink_metadata(&file).is_ok_and(|m| m.is_file()) {
-                        fs::read(&file)?;
+                    let readable = !fs::symlink_metadata(&file).is_ok_and(|m| m.is_file())
+                        || fs::read(&file).is_ok();
+                    if !readable || fs::remove_file(&file).is_err() {
+                        break;
                     }
-                    fs::remove_file(&file)?;
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) if linked && no_links(&e) => {
+                    linked = false;
+                }
+                Err(e) => {
+                    landed = Err(e.into());
+                    break;
+                }
             }
         }
-        Err(CoreError::NotFound(file.display().to_string()))
+        let _ = fs::remove_file(&mine);
+        landed
     }
 
     pub fn name(&self) -> String {
@@ -586,6 +636,22 @@ pub(crate) fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn everyone_who_asks_a_new_folder_for_its_id_at_once_gets_the_same_one() {
+        // Review of 2026-11-18: the first asker made the file empty and then filled it; one
+        // who came between took the empty file away and made an id of its own.
+        for _ in 0..200 {
+            let dir = tempfile::tempdir().unwrap();
+            let vault = Vault::open(dir.path()).unwrap();
+            let ids: Vec<String> = std::thread::scope(|s| {
+                let asked: Vec<_> = (0..8).map(|_| s.spawn(|| vault.id().unwrap())).collect();
+                asked.into_iter().map(|a| a.join().unwrap()).collect()
+            });
+            let kept = vault.id().unwrap();
+            assert!(ids.iter().all(|id| *id == kept), "{ids:?} then {kept}");
+        }
+    }
 
     #[test]
     fn a_folder_keeps_its_id_when_it_is_renamed() {
