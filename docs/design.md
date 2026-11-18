@@ -494,7 +494,12 @@ teams the person is in, and if this one is not among them it stops, says so once
 folder the same way; a team folder that is not open is dropped at the next look for teams, and so is one an
 earlier version left on the list after a Leave or Delete (it is named in that version's
 `lokus.sync.stopped`, which is read once and then removed). A
-refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped".
+refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped". A
+folder with words that could not be written to disk is not dropped: it stays open with the words
+on screen, says the save failed, and reads "Sync stopped" with the relay's reason, since its
+connection has ended and nothing retries; it goes from the list at the next start. The note
+editor is one object for the life of the window, and the page it sits on comes and goes with
+the folder, so the editor is put onto each new page (`attachEditor`).
 
 **Seeing sync fail without asking for a log.** Through the analytics bridge
 (`trackSync` in `ui/src/bridge/analytics.ts`) the app sends `sync_connected` (role),
