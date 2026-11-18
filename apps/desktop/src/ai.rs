@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use lokus_ai::config::{has_key, key_account, mcp_account, secret, set_secret};
+use lokus_ai::config::{api_account, has_key, key_account, mcp_account, secret, set_secret};
 use lokus_ai::{AiError, AppRunner, Approver, Config, McpServer, Provider, Request};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
@@ -39,9 +39,21 @@ fn load(app: &AppHandle) -> Result<Config, Value> {
     Ok(Config::load(&config_dir(app)?))
 }
 
-/// Tool servers offered by the plugins that are switched on.
-fn plugin_servers(app: &AppHandle) -> Vec<McpServer> {
-    let Some(core) = app.state::<Shell>().core() else {
+/// The folder a workspace's connections are kept by.
+fn root_of(core: &lokus_core::Core) -> String {
+    core.vault.root().to_string_lossy().to_string()
+}
+
+/// Give connections made before any workspace was open to these workspaces.
+pub fn hand_on(app: &AppHandle, roots: &[String]) {
+    if let Ok(dir) = config_dir(app) {
+        let _ = Config::hand_on(&dir, roots);
+    }
+}
+
+/// Tool servers offered by the plugins that are switched on in this workspace.
+fn plugin_servers(core: Option<&lokus_core::Core>) -> Vec<McpServer> {
+    let Some(core) = core else {
         return Vec::new();
     };
     lokus_core::plugins::list(&core.vault)
@@ -54,43 +66,70 @@ fn plugin_servers(app: &AppHandle) -> Vec<McpServer> {
             name: s.name,
             url: s.url,
             enabled: true,
+            keys: root_of(core),
         })
         .collect()
 }
 
-/// Settings as the window may see them: which keys exist, never the keys.
+/// What the window sends back: the settings it was shown, and the workspace they were for.
+#[derive(serde::Deserialize)]
+pub struct Seen {
+    #[serde(default)]
+    root: String,
+    #[serde(flatten)]
+    config: Config,
+}
+
+/// Settings as the window may see them: which keys exist, never the keys. The connections are
+/// the open workspace's; `config.root` says which, and comes back with every change.
 #[tauri::command(async)]
 pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
-    let config = load(&app)?;
-    let tokens: Vec<&str> = config
-        .mcp
-        .iter()
-        .filter(|s| secret(&mcp_account(&s.name)).is_some())
-        .map(|s| s.name.as_str())
-        .collect();
+    let core = app.state::<Shell>().core();
+    let root = core.as_deref().map(root_of).unwrap_or_default();
+    let config = load(&app)?.seen_from(&root);
+    let names = |keep: &dyn Fn(&McpServer) -> bool| -> Vec<&str> {
+        config
+            .mcp
+            .iter()
+            .filter(|s| keep(s))
+            .map(|s| s.name.as_str())
+            .collect()
+    };
+    let mut shown = serde_json::to_value(&config).map_err(|e| fail("config", e))?;
+    shown["root"] = json!(root);
     Ok(json!({
-        "config": config,
+        "config": shown,
+        "workspace": core.as_deref().map(|c| c.vault.name()).unwrap_or_default(),
         "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi), "chatgpt": has_key(Provider::ChatGpt) },
-        "tokens": tokens,
-        "api_keys": config.apis.iter().filter(|a| secret(&lokus_ai::config::api_account(&a.name)).is_some()).map(|a| a.name.as_str()).collect::<Vec<_>>(),
-        "signed_in": config.mcp.iter().filter(|s| lokus_ai::mcp_login::signed_in(&s.name)).map(|s| s.name.as_str()).collect::<Vec<_>>(),
-        "plugin_servers": plugin_servers(&app),
+        "tokens": names(&|s| secret(&mcp_account(s)).is_some()),
+        "api_keys": config.apis.iter().filter(|a| secret(&api_account(a)).is_some()).map(|a| a.name.as_str()).collect::<Vec<_>>(),
+        "signed_in": names(&lokus_ai::mcp_login::signed_in),
+        "plugin_servers": plugin_servers(core.as_deref()),
     }))
 }
 
 #[tauri::command(async)]
-pub fn ai_settings_save(app: AppHandle, config: Config) -> Result<(), Value> {
-    config.save(&config_dir(&app)?).map_err(|e| e.body())
+pub fn ai_settings_save(app: AppHandle, config: Seen) -> Result<(), Value> {
+    Config::put(&config_dir(&app)?, &config.root, config.config).map_err(|e| e.body())
 }
 
-/// Store or (with an empty value) remove a provider key or a tool-server token.
+/// Store or (with an empty value) remove a provider key, or the key of one of the
+/// workspace `root`'s connections.
 #[tauri::command(async)]
-pub fn ai_secret_set(kind: String, name: String, value: String) -> Result<(), Value> {
+pub fn ai_secret_set(
+    app: AppHandle,
+    kind: String,
+    name: String,
+    value: String,
+    root: String,
+) -> Result<(), Value> {
     let account = match (kind.as_str(), name.as_str()) {
         ("provider", "anthropic") => key_account(Provider::Anthropic),
         ("provider", "openai") => key_account(Provider::OpenAi),
-        ("mcp", server) if !server.is_empty() => mcp_account(server),
-        ("api", name) if !name.is_empty() => lokus_ai::config::api_account(name),
+        ("mcp" | "api", name) if !name.is_empty() => {
+            return lokus_ai::config::set_key(&config_dir(&app)?, &root, &kind, name, value.trim())
+                .map_err(|e| e.body())
+        }
         _ => return Err(fail("bad_args", "unknown secret")),
     };
     set_secret(&account, value.trim()).map_err(|e| e.body())
@@ -115,7 +154,13 @@ fn reqwest_client() -> lokus_ai::provider::Client {
 
 /// Connect to a tool server and list what it offers, to check an address.
 #[tauri::command]
-pub async fn ai_mcp_check(server: McpServer, token: Option<String>) -> Result<Vec<Value>, Value> {
+pub async fn ai_mcp_check(
+    app: AppHandle,
+    server: McpServer,
+    token: Option<String>,
+    root: String,
+) -> Result<Vec<Value>, Value> {
+    let server = load(&app)?.place(&root, server);
     let connection = match token {
         Some(token) => lokus_ai::mcp::check_token(&server, &token)
             .await
@@ -138,8 +183,13 @@ pub async fn ai_mcp_check(server: McpServer, token: Option<String>) -> Result<Ve
 
 /// Save a checked token connection, restoring its old token if settings cannot be saved.
 #[tauri::command(async)]
-pub fn ai_mcp_token_save(app: AppHandle, server: McpServer, token: String) -> Result<(), Value> {
-    lokus_ai::mcp::save_token(&config_dir(&app)?, server, &token).map_err(|e| e.body())
+pub fn ai_mcp_token_save(
+    app: AppHandle,
+    server: McpServer,
+    token: String,
+    root: String,
+) -> Result<(), Value> {
+    lokus_ai::mcp::save_token(&config_dir(&app)?, &root, server, &token).map_err(|e| e.body())
 }
 
 /// Run one request. Progress arrives as `ai:event` messages tagged with the
@@ -164,11 +214,15 @@ pub async fn ai_send(
         );
         wait
     });
+    // The workspace is taken once: its notes, its plugins and its connections go together, and
+    // a folder opened while this runs changes none of them.
+    let core = app.state::<Shell>().core();
+    let root = core.as_deref().map(root_of).unwrap_or_default();
     let request = Request {
-        config: load(&app)?,
+        config: load(&app)?.seen_from(&root),
         messages,
-        core: app.state::<Shell>().core(),
-        extra_servers: plugin_servers(&app),
+        extra_servers: plugin_servers(core.as_deref()),
+        core,
         briefing,
         app: Some(act),
     };
@@ -239,20 +293,27 @@ pub fn ai_connectors() -> Vec<lokus_ai::catalog::Connector> {
     lokus_ai::catalog::all()
 }
 
-/// Sign in to a tool server in the person's browser.
+/// Sign in to a tool server in the person's browser, for the workspace `root`. The sign-in is
+/// that workspace's own, also when it had been using one shared with others.
 #[tauri::command]
-pub async fn ai_mcp_login(server: McpServer) -> Result<(), Value> {
+pub async fn ai_mcp_login(
+    app: AppHandle,
+    mut server: McpServer,
+    root: String,
+) -> Result<(), Value> {
     let show = |url: &str| {
         let _ = open::that(url);
     };
+    server.keys = root.clone();
     lokus_ai::mcp_login::login(&server, show)
         .await
-        .map_err(|e| e.body())
+        .map_err(|e| e.body())?;
+    Config::let_go(&config_dir(&app)?, &root, "mcp", &server.name).map_err(|e| e.body())
 }
 
 #[tauri::command(async)]
-pub fn ai_mcp_logout(name: String) -> Result<(), Value> {
-    lokus_ai::mcp_login::sign_out(&name).map_err(|e| e.body())
+pub fn ai_mcp_logout(app: AppHandle, name: String, root: String) -> Result<(), Value> {
+    lokus_ai::mcp_login::sign_out(&config_dir(&app)?, &root, &name).map_err(|e| e.body())
 }
 
 /// Sign in with ChatGPT in the person's browser.

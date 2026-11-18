@@ -13,17 +13,13 @@ use rmcp::transport::auth::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::config::{forget, forget_checked, keep, kept, McpServer};
+use crate::config::{forget, forget_checked, keep, kept, oauth_account, Config, McpServer};
 use crate::error::{AiError, Result};
 
 const WAIT: Duration = Duration::from_secs(300);
 const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>Lokus</title>\
 <body style=\"font:16px -apple-system,sans-serif;text-align:center;padding-top:20vh\">\
 <h2>Signed in</h2><p>You can close this tab and go back to Lokus.</p>";
-
-fn account(server: &str) -> String {
-    format!("mcp-oauth:{server}")
-}
 
 struct Store {
     account: String,
@@ -48,12 +44,20 @@ impl CredentialStore for Store {
     }
 }
 
-pub fn signed_in(server: &str) -> bool {
-    kept(&account(server)).is_some()
+pub fn signed_in(server: &McpServer) -> bool {
+    kept(&oauth_account(server)).is_some()
 }
 
-pub fn sign_out(server: &str) -> Result<()> {
-    forget_checked(&account(server))
+/// Forget the workspace's own sign-in to a server; one it shared is left to the others.
+pub fn sign_out(dir: &std::path::Path, root: &str, name: &str) -> Result<()> {
+    let own = McpServer {
+        name: name.to_string(),
+        url: String::new(),
+        enabled: true,
+        keys: root.to_string(),
+    };
+    forget_checked(&oauth_account(&own))?;
+    Config::let_go(dir, root, "mcp", name)
 }
 
 fn failed(server: &McpServer) -> impl Fn(AuthError) -> AiError + '_ {
@@ -75,14 +79,14 @@ async fn manager(server: &McpServer) -> Result<AuthorizationManager> {
     };
     let mut manager = built.map_err(failed(server))?;
     manager.set_credential_store(Store {
-        account: account(&server.name),
+        account: oauth_account(server),
     });
     Ok(manager)
 }
 
 /// The signed-in connection details for a server, if the person signed in before.
 pub async fn authorized(server: &McpServer) -> Result<Option<AuthorizationManager>> {
-    if !signed_in(&server.name) {
+    if !signed_in(server) {
         return Ok(None);
     }
     let mut manager = manager(server).await?;

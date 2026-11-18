@@ -82,22 +82,30 @@ pub async fn check_token(server: &McpServer, token: &str) -> Result<Connection> 
         })
 }
 
-/// Commit an already checked token and its server together; a settings failure restores the
-/// previous credential, so updating a token cannot break a working connection on disk failure.
-pub fn save_token(dir: &std::path::Path, mut server: McpServer, token: &str) -> Result<()> {
+/// Commit an already checked token and its server together, for the workspace `root`; a
+/// settings failure restores the previous credential, so updating a token cannot break a
+/// working connection on disk failure.
+pub fn save_token(
+    dir: &std::path::Path,
+    root: &str,
+    mut server: McpServer,
+    token: &str,
+) -> Result<()> {
     let token = token.trim();
     if token.is_empty() {
         return Err(AiError::Config("Enter a personal access token.".into()));
     }
-    let account = mcp_account(&server.name);
+    // The workspace's own entry, also when it had been using one shared with others.
+    server.keys = root.to_string();
+    let account = mcp_account(&server);
     let previous = read_secret(&account)?;
-    let mut config = Config::load(dir);
-    if let Some(existing) = config.mcp.iter().find(|s| s.name == server.name) {
+    let mut seen = Config::load(dir).seen_from(root);
+    if let Some(existing) = seen.mcp.iter().find(|s| s.name == server.name) {
         server.enabled = existing.enabled;
     }
-    config.mcp.retain(|s| s.name != server.name);
-    config.mcp.push(server.clone());
-    if let Err(error) = set_secret(&account, token).and_then(|_| config.save(dir)) {
+    seen.mcp.retain(|s| s.name != server.name);
+    seen.mcp.push(server.clone());
+    if let Err(error) = set_secret(&account, token).and_then(|_| Config::put(dir, root, seen)) {
         set_secret(&account, previous.as_deref().unwrap_or_default()).map_err(|_| {
             AiError::Keychain(
                 "the previous token could not be restored; unlock the keychain and reconnect"
@@ -106,7 +114,7 @@ pub fn save_token(dir: &std::path::Path, mut server: McpServer, token: &str) -> 
         })?;
         return Err(error);
     }
-    let _ = crate::mcp_login::sign_out(&server.name);
+    let _ = crate::mcp_login::sign_out(dir, root, &server.name);
     Ok(())
 }
 
@@ -118,7 +126,7 @@ async fn connect_using(server: &McpServer, token: Option<&str>) -> Result<Connec
     let mut config = StreamableHttpClientTransportConfig::with_uri(server.url.clone());
     let token = token
         .map(str::to_owned)
-        .or_else(|| secret(&mcp_account(&server.name)));
+        .or_else(|| secret(&mcp_account(server)));
     if let Some(token) = &token {
         config = config.auth_header(token.clone());
     }

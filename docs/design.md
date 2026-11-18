@@ -821,6 +821,32 @@ request's make-up is measured and sent with its trace (`chars_tools_<service>` a
 
 ### Connections
 
+**A connection belongs to one workspace**, the folder it was made in: a tool server (named
+service or one added by address) and a team's own API alike. Two workspaces can each connect
+their own Slack or GitHub; connecting, replacing or disconnecting in one changes nothing in
+another, and a new workspace starts with none. The assistant's model, its key and the ChatGPT
+sign-in are the person's and stay the same in every workspace.
+
+- **Settings:** the one `ai.json` keeps, beside the model, `workspaces`: folder root → that
+  workspace's `mcp` and `apis`. `Config::seen_from(root)` is the only reader and `Config::put`
+  the only writer; the window is shown one workspace's list with its `root` and sends that root
+  back with every change, so a change made during a switch lands where it was shown.
+- **Keys:** the same keychain service; the account carries the folder:
+  `mcp:<name>@<root>`, `mcp-oauth:<name>@<root>`, `api:<name>@<root>`. Never in a file or a log.
+- **A request** takes the open workspace once (`ai_send`): its notes, its plugins and its
+  connections go together. Tool servers are connected per request, so nothing is held over
+  from the workspace before.
+- **Installs from before this:** at the first start, each connection is given to every
+  workspace on the computer and marked as `shared`: it goes on using the keychain entry it
+  already had (`mcp:<name>`, no folder). Nothing in the keychain is read, copied or removed, so
+  nobody signs in again and no prompt appears. One sign-in is shared rather than copied because
+  a copied browser sign-in dies the first time another copy refreshes it. A workspace that
+  connects again, updates its token or disconnects gets its own entry (or none) and stops
+  sharing; the old entry is removed when the last workspace has let go.
+- **First-run setup** can connect a service before any folder is open; it waits in the
+  top-level `mcp` list and goes to the folder that opens next.
+- A folder that is moved or renamed is a different workspace and starts with no connections.
+
 A connector is a tool server (MCP) that a service runs itself. Settings, Connections lists them
 by name: Connect signs the person in with that service in the browser (or asks for its supported
 personal access token) and the assistant gains
@@ -839,7 +865,7 @@ support a personal access token without registering the host app; browser OAuth 
 registered GitHub or OAuth app. First-run setup and Settings reuse the same GitHub Connect
 screen: it asks for one token, links to
 GitHub's token creation page, and checks tool discovery before saving it in the existing OS
-keychain (`mcp:github`). The token's repository access and permissions determine what works;
+keychain (`mcp:github@<workspace folder>`). The token's repository access and permissions determine what works;
 Lokus neither widens them nor copies a token from another app. Checking uses only the entered
 token, never an older token or OAuth grant, and times out after 20 seconds. Cancelling that check
 or leaving the screen saves nothing. Saving requires the keychain; a rejected token or failed
