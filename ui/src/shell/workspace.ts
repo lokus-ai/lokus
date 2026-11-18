@@ -1,17 +1,20 @@
 /** @part-of ui.shell */
 import type { EditorState } from "@codemirror/state";
 
-import { identify, track, reportError } from "../bridge/analytics";
+import { identify, track, trackSync, reportError } from "../bridge/analytics";
 import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
 import {
   CoreError,
   currentVault,
   type Entry,
+  forgetVault,
+  listVaults,
   type InstalledPlugin,
   type Eol,
   type Note,
   onIndexReady,
   onVaultChanged,
+  onVaultClosed,
   onVaultOpened,
   openVault,
   pickFolder,
@@ -20,7 +23,7 @@ import {
   type VaultInfo,
 } from "../bridge/core";
 import { openWeb } from "../bridge/updates";
-import { syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
+import { relay, syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, flushShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
@@ -426,15 +429,13 @@ export function syncedWith(root: string): string | null {
   }
 }
 
-const STOPPED = "lokus.sync.stopped";
-
-/** The teams whose syncing this person stopped on this computer. Those are not started again for them. */
-export function stoppedSync(): string[] {
-  try {
-    return (JSON.parse(localStorage.getItem(STOPPED) ?? "null") as string[] | null) ?? [];
-  } catch {
-    return [];
-  }
+/**
+ * Remember that a folder belongs to a team, without opening it. It connects when it is opened.
+ * Used for a folder whose syncing was stopped by an earlier version: being in the team is what
+ * decides, so it is put back with nobody asked.
+ */
+export function keepSync(root: string, server: string, workspace: string): void {
+  if (!localStorage.getItem(`lokus.sync:${root}`)) localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token: null }));
 }
 
 /** Start syncing this vault with a team workspace. */
@@ -445,6 +446,23 @@ let stopSignIns: (() => void) | null = null;
 let retriedSignIn = false;
 /** The latest request to connect, so a retry for an older one does nothing. */
 let lastAsk = "";
+/** The connection, for what is counted about it: when it last came online, and when its first pull came in. */
+let episode = { online: 0, pulled: 0 };
+/** A connection held when its first pull is in and it stayed up this long after; one that drops sooner is still failing. */
+const HELD = 30_000;
+/**
+ * Count one thing about the connection. Each is counted once per team (see `trackSync`), so a
+ * connection that comes up and drops every few seconds says so once. After one that held, what
+ * happens next is new and is counted again.
+ */
+function countSync(event: Parameters<typeof trackSync>[0], props: Record<string, string | number> = {}): void {
+  const held = episode.pulled > 0 && Date.now() - episode.pulled >= HELD;
+  // A drop ends the stretch being timed, held or not, so the retries after it are not taken for time up.
+  if (held || event === "sync_offline" || event === "sync_refused") episode.pulled = 0;
+  trackSync(event, app.get().sync.workspace, props, held);
+}
+/** The workspace being left or deleted from here, so the relay's own word of it is not answered twice. */
+let leaving: string | null = null;
 
 export async function connectSync(server: string, workspace: string, token: string | null, root = app.get().vault?.root ?? ""): Promise<void> {
   if (app.get().vault?.root !== root) return;
@@ -468,7 +486,6 @@ export async function connectSync(server: string, workspace: string, token: stri
   if (unsaved() && !reconnecting) return notify("Changes could not be saved. Retry before changing the sync connection.");
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
   localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
-  localStorage.setItem(STOPPED, JSON.stringify(stoppedSync().filter((w) => w !== workspace)));
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -495,21 +512,76 @@ export async function connectSync(server: string, workspace: string, token: stri
   }, 30_000);
   await syncConnect(server, workspace, useToken, root).catch((e) => {
     // Refused because another folder was opened meanwhile: that folder is not the one to say so.
-    if (lastAsk === asking && app.get().vault?.root === root) app.set({ sync: { ...app.get().sync, status: "refused", reason: String(e?.message ?? e) } });
+    if (lastAsk !== asking || app.get().vault?.root !== root) return;
+    countSync("sync_refused", { reason: String(e?.message ?? e) });
+    app.set({ sync: { ...app.get().sync, status: "refused", reason: String(e?.message ?? e) } });
   });
 }
 
+/** Stop the connection for now. Nothing remembers it as stopped: the folder connects again when it is next opened. */
 export async function disconnectSync(): Promise<void> {
   await saveAll();
   if (unsaved()) return notify("Changes could not be saved. Retry before disconnecting.");
-  const was = savedSync()?.workspace;
-  if (was) localStorage.setItem(STOPPED, JSON.stringify([...stoppedSync().filter((w) => w !== was), was]));
   localStorage.removeItem(syncKey());
   stopSignIns?.();
   stopSignIns = null;
   await syncDisconnect();
   await unshareAll();
   app.set({ sync: { status: "off" } });
+}
+
+/**
+ * This person is no longer in the team a folder synced with (they left, it was deleted, or an
+ * owner removed them): stop syncing, take the folder off the workspace list and show another
+ * workspace, or the start page when there is none. The folder and its notes stay on disk.
+ */
+export async function dropWorkspace(root: string, said: string): Promise<void> {
+  if (!localStorage.getItem(`lokus.sync:${root}`)) return;
+  if (app.get().vault?.root !== root) {
+    localStorage.removeItem(`lokus.sync:${root}`);
+    await forgetVault(root);
+    return notify(said);
+  }
+  await saveAll();
+  if (unsaved()) return notify("Changes could not be saved. Retry before leaving this workspace.");
+  // A reply still being written is put in its conversation while the folder is still open.
+  try {
+    await flushChat?.();
+  } catch {
+    return notify("The conversation could not be saved. Retry before leaving this workspace.");
+  }
+  localStorage.removeItem(`lokus.sync:${root}`);
+  stopSignIns?.();
+  stopSignIns = null;
+  await syncDisconnect();
+  await unshareAll();
+  app.set({ sync: { status: "off" }, settings: null });
+  const next = (await listVaults()).find((v) => v.root !== root);
+  if (next) await setVault(next.root).catch(report);
+  // Still on it: there was no other workspace, or the other could not be opened.
+  await forgetVault(root);
+  putAway(root);
+  notify(said);
+}
+
+/** The folder on screen was closed for good, here or in another window: show the start page. */
+function putAway(root: string): void {
+  if (app.get().vault?.root !== root) return;
+  for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
+  sessions.clear();
+  app.set({ vault: null, tree: [], tabs: [], view: "note", active: null, dirty: {}, saves: {}, properties: {}, conflict: null, peers: [], settings: null, sync: { status: "off" } });
+}
+
+/** Leave or delete the open team workspace: `ask` tells the relay, and when it agrees the workspace goes from this device. */
+export async function leaveWorkspace(ask: () => Promise<boolean>, said: (name: string) => string): Promise<void> {
+  const vault = app.get().vault;
+  if (!vault) return;
+  leaving = vault.root;
+  try {
+    if (await ask()) await dropWorkspace(vault.root, said(vault.name));
+  } finally {
+    leaving = null;
+  }
 }
 
 function watchSync(): void {
@@ -532,7 +604,10 @@ function watchSync(): void {
     if (event.root !== app.get().vault?.root) return;
     const { sync } = app.get();
     if (event.event === "online") {
-      if (app.get().sync.status !== "online") track("sync_connected", { role: event.role });
+      if (sync.status !== "online") {
+        countSync("sync_connected", { role: event.role });
+        episode = { online: Date.now(), pulled: 0 };
+      }
       if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
       retriedSignIn = false;
       app.set({ sync: { ...sync, status: "online", role: event.role, user: event.user, reason: undefined } });
@@ -540,7 +615,10 @@ function watchSync(): void {
       notify(event.role === "viewer" ? "An owner made you a viewer here. Changes you make now stay on this device." : `You are now ${event.role === "owner" ? "an owner" : "an editor"} of this workspace.`);
       app.set({ sync: { ...sync, role: event.role } });
     } else if (event.event === "skipped") notify(`Did not write “${event.path}”: another device named a place outside this vault.`);
-    else if (event.event === "offline" && sync.status !== "off") app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
+    else if (event.event === "offline" && sync.status !== "off") {
+      countSync("sync_offline", { reason: event.reason });
+      app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
+    }
     else if (event.event === "refused") {
       void (async () => {
         // A sign-in that ran out while the computer slept is answered once with a fresh one.
@@ -553,10 +631,27 @@ function watchSync(): void {
           await connectSync(saved.server, saved.workspace, null, root);
           return;
         }
+        // Leaving or deleting from here makes the relay close this connection: that is not a failure.
+        if (leaving !== root) countSync("sync_refused", { reason: event.reason });
+        // Refused because the team is gone or this person is no longer in it: the relay's list of
+        // their teams says so. Then the workspace goes from this device, and nothing retries.
+        const token = saved && leaving !== root ? (saved.token ?? (await accessToken().catch(() => null))) : null;
+        const mine = saved && token ? await relay<{ id: string }[]>(saved.server, token, "GET", "/v1/workspaces").catch(() => null) : null;
+        if (app.get().vault?.root !== root) return;
+        if (saved && mine && !mine.some((w) => w.id === saved.workspace)) {
+          await dropWorkspace(root, `${app.get().vault?.name ?? "This workspace"} was deleted, or you were removed from it. Its notes stay on this computer.`);
+          return;
+        }
         void unshareAll();
         app.set({ sync: { ...app.get().sync, status: "refused", reason: event.reason } });
       })();
-    } else if (event.event === "pulled") for (const path of sessions.keys()) void share(path);
+    } else if (event.event === "pulled") {
+      if (!episode.pulled && episode.online) {
+        countSync("sync_first_pull", { edits: event.edits, seconds: Math.round((Date.now() - episode.online) / 100) / 10 });
+        episode.pulled = Date.now();
+      }
+      for (const path of sessions.keys()) void share(path);
+    }
     else if (event.event === "published" || event.event === "wrote") void share(event.path);
     // Sync moved a file (a teammate renamed it, or another note took its name): its tab goes with it.
     else if (event.event === "renamed") moveOpen(event.from, event.to);
@@ -591,6 +686,10 @@ export async function boot(): Promise<void> {
   // Every window shows the same folder: when another window opens a different one, follow it.
   onVaultOpened((vault) => {
     if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);
+  });
+  // A window holding a note that could not be saved keeps it on screen, so the words can still be copied out.
+  onVaultClosed((root) => {
+    if (!unsaved()) putAway(root);
   });
   // Signing in or out in another window is noticed when this one is next looked at.
   window.addEventListener("focus", () => {
