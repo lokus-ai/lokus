@@ -6,7 +6,7 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
-| 2026-11-18 | The app takes one message of up to 1 GB from the relay, instead of the websocket library's default 16 MB | The reviewer of #596 found a history whose pull is over 16 MiB is refused in under a second and retried for ever: `Space limit exceeded: Message too long: 24852126 > 16777216`, 0 notes. Reproduced with a real local relay: 1000 notes (19.6 MB stored, a 26.1 MB message) gave 0 of 1000 before and 1000 of 1000 after. The owner's team sent 29.5 MB in one minute of a first sync, so it is at that size | Devin, on evidence, under the owner's "It should auto-sync" and "merge them when needed ur autopilot". Reversal: remove `roomy()` in `crates/lokus-sync/src/client.rs`. PR [#597](https://github.com/lokus-ai/lokus/pull/597) | The library default of 16 MB per message |
+| 2026-11-18 | The app takes one message of up to 1 GB from the relay, instead of the websocket library's default of 16 MB per frame | The reviewer of #596 found a history whose pull is over 16 MiB is refused in under a second and retried for ever: `Space limit exceeded: Message too long: 24852126 > 16777216`, 0 notes. Reproduced with a real local relay: 1000 notes (19.6 MB stored, a 26.1 MB message) gave 0 of 1000 before and 1000 of 1000 after. The owner's team sent 29.5 MB in one minute of a first sync, so it is likely near that size (inferred from traffic, not measured) | Devin, on evidence, under the owner's "It should auto-sync" and "merge them when needed ur autopilot". Reversal: remove `roomy()` in `crates/lokus-sync/src/client.rs`. PR [#597](https://github.com/lokus-ai/lokus/pull/597) | The library default of 16 MB per message |
 | 2026-11-18 | While what a device missed is still arriving, the connection waits up to ten minutes before it is called silent, instead of 50 seconds; the time spent applying it is not counted as silence either. Team settings ask for the member list again when the connection changes state | The owner: "wtf happened he is litrally on a video call with me", with a teammate's Lokus showing Offline and Members 0. His `sync.log`: online 10:56:04 UTC, `offline: "connection: the relay went quiet"` 10:57:24, no `pulled` line. The relay sent 11.6 MB in that minute and 29.5 MB in the next: the first pull is one message, heard only when complete, and it took longer than 50 seconds on a link shared with a video call. The member list was asked for once, while the connection was down | Devin, on evidence, under the owner's "It should auto-sync" and "u work on all". Reversal: remove `PULL_WAIT` in `crates/lokus-sync/src/client.rs`. PR [#596](https://github.com/lokus-ai/lokus/pull/596) | The flat 50-second silence limit |
 | 2026-11-17 | A delayed Noticed "Do it" proceeds only in the conversation and workspace it opened. Changing conversation or workspace, Stop before the reply starts, or a newer reply cancels it; a draft typed meanwhile stays unsent. Recording the choice and refreshing findings use the original workspace; an error that left the choice unrecorded starts nothing, while a recorded choice whose learning note failed still starts (PR #594) | Real macOS Tauri on `b967ff5` appended A's action to an existing B transcript, its provider history and its saved file after delivery of the native result was held; review of `f0c7f75` found the choice is recorded before the learning note is written | Devin, on that native evidence, under the parent's 2026-11-17 mandate to reuse the existing chat, workspace and navigation identity with no new store, flag, writer or queue | Starting a new chat before the awaited resolution with no check afterwards |
 | 2026-11-17 | Leaving the active conversation is declined with a message until its deletion finishes or fails. New, saved/shared chat navigation, Noticed handoff and ordinary workspace switching honor that refusal; already-completed root changes still reset the panel | Native failed deletion outlasting an ordinary workspace switch lost visible reply progress, even with permissions restored; source fixtures reproduced the same loss through New, saved chat and shared chat navigation | Devin, on reproduced evidence, within the parent's approved active-deletion guard using the existing deletion set and transcript writer | Allowing departure while deletion was unresolved left failed-delete recovery without its active transcript |
@@ -203,13 +203,63 @@ question was open, nobody answered, and a default was taken: those are the easie
 - **PR:** [#594](https://github.com/lokus-ai/lokus/pull/594), into `next`.
 - **Reversal:** Revert this change to return to component-local text/mentions and the unscoped attachment store; existing vault files and saved conversation formats need no migration.
 
+These blocks complete the decision records for the changes entering alpha.12. The dates are
+the original decision dates, not the date of this backfill. The rows above remain unchanged;
+`docs/design.md` describes the current system in place.
+
+### Build the installer once
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** Pull requests into `main` still test and use the app on Windows and Linux, but no
+  longer also build the installer and AppImage. Releases build, install and open those files
+  before publication; a manual desktop run retains the same installer checks.
+- **Why:** The alpha.11 Windows check took 27.7 minutes, including 12.9 minutes building and
+  opening an installer that the release built again. The revised check measured 14.4 minutes.
+- **Decided by:** Pratham, "sure" (2026-11-16), approving the proposed removal of the duplicate
+  installer build; Devin retained the manual run within that change.
+- **PR:** [#584](https://github.com/lokus-ai/lokus/pull/584), merged as
+  `97b37ed`; record completed by [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #584 to restore installer checks before merging as well as during release.
+
+### Accept an invitation from its email page
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** The invitation page offers Windows and Linux downloads beside both Macs. Pressing
+  Join records the recipient's consent; the updated app, signed in as that recipient, accepts
+  the invitation and creates the team folder without another click. Merely opening the link
+  does not accept it. The page does not launch the app; older apps retain their own Join button.
+- **Why:** The page offered only Mac downloads and required an installed-app user to find the
+  invitation again. Review also showed that the inviter must not be able to record consent
+  using the ordinary invitation code, so the emailed page uses a separate recipient key.
+- **Decided by:** Pratham, "the email invite doesnt have windows as option to download then also if user already downloaded if click on link shouldnt it open lokus or like u know just add them there or something"
+  (2026-11-16). Devin chose explicit page consent, the recipient key, and app-side joining
+  rather than a new link scheme, within that request.
+- **PR:** [#585](https://github.com/lokus-ai/lokus/pull/585), merged as
+  `ea5bde61b141ef6a2692e198068fddf863df942b`; record completed by
+  [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #585 in the app and relay; leave stored invitation columns intact and resume in-app confirmation.
+
+### Enter a provider key during setup
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** "I have a Claude or OpenAI key" opens the key form in place, in first-run setup
+  and the assistant panel, instead of trying to open Settings behind setup.
+- **Why:** The button was reported as greyed out on Windows; the same inert flow was reproduced
+  on Mac because Settings was not displayed before a folder existed.
+- **Decided by:** Pratham, "also in onboardin the openai api thingy was greyed out for windows"
+  (2026-11-16), reported the defect. Devin chose the shared inline form within the repair mandate.
+- **PR:** [#586](https://github.com/lokus-ai/lokus/pull/586), merged as
+  `993cdc13d7143a22fe64ee5d91728ed8c55ce81c`; record completed by
+  [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #586 to restore the Settings route, including its first-run limitation.
+
 ### Guarded table context menus
 
 - **Date:** 2026-11-16 (UTC).
 - **Change:** The table's mouse-only menu becomes the first consumer of one shared DOM command menu. It captures the visible note and unchanged table source, dismisses stale targets, supports keyboard opening/navigation/dismissal, restores cell focus and selection on cancellation, and guards read-only and secondary-click checkbox editing. Existing row/column operations become registered editor commands. Ordinary text inputs and source text retain native editing menus. Other frames and custom clipboard actions are not added in this milestone.
 - **Why:** Real Mac testing on `ea5bde61b141ef6a2692e198068fddf863df942b` with Tauri 2.12.5 and its JavaScript API 2.12.4 found native Select All targeting the note instead of the cell, stale native Cut executing after a document change, and both item removal and resource close deadlocking while a popup tracked. Process samples show reentry into the locked resource table. The installed JavaScript declaration says `popup()` resolves when shown, but this Mac resolved after dismissal; neither observation is a portable cleanup contract. See [Tauri menu API](https://v2.tauri.app/reference/javascript/api/namespacemenu/), [predefined item support](https://docs.rs/tauri/latest/tauri/menu/struct.PredefinedMenuItem.html), and [captured experiment](https://app.devin.ai/sessions/f04d7ebd0d5f43f9b3ff4c563888ee82?testRecording=22dcd17e-3c23-4e62-943c-50f4e3a0d224). Windows/Linux popup and clipboard behavior has not been proved; native Undo/Redo is unsupported there.
 - **Decided by:** Devin, on the runtime evidence above, within the accepted 2026-11-16 context-menu implementation mandate: "First resolve presentation in real app before broad adapters" and "if platform popup cannot safely meet target semantics, choose the smallest shared DOM presentation within existing bridge/registry, not a broad clipboard system."
-- **PR:** [#595](https://github.com/lokus-ai/lokus/pull/595); merge SHA to be recorded by the integrating parent.
+- **PR:** [#595](https://github.com/lokus-ai/lokus/pull/595), merged into `next` as `fc6606e5a97074f5772bc54935e3b5bfc4a6e7b6`.
 - **Reversal:** Revert the table-menu migration, its editor/workspace hooks and scoped styles together; native popups require new target-invalidation and lifetime evidence before adoption.
 
 ### GitHub personal-access-token connections
@@ -218,7 +268,8 @@ question was open, nobody answered, and a default was taken: those are the easie
 - **Change:** GitHub was waiting for Lokus app registration. Settings and first-run setup now reuse one personal-access-token screen, check discovery with only the entered token, and save the connection in the existing OS keychain. Updating a token keeps a switched-off connection switched off and preserves the previous credential on failed validation or a settings-save failure; cancellation during checking saves nothing. A bearer token takes precedence over OAuth for that server; OAuth-only and custom-server sign-in remain available.
 - **Why:** [GitHub's official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server) support PATs without host-app registration, while OAuth needs a GitHub or OAuth app. Real provider proof also exposed an invalid session when the SDK advertised a newer protocol with the initialize handshake; the client now advertises the SDK's latest initialize-compatible protocol. Review and an isolated credential-fault reproduction found that ignoring OAuth or bearer-token deletion errors let custom-server names be reused with old credentials: disconnect now clears fallback OAuth memory even on failure, surfaces persisted-credential deletion errors, and retains the server until both cleanup steps succeed. Discovery is not a promise that the token may call every listed tool.
 - **Decided by:** Devin, on that documentation and provider evidence, within the 2026-11-16 mandate relaying the owner's exact words: "Make the imessages connection work and the GitHub connector work." The GitHub-only scope, no app registration, no permission expansion and no external test writes were explicit constraints. The PAT flow and protocol correction are Devin's implementation decisions, not an owner decision to register an app or broaden a credential.
-- **PR:** [#590](https://github.com/lokus-ai/lokus/pull/590), into `next`.
+- **PR:** [#590](https://github.com/lokus-ai/lokus/pull/590), merged into `next` as
+  `75d5e846b668fc25d9e51e0de8b4c38334f55b73`.
 - **Reversal:** Revert this PR's commits to restore the registration-gated catalog and previous MCP authentication behavior; do not delete existing local keychain credentials or settings.
 
 ### Manual and global folder collapse
@@ -239,6 +290,7 @@ question was open, nobody answered, and a default was taken: those are the easie
   file open. I don't know why. Also, there is no button to collapse all the folders."
   Devin chose explicit reveal and workspace-scoped choices within that folder-collapse
   mandate, retaining the existing named-command registry and design system.
-- **PR:** [#591](https://github.com/lokus-ai/lokus/pull/591); merge SHA pending parent review.
+- **PR:** [#591](https://github.com/lokus-ai/lokus/pull/591), merged as
+  `835af2b21b3268d6bce5e300511fd354de478661`.
 - **Reversal:** Revert this PR to remove the control/commands and restore the old forced-open
   rendering; no file, storage or sync migration is involved.
