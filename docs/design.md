@@ -706,8 +706,7 @@ every look is shown. This handoff belongs to the conversation and workspace it o
 the person changes conversations or workspaces, starts another reply, or stops it before
 the reply starts, the delayed action is canceled. A draft typed in that same conversation
 stays unsent while the original action proceeds. Recording the choice and refreshing the
-findings use the original workspace; a failed resolution shows an error and does not start
-the action. A choice already recorded is not undone when the later handoff is canceled.
+findings use the original workspace; a resolution that fails before the choice is recorded shows an error and does not start the action; if the choice was recorded and only writing what was learned failed, the error is shown and the action still starts. A choice already recorded is not undone when the later handoff is canceled.
 Not built: looking while the app is closed, system notifications, a
 team's own admin API as a connection (it works today only if that API is offered as an MCP
 server), GitHub.
