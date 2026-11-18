@@ -702,6 +702,17 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
 4. Do not publish local files until the first server sync completes, or stale devices bring
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
+6. The text in a note's document always uses `\n`. Beside it the document carries one word,
+   `crlf` or `lf` (map `meta`, key `eol`): the line ending of the file on the device that last
+   put an edit of its own into the document. A device that has no file of the note yet creates
+   it with that ending, so a note written with `\r\n`, with or without a final newline or a
+   byte-order mark, arrives byte-identical. A file that exists is never rewritten because of
+   this word: a device keeps the endings its own file has, whatever a teammate's file has, so
+   a person who rewrites a note with other endings changes only their own file and those made
+   after it. A document without the word means `\n`, which is what a build before this one
+   writes and reads; notes already synced with `\n` stay so. Mixed endings and a lone `\r`
+   are not carried: such a note arrives with `\n`, and the first edit by anyone unifies it on
+   the device that wrote it too.
 
 ### Releases and news (built)
 
