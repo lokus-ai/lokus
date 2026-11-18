@@ -647,6 +647,11 @@ impl Engine {
         self.save(id, &doc, Some(&text), Some(path))?;
         self.queue(id, update.to_vec())?;
         if doc.transact().state_vector() != before {
+            // The open editor takes it too: its copy must not miss a step this device made.
+            self.events.push(Event::Ingested {
+                doc: id.to_string(),
+                data: encode(&said),
+            });
             self.queue(id, said)?;
         }
         Ok(())
@@ -673,7 +678,7 @@ impl Engine {
         // Fold in any local edit that has not been picked up yet, so it is merged, not overwritten.
         let mut local = None;
         if let (Some(p), Some(row)) = (&path, &row) {
-            if let Some((disk, _)) = self.read_disk(p) {
+            if let Some((disk, eol)) = self.read_disk(p) {
                 let base = row.synced.clone().unwrap_or_default();
                 if disk != base {
                     let before = doc.transact().state_vector();
@@ -681,6 +686,7 @@ impl Engine {
                         let mut txn = doc.transact_mut();
                         apply_diff(&content, &mut txn, &base, &disk);
                     }
+                    Self::carry_eol(&doc, eol);
                     local = Some(doc.transact().encode_diff_v1(&before));
                 }
             }
@@ -1760,6 +1766,29 @@ mod tests {
         assert_eq!(
             c.read("Late.md").as_deref(),
             Some("one\r\ntwo\r\nthree\r\n")
+        );
+    }
+
+    #[test]
+    fn a_line_ending_changed_while_away_is_said_when_merged_with_a_teammates_edit() {
+        // An edit made while away, merged with a teammate's as it arrives, says its ending too.
+        let (mut a, mut b) = (device(), device());
+        a.write("Away.md", "one\ntwo\n");
+        exchange(&mut a, &mut b);
+        a.write("Away.md", "one\r\ntwo\r\nfrom a\r\n");
+        b.write("Away.md", "from b\none\ntwo\n");
+        b.engine.scan().unwrap();
+        for out in b.engine.outbox().unwrap() {
+            a.engine.apply_remote(&out.doc, &out.data).unwrap();
+        }
+        exchange(&mut a, &mut b);
+        let id = b.engine.doc_id("Away.md").unwrap().unwrap();
+        let told = Doc::new();
+        apply(&told, &b.engine.state(&id).unwrap().unwrap()).unwrap();
+        assert_eq!(Engine::carried_eol(&told), Eol::Crlf);
+        assert_eq!(
+            a.read("Away.md").as_deref(),
+            Some("from b\r\none\r\ntwo\r\nfrom a\r\n")
         );
     }
 
