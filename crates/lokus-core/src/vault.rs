@@ -119,33 +119,39 @@ impl Vault {
         }
         fs::create_dir_all(self.root.join(META_DIR))?;
         let id = uuid::Uuid::new_v4().simple().to_string();
-        // Made only if it is not there: of two that ask at once, both get the one that landed.
-        // Whatever else sits at that name is taken away itself, never written through.
+        // Written whole beside it, then given its name only if nothing has that name: of several
+        // that ask at once, one lands and every other reads that one. Nobody sees a half-made
+        // file. Whatever else sits at that name is taken away itself, never written through.
+        let mine = self.root.join(META_DIR).join(format!("id.{id}"));
+        fs::write(&mine, &id)?;
+        let mut landed = Err(CoreError::NotFound(file.display().to_string()));
         for _ in 0..2 {
-            match fs::OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&file)
-            {
-                Ok(mut made) => {
-                    made.write_all(id.as_bytes())?;
-                    return Ok(id);
+            match fs::hard_link(&mine, &file) {
+                Ok(()) => {
+                    landed = Ok(id.clone());
+                    break;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    if let Some(id) = read() {
-                        return Ok(id);
+                    if let Some(theirs) = read() {
+                        landed = Ok(theirs);
+                        break;
                     }
                     // Its own file that cannot be read just now is still its id: fail rather
                     // than give the folder a new one and leave what was kept under the old.
-                    if fs::symlink_metadata(&file).is_ok_and(|m| m.is_file()) {
-                        fs::read(&file)?;
+                    let readable = !fs::symlink_metadata(&file).is_ok_and(|m| m.is_file())
+                        || fs::read(&file).is_ok();
+                    if !readable || fs::remove_file(&file).is_err() {
+                        break;
                     }
-                    fs::remove_file(&file)?;
                 }
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    landed = Err(e.into());
+                    break;
+                }
             }
         }
-        Err(CoreError::NotFound(file.display().to_string()))
+        let _ = fs::remove_file(&mine);
+        landed
     }
 
     pub fn name(&self) -> String {
@@ -586,6 +592,22 @@ pub(crate) fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn everyone_who_asks_a_new_folder_for_its_id_at_once_gets_the_same_one() {
+        // Review of 2026-11-18: the first asker made the file empty and then filled it; one
+        // who came between took the empty file away and made an id of its own.
+        for _ in 0..200 {
+            let dir = tempfile::tempdir().unwrap();
+            let vault = Vault::open(dir.path()).unwrap();
+            let ids: Vec<String> = std::thread::scope(|s| {
+                let asked: Vec<_> = (0..8).map(|_| s.spawn(|| vault.id().unwrap())).collect();
+                asked.into_iter().map(|a| a.join().unwrap()).collect()
+            });
+            let kept = vault.id().unwrap();
+            assert!(ids.iter().all(|id| *id == kept), "{ids:?} then {kept}");
+        }
+    }
 
     #[test]
     fn a_folder_keeps_its_id_when_it_is_renamed() {
