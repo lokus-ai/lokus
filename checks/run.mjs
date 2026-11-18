@@ -5,6 +5,7 @@ import { check as uiBridgeOnly } from './rules/ui-bridge-only.mjs'
 import { check as corePure } from './rules/core-pure.mjs'
 import { check as fidelity } from './rules/fidelity.mjs'
 import { check as partMarkers } from './rules/part-markers.mjs'
+import { check as news } from './rules/news.mjs'
 import { warnings } from './rules/warnings.mjs'
 
 // Usage: node checks/run.mjs [--root <dir>] [--skip fidelity]
@@ -18,6 +19,7 @@ const checks = [
   ['core-pure', corePure],
   ['fidelity', fidelity],
   ['part-markers', partMarkers],
+  ['news', news],
 ]
 
 let failed = false
