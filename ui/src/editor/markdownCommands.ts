@@ -112,14 +112,18 @@ export function readFrontmatter(text: string): Frontmatter {
   if (!close) return none;
   const bodyEnd = 3 + close.index;
   const values: Record<string, string> = {};
-  for (const line of text.slice(text.indexOf("\n") + 1, bodyEnd).split("\n")) {
-    const m = /^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$/.exec(line);
+  const lines = text.slice(text.indexOf("\n") + 1, bodyEnd).split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$/.exec(lines[i]);
     if (m) {
       let value = m[2].replace(/^(["'])(.*)\1$/, "$2");
       if (m[2].startsWith('"')) {
         try { value = JSON.parse(m[2]) as string; } catch { /* Preserve non-JSON YAML scalars. */ }
       }
-      values[m[1]] = value;
+      // A block list reads as the flow list it is equivalent to.
+      const items: string[] = [];
+      for (let item; !m[2] && (item = /^[ \t]+-[ \t]+(.*?)[ \t]*$/.exec(lines[i + 1] ?? "")); i++) items.push(item[1]);
+      values[m[1]] = items.length ? `[${items.join(", ")}]` : value;
     }
   }
   return { end: bodyEnd + close[0].length, values };
@@ -139,7 +143,8 @@ export function setFrontmatterKey(state: EditorState, key: string, value: string
   }
   const bodyStart = text.indexOf("\n") + 1;
   const closeStart = text.lastIndexOf("---", fm.end - 1);
-  const existing = new RegExp(`^${key}:.*\\n?`, "m").exec(text.slice(bodyStart, closeStart));
+  // A key owns its indented continuation lines, such as block-list entries.
+  const existing = new RegExp(`^${key}:.*\\n?(?:[ \\t]+.*\\n?)*`, "m").exec(text.slice(bodyStart, closeStart));
   if (existing) {
     const from = bodyStart + existing.index;
     return { changes: { from, to: from + existing[0].length, insert: line } };
