@@ -27,7 +27,7 @@ none of its code is carried over.
 | Editor | CodeMirror 6 | The markdown text is the document, so saving cannot corrupt a file; gives live preview |
 | Collaboration | Yjs in the editor, `yrs` in Rust | Same format on both sides; offline merge and live cursors |
 | Server | Supabase (auth, Postgres, storage) + one Rust websocket relay | Supabase alone cannot relay durable edits |
-| Analytics | PostHog | Product events only, with an opt-out; note content is never sent |
+| Analytics | PostHog | Product events and how sync is doing, with an opt-out; note content is never sent |
 
 ## 3. Repo layout
 
@@ -476,8 +476,29 @@ new one. Only one sync engine runs on a vault at a time: a second one (another w
 command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
 
 **Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
-change a role, remove someone, invite by email and cancel invitations, stop syncing, leave or delete.
-There is no separate team window.
+change a role, remove someone, invite by email and cancel invitations, leave or delete.
+There is no separate team window, and no way to stop syncing: a member's folder syncs.
+
+**Leaving, deleting, being removed.** When Leave or Delete succeeds, the connection ends, the
+folder is taken off this device's workspace list and the app shows the next workspace on the
+list, or the start page when there is none (`dropWorkspace` in `ui/src/shell/workspace.ts`;
+`vault_forget` also closes the folder when it is the open one, so the next start does not open
+it again). The folder and its notes stay on disk, and the page and the notice say so. The same
+happens on another member's device: when its connection is refused it asks the relay which
+teams the person is in, and if this one is not among them it stops, says so once and drops the
+folder the same way; a team folder that is not open is dropped at the next look for teams, and so is one an
+earlier version left on the list after a Leave or Delete (it is named in that version's
+`lokus.sync.stopped`, which is read once and then removed). A
+refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped".
+
+**Seeing sync fail without asking for a log.** Through the analytics bridge
+(`trackSync` in `ui/src/bridge/analytics.ts`) the app sends `sync_connected` (role),
+`sync_offline` and `sync_refused` (the reason) and `sync_first_pull` (edits, seconds from
+connected to pulled), each with the app version, the platform and the team's id. Each distinct
+event and reason goes once per connection, so a retry every three seconds is one event, not
+twenty a minute. Reasons have paths and file names taken out and anything shaped like a
+sign-in replaced; no note, title, path or token is sent. The opt-out covers these too.
+`sync.log` on the device is unchanged.
 
 **Not built:** end-to-end encryption (whoever runs the relay can read the notes; see the
 decision log), attachments in a bucket, and limits on ordinary requests per account.
@@ -578,8 +599,14 @@ safe:
   screen. When a note there cannot be written (it changed on disk meanwhile), the folder
   stays on screen and the teams wait for the next look. A team that cannot be given a
   folder does not hold up the others.
-- A team whose syncing was stopped on this computer (Settings, Team, Stop syncing) is not
-  started again. "Sync this vault here" starts it.
+- Nothing turns a team's syncing off, and nothing has to be pressed to start it. A folder
+  that synced with a team before (its `.lokus/sync.sqlite` names the team; `sync_bound`) is
+  connected again when a member opens it, including one whose syncing an earlier version had
+  stopped. "Sync this vault here" is left only for a relay of one's own, which knows nobody
+  until its address and token are typed. Creating a team (Share) and joining by invitation
+  stay the person's own acts.
+- A folder kept for a team the person is no longer in is taken off the workspace list (see
+  "Leaving, deleting, being removed").
 - One connection is open at a time, the open folder's. With several teams the first is left
   on screen; the others sync when their folder is opened from the switcher.
 - First-run setup chooses the first folder itself; teams are brought when it closes. With

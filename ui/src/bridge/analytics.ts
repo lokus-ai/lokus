@@ -64,6 +64,9 @@ export type AnalyticsEvent =
   | "connection_added"
   | "connection_failed"
   | "sync_connected"
+  | "sync_offline"
+  | "sync_refused"
+  | "sync_first_pull"
   | "update_offered"
   | "update_started"
   | "update_installed"
@@ -118,6 +121,24 @@ export function reportError(error: unknown, where: string, extra?: Record<string
   recent.push({ event: "$exception", props, sent: Boolean(posthog) });
   if (posthog) posthog.capture("$exception", props);
   else if (queue.length < 50) queue.push(["$exception", props]);
+}
+
+/** What one sync connection has already said, so a retry every few seconds is counted once. */
+let syncSaid = new Set<string>();
+
+/**
+ * How sync is doing on this copy, so a failure is seen without asking the person for their log:
+ * connected, went offline and why, was refused and why, and how the first pull went. Each
+ * distinct thing is sent once per connection (`fresh` starts the next one). Only the team's id
+ * and the reason go, with paths and names taken out; never a note, a title or a sign-in.
+ */
+export function trackSync(event: "sync_connected" | "sync_offline" | "sync_refused" | "sync_first_pull", workspace: string | undefined, props: Record<string, string | number> = {}, fresh = false): void {
+  if (fresh) syncSaid = new Set();
+  const reason = typeof props.reason === "string" ? scrub(props.reason).replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "<token>").slice(0, 200) : undefined;
+  const key = `${event}|${reason ?? ""}`;
+  if (syncSaid.has(key)) return;
+  syncSaid.add(key);
+  track(event, { app_version: about.app_version ?? "", platform: about.platform ?? "", ...props, ...(reason === undefined ? {} : { reason }), workspace: workspace ?? "" });
 }
 
 /** Catch what nothing else caught: errors thrown anywhere in the window, promises nobody handled. */

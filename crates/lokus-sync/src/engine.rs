@@ -86,6 +86,20 @@ struct Row {
     path: Option<String>,
 }
 
+/// The workspace a folder's sync state belongs to, read without starting an engine: `None` for a
+/// folder that never synced, and for one whose engine is running elsewhere and holds the file.
+pub fn bound(root: &std::path::Path) -> Option<String> {
+    let file = root.join(META_DIR).join("sync.sqlite");
+    if !file.is_file() {
+        return None;
+    }
+    let db = Connection::open_with_flags(file, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    db.query_row("SELECT value FROM meta WHERE key = 'workspace'", [], |r| {
+        r.get(0)
+    })
+    .ok()
+}
+
 impl Engine {
     pub fn root(&self) -> &std::path::Path {
         self.vault.root()

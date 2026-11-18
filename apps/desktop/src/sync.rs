@@ -225,6 +225,21 @@ pub fn sync_status(sync: State<'_, Sync>) -> Value {
     }
 }
 
+/// The team workspace a folder last synced with, whether or not it is syncing now. A member who
+/// opens such a folder is connected without being asked.
+#[tauri::command(async)]
+pub fn sync_bound(sync: State<'_, Sync>, root: String) -> Option<String> {
+    let root = std::path::Path::new(&root);
+    if let Some(link) = sync.link() {
+        if let Ok(engine) = link.engine.lock() {
+            if engine.root() == root {
+                return engine.meta("workspace").ok().flatten();
+            }
+        }
+    }
+    lokus_sync::engine::bound(root)
+}
+
 /// The shared document behind a note, for an editor that is opening it.
 #[tauri::command(async)]
 pub fn sync_doc(sync: State<'_, Sync>, path: String) -> Result<Option<Value>, Value> {
