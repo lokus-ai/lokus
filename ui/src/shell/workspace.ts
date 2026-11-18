@@ -14,6 +14,7 @@ import {
   type Note,
   onIndexReady,
   onVaultChanged,
+  onVaultClosed,
   onVaultOpened,
   openVault,
   pickFolder,
@@ -536,6 +537,12 @@ export async function dropWorkspace(root: string, said: string): Promise<void> {
   }
   await saveAll();
   if (unsaved()) return notify("Changes could not be saved. Retry before leaving this workspace.");
+  // A reply still being written is put in its conversation while the folder is still open.
+  try {
+    await flushChat?.();
+  } catch {
+    return notify("The conversation could not be saved. Retry before leaving this workspace.");
+  }
   localStorage.removeItem(`lokus.sync:${root}`);
   stopSignIns?.();
   stopSignIns = null;
@@ -545,14 +552,17 @@ export async function dropWorkspace(root: string, said: string): Promise<void> {
   const next = (await listVaults()).find((v) => v.root !== root);
   if (next) await setVault(next.root).catch(report);
   // Still on it: there was no other workspace, or the other could not be opened.
-  const stayed = app.get().vault?.root === root;
   await forgetVault(root);
-  if (stayed) {
-    for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
-    sessions.clear();
-    app.set({ vault: null, tree: [], tabs: [], view: "note", active: null, dirty: {}, saves: {}, properties: {}, conflict: null, peers: [] });
-  }
+  putAway(root);
   notify(said);
+}
+
+/** The folder on screen was closed for good, here or in another window: show the start page. */
+function putAway(root: string): void {
+  if (app.get().vault?.root !== root) return;
+  for (const session of sessions.values()) if (session.shared) closeShared(session.shared);
+  sessions.clear();
+  app.set({ vault: null, tree: [], tabs: [], view: "note", active: null, dirty: {}, saves: {}, properties: {}, conflict: null, peers: [], settings: null, sync: { status: "off" } });
 }
 
 /** Leave or delete the open team workspace: `ask` tells the relay, and when it agrees the workspace goes from this device. */
@@ -669,6 +679,7 @@ export async function boot(): Promise<void> {
   onVaultOpened((vault) => {
     if (!switching && app.get().ready && app.get().vault?.root !== vault.root) void enterVault(vault);
   });
+  onVaultClosed((root) => putAway(root));
   // Signing in or out in another window is noticed when this one is next looked at.
   window.addEventListener("focus", () => {
     void currentAccount().then((account) => {

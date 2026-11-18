@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 fn file(app: &AppHandle) -> Option<PathBuf> {
     app.path()
@@ -76,6 +76,8 @@ pub fn vault_forget(app: AppHandle, root: String) {
         {
             crate::sync::stop_for(&app);
             *open = None;
+            // Every window shows the same folder: each one puts it away.
+            let _ = app.emit("vault:closed", &root);
             if let Some(last) = crate::last_vault_file(&app) {
                 let _ = std::fs::remove_file(last);
             }

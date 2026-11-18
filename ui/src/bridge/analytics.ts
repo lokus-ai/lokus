@@ -134,7 +134,11 @@ let syncSaid = new Set<string>();
  */
 export function trackSync(event: "sync_connected" | "sync_offline" | "sync_refused" | "sync_first_pull", workspace: string | undefined, props: Record<string, string | number> = {}, fresh = false): void {
   if (fresh) syncSaid = new Set();
-  const reason = typeof props.reason === "string" ? scrub(props.reason).replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "<token>").slice(0, 200) : undefined;
+  const said = typeof props.reason === "string" ? scrub(props.reason).replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "<token>").slice(0, 200) : undefined;
+  // A reason that names a file or a place may carry the rest of a title around it ("Project <file>"):
+  // only its kind goes, the words before the first colon.
+  const named = said?.search(/<file>|<path>|“/) ?? -1;
+  const reason = said === undefined || named < 0 ? said : `${said.includes(":") && said.indexOf(":") < named ? said.slice(0, said.indexOf(":")) : "sync"}: <about a file>`;
   const key = `${event}|${reason ?? ""}`;
   if (syncSaid.has(key)) return;
   syncSaid.add(key);
