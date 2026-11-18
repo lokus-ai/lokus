@@ -336,6 +336,11 @@ The team's work, kept the way customers are: one note each.
   private/shared writers reject another root, and stale completion cannot move a new vault's
   tabs or trigger caller follow-up. Tree refresh reads that captured root and discards results
   after the UI changes vaults. Shared rename preserves the existing document identity.
+  Creating a note, folder, row, daily or template note, attachment, the first Customers or
+  Tasks note, and restoring a version or a trashed file carry the window's vault the same way:
+  a window left on its folder by a refused switch is refused rather than writing into the
+  folder another window opened. A workspace made from the sidebar is created and opened only
+  after this window has saved its notes and the assistant has kept its reply in progress.
   Incoming sync events carry the serving vault's root: another vault's same-ID text, presence,
   rename, trash, role or new-data notice cannot change the retained session or current workspace.
   A shared document without a materialized file refuses local updates before changing sync state

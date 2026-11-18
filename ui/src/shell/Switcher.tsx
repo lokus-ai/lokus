@@ -55,10 +55,10 @@ export function WorkspaceSwitcher() {
     const wanted = name.trim();
     if (!wanted) return;
     close();
-    void defaultVault(true, wanted).then(
-      (made) => setVault(made.root),
-      (err) => notify(said(err)),
-    );
+    // Find the folder first; it is made and opened only after this window has saved and flushed.
+    void defaultVault(false, wanted)
+      .then((at) => setVault(at.root, () => defaultVault(true, wanted)))
+      .catch((err) => notify(said(err)));
   };
   const accept = (w: Waiting) => {
     void join(w, "new").then(close, (e) => notify(said(e)));
