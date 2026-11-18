@@ -291,19 +291,25 @@ impl Config {
             let pairs = accounts(kind, name, WAITING)
                 .into_iter()
                 .zip(accounts(kind, name, at));
-            let mut found = Vec::new();
+            let (mut found, mut unread, mut in_memory) = (Vec::new(), false, false);
             for (from, to) in pairs {
                 match read_raw(&from) {
                     Ok(value) => found.push((to, value.or_else(|| kept(&from)))),
-                    // Not shown. Where there is no keychain at all a sign-in is held in
-                    // memory and that is all there is; where there is one, it said no (locked,
-                    // or the person refused) and what it holds is not known.
+                    // Not shown: locked, refused, or not there to ask just now. What it holds
+                    // is not known, unless the sign-in was never in it and is held in memory.
                     Err(_) => match kept(&from) {
-                        Some(value) => found.push((to, Some(value))),
-                        None if keychain_answers() => return false,
-                        None => found.push((to, None)),
+                        Some(value) => {
+                            in_memory = true;
+                            found.push((to, Some(value)));
+                        }
+                        None => unread = true,
                     },
                 }
+            }
+            // Could not read always means leave it waiting. The one exception is a sign-in made
+            // while there was no keychain: memory is then all there ever was of it.
+            if unread && !in_memory {
+                return false;
             }
             for (to, value) in found {
                 let Some(value) = value else { continue };
@@ -418,14 +424,6 @@ fn entry_raw(account: &str) -> keyring::Result<keyring::Entry> {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| SERVICE.to_string());
     keyring::Entry::new(&service, account)
-}
-
-/// Whether there is a keychain to ask: one that knows nothing of a name nobody uses is there.
-fn keychain_answers() -> bool {
-    matches!(
-        entry_raw("probe").map(|e| e.get_password()),
-        Ok(Ok(_) | Err(keyring::Error::NoEntry))
-    )
 }
 
 fn entry(account: &str) -> Result<keyring::Entry> {
@@ -684,6 +682,9 @@ mod tests {
         Config::put(dir, "", seen).unwrap();
         let waiting = Config::load(dir).seen_from("");
         assert_eq!(oauth_account(&waiting.mcp[0]), "mcp-oauth:slack@-");
+        // Signed in, as the app keeps it: in the keychain, or in memory where there is none.
+        // Without that, a keychain that cannot be read would leave it waiting (below).
+        keep(&oauth_account(&waiting.mcp[0]), "sign-in");
         Config::settle(dir, "/w/d").unwrap();
         let now = Config::load(dir);
         assert!(now.seen_from("").mcp.is_empty());
@@ -693,6 +694,11 @@ mod tests {
         assert_eq!(mcp_account(&now.seen_from(&a).mcp[0]), "mcp:slack");
         Config::settle(dir, "/w/e").unwrap();
         assert!(Config::load(dir).seen_from("/w/e").mcp.is_empty());
+        assert_eq!(
+            kept(&oauth_account(&in_d.mcp[0])).as_deref(),
+            Some("sign-in")
+        );
+        forget(&oauth_account(&in_d.mcp[0]));
         // Nothing that names a key's place is written to the file.
         assert!(!std::fs::read_to_string(dir.join(FILE))
             .unwrap()
