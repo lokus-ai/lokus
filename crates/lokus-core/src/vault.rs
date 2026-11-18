@@ -162,16 +162,18 @@ impl Vault {
                     break;
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-                    // Without links the other one may still be filling it: give it a moment.
+                    // An empty one may be another app's, on a drive without links, about to be
+                    // filled: give it a moment before it is taken for a broken one.
                     let mut theirs = read();
-                    for _ in 0..if linked { 0 } else { 100 } {
-                        if theirs.is_some() {
+                    for _ in 0..100 {
+                        if theirs.is_some() || fs::metadata(&file).map_or(true, |m| m.len() > 0) {
                             break;
                         }
                         std::thread::sleep(std::time::Duration::from_millis(10));
                         theirs = read();
                     }
-                    if let Some(theirs) = theirs {
+                    // Once more: it may have been filled between the two looks.
+                    if let Some(theirs) = theirs.or_else(read) {
                         landed = Ok(theirs);
                         break;
                     }
