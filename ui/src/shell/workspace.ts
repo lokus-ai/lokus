@@ -1153,7 +1153,9 @@ export interface NoteVersion {
 /** Earlier versions of the open note, newest first. */
 export async function versions(): Promise<NoteVersion[]> {
   const { active } = app.get();
-  return active ? runCore<NoteVersion[]>("history.list", { path: active }, app.get().vault?.root) : [];
+  if (!active) return [];
+  // Say why the list is empty when another folder is serving, rather than "no versions".
+  return runCore<NoteVersion[]>("history.list", { path: active }, app.get().vault?.root).catch((e) => (report(e), []));
 }
 
 /** Bring back an earlier version of the open note. What it replaces becomes a version too. */
@@ -1176,7 +1178,7 @@ export interface TrashedFile {
   deleted_at: number;
 }
 
-export const trashed = () => runCore<TrashedFile[]>("trash.list", {}, app.get().vault?.root);
+export const trashed = () => runCore<TrashedFile[]>("trash.list", {}, app.get().vault?.root).catch((e): TrashedFile[] => (report(e), []));
 
 export async function restoreFromTrash(id: string): Promise<void> {
   const root = app.get().vault?.root;
