@@ -17,8 +17,8 @@ use serde::Serialize;
 use crate::error::{CoreError, Result};
 use crate::vault::{Vault, META_DIR};
 
-/// Bump when the tables change; an old index is thrown away and rebuilt.
-const SCHEMA: i64 = 4;
+/// Bump when tables or derived interpretations change; old indexes are rebuilt.
+const SCHEMA: i64 = 5;
 
 pub struct Index {
     db: Connection,
@@ -612,6 +612,43 @@ mod tests {
         }
         let vault = Vault::open(dir.path()).unwrap();
         (dir, vault)
+    }
+
+    #[test]
+    fn old_quoted_properties_rebuild_without_rewriting_notes() {
+        let status = "qa, [雪]: \"x\" \\done";
+        let note = crate::frontmatter::set(
+            "---\ntype: task\n---\nBody stays.  \n",
+            "status",
+            &serde_json::json!(status),
+        );
+        let (_dir, v) = vault(&[("tasks/One.md", &note)]);
+        let mut old = Index::open(&v).unwrap();
+        old.refresh().unwrap();
+        old.db
+            .execute(
+                "UPDATE props SET value = ?1 WHERE key = 'status'",
+                [serde_json::json!(status.replace('\\', "\\\\")).to_string()],
+            )
+            .unwrap();
+        old.db.pragma_update(None, "user_version", 4).unwrap();
+        assert_ne!(
+            old.rows("tasks").unwrap()[0].props["status"],
+            serde_json::json!(status)
+        );
+        let path = v.root().join("tasks/One.md");
+        let bytes = fs::read(&path).unwrap();
+        let modified = fs::metadata(&path).unwrap().modified().unwrap();
+        drop(old);
+        let mut updated = Index::open(&v).unwrap();
+        assert_eq!(updated.refresh().unwrap().updated, 1);
+        assert_eq!(
+            updated.rows("tasks").unwrap()[0].props["status"],
+            serde_json::json!(status)
+        );
+        assert_eq!(updated.refresh().unwrap().updated, 0);
+        assert_eq!(fs::read(&path).unwrap(), bytes);
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), modified);
     }
 
     #[test]

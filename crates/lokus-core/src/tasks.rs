@@ -122,6 +122,12 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
         return Err(bad("a task is a list of details"));
     }
     let title = line(task, "title", 200)?;
+    if task.get("status").and_then(Value::as_str).is_some_and(|s| {
+        s.chars()
+            .any(|c| c.is_control() || matches!(c, '\u{2028}' | '\u{2029}'))
+    }) {
+        return Err(bad("status must fit on one line"));
+    }
     let status = line(task, "status", 30)?.map(|s| s.to_lowercase());
     let priority = line(task, "priority", 20)?.map(|s| s.to_lowercase());
     if let Some(p) = &priority {
@@ -173,28 +179,38 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
     }
 
     let existing = all(vault)?;
-    let wanted = match line(task, "key", 20)? {
-        Some(key) => {
-            let number = number_of(&key).ok_or_else(|| bad("key is a task's number, like T-12"))?;
-            Some(
-                existing
-                    .iter()
-                    .find(|t| t.number == number)
-                    .ok_or_else(|| CoreError::NotFound(format!("task T-{number}")))?,
-            )
-        }
-        None => title.as_ref().and_then(|title| {
-            let name = file_name(title).ok()?;
+    let wanted = if let Some(path) = task.get("path").and_then(Value::as_str) {
+        Some(
             existing
                 .iter()
-                .find(|t| t.title.eq_ignore_ascii_case(&name))
-        }),
+                .find(|t| t.path == path)
+                .ok_or_else(|| CoreError::NotFound(path.to_string()))?,
+        )
+    } else {
+        match line(task, "key", 20)? {
+            Some(key) => {
+                let number =
+                    number_of(&key).ok_or_else(|| bad("key is a task's number, like T-12"))?;
+                Some(
+                    existing
+                        .iter()
+                        .find(|t| t.number == number)
+                        .ok_or_else(|| CoreError::NotFound(format!("task T-{number}")))?,
+                )
+            }
+            None => title.as_ref().and_then(|title| {
+                let name = file_name(title).ok()?;
+                existing
+                    .iter()
+                    .find(|t| t.title.eq_ignore_ascii_case(&name))
+            }),
+        }
     };
 
     let mut props: Vec<(&str, Value)> = Vec::new();
     let mut set = |key: &'static str, value: Option<String>| {
-        if let Some(value) = value {
-            props.push((key, json!(value)));
+        if task.get(key).is_some() {
+            props.push((key, value.map_or(Value::Null, |v| json!(v))));
         }
     };
     set("status", status.clone());
@@ -211,6 +227,16 @@ pub fn record(vault: &Vault, task: &Value) -> Result<(String, i64)> {
         Some(found) => {
             let note = vault.read(&found.path)?;
             let had = frontmatter::read(&note.text);
+            if let Some(expected) = task.get("expected").and_then(Value::as_object) {
+                for (key, value) in expected {
+                    let current = had.get(key).unwrap_or(&Value::Null);
+                    if current != value && !(current.is_null() && value == "") {
+                        return Err(bad(format!(
+                            "{key} changed elsewhere; reload the task before editing it"
+                        )));
+                    }
+                }
+            }
             let mut changed = note.text.clone();
             for (key, value) in &props {
                 if had.get(*key).unwrap_or(&Value::Null) != value {
@@ -259,6 +285,69 @@ mod tests {
 
     fn props(vault: &Vault, path: &str) -> serde_json::Map<String, Value> {
         frontmatter::read(&vault.read(path).unwrap().text)
+    }
+
+    #[test]
+    fn inline_edits_clear_fields_merge_latest_body_and_reject_stale_values() {
+        let (_dir, v) = vault();
+        let (path, _) = record(&v, &json!({"title":"Inline", "assignee":"Alice", "priority":"high", "due":"2026-12-01", "text":"Original body"})).unwrap();
+        let note = v.read(&path).unwrap();
+        let changed = note.text.replace("Original body", "Body changed elsewhere");
+        v.write(&path, &changed, Eol::Lf, Some(&note.hash)).unwrap();
+        record(
+            &v,
+            &json!({"path":path, "assignee":null, "expected":{"assignee":"Alice"}}),
+        )
+        .unwrap();
+        let cleared = v.read(&path).unwrap();
+        assert!(cleared.text.contains("Body changed elsewhere"));
+        assert!(!props(&v, &path).contains_key("assignee"));
+        assert_eq!(props(&v, &path)["priority"], "high");
+        assert!(record(
+            &v,
+            &json!({"path":path, "priority":"low", "expected":{"priority":"medium"}})
+        )
+        .is_err());
+        assert_eq!(v.read(&path).unwrap().text, cleared.text);
+        assert!(record(&v, &json!({"path":path, "priority":"invalid", "due":null})).is_err());
+        assert_eq!(v.read(&path).unwrap().text, cleared.text);
+        record(&v, &json!({"path":path, "priority":null, "due":null})).unwrap();
+        assert!(!props(&v, &path).contains_key("priority"));
+        assert!(!props(&v, &path).contains_key("due"));
+        let saved = v.read(&path).unwrap();
+        record(&v, &json!({"path":path, "priority":null, "due":null})).unwrap();
+        assert_eq!(v.read(&path).unwrap().hash, saved.hash);
+    }
+
+    #[test]
+    fn clicked_path_wins_over_duplicate_task_numbers() {
+        let (_dir, v) = vault();
+        v.create(
+            "tasks/One.md",
+            "---\ntype: task\nnumber: 1\nstatus: todo\n---\n",
+        )
+        .unwrap();
+        v.create(
+            "tasks/Two.md",
+            "---\ntype: task\nnumber: 1\nstatus: todo\n---\n",
+        )
+        .unwrap();
+        record(
+            &v,
+            &json!({"path":"tasks/Two.md", "status":"ready, [雪]: \"yes\" \\done"}),
+        )
+        .unwrap();
+        assert_eq!(props(&v, "tasks/One.md")["status"], "todo");
+        assert_eq!(
+            props(&v, "tasks/Two.md")["status"],
+            "ready, [雪]: \"yes\" \\done"
+        );
+        assert!(record(&v, &json!({"path":"tasks/Two.md", "status":"bad\ncolumn"})).is_err());
+        assert!(record(
+            &v,
+            &json!({"path":"tasks/Gone.md", "title":"One", "status":"done"})
+        )
+        .is_err());
     }
 
     #[test]

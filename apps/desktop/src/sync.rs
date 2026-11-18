@@ -147,24 +147,28 @@ pub async fn sync_connect(
     };
     let (reporter, done) = (app.clone(), app.clone());
     let serving = link.clone();
+    let root = core.vault.root().to_string_lossy().into_owned();
     let task = tauri::async_runtime::spawn(async move {
         let logging = reporter.clone();
+        let event_root = root.clone();
         // Run where a panic can be seen. One inside the connection used to end it without a
         // word, and the app went on saying "Connecting".
-        let working = std::panic::AssertUnwindSafe(serve(serving, nudges, config, move |event| {
-            // What the connection goes through is kept: when sync misbehaves on someone's
-            // computer, this file is the only account of it there is.
-            match event["event"].as_str() {
-                Some("online") => note(&logging, &format!("online as {}", event["role"])),
-                Some("offline") => note(&logging, &format!("offline: {}", event["reason"])),
-                Some("pulled") => note(&logging, &format!("pulled {} edits", event["edits"])),
-                Some(kind @ ("renamed" | "kept_both" | "skipped" | "rebound")) => {
-                    note(&logging, &format!("{kind}: {event}"))
+        let working =
+            std::panic::AssertUnwindSafe(serve(serving, nudges, config, move |mut event| {
+                event["root"] = json!(event_root);
+                // What the connection goes through is kept: when sync misbehaves on someone's
+                // computer, this file is the only account of it there is.
+                match event["event"].as_str() {
+                    Some("online") => note(&logging, &format!("online as {}", event["role"])),
+                    Some("offline") => note(&logging, &format!("offline: {}", event["reason"])),
+                    Some("pulled") => note(&logging, &format!("pulled {} edits", event["edits"])),
+                    Some(kind @ ("renamed" | "kept_both" | "skipped" | "rebound")) => {
+                        note(&logging, &format!("{kind}: {event}"))
+                    }
+                    _ => {}
                 }
-                _ => {}
-            }
-            let _ = reporter.emit("sync:event", event);
-        }));
+                let _ = reporter.emit("sync:event", event);
+            }));
         // Caught in this same task, so stopping the task still stops the connection.
         let outcome = match futures_util::FutureExt::catch_unwind(working).await {
             Ok(outcome) => outcome,
@@ -172,7 +176,7 @@ pub async fn sync_connect(
                 note(&done, "the connection crashed");
                 let _ = done.emit(
                     "sync:event",
-                    json!({ "event": "offline", "reason": "sync stopped unexpectedly; it will be tried again" }),
+                    json!({ "event": "offline", "root": root, "reason": "sync stopped unexpectedly; it will be tried again" }),
                 );
                 return;
             }
@@ -181,7 +185,7 @@ pub async fn sync_connect(
         if let Err(e) = outcome {
             let _ = done.emit(
                 "sync:event",
-                json!({ "event": "refused", "reason": e.to_string() }),
+                json!({ "event": "refused", "root": root, "reason": e.to_string() }),
             );
         }
     });
@@ -238,46 +242,82 @@ pub fn sync_doc(sync: State<'_, Sync>, path: String) -> Result<Option<Value>, Va
         .state(&id)
         .map_err(|e| fail("sync", e))?
         .unwrap_or_default();
-    Ok(Some(json!({ "id": id, "state": B64.encode(state) })))
+    Ok(Some(
+        json!({ "id": id, "state": B64.encode(state), "root": engine.root() }),
+    ))
 }
 
 /// Rename a note or a folder in a shared vault. `false` when the vault is not shared, and the
 /// caller renames it the ordinary way.
 #[tauri::command(async)]
-pub fn sync_rename(sync: State<'_, Sync>, from: String, to: String) -> Result<bool, Value> {
+pub fn sync_rename(
+    sync: State<'_, Sync>,
+    from: String,
+    to: String,
+    root: String,
+) -> Result<bool, Value> {
     let Some(link) = sync.link() else {
         return Ok(false);
     };
-    link.engine
+    let mut engine = link
+        .engine
         .lock()
-        .map_err(|_| fail("sync", "sync engine stopped"))?
-        .rename(&from, &to)
-        .map_err(|e| fail("sync", e))?;
+        .map_err(|_| fail("sync", "sync engine stopped"))?;
+    if engine.root() != std::path::Path::new(&root) {
+        return Err(fail(
+            "vault_changed",
+            "The workspace changed. Try again in the original workspace.",
+        ));
+    }
+    engine.rename(&from, &to).map_err(|e| fail("sync", e))?;
+    drop(engine);
     link.nudge(Nudge::Changed);
     Ok(true)
 }
 
 /// An edit typed in the editor.
 #[tauri::command(async)]
-pub fn sync_local(sync: State<'_, Sync>, id: String, update: String) -> Result<(), Value> {
+pub fn sync_local(
+    sync: State<'_, Sync>,
+    id: String,
+    update: String,
+    root: String,
+) -> Result<(), Value> {
     let link = sync
         .link()
         .ok_or_else(|| fail("sync", "sync is not running"))?;
     let bytes = B64.decode(update).map_err(|e| fail("sync", e))?;
-    link.engine
+    let mut engine = link
+        .engine
         .lock()
-        .map_err(|_| fail("sync", "sync engine stopped"))?
+        .map_err(|_| fail("sync", "sync engine stopped"))?;
+    if engine.root() != std::path::Path::new(&root) {
+        return Err(fail(
+            "vault_changed",
+            "The workspace changed. Try again in the original workspace.",
+        ));
+    }
+    engine
         .local_update(&id, &bytes)
         .map_err(|e| fail("sync", e))?;
+    drop(engine);
     link.nudge(Nudge::Changed);
     Ok(())
 }
 
 #[tauri::command(async)]
-pub fn sync_awareness(sync: State<'_, Sync>, id: String, data: Value) {
-    if let Some(link) = sync.link() {
-        link.nudge(Nudge::Awareness { doc: id, data });
+pub fn sync_awareness(sync: State<'_, Sync>, id: String, data: Value, root: String) {
+    let Some(link) = sync.link() else {
+        return;
+    };
+    let Ok(engine) = link.engine.lock() else {
+        return;
+    };
+    if engine.root() != std::path::Path::new(&root) {
+        return;
     }
+    drop(engine);
+    link.nudge(Nudge::Awareness { doc: id, data });
 }
 
 /// Workspaces, members and invites on the relay.

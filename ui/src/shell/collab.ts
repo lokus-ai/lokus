@@ -11,9 +11,13 @@ import { onSyncEvent, syncAwareness, syncDoc, syncLocal } from "../bridge/sync";
  */
 export interface Shared {
   id: string;
+  root: string;
   ydoc: Y.Doc;
   text: Y.Text;
   awareness: Awareness;
+  pending: Uint8Array[];
+  saving?: Promise<void>;
+  failed: boolean;
 }
 
 export interface Peer {
@@ -23,10 +27,10 @@ export interface Peer {
 
 const open = new Map<string, Shared>();
 /** Which awareness ids arrived over which connection, so a dropped connection clears its cursors. */
-const byConn = new Map<number, { doc: string; ids: Set<number> }>();
-const sending = new Map<string, Promise<void>>();
+const byConn = new Map<string, { doc: string; ids: Set<number> }>();
 let me: Peer = { name: "You", color: "#2f6fed" };
 let changed: () => void = () => {};
+let saved: (shared: Shared) => void = () => {};
 
 const COLORS = ["#e5484d", "#f76b15", "#ffb224", "#30a46c", "#12a594", "#0091ff", "#6e56cf", "#d6409f"];
 
@@ -37,67 +41,86 @@ export function setIdentity(name: string): void {
   for (const shared of open.values()) shared.awareness.setLocalStateField("user", { ...me, colorLight: `${me.color}33` });
 }
 
-export function startCollab(onPresenceChange: () => void): void {
+export function startCollab(onPresenceChange: () => void, onSaveChange: (shared: Shared) => void): void {
   changed = onPresenceChange;
+  saved = onSaveChange;
   onSyncEvent((event) => {
     if (event.event === "remote" || event.event === "ingested") {
       const shared = open.get(event.doc);
-      if (shared) Y.applyUpdate(shared.ydoc, event.data, "remote");
+      if (shared?.root === event.root) Y.applyUpdate(shared.ydoc, event.data, "remote");
     } else if (event.event === "presence") {
-      const known = byConn.get(event.conn);
+      const connection = JSON.stringify([event.root, event.conn]);
+      const known = byConn.get(connection);
       if (event.left) {
         const shared = known && open.get(known.doc);
-        if (shared && known) removeAwarenessStates(shared.awareness, [...known.ids], "remote");
-        byConn.delete(event.conn);
+        if (shared?.root === event.root && known) removeAwarenessStates(shared.awareness, [...known.ids], "remote");
+        byConn.delete(connection);
         return;
       }
       const shared = event.doc ? open.get(event.doc) : undefined;
-      if (!shared || !event.data) return;
+      if (!shared || shared.root !== event.root || !event.data) return;
       const before = new Set(shared.awareness.getStates().keys());
       applyAwarenessUpdate(shared.awareness, event.data, "remote");
       const entry = known ?? { doc: shared.id, ids: new Set<number>() };
       for (const id of shared.awareness.getStates().keys()) if (!before.has(id)) entry.ids.add(id);
-      byConn.set(event.conn, entry);
+      byConn.set(connection, entry);
       // Someone new: make sure they see our cursor too.
-      if (!known) syncAwareness(shared.id, encodeAwarenessUpdate(shared.awareness, [shared.ydoc.clientID]));
+      if (!known) syncAwareness(shared.id, encodeAwarenessUpdate(shared.awareness, [shared.ydoc.clientID]), shared.root);
     }
   });
 }
 
 /** The shared document behind a note, or null when the note is not synced. */
-export async function openShared(path: string): Promise<Shared | null> {
+export async function openShared(path: string, root: string): Promise<Shared | null> {
   const found = await syncDoc(path).catch(() => null);
-  if (!found) return null;
+  if (!found || found.root !== root) return null;
   const existing = open.get(found.id);
-  if (existing) return existing;
+  if (existing) return existing.root === root ? existing : null;
 
   const ydoc = new Y.Doc();
   const awareness = new Awareness(ydoc);
-  const shared: Shared = { id: found.id, ydoc, text: ydoc.getText("content"), awareness };
+  const shared: Shared = { id: found.id, root, ydoc, text: ydoc.getText("content"), awareness, pending: [], failed: false };
   Y.applyUpdate(ydoc, found.state, "remote");
-  open.set(found.id, shared);
-  // Anything that arrived between the first read and registering above.
-  const again = await syncDoc(path).catch(() => null);
-  if (again) Y.applyUpdate(ydoc, again.state, "remote");
-
   ydoc.on("update", (update: Uint8Array, origin: unknown) => {
     if (origin === "remote") return;
-    // One at a time, in order, so the engine never sees an edit before the one it builds on.
-    const previous = sending.get(shared.id) ?? Promise.resolve();
-    sending.set(
-      shared.id,
-      previous.then(() => syncLocal(shared.id, update)).catch(() => {}),
-    );
+    shared.pending.push(update);
+    void flushShared(shared).catch(() => {});
   });
   awareness.on("update", (change: { added: number[]; updated: number[]; removed: number[] }, origin: unknown) => {
     if (origin === "local") {
-      syncAwareness(shared.id, encodeAwarenessUpdate(awareness, [...change.added, ...change.updated, ...change.removed]));
+      syncAwareness(shared.id, encodeAwarenessUpdate(awareness, [...change.added, ...change.updated, ...change.removed]), shared.root);
     }
     changed();
   });
+  open.set(found.id, shared);
+  // Anything that arrived between the first read and registering above.
+  const again = await syncDoc(path).catch(() => null);
+  if (again?.root === root && again.id === found.id) Y.applyUpdate(ydoc, again.state, "remote");
   // Set after listening, so our name reaches people who already have the note open.
   awareness.setLocalStateField("user", { ...me, colorLight: `${me.color}33` });
   return shared;
+}
+
+/** Keep failed updates: later edits may depend on them even after the disk is writable again. */
+export function flushShared(shared: Shared): Promise<void> {
+  if (shared.saving) return shared.saving;
+  if (!shared.pending.length) return Promise.resolve();
+  shared.failed = false;
+  shared.saving = (async () => {
+    while (shared.pending.length) {
+      const count = shared.pending.length;
+      await syncLocal(shared.id, Y.mergeUpdates(shared.pending.slice(0, count)), shared.root);
+      shared.pending.splice(0, count);
+    }
+  })().catch((error: unknown) => {
+    shared.failed = true;
+    throw error;
+  }).finally(() => {
+    shared.saving = undefined;
+    saved(shared);
+  });
+  saved(shared);
+  return shared.saving;
 }
 
 export function closeShared(shared: Shared): void {
@@ -105,7 +128,6 @@ export function closeShared(shared: Shared): void {
   shared.awareness.destroy();
   shared.ydoc.destroy();
   open.delete(shared.id);
-  sending.delete(shared.id);
 }
 
 /** Other people with this note open. */

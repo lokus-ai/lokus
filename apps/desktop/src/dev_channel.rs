@@ -96,7 +96,7 @@ fn serve(app: AppHandle, stream: Stream) {
 fn dispatch(app: &AppHandle, name: &str, args: Value) -> Result<Value, Value> {
     if name == "vault.open" {
         let path = args["path"].as_str().unwrap_or_default();
-        return open_vault(app, path);
+        return open_vault(app, path, args["root"].as_str());
     }
     // The menu bar icon's own menu cannot be clicked from a script, so its three choices are here.
     match name {

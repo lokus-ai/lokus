@@ -283,8 +283,8 @@ const KINDS = "lokus.data.kinds";
  * person would otherwise do by hand: read a few, give the fields readable names, and choose
  * which ones the list shows.
  */
-async function newKind(kind: string): Promise<void> {
-  if (!kind || kind.includes(".")) return;
+async function newKind(kind: string, root: string): Promise<void> {
+  if (!kind || kind.includes(".") || app.get().vault?.root !== root) return;
   const known = JSON.parse(localStorage.getItem(KINDS) ?? "[]") as string[];
   if (known.includes(kind)) return;
   localStorage.setItem(KINDS, JSON.stringify([...known, kind]));
@@ -300,8 +300,8 @@ async function newKind(kind: string): Promise<void> {
       situation: "a new kind of data starts arriving from the team's own systems",
       action: `A new kind of record, "${kind}", has started arriving in the folder data/${kind}/ (list note: data/${label.replace(/^./, (c) => c.toUpperCase())} list.md). Read up to 8 of them. Then tell me, as a table: each field, what you think it means, its type and unit, and whether it belongs in the list. Say which fields you are unsure about. Name the 5 fields that matter most day to day and why. Do not change any notes yet; ask me before setting anything.`,
     },
-  }).catch(() => {});
-  await loadNoticed();
+  }, root).catch(() => {});
+  if (app.get().vault?.root === root) await loadNoticed();
 }
 
 let timer = 0;
@@ -359,11 +359,15 @@ export function startWatching(): void {
   }, 45_000);
   // Something pushed in from the team's own systems is a reason to look, once things settle.
   onSyncEvent((event) => {
+    const root = event.root;
+    if (root !== app.get().vault?.root) return;
     const fact = event as { event: string; path?: string };
-    if (fact.event === "fact" && fact.path?.startsWith("data/")) void newKind(fact.path.split("/")[1] ?? "");
+    if (fact.event === "fact" && fact.path?.startsWith("data/")) void newKind(fact.path.split("/")[1] ?? "", root);
     if (fact.event !== "fact" || watchEvery() === 0) return;
     window.clearTimeout(soon);
-    soon = window.setTimeout(() => void check("New customer information has just arrived from the team's own systems; start with what changed."), 90_000);
+    soon = window.setTimeout(() => {
+      if (app.get().vault?.root === root) void check("New customer information has just arrived from the team's own systems; start with what changed.");
+    }, 90_000);
   });
 }
 
