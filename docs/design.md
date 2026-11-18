@@ -670,6 +670,9 @@ confirms that everything it must not be able to do is refused.
   kept in one shape and translated on the way out.
 - **The address belongs to one provider.** It is typed for a compatible service; choosing
   another provider drops it, so a ChatGPT sign-in or a Claude key is never sent there.
+- **The chosen model stays with its provider.** Connecting the same provider again, or going
+  between a ChatGPT plan and an OpenAI key, keeps the model; any other change of provider, or a
+  typed address, clears it and the provider's default is used.
 - **Tools, in three groups.** Reading the vault (search, read a note in parts, list one folder,
   backlinks) never asks. Changing it (create, edit by exact-match replace, move, set a property)
   waits for the person to allow it unless they switch that off, as does any tool-server action
