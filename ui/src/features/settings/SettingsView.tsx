@@ -330,20 +330,12 @@ export default function SettingsView({ page, returnFocus, onPage, onClose }: Pro
         if (!(element instanceof HTMLElement) || !element.isConnected || !element.getClientRects().length ||
           element.closest("[inert]") || getComputedStyle(element).visibility !== "visible" || (selection && !selection.owned())) return;
         element.focus();
-        // A selection returns only to the same text in the same target; a stale one is dropped.
-        if (!selection || document.activeElement !== element || !element.isContentEditable || element.textContent !== selection.text) return;
-        const at = (offset: number): [Node, number] | null => {
-          const walk = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-          let left = offset;
-          for (let node = walk.nextNode(); node; node = walk.nextNode()) {
-            const length = (node as Text).length;
-            if (left <= length) return [node, left];
-            left -= length;
-          }
-          return offset === 0 ? [element, 0] : null;
-        };
-        const anchor = at(selection.anchor), focus = at(selection.focus);
-        if (anchor && focus) getSelection()?.setBaseAndExtent(anchor[0], anchor[1], focus[0], focus[1]);
+        // A selection returns only to the same plain text in the same target; a stale one is dropped.
+        // An editor of many lines keeps its own selection, which offsets in its text cannot tell apart.
+        const text = element.firstChild;
+        if (!selection || document.activeElement !== element || !element.isContentEditable || element.textContent !== selection.text ||
+          !(text instanceof Text) || element.childNodes.length !== 1) return;
+        getSelection()?.setBaseAndExtent(text, selection.anchor, text, selection.focus);
       });
     };
   }, [returnFocus]);
