@@ -8,8 +8,8 @@ import { aiSettings } from "../../bridge/ai";
 import { runCore } from "../../bridge/core";
 import { onSyncEvent } from "../../bridge/sync";
 import { createStore } from "../../shell/store";
-import { app, getEditor, notify, openNote, refreshTree } from "../../shell/workspace";
-import { ask, brief, newChat } from "../ai/chat";
+import { app, getEditor, isSwitchingVault, notify, openNote, refreshTree } from "../../shell/workspace";
+import { ask, brief, captureChat, newChat } from "../ai/chat";
 
 /**
  * The assistant working without being asked.
@@ -85,10 +85,10 @@ export function setWatchEvery(minutes: number): void {
   schedule();
 }
 
-export async function loadNoticed(): Promise<void> {
-  if (!app.get().vault) return;
-  const items = await runCore<Noticed[]>("noticed.list").catch(() => [] as Noticed[]);
-  noticed.set({ items });
+export async function loadNoticed(root = app.get().vault?.root): Promise<void> {
+  if (!root) return;
+  const items = await runCore<Noticed[]>("noticed.list", undefined, root).catch(() => [] as Noticed[]);
+  if (root === app.get().vault?.root) noticed.set({ items });
 }
 
 export const waiting = (items: Noticed[]) => items.filter((i) => i.state === "new");
@@ -220,19 +220,36 @@ export async function check(reason = "This is a routine look.", asked = false): 
 
 /** "Do it": hand what the finding proposed to the assistant, in the open, where each change is asked about. */
 export async function act(item: Noticed, learn: boolean): Promise<void> {
+  if (isSwitchingVault()) {
+    notify("Wait for the workspace to finish opening.");
+    return;
+  }
+  if (!newChat()) return;
+  const target = captureChat();
   track("action", { feature: "noticed", action: "do_it", learn });
-  await resolve(item, "done", learn);
+  if (!(await resolve(item, "done", learn, target.root))) return;
+  if (!target.current()) {
+    notify("The conversation changed, so this action was not started.");
+    return;
+  }
   noticed.set({ open: false });
-  newChat();
   app.set({ panel: { kind: "ai" } });
   await ask(`Do this, which you proposed after noticing it on your own:\n\n${item.action || item.recommend}\n\nWhat you noticed: ${item.title}. ${item.summary ?? ""}`);
 }
 
-export async function resolve(item: Noticed, state: "done" | "dismissed", learn: boolean): Promise<void> {
+export async function resolve(item: Noticed, state: "done" | "dismissed", learn: boolean, root = app.get().vault?.root): Promise<boolean> {
+  if (!root) return false;
   if (state === "dismissed") track("action", { feature: "noticed", action: "dismissed", kind: item.kind, learn });
-  const result = await runCore<{ learned: string | null }>("noticed.resolve", { id: item.id, state, learn }).catch(() => ({ learned: null }));
-  if (result.learned) notify("Remembered for next time");
-  await loadNoticed();
+  const result = await runCore<{ learned: string | null }>("noticed.resolve", { id: item.id, state, learn }, root).catch((e) => {
+    if (root === app.get().vault?.root) notify(e instanceof Error ? e.message : String(e));
+    return null;
+  });
+  if (root !== app.get().vault?.root) return false;
+  if (result?.learned) notify("Remembered for next time");
+  await loadNoticed(root);
+  if (root !== app.get().vault?.root) return false;
+  // The choice is recorded before it is learned from, so a failure may still have recorded it.
+  return Boolean(result) || noticed.get().items.some((i) => i.id === item.id && i.state === state);
 }
 
 /** Add a suggested piece of text to its note: under the heading it named, or at the end. */

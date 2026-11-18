@@ -646,6 +646,31 @@ confirms that everything it must not be able to do is refused.
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
+  explicitly picked @ notes/folders and attached files. Each conversation in each workspace
+  has its own draft in this window's memory; Earlier conversations also lists messages not
+  sent yet, so New chat or a workspace switch leaves them reachable. Deleting a conversation
+  clears its draft. A successful answer clears the submitted draft only if it was not edited
+  while waiting; a failure, stop or model refusal keeps it. Sending waits for file imports.
+  An import belongs to the draft and vault where it started, even if the panel closes or the
+  conversation changes. If its vault is no longer open when the write starts, it reports an
+  error rather than writing into the new workspace. Drafts are not synced, shared between
+  windows or kept after an app restart. Imported files remain ordinary vault files when
+  removed from a draft or when a conversation is deleted.
+  Switching conversations or starting New chat saves unfinished reply progress before
+  leaving. Opening another workspace from this window waits for its captured transcript
+  save; a failed save refuses the switch. A workspace change already completed by another
+  window or initial setup may lose the latest unsaved reply text; its draft is still retained
+  and no transcript is written to another workspace. Stop also cancels while context is
+  loading, before a provider request starts. Late loads/replies cannot undo a newer choice
+  or reopen a deleted conversation.
+  This window declines new sends and additional workspace switches until its current switch
+  finishes or fails; drafts and imports remain with their conversation. A pending deletion
+  cannot be re-saved by the switch. Failed deletion keeps the draft and reply progress for retry.
+  While the current conversation's deletion is unresolved, New, opening another conversation,
+  carrying on from a shared conversation or Noticed, and an ordinary workspace switch are
+  declined with a message. This keeps recovery available if deletion fails; it does not block
+  resetting the panel after a workspace change that has already completed elsewhere.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
@@ -683,7 +708,12 @@ What it finds goes through two tools into `.lokus/noticed/` (never synced):
 
 "Do it" hands the action to the assistant in the open, where each change is asked about, and
 writes what was chosen under "How we handle things" in `Assistant.md`, which every request and
-every look is shown. Not built: looking while the app is closed, system notifications, a
+every look is shown. This handoff belongs to the conversation and workspace it opened. If
+the person changes conversations or workspaces, starts another reply, or stops it before
+the reply starts, the delayed action is canceled. A draft typed in that same conversation
+stays unsent while the original action proceeds. Recording the choice and refreshing the
+findings use the original workspace; a resolution that fails before the choice is recorded shows an error and does not start the action; if the choice was recorded and only writing what was learned failed, the error is shown and the action still starts. A choice already recorded is not undone when the later handoff is canceled.
+Not built: looking while the app is closed, system notifications, a
 team's own admin API as a connection (it works today only if that API is offered as an MCP
 server), GitHub.
 

@@ -112,8 +112,25 @@ fn last_vault_file(app: &AppHandle) -> Option<PathBuf> {
 }
 
 #[tauri::command(async)]
-fn core_run(shell: State<'_, Shell>, name: String, args: Option<Value>) -> Result<Value, Value> {
-    run_core(&shell, &name, args.unwrap_or(Value::Null))
+fn core_run(
+    shell: State<'_, Shell>,
+    name: String,
+    args: Option<Value>,
+    root: Option<String>,
+) -> Result<Value, Value> {
+    // Check and capture together. The Arc keeps this vault alive through execution without
+    // holding up a folder switch, and execution never looks up the current vault again.
+    let core = {
+        let open = shell.open.lock().map_err(|_| no_vault())?;
+        let core = &open.as_ref().ok_or_else(no_vault)?.core;
+        if root.is_some_and(|root| core.vault.root() != std::path::Path::new(&root)) {
+            return Err(
+                json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+            );
+        }
+        core.clone()
+    };
+    commands::run(&core, &name, args.unwrap_or(Value::Null)).map_err(|e| error_value(&e))
 }
 
 #[tauri::command(async)]
