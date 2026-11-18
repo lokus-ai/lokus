@@ -63,6 +63,9 @@ const RENEW_CHECK: Duration = Duration::from_secs(20);
 /// relay is asked to answer at every renew check, so a healthy connection is never this quiet;
 /// one that a sleeping laptop or a changed network left open but dead is.
 const QUIET: Duration = Duration::from_secs(50);
+/// The longest a pull may take to arrive. What a device missed comes as one message, heard only
+/// once all of it is here; a team's whole history over a slow link takes longer than `QUIET`.
+const PULL_WAIT: Duration = Duration::from_secs(600);
 
 /// What the app can ask a running connection to do.
 pub enum Nudge {
@@ -374,6 +377,7 @@ async fn session(
     ))
     .await
     .map_err(|e| Error::Net(e.to_string()))?;
+    let mut pulling = true;
 
     loop {
         // Everything queued goes out; acks remove it from the outbox.
@@ -444,6 +448,9 @@ async fn session(
                             report(json!({ "event": "remote", "doc": item["doc"], "data": item["data"] }));
                         }
                         report(json!({ "event": "pulled", "edits": items.len() }));
+                        // Applying a long pull is this device's time, not the relay's silence.
+                        pulling = false;
+                        heard = tokio::time::Instant::now();
                     }
                     "up" => {
                         let data = B64.decode(value["data"].as_str().unwrap_or_default()).map_err(|x| Error::Crdt(x.to_string()))?;
@@ -469,6 +476,7 @@ async fn session(
                         out.send(Message::Text(json!({ "t": "pull", "since": safe }).to_string().into()))
                             .await
                             .map_err(|e| Error::Net(e.to_string()))?;
+                        pulling = true;
                     }
                     "error" => {
                         let text = value["message"].as_str().unwrap_or("refused").to_string();
@@ -481,7 +489,7 @@ async fn session(
                 }
             }
             _ = renew.tick() => {
-                if heard.elapsed() > QUIET {
+                if heard.elapsed() > if pulling { PULL_WAIT } else { QUIET } {
                     return Err(Error::Net("the relay went quiet".into()));
                 }
                 out.send(Message::Ping(Default::default())).await.map_err(|e| Error::Net(e.to_string()))?;
