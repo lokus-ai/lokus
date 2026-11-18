@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { DOWNLOAD_PAGE, misplaced, openWeb, type Post, quitApp, UPDATE_SERVER } from "../../bridge/updates";
 import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
-import { renderMarkdown } from "../../shell/workspace";
+import { app, renderMarkdown } from "../../shell/workspace";
 import { Row, Section } from "../settings/parts";
 import { applies, check, closeNews, install, later, readNews, restart, updates } from "./updates";
 
@@ -190,7 +190,7 @@ export function WhatsNew() {
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && closeNews()}>
       <div className="news" role="dialog" aria-label="What’s new in Lokus">
-        <button className="news-close" aria-label="Close" onClick={closeNews}>
+        <button className="news-close" aria-label="Close" autoFocus onClick={closeNews}>
           <Icon name="close" />
         </button>
         {post ? (
@@ -310,7 +310,7 @@ export function UpdateSettings() {
         )}
       </Row>
       <Row label="What’s new" hint="Everything we have shipped and announced, newest first.">
-        <button className="settings-button" onClick={() => readNews("all")}>
+        <button className="settings-button" onClick={() => { app.set({ settings: null }); readNews("all"); }}>
           See what’s new
         </button>
       </Row>
