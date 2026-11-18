@@ -481,7 +481,7 @@ There is no separate team window, and no way to stop syncing: a member's folder 
 
 **Leaving, deleting, being removed.** When Leave or Delete succeeds, the connection ends, the
 folder is taken off this device's workspace list and the app shows the next workspace on the
-list, or the start page when there is none (`dropWorkspace` in `ui/src/shell/workspace.ts`;
+list, or the start page when there is none, where the same one sentence is shown (`dropWorkspace` in `ui/src/shell/workspace.ts`;
 `vault_forget` also closes the folder when it is the open one, so the next start does not open
 it again). The folder and its notes stay on disk, and the page and the notice say so. The same
 happens on another member's device: when its connection is refused it asks the relay which
@@ -495,8 +495,13 @@ refusal for any other reason (a sign-in that ran out) keeps the folder and shows
 (`trackSync` in `ui/src/bridge/analytics.ts`) the app sends `sync_connected` (role),
 `sync_offline` and `sync_refused` (the reason) and `sync_first_pull` (edits, seconds from
 connected to pulled), each with the app version, the platform and the team's id. Each distinct
-event and reason goes once per connection, so a retry every three seconds is one event, not
-twenty a minute. Reasons have paths and file names taken out and anything shaped like a
+event and reason goes once per team, and that memory outlives a reconnect: a relay that is down,
+or a connection that comes up and drops every three seconds, is one event per reason, not twenty
+a minute. It starts again only after a connection that held (its first pull is in and it stayed
+up 30 seconds), so a later failure is said once more. The same thing still repeating an hour
+later is sent again with `suppressed`, the number of repeats held back. Leaving or deleting a
+workspace from this device is not a failure and sends no `sync_refused`. The memory is in the
+window, not on disk. Reasons have paths and file names taken out and anything shaped like a
 sign-in replaced; no note, title, path or token is sent. The opt-out covers these too.
 `sync.log` on the device is unchanged.
 

@@ -446,12 +446,19 @@ let stopSignIns: (() => void) | null = null;
 let retriedSignIn = false;
 /** The latest request to connect, so a retry for an older one does nothing. */
 let lastAsk = "";
-/** One connection, for what is counted about it: starting afresh, when it came online, whether its first pull is in. */
-let episode = { fresh: true, online: 0, pulled: false };
-/** Count one thing about the connection. The first thing counted for a connection starts its once-each memory again. */
+/** The connection, for what is counted about it: when it last came online, and when its first pull came in. */
+let episode = { online: 0, pulled: 0 };
+/** A connection held when its first pull is in and it stayed up this long after; one that drops sooner is still failing. */
+const HELD = 30_000;
+/**
+ * Count one thing about the connection. Each is counted once per team (see `trackSync`), so a
+ * connection that comes up and drops every few seconds says so once. After one that held, what
+ * happens next is new and is counted again.
+ */
 function countSync(event: Parameters<typeof trackSync>[0], props: Record<string, string | number> = {}): void {
-  trackSync(event, app.get().sync.workspace, props, episode.fresh);
-  episode.fresh = false;
+  const held = episode.pulled > 0 && Date.now() - episode.pulled >= HELD;
+  if (held) episode.pulled = 0;
+  trackSync(event, app.get().sync.workspace, props, held);
 }
 /** The workspace being left or deleted from here, so the relay's own word of it is not answered twice. */
 let leaving: string | null = null;
@@ -478,7 +485,6 @@ export async function connectSync(server: string, workspace: string, token: stri
   if (unsaved() && !reconnecting) return notify("Changes could not be saved. Retry before changing the sync connection.");
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
   localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
-  episode = { fresh: true, online: 0, pulled: false };
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -598,8 +604,8 @@ function watchSync(): void {
     const { sync } = app.get();
     if (event.event === "online") {
       if (sync.status !== "online") {
-        episode = { fresh: true, online: Date.now(), pulled: false };
         countSync("sync_connected", { role: event.role });
+        episode = { online: Date.now(), pulled: 0 };
       }
       if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
       retriedSignIn = false;
@@ -624,7 +630,8 @@ function watchSync(): void {
           await connectSync(saved.server, saved.workspace, null, root);
           return;
         }
-        countSync("sync_refused", { reason: event.reason });
+        // Leaving or deleting from here makes the relay close this connection: that is not a failure.
+        if (leaving !== root) countSync("sync_refused", { reason: event.reason });
         // Refused because the team is gone or this person is no longer in it: the relay's list of
         // their teams says so. Then the workspace goes from this device, and nothing retries.
         const token = saved && leaving !== root ? (saved.token ?? (await accessToken().catch(() => null))) : null;
@@ -639,8 +646,8 @@ function watchSync(): void {
       })();
     } else if (event.event === "pulled") {
       if (!episode.pulled && episode.online) {
-        episode.pulled = true;
         countSync("sync_first_pull", { edits: event.edits, seconds: Math.round((Date.now() - episode.online) / 100) / 10 });
+        episode.pulled = Date.now();
       }
       for (const path of sessions.keys()) void share(path);
     }

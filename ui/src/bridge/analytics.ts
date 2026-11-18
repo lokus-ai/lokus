@@ -123,26 +123,35 @@ export function reportError(error: unknown, where: string, extra?: Record<string
   else if (queue.length < 50) queue.push(["$exception", props]);
 }
 
-/** What one sync connection has already said, so a retry every few seconds is counted once. */
-let syncSaid = new Set<string>();
+/** What has been said about each team's sync, when, and how many repeats were held back since. */
+const syncSaid = new Map<string, { at: number; held: number }>();
+const SYNC_REPEAT = 60 * 60 * 1000;
 
 /**
  * How sync is doing on this copy, so a failure is seen without asking the person for their log:
  * connected, went offline and why, was refused and why, and how the first pull went. Each
- * distinct thing is sent once per connection (`fresh` starts the next one). Only the team's id
- * and the reason go, with paths and names taken out; never a note, a title or a sign-in.
+ * distinct thing is sent once per team, however often the connection is retried or comes back
+ * and fails again; the same thing is sent again after an hour, with `suppressed`, the number of
+ * repeats held back. `healthy` says the connection held (its first pull is in and it stayed up),
+ * so what happens next is new and is said again. Only the team's id and the reason go, with
+ * paths and names taken out; never a note, a title or a sign-in.
  */
-export function trackSync(event: "sync_connected" | "sync_offline" | "sync_refused" | "sync_first_pull", workspace: string | undefined, props: Record<string, string | number> = {}, fresh = false): void {
-  if (fresh) syncSaid = new Set();
+export function trackSync(event: "sync_connected" | "sync_offline" | "sync_refused" | "sync_first_pull", workspace: string | undefined, props: Record<string, string | number> = {}, healthy = false): void {
+  const team = workspace ?? "";
+  if (healthy) for (const key of syncSaid.keys()) if (key.startsWith(`${team}|`)) syncSaid.delete(key);
   const said = typeof props.reason === "string" ? scrub(props.reason).replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "<token>").slice(0, 200) : undefined;
   // A reason that names a file or a place may carry the rest of a title around it ("Project <file>"):
   // only its kind goes, the words before the first colon.
   const named = said?.search(/<file>|<path>|“/) ?? -1;
   const reason = said === undefined || named < 0 ? said : `${said.includes(":") && said.indexOf(":") < named ? said.slice(0, said.indexOf(":")) : "sync"}: <about a file>`;
-  const key = `${event}|${reason ?? ""}`;
-  if (syncSaid.has(key)) return;
-  syncSaid.add(key);
-  track(event, { app_version: about.app_version ?? "", platform: about.platform ?? "", ...props, ...(reason === undefined ? {} : { reason }), workspace: workspace ?? "" });
+  const key = `${team}|${event}|${reason ?? ""}`;
+  const before = syncSaid.get(key);
+  if (before && Date.now() - before.at < SYNC_REPEAT) {
+    before.held += 1;
+    return;
+  }
+  syncSaid.set(key, { at: Date.now(), held: 0 });
+  track(event, { app_version: about.app_version ?? "", platform: about.platform ?? "", ...props, ...(reason === undefined ? {} : { reason }), ...(before ? { suppressed: before.held } : {}), workspace: team });
 }
 
 /** Catch what nothing else caught: errors thrown anywhere in the window, promises nobody handled. */
