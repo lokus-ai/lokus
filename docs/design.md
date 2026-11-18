@@ -88,6 +88,14 @@ and fails unless every file is byte-identical.
 
 Small things that make it a daily driver, all plain commands over plain files:
 
+- **Folders in the sidebar:** opening a file shows its parents unless the person has closed
+  them. A manually closed folder stays closed through edits, tab changes and renaming it
+  in the sidebar; its nested folder choices follow the rename too. The separate
+  **Collapse all folders** sidebar button and `tree.collapseAll` command close every folder
+  in the open workspace, including nested folders, without closing files, changing text or
+  stopping sync. `tree.revealActive` (**Reveal active file in sidebar**) reopens the active
+  file's parents and brings its row into view. Folder choices belong to the current workspace
+  and window; switching workspaces starts a fresh tree, not another workspace's choices.
 - **Links inside a note:** `[[Note#Heading]]` and `[[Note^block]]` open the note at that place;
   `![[Note#Heading]]` embeds just that part. "Go to a heading" lists the open note's headings.
   A link to a web page, `[words](https://…)`, opens in the browser on a click, as a link to a
@@ -97,7 +105,16 @@ Small things that make it a daily driver, all plain commands over plain files:
   A note that cannot be drawn does not open, and the note on screen stays as it was.
 - **Tables:** a table in a note is edited as a table. A click in a cell types into that cell (the
   cell shows its own markdown while typed in, the rest stay drawn), Tab and Enter move on and make
-  a new row past the last one, and a right-click adds or removes a row or a column. A link in a
+  a new row past the last one, and a right-click adds or removes a row or a column. Shift+F10 or
+  the Menu key opens the same command menu from a cell. Arrow keys, Home and End move through
+  its actions; Enter or Space chooses one. The target cell stays outlined while its menu is
+  open. Escape or Tab dismisses it and restores the cell's
+  selection. The menu stays inside the window and closes on outside focus/click, window blur,
+  scrolling, resize, or a change to the captured note, document, selection or editable state.
+  It never applies an old action to a replacement row or hidden note. Header deletion and
+  deletion of the last column are not offered. The existing table actions use named commands
+  and the shared `ui/src/shell/contextMenu.ts` presentation; ordinary inputs and source text
+  retain native menus. No clipboard bridge or native popup is added. A link in a
   cell, to a note or to a web page, reads as its words and opens on a click. Each
   keystroke changes only that cell's text in the file, so the note is still a plain markdown
   table. When the file changes outside the app, only the part that differs is replaced in the
@@ -109,7 +126,8 @@ Small things that make it a daily driver, all plain commands over plain files:
 - **Trash:** deleting moves a file to `.lokus/trash/`; "Restore from the trash" puts it back.
   A note a teammate deletes while it is open here closes its tab and says so, so nobody goes on
   typing into a note that is gone; it is in this computer's trash too. The graph or a file in
-  front stays in front. A note that is not shared, with words not yet in its file, keeps its tab,
+  front stays in front, and while it is in front keys do not reach the note underneath, however
+  it was brought forward; the note takes the keyboard again when it is back in front. A note that is not shared, with words not yet in its file, keeps its tab,
   and saving brings it back. Known limit: in a shared note, keys typed in the instant between the
   delete arriving and the tab closing (about a tenth of a second) reach no file.
 - **Version history:** when a note is overwritten (by you, a teammate's edit or the assistant) its
@@ -269,7 +287,11 @@ sprints, estimates, a roadmap or timeline view, comments on a task, and reading 
   screen; a small picture of their Lokus fills in as they answer. The last screen does the work
   in front of them: makes Documents/Lokus if no folder is open, creates `Customers.md` and
   `Tasks.md` when asked for, and writes "About this workspace" into `Assistant.md` so the
-  assistant knows what they are here for. `Lokus: run the setup again` replays it.
+  assistant knows what they are here for. `Lokus: run the setup again` replays it. Someone
+  with no model connected is asked to turn the assistant on: Sign in with ChatGPT, or a Claude
+  or OpenAI key pasted right there (`ui/src/features/ai/Connect.tsx`, the same card the
+  assistant's panel shows). The key is not sent to Settings for: Settings is not on screen
+  until a folder is open.
 - **Start page**: what shows when nothing is open. Cards ordered by what they said they use,
   their aim, the tools they named but have not connected, and their notes.
 - **Windows** (`apps/desktop/src/windows.rs`): File, New Window (Cmd+Shift+N). Every window
@@ -299,7 +321,7 @@ engine in `lokus-sync`, which writes the file.
 |---|---|
 | `workspaces` | id, name, who created it and when |
 | `members` | workspace, user, email, role, when they joined |
-| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often |
+| `invites` | code, workspace, role, who made it, when it runs out, whether it was cancelled, who used it; for one sent by email: the address, the name the owner goes by, when it was last emailed and how often, the key its email carries, and when the person it names pressed Join on its page |
 | `updates` | the edit log: a running number, workspace, note id, the edit, who made it and when |
 | `blobs` | attachments under the hash of their bytes, with size, who stored them and when |
 | `audit` | who changed who may do what; kept even after a workspace is deleted |
@@ -350,7 +372,11 @@ been, so a note made as "Untitled" and given its title offline never meets a tea
   runs out.
 - A socket that has gone silent is not trusted. The app asks the relay to answer every 20
   seconds; after 50 seconds of hearing nothing (a laptop that slept, a network that changed) it
-  drops the connection and opens a new one, and what either side missed arrives then.
+  drops the connection and opens a new one, and what either side missed arrives then. While
+  what it missed is still arriving the wait is ten minutes: that comes as one message, heard
+  only when all of it is here, and a team's whole history over a slow link takes longer than 50
+  seconds. That one message may be up to 1 GB; the 16 MB a websocket takes by default
+  refused a team's history once it had grown past that.
 
 **What the relay refuses**
 
@@ -481,8 +507,9 @@ safe:
 ### Inviting by email (built; tried in the real app against a local relay with a stand-in mail service; no real email has been sent yet)
 
 An owner types an address under Settings, Team. The relay emails that person from
-`noreply@lokusmd.com`; they sign in to Lokus with that address and the invitation is waiting.
-Nobody copies or pastes a code.
+`noreply@lokusmd.com`; they press Join on the page the email opens, and the workspace comes to
+every computer where they are signed in to Lokus with that address. Nobody copies or pastes a
+code, and someone who pressed Join on the page is not asked again inside Lokus.
 
 - **Sending.** `POST /v1/workspaces/{id}/invites` with an `email` makes the invite and sends
   it through Resend's HTTP API (`crates/lokus-server/src/mail.rs`). The relay needs
@@ -490,10 +517,28 @@ Nobody copies or pastes a code.
   invites go out as links as before. A reply to the email goes to the owner who invited.
 - **The email** (`assets/invitation.html`) says who invited whom to what, as what, with one
   button and the three steps after it. It is the app's own colours, light and dark.
-- **The link** opens `/join/{code}` on the relay: the same facts, the installers for the newest
-  build, which address to sign in with, and the code for someone who signs in under another.
-- **Waiting.** `GET /v1/invites/mine` gives the invitations addressed to the signed-in
-  person's email. The app asks on sign-in and when the window is returned to. In first-run
+- **The link** opens `/join/{code}` on the relay: the same facts, a Join button, the installers
+  for the newest build (both kinds of Mac, Windows, Linux; the reader's own system first, with
+  the one thing that system asks when opening it), which address to sign in with, and the code
+  for someone who signs in under another.
+- **Join on the page.** The link in the email carries a key (`?k=`, `invites.agree_key`) that
+  the owner who sent the invitation is never shown. With it the page has a Join button, which
+  posts to `/join/{code}?k=...` and only notes that the person the invitation names said yes
+  (`agreed_at`): the page is signed in to nothing, so nobody joins there. `GET
+  /v1/invites/mine` hands `agreed_at` to Lokus, signed in with the invited address, and Lokus
+  uses the invitation without asking (`lookForInvites`, one look at a time), then `bringTeams`
+  gives the workspace a folder as for any team the person is in. In first-run setup it is the
+  person's first folder and the question "join, or set up my own first" is not put. Opening
+  the link says yes to nothing, because mail programs open links by themselves. Without the
+  key (the owner's copy of the link, an email sent before this, a bare link with no address)
+  there is no button and the invitation waits inside Lokus as before, so an owner cannot put
+  a workspace on someone's computer for them. A copy of Lokus from before this
+  (2.0.0-alpha.11 and older) does not read `agreed_at`: it shows the invitation with its Join
+  button, as it always did.
+- **Waiting.** Someone who signs in without pressing Join on the page is still asked inside
+  the app: `GET /v1/invites/mine` gives the invitations addressed to the signed-in
+  person's email. The app asks on sign-in and when the window is returned to (at most every
+  ten seconds). In first-run
   setup it is the step after signing in, and joining skips the questions about pages (those
   are the team's). Afterwards it is a card, and stays under Settings, Team if put away.
 - **Where the workspace lands.** A folder that holds the person's own notes is never merged
@@ -505,7 +550,7 @@ Nobody copies or pastes a code.
   by a person is escaped.
 - **What it rests on.** "Waiting for you" trusts the address in the sign-in, so email
   confirmation must stay on in Supabase. The code in the link still works for whoever holds
-  it, once, as before.
+  it, once, as before. Saying yes on the page takes the key that only the email carries.
 - **Not built.** A `lokus://` link that opens the app from the email (the app has no link
   scheme yet); telling the owner when an invitation is declined.
 
@@ -531,7 +576,7 @@ The hardest part. Rules, taken from the Obsidian plugin Relay, which hit these b
    deleted notes back.
 5. Normalise line endings for diffing only; the file on disk keeps its own.
 
-### Releases and news (built; tested on macOS with three local releases; Windows and Linux are built and opened in CI)
+### Releases and news (built)
 
 The relay also answers every copy of the app, signed in or not: `GET /v1/app/update/{target}/{arch}/{version}`
 (the newest build for that platform, or 204) and `GET /v1/app/news` (posts, newest first). Tables
@@ -539,6 +584,8 @@ The relay also answers every copy of the app, signed in or not: `GET /v1/app/upd
 Publishing needs `LOKUS_PUBLISH_KEY`. The app installs a download only if it carries our
 signature for that version. The window's side is `ui/src/features/updates/`; the steps a person
 goes through, how to publish, and what was tested are in `docs/releasing.md`.
+Published-build and in-app update checks are recorded there by version and platform; they are
+historical evidence, not acceptance of a later release.
 
 ## 7. Plugins (built)
 
@@ -576,7 +623,7 @@ the API.
 Checked by `checks/flows/plugins.sh`, which installs a hostile fixture plugin in the real app and
 confirms that everything it must not be able to do is refused.
 
-## 8. AI and MCP (built; untried against a real provider)
+## 8. AI and MCP (built; MCP discovery and workflow reads tried with GitHub)
 
 `lokus-ai` holds all of it; the UI is a chat panel and a settings section.
 
@@ -602,6 +649,9 @@ confirms that everything it must not be able to do is refused.
 - **MCP:** tool servers over HTTP through the official Rust SDK (`rmcp`), added by address in
   Settings or contributed by a plugin. A server that asks for sign-in gets it: "Sign in" opens
   the browser, the app catches the redirect on a local port, and the SDK keeps the tokens fresh.
+  The initialize handshake advertises the SDK's latest initialize-compatible protocol, not a
+  newer protocol that no longer supports that handshake. A saved bearer token takes precedence
+  over OAuth for that server; OAuth-only servers keep their existing sign-in and refresh path.
   Tokens live in the keychain (in memory until the app quits if the keychain is unavailable).
   Not built: local (stdio) servers.
 - `lokus ai --vault DIR q=...` asks one question from a terminal.
@@ -654,10 +704,11 @@ shelf: the instructions list each by name with one line, and the assistant calls
 for the ones it needs. Tools a conversation has used stay loaded for the rest of it. Each
 request's make-up is measured and sent with its trace (`chars_tools_<service>` and so on).
 
-### Connections (the catalog is built; signing in to a real service is untried)
+### Connections
 
 A connector is a tool server (MCP) that a service runs itself. Settings, Connections lists them
-by name: Connect signs the person in with that service in the browser and the assistant gains
+by name: Connect signs the person in with that service in the browser (or asks for its supported
+personal access token) and the assistant gains
 its tools, named `mcp__<id>__<tool>`. Each can be switched off or disconnected. Anything that
 changes something asks first unless the person has turned asking off.
 
@@ -666,7 +717,26 @@ today. Checked against the live servers on 2026-11-13:
 
 | Ready now | Waiting for Lokus to be registered with the service | Not built |
 |---|---|---|
-| Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | GitHub, Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+
+GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
+support a personal access token without registering the host app; browser OAuth still needs a
+registered GitHub or OAuth app. First-run setup and Settings reuse the same GitHub Connect
+screen: it asks for one token, links to
+GitHub's token creation page, and checks tool discovery before saving it in the existing OS
+keychain (`mcp:github`). The token's repository access and permissions determine what works;
+Lokus neither widens them nor copies a token from another app. Checking uses only the entered
+token, never an older token or OAuth grant, and times out after 20 seconds. Cancelling that check
+or leaving the screen saves nothing. Saving requires the keychain; a rejected token or failed
+save never reports success. A token replacement stops if the old credential cannot be read;
+if saving settings fails, the previous token is restored (or the new one removed). A connected
+GitHub row offers Update token for an expired or revoked
+credential without switching on a connection the person switched off. Existing OAuth and
+custom-server connections keep their own sign-in flows; tool
+annotations and the assistant's existing approval gate still govern writes.
+Disconnect clears the in-memory OAuth session even if the keychain is unavailable, but keeps
+the server entry until OAuth and bearer-token deletion succeed; an uncleared token must not follow a
+reused server name to a different address.
 
 A server that is not listed can be added by its address. A plugin can still bring its own.
 

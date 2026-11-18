@@ -93,12 +93,13 @@ export function TeamSettings() {
   }, [attempt, base, connected, current.workspace, owner, server, token]);
 
   // Asked again on coming back to the window: someone may have accepted an invitation meanwhile.
+  // And when the connection comes back: a list asked for while it was down stayed empty.
   useEffect(() => {
     void loadTeam();
     const again = () => void loadTeam();
     window.addEventListener("focus", again);
     return () => window.removeEventListener("focus", again);
-  }, [loadTeam]);
+  }, [loadTeam, current.status]);
   // Opening this page is a good moment to ask again whether anyone has invited this person.
   useEffect(() => void lookForInvites(), []);
 

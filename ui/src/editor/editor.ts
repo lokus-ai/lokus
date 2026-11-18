@@ -5,12 +5,14 @@ import { markdown, markdownKeymap, markdownLanguage } from "@codemirror/lang-mar
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { indentUnit } from "@codemirror/language";
 import { EditorState, type Extension, Prec, type TransactionSpec } from "@codemirror/state";
-import { drawSelection, EditorView, keymap, placeholder } from "@codemirror/view";
+import { drawSelection, EditorView, keymap, placeholder, ViewPlugin } from "@codemirror/view";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import type { Awareness } from "y-protocols/awareness";
 import { type Text as YText, UndoManager } from "yjs";
 
-import { differing, livePreview } from "./livePreview";
+import { registerCommands, runCommand } from "../shell/commands";
+import { showContextMenu } from "../shell/contextMenu";
+import { differing, livePreview, reshapeTable, tableActions, tableMenuItems, type TableTarget } from "./livePreview";
 import { insertLink, readFrontmatter, setFrontmatterKey, setHeading, toggleMark } from "./markdownCommands";
 import { markdownPairs, typeText } from "./pairs";
 import { completions } from "./slash";
@@ -29,6 +31,8 @@ export interface EditorHooks {
   saveFile(file: File): Promise<string | null>;
   /** Extra slash-menu entries, from plugins. */
   snippets(): { label: string; detail: string; insert: string }[];
+  /** The visible note's identity; clipboard focus is deliberately separate. */
+  menuContext(): { path: string; valid(): boolean; subscribe(check: () => void): () => void } | null;
 }
 
 /** One editing surface. Each open note keeps its own state (and undo history). */
@@ -64,10 +68,69 @@ export function previewMarkdown(parent: HTMLElement, text: string, hooks: Pick<E
 export class Editor {
   readonly view: EditorView;
   private hooks: EditorHooks;
+  private menuChecks = new Set<() => void>();
+  private closeMenu?: () => void;
 
   constructor(parent: HTMLElement, hooks: EditorHooks) {
     this.hooks = hooks;
     this.view = new EditorView({ parent, state: this.createState("") });
+    registerCommands(tableActions.map(({ id, label }) => ({
+      id,
+      title: label,
+      hidden: true,
+      run: (args: Record<string, unknown>) => {
+        const context = this.hooks.menuContext();
+        if (!context?.valid() || args.path !== context.path || !this.canEdit()) return { applied: false };
+        const applied = reshapeTable(this.view, id, args);
+        if (applied) this.view.focus();
+        return { applied };
+      },
+    })));
+  }
+
+  private canEdit(): boolean {
+    const { view } = this;
+    return view.dom.isConnected && view.dom.getClientRects().length > 0 && !view.dom.closest("[inert]") &&
+      !view.state.readOnly && view.state.facet(EditorView.editable);
+  }
+
+  private tableMenu(cell: HTMLElement, target: TableTarget, at: { x: number; y: number }): void {
+    const context = this.hooks.menuContext();
+    if (!context?.valid() || !this.canEdit()) return;
+    const { view } = this;
+    const state = view.state;
+    const valid = () => context.valid() && this.canEdit() && cell.isConnected && view.dom.contains(cell) &&
+      view.state.doc === state.doc && view.state.selection.eq(state.selection);
+    const selection = getSelection();
+    const offset = (node: Node, end: number) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      range.setEnd(node, end);
+      return range.toString().length;
+    };
+    const selected = document.activeElement === cell && selection?.anchorNode && selection.focusNode &&
+      cell.contains(selection.anchorNode) && cell.contains(selection.focusNode)
+      ? [offset(selection.anchorNode, selection.anchorOffset), offset(selection.focusNode, selection.focusOffset)] : null;
+    const items = tableMenuItems(target);
+    const firstDelete = items.find((item) => item.danger);
+    this.closeMenu = showContextMenu(at, "Table", items.flatMap((item) => item === firstDelete ? [null, item] : [item]), {
+      valid,
+      subscribe: (check) => {
+        cell.classList.add("cm-context-target");
+        this.menuChecks.add(check);
+        const unsubscribe = context.subscribe(check);
+        return () => { cell.classList.remove("cm-context-target"); this.menuChecks.delete(check); unsubscribe(); };
+      },
+      restoreFocus: () => {
+        cell.focus({ preventScroll: true });
+        const text = cell.firstChild;
+        if (selected && text?.nodeType === Node.TEXT_NODE) {
+          const length = text.textContent?.length ?? 0;
+          getSelection()?.setBaseAndExtent(text, Math.min(selected[0], length), text, Math.min(selected[1], length));
+        }
+      },
+      run: (id) => { if (valid()) void runCommand(id, { path: context.path, ...target }); },
+    });
   }
 
   createState(text: string): EditorState {
@@ -105,7 +168,12 @@ export class Editor {
           resolveImage: (src) => this.hooks.resolveImage(src),
           loadNote: (target) => this.hooks.loadNote(target),
           mountEmbed: (parent, text) => this.mountEmbed(parent, text),
+          tableMenu: (cell, target, at) => this.tableMenu(cell, target, at),
         }),
+        ViewPlugin.define(() => ({
+          update: () => this.menuChecks.forEach((check) => check()),
+          destroy: () => this.closeMenu?.(),
+        })),
         editorTheme,
         placeholder("Write something, or press / for commands…"),
         Prec.high(

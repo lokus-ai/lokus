@@ -7,8 +7,9 @@ Nothing here depends on an app store.
 
 1. A pop-up in the corner: "A new version of Lokus is ready", with **Update now**.
 2. A progress bar while it downloads. They can keep working.
-3. "The update is installed", with **Restart now**. It says Lokus will close and open again by
-   itself, and what to do if it does not (open it again; nothing is lost).
+3. On Mac and Linux, "The update is installed", with **Restart now**. It says Lokus will close
+   and open again by itself, and what to do if it does not (open it again; nothing is lost).
+   On Windows, the installer closes and reopens Lokus automatically after **Update now**.
 4. Lokus comes back as the new version and opens "What's new" on that version's post, with its
    video.
 
@@ -155,10 +156,27 @@ it.
 Windows and Linux: every pull request into `main` (a release), and any other one labelled
 `desktop`, starts the real app on a Windows and a Linux machine of GitHub's and uses it alone and in a team against a relay started beside it (notes both ways,
 typing, an attachment, rename, delete, the relay going away and coming back, catching up after
-being closed), then builds the installer and the AppImage the way a release does and opens
-them (`checks/desktop-smoke.mjs`, the `desktop` job in `.github/workflows/ci.yml`). Not tested
-there: a person's own Windows or Linux computer, an update from one published version to the
-next, sign-in through the browser.
+being closed) (`checks/desktop-smoke.mjs`, the `desktop` job in `.github/workflows/ci.yml`).
+The installer and the AppImage are built and opened by the release itself, before anything is
+put out, and by that job only when it is run by hand (Actions, CI, Run workflow): the way to
+try a change to `deploy/release/desktop.sh` without releasing. Not tested there: a person's own
+Windows or Linux computer, an update from one published version to the next, sign-in through
+the browser.
 
 Not tested: a download through a browser on someone else's Mac;
-an app sitting in `/Applications` owned by another user; the release workflow in CI.
+an app sitting in `/Applications` owned by another user.
+
+## Published Windows and Linux builds (2026-11-16)
+
+The [alpha.11 release workflow](https://github.com/lokus-ai/lokus/actions/runs/43810784896)
+built all four platforms, installed and opened the Windows installer, and opened the Linux
+AppImage before publishing. Both Mac builds were signed and notarized.
+
+A separate [published-update run](https://github.com/lokus-ai/lokus/actions/runs/43815532107)
+opened the published alpha.10 builds on Windows and Linux and used their in-app update flow.
+Windows reopened automatically after Update now; Linux used Restart now. Both verified that a
+new process opened showing alpha.11. Windows also reported
+alpha.11 in the installed executable's version; the Linux AppImage hash matched the published
+alpha.11 file. This was a one-off check on GitHub runners, not a check every release runs.
+It proves that alpha.10-to-alpha.11 update, not publication or update acceptance of alpha.12
+or any later version.

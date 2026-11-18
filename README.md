@@ -11,10 +11,17 @@ previous app (Lokus 1) is kept at the tag `v1-legacy`.
 
 ## Get it
 
-Early builds for Macs, for people who do not mind rough edges:
-[Apple Silicon](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.6/Lokus_2.0.0-alpha.6_aarch64.dmg)
-or [Intel](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.6/Lokus_2.0.0-alpha.6_x86_64.dmg).
-Open the download and drag Lokus into Applications. It updates itself from then on.
+Early builds, for people who do not mind rough edges:
+
+- Mac: [Apple Silicon](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.11/Lokus_2.0.0-alpha.11_aarch64.dmg)
+  or [Intel](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.11/Lokus_2.0.0-alpha.11_x86_64.dmg).
+  Open the download and drag Lokus into Applications.
+- Windows: [installer](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.11/Lokus_2.0.0-alpha.11_x64-setup.exe).
+  Windows asks before running it: choose More info, then Run anyway.
+- Linux: [AppImage](https://github.com/lokus-ai/lokus/releases/download/v2.0.0-alpha.11/Lokus_2.0.0-alpha.11_amd64.AppImage).
+  Allow the file to run as a program, then open it.
+
+It updates itself from then on.
 
 ## What it does
 

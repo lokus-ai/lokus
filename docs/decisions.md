@@ -6,6 +6,14 @@ question was open, nobody answered, and a default was taken: those are the easie
 
 | Date | Decision | Why | Who made the call | Replaces |
 |---|---|---|---|---|
+| 2026-11-18 | The app takes one message of up to 1 GB from the relay, instead of the websocket library's default of 16 MB per frame | The reviewer of #596 found a history whose pull is over 16 MiB is refused in under a second and retried for ever: `Space limit exceeded: Message too long: 24852126 > 16777216`, 0 notes. Reproduced with a real local relay: 1000 notes (19.6 MB stored, a 26.1 MB message) gave 0 of 1000 before and 1000 of 1000 after. The owner's team sent 29.5 MB in one minute of a first sync, so it is likely near that size (inferred from traffic, not measured) | Devin, on evidence, under the owner's "It should auto-sync" and "merge them when needed ur autopilot". Reversal: remove `roomy()` in `crates/lokus-sync/src/client.rs`. PR [#597](https://github.com/lokus-ai/lokus/pull/597) | The library default of 16 MB per message |
+| 2026-11-18 | While what a device missed is still arriving, the connection waits up to ten minutes before it is called silent, instead of 50 seconds; the time spent applying it is not counted as silence either. Team settings ask for the member list again when the connection changes state | The owner: "wtf happened he is litrally on a video call with me", with a teammate's Lokus showing Offline and Members 0. His `sync.log`: online 10:56:04 UTC, `offline: "connection: the relay went quiet"` 10:57:24, no `pulled` line. The relay sent 11.6 MB in that minute and 29.5 MB in the next: the first pull is one message, heard only when complete, and it took longer than 50 seconds on a link shared with a video call. The member list was asked for once, while the connection was down | Devin, on evidence, under the owner's "It should auto-sync" and "u work on all". Reversal: remove `PULL_WAIT` in `crates/lokus-sync/src/client.rs`. PR [#596](https://github.com/lokus-ai/lokus/pull/596) | The flat 50-second silence limit |
+| 2026-11-16 | Table context menus use one shared DOM command presentation with a captured visible-note and table-source target, keyboard navigation, focus return and stale-target dismissal. Native input menus stay native; wider frame adapters wait for this contract's validation | In the real Mac app, native predefined Select All escaped its table cell, stale Cut still changed the document, and removing or closing a tracking popup deadlocked Tauri's resource-table mutex | Devin, on that evidence, within the owner's accepted frame-specific context-menu mandate and the parent's instruction to settle at a safe first milestone (2026-11-16) | The table's one-off mouse-only renderer; the proposed native popup approach was rejected before shipping |
+| 2026-11-16 | GitHub connects with a personal access token on the existing MCP server, checked before saving to the OS keychain, rather than waiting for Lokus to be registered as a GitHub app. No app registration or wider permission grant is made | GitHub's official MCP instructions support PAT authentication for any remote MCP host; only OAuth requires host-app registration. The owner asked: "Make the imessages connection work and the GitHub connector work." | Pratham (the goal, quoted); Devin (the supported token flow within that mandate, not a decision by the owner to register an app) | GitHub listed as waiting for registration (2026-11-13) |
+| 2026-11-16 | A folder can be closed while a file inside it stays open, and stays closed through edits and tab changes. A separate Collapse all folders sidebar button and `tree.collapseAll` command close every folder in the open workspace, including nested ones. Reveal active file in sidebar (`tree.revealActive`) opens the file's parents again. These actions only change the tree, never tabs, text, vaults or team connections; choices reset on switching workspaces | The owner: "Also, I cannot close the folder in which I have a file open. I don't know why. Also, there is no button to collapse all the folders." The tree rendered an active file's parents open regardless of the person's click | Pratham (manual collapse and a separate global control); Devin (manual choices override automatic reveal until explicitly reopened, a reveal command, and choices scoped to the open workspace/window) | Active-file parents forced open on every render; no collapse-all control |
+| 2026-11-16 | The page an emailed invitation opens has a Join button, and someone who pressed it is not asked again in Lokus: signed in with the invited address, Lokus joins the workspace and gives it a folder by itself, on that computer and any other. Only the link in the email has the button: it carries a key the owner who invited is never shown, so nobody can say yes for someone else. The page offers the download for Windows and Linux beside the two Macs, the reader's own system first. Opening the link alone says yes to nothing. A copy from before this still shows the invitation with its Join button | The owner: "the email invite doesnt have windows as option to download then also if user already downloaded if click on link shouldnt it open lokus or like u know just add them there or something". The page listed Macs only, from before Windows and Linux were built, and someone who already had Lokus still had to find the invitation inside it. Review showed that with the code alone an owner could press Join for the person invited, and a workspace would then arrive on that person's computer unasked | Pratham (Windows on the invitation, and the link adds someone who has Lokus); Devin (a press on the page that Lokus acts on when it next asks the relay, not a `lokus://` link that opens the app: no link scheme to register on three systems; a button and not the opening of the link, because mail programs open links by themselves; the app does the joining, not the relay on a read, so first-run setup still makes the team the first folder; the key in the email) | An emailed invitation always waits inside the app for a click on Join (2026-11-14); that stays for someone who signs in without pressing Join on the page |
+| 2026-11-16 | A Claude or OpenAI key is pasted under the "I have a Claude or OpenAI key" button itself, in first-run setup and in the assistant's panel, and no longer by opening Settings | The owner: "also in onboardin the openai api thingy was greyed out for windows". Reproduced on a Mac too: in first-run setup the button opened Settings, which is drawn only once a folder is open and sits under the setup screen, so nothing happened on any system | Pratham (the report); Devin (pasted in place rather than Settings drawn over setup: one card, the same in both places; an address for a compatible service is still typed in Settings) | The button opened Settings, Assistant |
+| 2026-11-16 | A pull request into `main` no longer builds the Windows installer and the Linux AppImage; it still runs the tests and starts and uses the real app on both, alone and in a team. The installer and the AppImage are built, installed and opened by the release, which puts nothing out if one fails, and by the `desktop` job when it is run by hand | Timed on alpha.11: the check before the merge took 27.8 minutes (Windows 27.7, Linux 17.6), of which 12.9 on Windows and 9.5 on Linux built the installer; the release then built it again in 7.5 and 7.9 minutes and installed and opened it. A broken installer is now found after the merge instead of before; nothing is published in that case | Pratham ("sure", to dropping the installer build from the check); Devin (kept for runs by hand) | The installer built on every pull request into `main` (2026-11-15) |
 | 2026-11-16 | A note a teammate deletes while it is open here closes its tab and says so; words typed here that are not yet in the file keep the tab open. A shared note whose tab is behind another shows what teammates typed the moment it comes forward, and a click on the tab already on screen changes nothing | Tried with two real sign-ins on the hosted relay against published alpha.10: a note deleted by a teammate stayed open and took typing that went into no file; a shared note behind another tab came forward with old text although the file was current; and a click on the tab already on screen put old text back, after which the next key wrote it over the file of a note that is not shared (`Personal base. PERSONAL-TYPED.` became `Personal base.X`) | Devin (default, on that evidence; the owner asked for sync that is reliable with no action from anyone) | — |
 | 2026-11-15 | A release also builds a Windows installer and a Linux AppImage on GitHub's machines, beside the two Macs, and tells installed copies on those systems about it. They carry no Windows or Linux certificate, only our update signature. Every pull request into `main` (a release) starts the real app on Windows and Linux and uses it alone and in a team; other pull requests do when labelled `desktop` (it takes about forty minutes). The release installs and opens the very files it built; if one platform fails to build or does not stay open, nothing is put out | The owner asked for Windows and Linux: "can u make it proper and reliable for windows and linux with sync and every feature properly made and tested", and "generate from server side". CI started and used the app on both (`checks/desktop-smoke.mjs`) and opened the built installer and AppImage | Pratham (Windows and Linux, built on the server); Devin (no certificate for now, one AppImage built on Ubuntu 22.04, all platforms or none) | Releases for Macs only |
 | 2026-11-15 | A table in a note is edited as a table: a click in a cell types into that cell, Tab and Enter move on, a right-click adds or removes rows and columns. It no longer turns into its lines of bars when clicked. A customer's conversation draws what was said as markdown, and a Slack message reads the way it does in Slack (mentions, links, bold); the note keeps what Slack sent. A link to a web page is followed with a click, in a note and in a conversation, the way a link to a note already was; only `https` | The owner clicked a table on a customer's page and got raw bars, and saw `<@U123|Name>` and `*stars*` in a Slack conversation. His words: "when i try to edit table i should be edit the table as it is" | Owner (the ask); Devin (how: the cell being typed in shows its markdown so bold and links stay editable, and Slack's marks are turned when shown, not when stored, so nothing already saved has to change; and, as Devin's own default nobody asked for, that a web link is followed with a click) | Clicking a table reveals its markdown |
@@ -152,3 +160,97 @@ question was open, nobody answered, and a default was taken: those are the easie
 | 2026-11-14 | The app chooses its encryption provider itself, at start-up | Sync died silently whenever its socket was the first secure connection the app made: two providers are built in and rustls panics rather than pick. Proven by running the release build from a terminal with a real sign-in; debug builds and local relays (no TLS) never showed it | Claude (root cause from the release build's own output) | Leaving it to whichever library connected first |
 | 2026-11-14 | A crash inside the sync connection is reported and logged; each computer keeps `sync.log` | The crash above left the app saying "Connecting" with nothing anywhere to say why | Claude (default) | — |
 | 2026-11-15 | A version is released by merging a pull request into main that changes `VERSION`, and no other way; the release keys sit in an environment only main can use | Pratham: "this is an open source project… make it so that it only triggers when a PR is merged". Only the two admins can merge; forks get no secrets; a branch workflow cannot read an environment limited to main | Pratham | A button anyone with write access can press |
+
+## Amendments
+
+These blocks complete the decision records for the changes entering alpha.12. The dates are
+the original decision dates, not the date of this backfill. The rows above remain unchanged;
+`docs/design.md` describes the current system in place.
+
+### Build the installer once
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** Pull requests into `main` still test and use the app on Windows and Linux, but no
+  longer also build the installer and AppImage. Releases build, install and open those files
+  before publication; a manual desktop run retains the same installer checks.
+- **Why:** The alpha.11 Windows check took 27.7 minutes, including 12.9 minutes building and
+  opening an installer that the release built again. The revised check measured 14.4 minutes.
+- **Decided by:** Pratham, "sure" (2026-11-16), approving the proposed removal of the duplicate
+  installer build; Devin retained the manual run within that change.
+- **PR:** [#584](https://github.com/lokus-ai/lokus/pull/584), merged as
+  `97b37ed`; record completed by [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #584 to restore installer checks before merging as well as during release.
+
+### Accept an invitation from its email page
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** The invitation page offers Windows and Linux downloads beside both Macs. Pressing
+  Join records the recipient's consent; the updated app, signed in as that recipient, accepts
+  the invitation and creates the team folder without another click. Merely opening the link
+  does not accept it. The page does not launch the app; older apps retain their own Join button.
+- **Why:** The page offered only Mac downloads and required an installed-app user to find the
+  invitation again. Review also showed that the inviter must not be able to record consent
+  using the ordinary invitation code, so the emailed page uses a separate recipient key.
+- **Decided by:** Pratham, "the email invite doesnt have windows as option to download then also if user already downloaded if click on link shouldnt it open lokus or like u know just add them there or something"
+  (2026-11-16). Devin chose explicit page consent, the recipient key, and app-side joining
+  rather than a new link scheme, within that request.
+- **PR:** [#585](https://github.com/lokus-ai/lokus/pull/585), merged as
+  `ea5bde61b141ef6a2692e198068fddf863df942b`; record completed by
+  [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #585 in the app and relay; leave stored invitation columns intact and resume in-app confirmation.
+
+### Enter a provider key during setup
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** "I have a Claude or OpenAI key" opens the key form in place, in first-run setup
+  and the assistant panel, instead of trying to open Settings behind setup.
+- **Why:** The button was reported as greyed out on Windows; the same inert flow was reproduced
+  on Mac because Settings was not displayed before a folder existed.
+- **Decided by:** Pratham, "also in onboardin the openai api thingy was greyed out for windows"
+  (2026-11-16), reported the defect. Devin chose the shared inline form within the repair mandate.
+- **PR:** [#586](https://github.com/lokus-ai/lokus/pull/586), merged as
+  `993cdc13d7143a22fe64ee5d91728ed8c55ce81c`; record completed by
+  [#588](https://github.com/lokus-ai/lokus/pull/588).
+- **Reversal:** Revert #586 to restore the Settings route, including its first-run limitation.
+
+### Guarded table context menus
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** The table's mouse-only menu becomes the first consumer of one shared DOM command menu. It captures the visible note and unchanged table source, dismisses stale targets, supports keyboard opening/navigation/dismissal, restores cell focus and selection on cancellation, and guards read-only and secondary-click checkbox editing. Existing row/column operations become registered editor commands. Ordinary text inputs and source text retain native editing menus. Other frames and custom clipboard actions are not added in this milestone.
+- **Why:** Real Mac testing on `ea5bde61b141ef6a2692e198068fddf863df942b` with Tauri 2.12.5 and its JavaScript API 2.12.4 found native Select All targeting the note instead of the cell, stale native Cut executing after a document change, and both item removal and resource close deadlocking while a popup tracked. Process samples show reentry into the locked resource table. The installed JavaScript declaration says `popup()` resolves when shown, but this Mac resolved after dismissal; neither observation is a portable cleanup contract. See [Tauri menu API](https://v2.tauri.app/reference/javascript/api/namespacemenu/), [predefined item support](https://docs.rs/tauri/latest/tauri/menu/struct.PredefinedMenuItem.html), and [captured experiment](https://app.devin.ai/sessions/f04d7ebd0d5f43f9b3ff4c563888ee82?testRecording=22dcd17e-3c23-4e62-943c-50f4e3a0d224). Windows/Linux popup and clipboard behavior has not been proved; native Undo/Redo is unsupported there.
+- **Decided by:** Devin, on the runtime evidence above, within the accepted 2026-11-16 context-menu implementation mandate: "First resolve presentation in real app before broad adapters" and "if platform popup cannot safely meet target semantics, choose the smallest shared DOM presentation within existing bridge/registry, not a broad clipboard system."
+- **PR:** [#595](https://github.com/lokus-ai/lokus/pull/595), merged into `next` as `fc6606e5a97074f5772bc54935e3b5bfc4a6e7b6`.
+- **Reversal:** Revert the table-menu migration, its editor/workspace hooks and scoped styles together; native popups require new target-invalidation and lifetime evidence before adoption.
+
+### GitHub personal-access-token connections
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** GitHub was waiting for Lokus app registration. Settings and first-run setup now reuse one personal-access-token screen, check discovery with only the entered token, and save the connection in the existing OS keychain. Updating a token keeps a switched-off connection switched off and preserves the previous credential on failed validation or a settings-save failure; cancellation during checking saves nothing. A bearer token takes precedence over OAuth for that server; OAuth-only and custom-server sign-in remain available.
+- **Why:** [GitHub's official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server) support PATs without host-app registration, while OAuth needs a GitHub or OAuth app. Real provider proof also exposed an invalid session when the SDK advertised a newer protocol with the initialize handshake; the client now advertises the SDK's latest initialize-compatible protocol. Review and an isolated credential-fault reproduction found that ignoring OAuth or bearer-token deletion errors let custom-server names be reused with old credentials: disconnect now clears fallback OAuth memory even on failure, surfaces persisted-credential deletion errors, and retains the server until both cleanup steps succeed. Discovery is not a promise that the token may call every listed tool.
+- **Decided by:** Devin, on that documentation and provider evidence, within the 2026-11-16 mandate relaying the owner's exact words: "Make the imessages connection work and the GitHub connector work." The GitHub-only scope, no app registration, no permission expansion and no external test writes were explicit constraints. The PAT flow and protocol correction are Devin's implementation decisions, not an owner decision to register an app or broaden a credential.
+- **PR:** [#590](https://github.com/lokus-ai/lokus/pull/590), merged into `next` as
+  `75d5e846b668fc25d9e51e0de8b4c38334f55b73`.
+- **Reversal:** Revert this PR's commits to restore the registration-gated catalog and previous MCP authentication behavior; do not delete existing local keychain credentials or settings.
+
+### Manual and global folder collapse
+
+- **Date:** 2026-11-16 (UTC).
+- **Change:** Active-file parents were forced open on every render. Manual closure now wins
+  through edits, tab changes and successful sidebar folder renames (including nested
+  folder choices); a separate sidebar button and `tree.collapseAll` close all
+  folders in the open workspace, recursively. `tree.revealActive` explicitly reopens the
+  active file's parents and focuses its row. Only tree presentation changes; tabs, files and
+  team connections remain intact. Choices reset when the workspace changes.
+- **Why:** Reproduced in the real macOS app: clicking `Projects/Alpha` or `Projects` left
+  `Projects/Alpha/Active.md` visible, while an unrelated folder collapsed normally. The
+  render expression forced active ancestors open regardless of the manual state.
+  Real-app review also reproduced a closed folder reopening after a rename because the
+  explicit choices still used its old path; they now follow a successful sidebar rename.
+- **Decided by:** Pratham, 2026-11-16: "Also, I cannot close the folder in which I have a
+  file open. I don't know why. Also, there is no button to collapse all the folders."
+  Devin chose explicit reveal and workspace-scoped choices within that folder-collapse
+  mandate, retaining the existing named-command registry and design system.
+- **PR:** [#591](https://github.com/lokus-ai/lokus/pull/591), merged as
+  `835af2b21b3268d6bce5e300511fd354de478661`.
+- **Reversal:** Revert this PR to remove the control/commands and restore the old forced-open
+  rendering; no file, storage or sync migration is involved.

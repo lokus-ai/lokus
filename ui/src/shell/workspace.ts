@@ -247,6 +247,18 @@ export function attachEditor(parent: HTMLElement): void {
     notePaths: () => allNotes(),
     saveFile,
     snippets: () => app.get().plugins.flatMap((p) => (p.enabled ? (p.manifest?.contributes.snippets ?? []) : [])),
+    menuContext() {
+      const { active: path, vault } = app.get();
+      if (!path || !vault) return null;
+      return {
+        path,
+        valid: () => {
+          const now = app.get();
+          return now.active === path && now.vault?.root === vault.root && now.view === "note" && !now.settings && !now.palette && !now.accountDialog;
+        },
+        subscribe: app.subscribe,
+      };
+    },
   });
 }
 
@@ -596,7 +608,7 @@ export function allNotes(entries: Entry[] = app.get().tree, out: string[] = []):
 function show(path: string): void {
   const next = sessions.get(path);
   if (!editor || !next) return;
-  const previous = app.get().active;
+  const { active: previous, view } = app.get();
   // The note already on screen keeps what was typed in it. One coming forward shows what a
   // teammate typed while its tab was behind another.
   if (previous !== path) {
@@ -609,6 +621,8 @@ function show(path: string): void {
   syncProperties();
   syncPeers();
   editor.view.focus();
+  // Behind the graph or a file the page was hidden, and a hidden page cannot take the keyboard.
+  if (view !== "note") enterNote();
 }
 
 function syncPeers(): void {
@@ -620,9 +634,33 @@ function syncPeers(): void {
 /** Whether a path is a note; anything else in a vault is a file to look at, not to edit. */
 export const isNotePath = (path: string) => /\.md$/i.test(path);
 
+/** With the graph or a file in front, keys do not go on into the note underneath. */
+function leaveNote(): void {
+  const page = editor?.view.dom.closest(".page");
+  const at = document.activeElement;
+  if (at instanceof HTMLElement && page?.contains(at)) at.blur();
+  // A click on a button leaves the cursor in the note, and keys follow the cursor.
+  const cursor = window.getSelection();
+  if (cursor?.anchorNode && page?.contains(cursor.anchorNode)) cursor.removeAllRanges();
+}
+
+/** A note back in front takes the keyboard again, once its page is showing. */
+function enterNote(): void {
+  const note = app.get().active;
+  requestAnimationFrame(() => {
+    // A note a teammate deleted meanwhile does not hand the keyboard to its neighbour.
+    if (app.get().view !== "note" || !note || app.get().active !== note) return;
+    // Someone typing in a field elsewhere (a rename, the palette) keeps it.
+    const at = document.activeElement;
+    if (at instanceof HTMLElement && (at.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(at.tagName))) return;
+    editor?.view.focus();
+  });
+}
+
 /** Show a file that is not a note (a picture, a PDF, a CSV) in its own tab. */
 export function openFile(path: string): void {
   app.set((s) => ({ view: "file", file: path, tabs: s.tabs.includes(path) ? s.tabs : [...s.tabs, path] }));
+  leaveNote();
   track("page_opened", { kind: "file" });
 }
 
@@ -663,6 +701,7 @@ export async function closeTab(path: string): Promise<void> {
     app.set({ tabs: rest, file: null, view: "note" });
     // The note underneath is still loaded; any other tab is brought forward.
     if (next && next !== active) go(next);
+    enterNote();
     return;
   }
   await save(path);
@@ -682,7 +721,10 @@ export async function closeTab(path: string): Promise<void> {
   app.set({ tabs: rest, active: null, properties: {} });
   if (next) go(next);
   // The graph or a file in front of the note stays in front.
-  if (view !== "note") app.set({ view, file });
+  if (view !== "note") {
+    app.set({ view, file });
+    leaveNote();
+  }
 }
 
 /** Go to the tab after the one showing (or before it), wrapping round at the ends. */
@@ -698,11 +740,13 @@ export function stepTab(by: 1 | -1): void {
 /** Open the graph as a tab, or bring its tab forward. */
 export function showGraph(): void {
   app.set((s) => ({ view: "graph", tabs: s.tabs.includes(GRAPH_TAB) ? s.tabs : [...s.tabs, GRAPH_TAB] }));
+  leaveNote();
 }
 
 /** Close the graph's tab; the note that was open underneath shows again. */
 export function closeGraph(): void {
   app.set((s) => ({ view: "note", tabs: s.tabs.filter((t) => t !== GRAPH_TAB) }));
+  enterNote();
 }
 
 function uniquePath(folder: string, base: string): string {
@@ -794,16 +838,18 @@ function closeGone(path: string): void {
 }
 
 /** Rename or move a note or a folder; open tabs follow it. */
-export async function renameEntry(from: string, to: string): Promise<void> {
-  if (from === to) return;
+export async function renameEntry(from: string, to: string): Promise<boolean> {
+  if (from === to) return true;
   try {
     await saveAll();
     // A shared vault renames through sync, which keeps each note's shared document with it.
     if (!(await syncRename(from, to))) await runCore("note.rename", { from, to });
     moveOpen(from, to);
     await refreshTree();
+    return true;
   } catch (e) {
     report(e);
+    return false;
   }
 }
 

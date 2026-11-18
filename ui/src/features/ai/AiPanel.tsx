@@ -698,7 +698,7 @@ export function AiPanel() {
           ) : (
             <div key={i} className={`ai-notice${item.error ? " error" : ""}`}>
               <span>{item.text.replace(/^./, (c) => c.toUpperCase())}</span>
-              {(item.code === "no_key" || item.code === "no_model" || item.code === "bad_key") && <button onClick={() => app.set({ settings: "assistant" })}>Open settings</button>}
+              {(item.code === "no_key" || item.code === "bad_key") && <button onClick={() => app.set({ settings: "assistant" })}>Open settings</button>}
             </div>
           );
         })}

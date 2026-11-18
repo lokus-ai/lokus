@@ -35,8 +35,13 @@ class Checkbox extends WidgetType {
     box.type = "checkbox";
     box.className = "cm-task-box";
     box.checked = this.checked;
+    box.disabled = view.state.readOnly || !view.state.facet(EditorView.editable);
     box.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || e.ctrlKey) return;
       e.preventDefault();
+      if (view.state.readOnly || !view.state.facet(EditorView.editable) || !box.isConnected || !view.dom.getClientRects().length || view.dom.closest("[inert]")) return;
+      const marker = view.state.sliceDoc(this.pos, this.pos + 3);
+      if (!/^\[[ xX]\]$/.test(marker) || /x/i.test(marker) !== this.checked) return;
       view.dispatch({
         changes: { from: this.pos + 1, to: this.pos + 2, insert: this.checked ? " " : "x" },
         userEvent: "input.format",
@@ -369,6 +374,7 @@ class Table extends WidgetType {
   constructor(
     readonly source: string,
     readonly from: number,
+    readonly menu?: PreviewHooks["tableMenu"],
   ) {
     super();
   }
@@ -382,7 +388,7 @@ class Table extends WidgetType {
     wrap.widget = this;
     wrap.appendChild(document.createElement("table"));
     this.draw(wrap, view);
-    if (view.state.readOnly) return wrap;
+    if (view.state.readOnly || !view.state.facet(EditorView.editable)) return wrap;
 
     const place = (cell: HTMLElement) => {
       const tr = cell.parentElement as HTMLTableRowElement;
@@ -427,6 +433,14 @@ class Table extends WidgetType {
     wrap.addEventListener("keydown", (e) => {
       const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
       if (!cell || e.isComposing) return;
+      if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+        if (!wrap.widget.menu) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = cell.getBoundingClientRect();
+        wrap.widget.menu(cell, tableTarget(wrap, cell), { x: rect.left, y: rect.bottom });
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
         // Select all is the cell's, not the note's: the next key replaces what is in this cell.
         e.preventDefault();
@@ -454,14 +468,9 @@ class Table extends WidgetType {
     });
     wrap.addEventListener("contextmenu", (e) => {
       const cell = (e.target as HTMLElement).closest<HTMLElement>("th, td");
-      if (!cell) return;
+      if (!cell || !wrap.widget.menu) return;
       e.preventDefault();
-      const { row, col } = place(cell);
-      tableMenu(e.clientX, e.clientY, row, grid(wrap.widget.source)[0].length, (how) => {
-        wrap.widget.change(view, (lines) => how(lines, row === 0 ? 0 : row + 1, col));
-        // The keyboard goes back to the note, so undo takes back what was just chosen.
-        view.focus();
-      });
+      wrap.widget.menu(cell, tableTarget(wrap, cell), { x: e.clientX, y: e.clientY });
     });
     return wrap;
   }
@@ -557,6 +566,7 @@ class Table extends WidgetType {
 
   /** Change the table's lines and write only the part that differs. */
   change(view: EditorView, how: (lines: string[]) => void): void {
+    if (view.state.readOnly || !view.state.facet(EditorView.editable) || this.from < 0 || this.from + this.source.length > view.state.doc.length) return;
     const lines = this.source.split("\n");
     how(lines);
     const next = lines.join("\n");
@@ -574,45 +584,56 @@ class Table extends WidgetType {
 }
 
 type Reshape = (lines: string[], line: number, col: number) => void;
+export interface TableTarget {
+  from: number;
+  source: string;
+  row: number;
+  col: number;
+}
+
+function tableTarget(wrap: TableBox, cell: HTMLElement): TableTarget {
+  return {
+    from: wrap.widget.from,
+    source: wrap.widget.source,
+    row: (cell.parentElement as HTMLTableRowElement).rowIndex,
+    col: (cell as HTMLTableCellElement).cellIndex,
+  };
+}
+
 const eachRow = (lines: string[], how: (texts: string[], i: number) => string[]) =>
   lines.forEach((line, i) => (lines[i] = lead(line) + rowLine(how(cells(line), i))));
-const RESHAPES: [string, Reshape, ("body" | "wide")?][] = [
-  ["Add row above", (lines, at) => lines.splice(at, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill(""))), "body"],
-  ["Add row below", (lines, at) => lines.splice(Math.max(at, 1) + 1, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill("")))],
-  ["Add column left", (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col, 0, i === 1 ? "---" : ""))],
-  ["Add column right", (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col + 1, 0, i === 1 ? "---" : ""))],
-  ["Delete row", (lines, at) => lines.splice(at, 1), "body"],
-  ["Delete column", (lines, _, col) => eachRow(lines, (t) => t.toSpliced(col, 1)), "wide"],
-  ["Delete table", (lines) => lines.splice(0)],
+export const tableActions: { id: string; label: string; reshape: Reshape; where?: "body" | "wide" }[] = [
+  { id: "editor.table.addRowAbove", label: "Add row above", reshape: (lines, at) => lines.splice(at, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill(""))), where: "body" },
+  { id: "editor.table.addRowBelow", label: "Add row below", reshape: (lines, at) => lines.splice(Math.max(at, 1) + 1, 0, lead(lines[1]) + rowLine(Array(cells(lines[0]).length).fill(""))) },
+  { id: "editor.table.addColumnLeft", label: "Add column left", reshape: (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col, 0, i === 1 ? "---" : "")) },
+  { id: "editor.table.addColumnRight", label: "Add column right", reshape: (lines, _, col) => eachRow(lines, (t, i) => t.toSpliced(col + 1, 0, i === 1 ? "---" : "")) },
+  { id: "editor.table.deleteRow", label: "Delete row", reshape: (lines, at) => lines.splice(at, 1), where: "body" },
+  { id: "editor.table.deleteColumn", label: "Delete column", reshape: (lines, _, col) => eachRow(lines, (t) => t.toSpliced(col, 1)), where: "wide" },
+  { id: "editor.table.delete", label: "Delete table", reshape: (lines) => lines.splice(0) },
 ];
 
-/** Right-click in a table: add or remove a row or a column. */
-function tableMenu(x: number, y: number, row: number, width: number, run: (how: Reshape) => void): void {
-  const menu = document.body.appendChild(document.createElement("div"));
-  menu.className = "menu";
-  menu.style.left = `${x}px`;
-  menu.style.top = `${y}px`;
-  const close = () => {
-    menu.remove();
-    removeEventListener("mousedown", away, true);
-    removeEventListener("keydown", close, true);
-  };
-  const away = (e: Event) => menu.contains(e.target as Node) || close();
-  addEventListener("mousedown", away, true);
-  addEventListener("keydown", close, true);
-  for (const [label, how, where] of RESHAPES) {
-    // The heading row stays where it is, and a table keeps at least one column.
-    if ((where === "body" && row === 0) || (where === "wide" && width < 2)) continue;
-    const item = menu.appendChild(document.createElement("button"));
-    item.textContent = label;
-    if (label.startsWith("Delete")) item.className = "danger";
-    item.addEventListener("click", () => {
-      close();
-      run(how);
-    });
-  }
-  menu.style.left = `${Math.max(4, Math.min(x, innerWidth - menu.offsetWidth - 4))}px`;
-  menu.style.top = `${Math.max(4, Math.min(y, innerHeight - menu.offsetHeight - 4))}px`;
+export function tableMenuItems(target: TableTarget) {
+  const width = grid(target.source)[0].length;
+  return tableActions.filter(({ where }) => !(where === "body" && target.row === 0) && !(where === "wide" && width < 2))
+    .map(({ id, label }) => ({ id, label, danger: label.startsWith("Delete") }));
+}
+
+/** Commands accept only the unchanged source of a real markdown table. */
+export function reshapeTable(view: EditorView, id: string, args: Record<string, unknown>): boolean {
+  const { from, source, row, col } = args;
+  if (typeof from !== "number" || !Number.isInteger(from) || from < 0 || typeof source !== "string" ||
+      typeof row !== "number" || !Number.isInteger(row) || row < 0 || typeof col !== "number" || !Number.isInteger(col) || col < 0 ||
+      from + source.length > view.state.doc.length || view.state.sliceDoc(from, from + source.length) !== source) return false;
+  let found = false;
+  syntaxTree(view.state).iterate({ from, to: from + source.length, enter(node) {
+    if (node.name === "Table" && node.from === from && node.to === from + source.length) found = true;
+  } });
+  if (!found || row >= grid(source).length || col >= grid(source)[0].length) return false;
+  const action = tableActions.find((action) => action.id === id);
+  if (!action || !tableMenuItems({ from, source, row, col }).some((item) => item.id === id)) return false;
+  if (view.state.readOnly || !view.state.facet(EditorView.editable)) return false;
+  new Table(source, from).change(view, (lines) => action.reshape(lines, row === 0 ? 0 : row + 1, col));
+  return true;
 }
 
 class Properties extends WidgetType {
@@ -754,7 +775,7 @@ function buildBlocks(state: EditorState, hooks: PreviewHooks): DecorationSet {
     enter(node) {
       if (node.name !== "Table") return;
       if (!touches(state, node.from, node.to)) {
-        const widget = new Table(state.sliceDoc(node.from, node.to), node.from);
+        const widget = new Table(state.sliceDoc(node.from, node.to), node.from, hooks.tableMenu);
         out.push(Decoration.replace({ widget, block: true }).range(node.from, node.to));
       }
       return false;
@@ -806,6 +827,7 @@ export interface PreviewHooks {
   loadNote?(target: string): Promise<string | null>;
   /** Show markdown read-only inside `parent`. */
   mountEmbed?(parent: HTMLElement, text: string): { destroy(): void };
+  tableMenu?(cell: HTMLElement, target: TableTarget, at: { x: number; y: number }): void;
 }
 
 export function livePreview(hooks: PreviewHooks) {

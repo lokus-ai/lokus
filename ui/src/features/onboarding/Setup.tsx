@@ -8,6 +8,7 @@ import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { app } from "../../shell/workspace";
 import { Logo } from "../connections/logos";
+import { TokenConnection } from "../connections/Connections";
 import { identify } from "../../bridge/analytics";
 import { type Account, accountsAvailable, signInWithGoogle } from "../../bridge/auth";
 import { ConnectModel, useModel } from "../ai/Connect";
@@ -207,6 +208,7 @@ export default function Onboarding() {
   const [answers, setAnswers] = useState<Answers>(EMPTY);
   const [step, setStep] = useState<Step>("hello");
   const [catalog, setCatalog] = useState<Connector[]>([]);
+  const [tokenConnection, setTokenConnection] = useState<Connector | null>(null);
   const [linked, setLinked] = useState<Record<string, "busy" | "done" | string>>({});
   const [muted, setMuted] = useState(soundsMuted());
   // Whether a folder was open when setup began decides if the folder question is asked at all.
@@ -248,16 +250,23 @@ export default function Onboarding() {
   const waiting = useStore(invited, (s) => s.waiting);
   // Kept once seen: joining takes it off the waiting list, and the last screen still needs to name it.
   const [offer, setOffer] = useState<Waiting | null>(null);
-  useEffect(() => {
-    if (!hadVault.current && !offer && waiting[0]) setOffer(waiting[0]);
-  }, [waiting, offer]);
   const [answer, setAnswer] = useState<"join" | "own" | "">("");
+  useEffect(() => {
+    if (hadVault.current || offer || !waiting[0]) return;
+    // One they pressed Join for on its page in a browser is not asked about again.
+    const agreed = waiting.find((w) => w.agreed_at);
+    setOffer(agreed ?? waiting[0]);
+    if (!agreed) return;
+    setAnswer("join");
+    // The questions about pages are the team's now: someone in the middle of them moves past.
+    setStep((at) => (at === "uses" || at === "aim" || at === "team" ? "look" : at));
+  }, [waiting, offer]);
   const joining = offer && answer === "join" ? offer : null;
   const order = useMemo<Step[]>(
     () => [
       "hello",
       ...(needsAccount.current ? (["account"] as Step[]) : []),
-      ...(offer ? (["invited"] as Step[]) : []),
+      ...(offer && !offer.agreed_at ? (["invited"] as Step[]) : []),
       // The pages and what they are for are the team's to decide; a person joining is asked only about themselves.
       ...(joining ? [] : (["uses", "aim", "team"] as Step[])),
       "look",
@@ -296,6 +305,7 @@ export default function Onboarding() {
   const skip = () => leaveOnboarding(true, step);
 
   useEffect(() => {
+    if (tokenConnection) return;
     const key = (e: KeyboardEvent) => {
       const typing = e.target instanceof HTMLInputElement;
       if (e.key === "Enter" && step !== "building") {
@@ -306,7 +316,7 @@ export default function Onboarding() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [next, step]);
+  }, [next, step, tokenConnection]);
 
   const toggle = (key: "uses" | "tools", id: string) => {
     wakeSounds();
@@ -320,6 +330,10 @@ export default function Onboarding() {
     set({ [key]: id });
   };
   const connect = async (c: Connector) => {
+    if (c.token_url) {
+      setTokenConnection(c);
+      return;
+    }
     setLinked((l) => ({ ...l, [c.id]: "busy" }));
     try {
       await connectService(c);
@@ -486,7 +500,7 @@ export default function Onboarding() {
         <p className="ob-sub">It is what does the linking for you: reads what customers say, updates the board, tells you what needs you. It needs a model to think with.</p>
         {model.ready ? (
           <p className="ob-line" style={nth(0)}>
-            Connected. It is ready.
+            Connected. Choose your model in the chat box.
           </p>
         ) : (
           <ConnectModel from="setup" onDone={model.recheck} />
@@ -494,7 +508,18 @@ export default function Onboarding() {
       </section>
     );
   } else if (step === "tools") {
-    ask = (
+    ask = tokenConnection ? (
+      <TokenConnection
+        connector={tokenConnection}
+        from="setup"
+        onCancel={() => setTokenConnection(null)}
+        onConnected={(server) => {
+          setTokenConnection(null);
+          doneSound(2);
+          setLinked((l) => ({ ...l, [server.name]: "done" }));
+        }}
+      />
+    ) : (
       <section className="ob-ask">
         <h1>
           <Said text="Which of these do you already use?" />
@@ -510,7 +535,7 @@ export default function Onboarding() {
         </div>
         {picked.length > 0 && (
           <div className="ob-connect">
-            <small>Connect them now, or later in Settings. Connecting opens your browser so you can sign in.</small>
+            <small>Connect them now, or later in Settings.</small>
             {picked.map((c) => {
               const state = linked[c.id];
               return (
@@ -610,7 +635,7 @@ export default function Onboarding() {
           </aside>
         )}
       </div>
-      {step !== "hello" && step !== "building" && (
+      {step !== "hello" && step !== "building" && !tokenConnection && (
         <footer className="ob-foot">
           <button className="link" onClick={() => go(index - 1)}>
             Back
