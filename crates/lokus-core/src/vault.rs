@@ -101,6 +101,53 @@ impl Vault {
         &self.root
     }
 
+    /// What this folder is known by wherever it is moved or renamed to: a random id kept in
+    /// `.lokus/id`, made the first time it is asked for. It is never synced, so each computer's
+    /// copy of a shared folder has its own; a folder copied by hand takes its original's along.
+    pub fn id(&self) -> Result<String> {
+        let file = self.root.join(META_DIR).join("id");
+        // Only what this app writes counts: 32 hex digits in a plain file. A folder that came
+        // from somewhere else cannot name an id of its choosing, or point this at another file.
+        let read = || {
+            let plain = fs::symlink_metadata(&file).is_ok_and(|m| m.is_file());
+            let text = plain.then(|| fs::read_to_string(&file).ok()).flatten()?;
+            let id = text.trim();
+            (id.len() == 32 && id.bytes().all(|b| b.is_ascii_hexdigit())).then(|| id.to_string())
+        };
+        if let Some(id) = read() {
+            return Ok(id);
+        }
+        fs::create_dir_all(self.root.join(META_DIR))?;
+        let id = uuid::Uuid::new_v4().simple().to_string();
+        // Made only if it is not there: of two that ask at once, both get the one that landed.
+        // Whatever else sits at that name is taken away itself, never written through.
+        for _ in 0..2 {
+            match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&file)
+            {
+                Ok(mut made) => {
+                    made.write_all(id.as_bytes())?;
+                    return Ok(id);
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    if let Some(id) = read() {
+                        return Ok(id);
+                    }
+                    // Its own file that cannot be read just now is still its id: fail rather
+                    // than give the folder a new one and leave what was kept under the old.
+                    if fs::symlink_metadata(&file).is_ok_and(|m| m.is_file()) {
+                        fs::read(&file)?;
+                    }
+                    fs::remove_file(&file)?;
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Err(CoreError::NotFound(file.display().to_string()))
+    }
+
     pub fn name(&self) -> String {
         self.root
             .file_name()
@@ -539,6 +586,33 @@ pub(crate) fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_folder_keeps_its_id_when_it_is_renamed() {
+        let dir = tempfile::tempdir().unwrap();
+        let (old, new) = (dir.path().join("School"), dir.path().join("Uni"));
+        fs::create_dir(&old).unwrap();
+        let id = Vault::open(&old).unwrap().id().unwrap();
+        assert_eq!(Vault::open(&old).unwrap().id().unwrap(), id);
+        fs::rename(&old, &new).unwrap();
+        assert_eq!(Vault::open(&new).unwrap().id().unwrap(), id);
+        fs::create_dir(&old).unwrap();
+        assert_ne!(Vault::open(&old).unwrap().id().unwrap(), id);
+        // A folder from elsewhere cannot pick its id, or have another file written through a link.
+        let other = dir.path().join("other.txt");
+        fs::write(&other, "mine").unwrap();
+        fs::write(old.join(".lokus/id"), "-").unwrap();
+        assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
+        fs::write(old.join(".lokus/id"), [0xff, 0xfe]).unwrap();
+        assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
+        #[cfg(unix)]
+        {
+            fs::remove_file(old.join(".lokus/id")).unwrap();
+            std::os::unix::fs::symlink(&other, old.join(".lokus/id")).unwrap();
+            assert_eq!(Vault::open(&old).unwrap().id().unwrap().len(), 32);
+            assert_eq!(fs::read_to_string(&other).unwrap(), "mine");
+        }
+    }
 
     fn vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();

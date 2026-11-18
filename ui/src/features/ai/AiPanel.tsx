@@ -402,13 +402,16 @@ export function AiPanel() {
   /** The services the assistant can use right now. */
   const [services, setServices] = useState<string[]>([]);
   const settingsOpen = useStore(app, (s) => s.settings);
+  const at = useStore(app, (s) => s.vault?.root ?? "");
   useEffect(() => {
     if (settingsOpen) return;
+    // Each workspace has its own; one that answers for another workspace is not shown.
+    setServices([]);
     void aiSettings().then(
-      (s) => setServices([...s.config.mcp.filter((m) => m.enabled), ...s.plugin_servers].map((m) => m.name)),
+      (s) => s.config.root === at && setServices([...s.config.mcp.filter((m) => m.enabled), ...s.plugin_servers].map((m) => m.name)),
       () => {},
     );
-  }, [settingsOpen]);
+  }, [settingsOpen, at]);
 
   useLayoutEffect(() => {
     scroll.current?.scrollTo({ top: scroll.current.scrollHeight });

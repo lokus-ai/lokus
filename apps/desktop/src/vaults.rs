@@ -40,20 +40,26 @@ pub fn remember(app: &AppHandle, root: &Path) {
     }
 }
 
-/// Every workspace still on this computer, in the order they were first opened. A folder that
-/// was deleted or moved drops out of the list by itself.
-#[tauri::command(async)]
-pub fn vault_list(app: AppHandle) -> Vec<Value> {
-    let known = read(&app);
+/// The folders of the workspaces still on this computer.
+pub fn here(app: &AppHandle) -> Vec<String> {
+    let known = read(app);
     let here: Vec<String> = known
         .iter()
         .filter(|root| Path::new(root).is_dir())
         .cloned()
         .collect();
     if here.len() != known.len() {
-        write(&app, &here);
+        write(app, &here);
     }
-    here.iter()
+    here
+}
+
+/// Every workspace still on this computer, in the order they were first opened. A folder that
+/// was deleted or moved drops out of the list by itself.
+#[tauri::command(async)]
+pub fn vault_list(app: AppHandle) -> Vec<Value> {
+    here(&app)
+        .iter()
         .map(|root| {
             let name = Path::new(root)
                 .file_name()

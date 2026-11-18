@@ -5,7 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, saveAiConfig, saveMcpToken, setAiSecret } from "../../bridge/ai";
 import { openWeb } from "../../bridge/updates";
 import { Icon } from "../../shell/Icon";
-import { notify } from "../../shell/workspace";
+import { useStore } from "../../shell/store";
+import { app, notify } from "../../shell/workspace";
 import { WorkspaceKeys } from "../customers/DataDoor";
 import { Toggle } from "../settings/parts";
 import { Logo } from "./logos";
@@ -18,8 +19,10 @@ interface Offered {
   asks: boolean;
 }
 
-export function TokenConnection({ connector, from = "settings", onCancel, onConnected }: {
+export function TokenConnection({ connector, root, from = "settings", onCancel, onConnected }: {
   connector: Connector;
+  /** The workspace the connection is for. */
+  root: string;
   from?: "settings" | "setup";
   onCancel(): void;
   onConnected(server: McpServer, tools: Offered[]): void;
@@ -59,11 +62,11 @@ export function TokenConnection({ connector, from = "settings", onCancel, onConn
     const server = { name: connector.id, url: connector.url, enabled: true };
     let saving = false;
     try {
-      const offered = await checkMcp(server, token);
+      const offered = await checkMcp(root, server, token);
       if (!active.current) return;
       saving = true;
       setPhase("saving");
-      await saveMcpToken(server, token);
+      await saveMcpToken(root, server, token);
       if (!active.current) return;
       setToken("");
       track("connection_added", { service: connector.id, from });
@@ -118,14 +121,21 @@ export function Connections() {
   const [tokenConnection, setTokenConnection] = useState<Connector | null>(null);
 
   const reload = useCallback(() => aiSettings().then(setSettings, (e) => setNote(message(e))), []);
+  // Another workspace has its own connections: start again from what it has.
+  const at = useStore(app, (s) => s.vault?.root ?? "");
   useEffect(() => {
+    setSettings(null);
+    setTools({});
+    setOpen(null);
+    setTokenConnection(null);
     void reload();
-    void aiConnectors().then(setCatalog, () => {});
-  }, [reload]);
+  }, [reload, at]);
+  useEffect(() => void aiConnectors().then(setCatalog, () => {}), []);
   const kinds = useMemo(() => [...new Set(catalog.map((c) => c.kind))], [catalog]);
-  if (!settings) return <p className="settings-hint">{note ?? "Loading…"}</p>;
+  if (!settings || settings.config.root !== at) return <p className="settings-hint">{note ?? "Loading…"}</p>;
 
   const { config } = settings;
+  const root = config.root;
   const save = async (patch: Partial<AiConfig>) => {
     const next = { ...config, ...patch };
     setSettings({ ...settings, config: next });
@@ -137,7 +147,7 @@ export function Connections() {
   /** Ask a connected service what it offers, which also proves the connection works. */
   const look = async (server: McpServer) => {
     setTools((t) => ({ ...t, [server.name]: "Checking…" }));
-    const found = await checkMcp(server).then(
+    const found = await checkMcp(root, server).then(
       (list) => list as Offered[],
       (e) => message(e),
     );
@@ -152,9 +162,8 @@ export function Connections() {
     setBusy(c.id);
     const server = { name: c.id, url: c.url, enabled: true };
     try {
-      await mcpLogin(server);
+      await mcpLogin(root, server);
       track("connection_added", { service: c.id, from: "settings" });
-      if (!added(c.id)) await save({ mcp: [...config.mcp, server] });
       await reload();
       notify(`${c.name} is connected`);
       setOpen(c.id);
@@ -168,8 +177,8 @@ export function Connections() {
   const disconnect = async (name: string) => {
     setNote(null);
     try {
-      await mcpLogout(name);
-      await setAiSecret("mcp", name, "");
+      await mcpLogout(root, name);
+      await setAiSecret("mcp", name, "", root);
       await saveAiConfig({ ...config, mcp: config.mcp.filter((s) => s.name !== name) });
       setTools((t) => { const next = { ...t }; delete next[name]; return next; });
     } catch {
@@ -185,7 +194,7 @@ export function Connections() {
       setNote("It needs a short name that is not taken (letters, digits and dashes) and an address starting with https://.");
       return;
     }
-    if (api.key.trim()) await setAiSecret("api", name, api.key).catch((e) => setNote(message(e)));
+    if (api.key.trim()) await setAiSecret("api", name, api.key, root).catch((e) => setNote(message(e)));
     await save({ apis: [...apis, { name, url, about: api.about.trim(), enabled: true }] });
     track("connection_added", { service: "own_api", from: "settings" });
     setApi({ name: "", url: "", key: "", about: "" });
@@ -193,7 +202,7 @@ export function Connections() {
     await reload();
   };
   const removeApi = async (name: string) => {
-    await setAiSecret("api", name, "").catch(() => {});
+    await setAiSecret("api", name, "", root).catch(() => {});
     await save({ apis: apis.filter((a) => a.name !== name) });
     await reload();
   };
@@ -204,7 +213,7 @@ export function Connections() {
       setNote("A server needs a short name that is not taken (letters, digits and dashes) and an http(s) address.");
       return;
     }
-    if (own.token.trim()) await setAiSecret("mcp", name, own.token).catch((e) => setNote(message(e)));
+    if (own.token.trim()) await setAiSecret("mcp", name, own.token, root).catch((e) => setNote(message(e)));
     await save({ mcp: [...config.mcp, { name, url, enabled: true }] });
     setOwn({ name: "", url: "", token: "" });
     setAdding(false);
@@ -247,7 +256,7 @@ export function Connections() {
             </small>
           </button>
           {needsSignIn && (
-            <button className="settings-button" onClick={() => connector?.token_url ? setTokenConnection(connector) : void mcpLogin(server).then(reload, (e) => setNote(message(e)))}>
+            <button className="settings-button" onClick={() => connector?.token_url ? setTokenConnection(connector) : void mcpLogin(root, server).then(reload, (e) => setNote(message(e)))}>
               {connector?.token_url ? "Connect" : "Sign in"}
             </button>
           )}
@@ -290,6 +299,7 @@ export function Connections() {
 
   if (tokenConnection) return (
     <TokenConnection
+      root={root}
       connector={tokenConnection}
       onCancel={() => setTokenConnection(null)}
       onConnected={(server, offered) => {
@@ -306,7 +316,7 @@ export function Connections() {
     <div className="conn">
       <header className="conn-head">
         <div>
-          <h2>Connections</h2>
+          <h2>{settings.workspace ? `Connections in ${settings.workspace}` : "Connections"}</h2>
           <p>Let the assistant look things up and act in the tools you already use. It works when you ask, and asks before it changes anything.</p>
         </div>
       </header>

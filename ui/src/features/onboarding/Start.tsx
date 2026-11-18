@@ -39,7 +39,12 @@ export function Start() {
   const tree = useStore(app, (s) => s.tree);
   const [connected, setConnected] = useState<string[] | null>(null);
   const answers = keptAnswers();
-  useEffect(() => void aiSettings().then((s) => setConnected(s.config.mcp.map((m) => m.name)), () => setConnected([])), []);
+  // The open workspace's connections; another workspace has its own.
+  const at = useStore(app, (s) => s.vault?.root ?? "");
+  useEffect(() => {
+    setConnected(null);
+    void aiSettings().then((s) => s.config.root === at && setConnected(s.config.mcp.map((m) => m.name)), () => setConnected([]));
+  }, [at]);
 
   const uses = answers?.uses ?? [];
   const cards = [...CARDS].sort((a, b) => Number(uses.includes(b.use ?? "")) - Number(uses.includes(a.use ?? "")));
