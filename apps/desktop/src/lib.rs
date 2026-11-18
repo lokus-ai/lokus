@@ -8,6 +8,8 @@ mod ai;
 mod background;
 #[cfg(all(debug_assertions, desktop))]
 mod dev_channel;
+#[cfg(desktop)]
+mod menus;
 mod sync;
 mod updates;
 mod vaults;
@@ -222,61 +224,6 @@ fn plugin_file(app: &AppHandle, uri_path: &str) -> tauri::http::Response<Vec<u8>
     response.unwrap_or_default()
 }
 
-/// The app menu. Cmd+W closes a tab, not the window, so it is our own item.
-#[cfg(desktop)]
-fn menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
-    use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
-    let close_tab = MenuItemBuilder::with_id("close-tab", "Close Tab")
-        .accelerator("CmdOrCtrl+W")
-        .build(app)?;
-    // The system's own "Close Window" also answers to Cmd+W, and it won: Cmd+W closed the
-    // window, and with it the app, instead of the tab. Ours takes Cmd+Shift+W.
-    let close_window = MenuItemBuilder::with_id("close-window", "Close Window")
-        .accelerator("CmdOrCtrl+Shift+W")
-        .build(app)?;
-    // Our own Quit: while Lokus stays in the menu bar, Command-Q puts it away and keeps it running.
-    let quit = MenuItemBuilder::with_id("quit", "Quit Lokus")
-        .accelerator("CmdOrCtrl+Q")
-        .build(app)?;
-    let app_menu = SubmenuBuilder::new(app, "Lokus")
-        .about(None)
-        .separator()
-        .services()
-        .separator()
-        .hide()
-        .hide_others()
-        .show_all()
-        .separator()
-        .item(&quit)
-        .build()?;
-    let new_window = MenuItemBuilder::with_id("new-window", "New Window")
-        .accelerator("CmdOrCtrl+Shift+N")
-        .build(app)?;
-    let file = SubmenuBuilder::new(app, "File")
-        .item(&new_window)
-        .separator()
-        .item(&close_tab)
-        .item(&close_window)
-        .build()?;
-    let edit = SubmenuBuilder::new(app, "Edit")
-        .undo()
-        .redo()
-        .separator()
-        .cut()
-        .copy()
-        .paste()
-        .select_all()
-        .build()?;
-    let window = SubmenuBuilder::new(app, "Window")
-        .minimize()
-        .maximize()
-        .fullscreen()
-        .build()?;
-    MenuBuilder::new(app)
-        .items(&[&app_menu, &file, &edit, &window])
-        .build()
-}
-
 /// Every command the window may call, written once. A development build adds the one that
 /// answers the terminal. There used to be two lists, and a command added to only the
 /// development one (the list of services to connect) was missing from the released app.
@@ -319,6 +266,10 @@ macro_rules! commands {
             updates::app_place,
             updates::app_quit,
             windows::window_new,
+            #[cfg(desktop)]
+            menus::menu_commands,
+            #[cfg(desktop)]
+            menus::menu_enabled,
             vault_default,
             vaults::vault_list,
             vaults::vault_forget,
@@ -346,21 +297,11 @@ pub fn run() {
             plugin_file(ctx.app_handle(), request.uri().path())
         });
     #[cfg(desktop)]
-    let builder = builder.menu(menu).on_menu_event(|app, event| {
-        match event.id().as_ref() {
-            "close-tab" => windows::tell_front(app, "menu:close-tab"),
-            "close-window" => windows::close_front(app),
-            "quit" => background::quit_or_put_away(app),
-            "new-window" => {
-                let app = app.clone();
-                // Off the menu's own thread: a window cannot be made from inside its handler.
-                tauri::async_runtime::spawn(async move {
-                    let _ = windows::open(&app);
-                });
-            }
-            _ => {}
-        }
-    });
+    let builder = builder
+        .manage(menus::State::default())
+        .menu(menus::build)
+        .on_menu_event(menus::on_menu_event)
+        .on_window_event(menus::on_window_event);
 
     #[cfg(all(debug_assertions, desktop))]
     let builder = builder

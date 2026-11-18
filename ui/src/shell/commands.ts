@@ -18,6 +18,12 @@ export interface Command {
 }
 
 const registry = new Map<string, Command>();
+const nativeShortcuts = new Map<string, boolean>();
+
+/** Native accelerators own these keystrokes, including before CodeMirror sees them. */
+export function ownNativeShortcuts(ids: string[], enabled: string[]): void {
+  for (const id of ids) nativeShortcuts.set(id, enabled.includes(id));
+}
 
 export function registerCommands(commands: Command[]): void {
   for (const c of commands) registry.set(c.id, c);
@@ -64,6 +70,20 @@ export function installShortcuts(): () => void {
     if (!(e.metaKey || e.ctrlKey)) return;
     const pressed = chord(e);
     for (const c of registry.values()) {
+      if (c.keys === pressed && nativeShortcuts.has(c.id)) {
+        // WKWebView forwards unhandled keys to the menu. Cancelling default also cancels
+        // that native accelerator; only disabled commands must be swallowed completely.
+        const enabled = nativeShortcuts.get(c.id);
+        if (!enabled) e.preventDefault();
+        // WebKit consumes Control-Tab for focus navigation before the native menu sees it.
+        // Handle that chord here and cancel the native default, still running only once.
+        else if (isMac && (c.id === "tab.next" || c.id === "tab.previous")) {
+          e.preventDefault();
+          void runCommand(c.id);
+        }
+        e.stopImmediatePropagation();
+        return;
+      }
       if (c.keys === pressed && !c.id.startsWith("editor.")) {
         e.preventDefault();
         void runCommand(c.id);

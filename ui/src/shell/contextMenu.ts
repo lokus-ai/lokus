@@ -15,7 +15,11 @@ export interface ContextMenuTarget {
   run(id: string): void;
 }
 
-let dismiss: (() => void) | undefined;
+let dismiss: ((restoreFocus?: boolean) => void) | undefined;
+
+export function dismissContextMenu(restoreFocus = false): void {
+  dismiss?.(restoreFocus);
+}
 
 /** One command menu; ordinary text inputs keep their native context menus. */
 export function showContextMenu(

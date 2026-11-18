@@ -93,13 +93,6 @@ export function vaultFileUrl(root: string, relative: string): string {
   return convertFileSrc(`${root}/${relative}`);
 }
 
-/** Cmd+W from the app menu. */
-export function onCloseTab(handler: () => void): () => void {
-  // Heard by this window only: with two windows open, Cmd+W closes a tab in the one in front.
-  const stop = getCurrentWindow().listen("menu:close-tab", handler);
-  return () => void stop.then((off) => off());
-}
-
 export function closeWindow(): void {
   void getCurrentWindow().close();
 }
