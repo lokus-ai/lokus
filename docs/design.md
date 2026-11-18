@@ -268,6 +268,48 @@ The team's work, kept the way customers are: one note each.
 - **The board** has a column per status and cards dragged between them; **the list** is the same
   tasks grouped the same way. A card shows the number, priority, customer, labels, due date and
   whose it is. A task's own page shows those as properties, changed in place, above its text.
+- **Edit without leaving the board or list.** Status, priority, assignee and due date have inline
+  controls. They confirm only after the existing task writer succeeds; a failed change keeps
+  the saved value alongside the attempted field/value and offers Retry or Cancel change. In-flight
+  or failed inline edits keep their board open through note navigation, close and folder changes;
+  Cancel discards only that failed inline intent, never shared text or a running write, and remains
+  available to viewers. An unsaved open task must be saved first. The writer
+  checks the field's original parsed value, not its normalized display, and changes only supplied properties in the latest file,
+  preserving its body; explicit empty values clear a property. Clicked tasks are identified by
+  their path, not by a possibly duplicated number.
+- **Custom columns** use the board note's existing `order` property, an array of status names.
+  Empty custom columns survive reload and sync. Names are lowercase, one line, up to 30
+  characters; duplicate names are refused. Only empty custom columns can be renamed or removed;
+  populated columns require moving their tasks first. Built-in columns remain. The board's
+  editor changes this property through the same save path as its body, not a separate writer.
+  Quoted names preserve commas, quotes, backslashes and Unicode. Existing cached properties
+  rebuild automatically for corrected decoding, without rewriting notes or requiring user action.
+- **Save feedback** distinguishes unsaved, saving, locally saved and failed writes on task pages
+  and the board. A locally saved file is not a relay acknowledgement: offline edits can still
+  be saved on this device. Failed shared updates stay queued with their dependencies for retry.
+  Closing or replacing their tab, disconnecting sync or changing folders cannot discard them.
+  Saves and task mutations identify their original vault; a delayed operation cannot write to
+  a different folder's same-named note or shared document.
+  Edits arriving while a folder opens refuse that transition and keep their sessions. The original
+  native root is restored only if the opened target still owns it; a newer independent open is
+  not overwritten. If restoration fails, selecting the original folder again restores ownership
+  without resetting retained work. Reconnecting with pending edits requires the same captured
+  root, server and workspace. Failed target construction leaves the original sync link running;
+  stale conditional opens do not change the current root, link or remembered-folder settings.
+  File and folder renames also capture the original vault: failed saves refuse the rename,
+  private/shared writers reject another root, and stale completion cannot move a new vault's
+  tabs or trigger caller follow-up. Tree refresh reads that captured root and discards results
+  after the UI changes vaults. Shared rename preserves the existing document identity.
+  Incoming sync events carry the serving vault's root: another vault's same-ID text, presence,
+  rename, trash, role or new-data notice cannot change the retained session or current workspace.
+  A shared document without a materialized file refuses local updates before changing sync state
+  or the outbox. Pending words stay unsaved after peer deletion; Retry never resurrects the note.
+- **Context actions and trash.** Right-click a task to open it, focus its inline fields or move
+  that task to the vault trash; right-click a column to manage columns. These use the shared
+  command-menu presentation and capture the clicked target, invalidating on context changes,
+  including a board hidden behind Graph or a file. Delayed column actions recheck that visibility.
+  Task pages also expose trash directly. The existing note trash operation retains open sessions
+  until pending saves and deletion succeed. Viewer task controls are disabled.
 - **Tied to customers.** A task with `customer:` shows under Tasks on that customer's page, and
   one can be added from there. A fact pushed through the data door may carry a `task`.
 - **Kept in step by the assistant.** Its standing instructions tell it that when a customer
@@ -404,7 +446,11 @@ Checked by `crates/lokus-server/tests/relay.rs` against a real relay on a local 
 scripted flows: `checks/flows/sync-devices.sh` and `checks/flows/live-coedit.sh`.
 
 Device and relay exchange only what the other is missing; after that edits are relayed live.
-Cursors and presence pass through memory and are never stored. A personal vault is local-only
+Cursors and presence pass through memory and are never stored. Each outgoing cursor, name,
+removal and new-peer reply carries its shared note's original vault root; the native boundary
+checks the captured connection's engine and drops stale presence rather than forwarding it to
+another folder's team. Presence delivery remains best-effort and cannot change note save state.
+A personal vault is local-only
 by default; turning sync on makes it a one-person workspace on the same pipeline.
 
 ### Files that are not notes (built; tried in the real app with a ChatGPT-plan model)

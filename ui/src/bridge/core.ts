@@ -26,17 +26,17 @@ export interface VaultInfo {
 }
 
 /** Run a core command against the open vault. */
-export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>): Promise<T> {
+export async function runCore<T = unknown>(name: string, args?: Record<string, unknown>, root?: string): Promise<T> {
   try {
-    return await invoke<T>("core_run", { name, args: args ?? null });
+    return await invoke<T>("core_run", { name, args: args ?? null, root });
   } catch (raw) {
     throw toCoreError(raw);
   }
 }
 
-export async function openVault(path: string): Promise<VaultInfo> {
+export async function openVault(path: string, root?: string): Promise<VaultInfo> {
   try {
-    return await invoke<VaultInfo>("vault_open", { path });
+    return await invoke<VaultInfo>("vault_open", { path, root });
   } catch (raw) {
     throw toCoreError(raw);
   }

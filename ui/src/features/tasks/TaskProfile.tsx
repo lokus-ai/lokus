@@ -1,15 +1,15 @@
 /** @part-of ui.tasks */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { Icon, type IconName } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
-import { app } from "../../shell/workspace";
+import { app, deleteEntry, save } from "../../shell/workspace";
 import { Field } from "../customers/parts";
 import { Face } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
-import { dueText, loadAssignees, PRIORITIES, STATUSES, statusName } from "./data";
+import { dueText, loadAssignees, PRIORITIES, STATUSES, statusName, type TaskField } from "./data";
 import { Priority } from "./TasksBoard";
 
 interface Props {
@@ -34,6 +34,7 @@ function Row({ icon, name, children }: { icon: IconName; name: string; children:
 
 /** Whose the task is: shown as a person, chosen from the people the team already works with. */
 function Assignee({ value, onChange }: { value: string; onChange(next: string | null): void }) {
+  const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [people, setPeople] = useState<string[]>([]);
   const [typed, setTyped] = useState("");
@@ -65,18 +66,21 @@ function Assignee({ value, onChange }: { value: string; onChange(next: string | 
     onChange(name);
     setOpen(false);
     setTyped("");
+    trigger.current?.focus();
   };
   const q = typed.trim().toLowerCase();
   const shown = people.filter((p) => !q || p.toLowerCase().includes(q));
   return (
     <span className="cust-menu-at task-pick">
-      <button className="cust-value" title="Change who this is assigned to" onClick={() => setOpen((o) => !o)}>
+      <button ref={trigger} className="cust-value" aria-label="Assignee" aria-expanded={open} title="Change who this is assigned to" onClick={() => setOpen((o) => !o)}>
         {value ? <Face name={value} /> : <span className="cust-none">Nobody yet</span>}
       </button>
       {open && (
         <>
           <div className="cust-shade" onClick={() => setOpen(false)} />
-          <div className="cust-menu left">
+          <div className="cust-menu left" onKeyDown={(e) => {
+            if (e.key === "Escape") { e.stopPropagation(); setOpen(false); trigger.current?.focus(); }
+          }}>
             <input
               className="cust-input"
               autoFocus
@@ -86,7 +90,6 @@ function Assignee({ value, onChange }: { value: string; onChange(next: string | 
               onChange={(e) => setTyped(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && typed.trim()) pick(shown[0] ?? typed.trim());
-                if (e.key === "Escape") setOpen(false);
               }}
             />
             {shown.map((name) => (
@@ -115,6 +118,33 @@ function Assignee({ value, onChange }: { value: string; onChange(next: string | 
       )}
     </span>
   );
+}
+
+export function SaveFeedback({ path, label }: { path: string | null; label?: string }) {
+  const state = useStore(app, (s) => path ? s.saves[path] ?? "saved" : "saved");
+  return <span className={`task-save ${state}`} role="status" aria-live="polite">
+    {label && `${label}: `}
+    {state === "failed" ? "Not saved on this device" : state === "saving" ? "Saving…" : state === "unsaved" ? "Unsaved changes" : "Saved on this device"}
+    {state === "failed" && path && <button className="link" onClick={() => void save(path)}>Retry save</button>}
+  </span>;
+}
+
+export function TaskFields({ values, statuses, disabled, onChange }: {
+  values: Record<TaskField, string>; statuses: string[]; disabled: boolean;
+  onChange(field: TaskField, value: string | null): void;
+}) {
+  return <fieldset className="task-inline" disabled={disabled} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()}>
+    <select aria-label="Status" value={values.status} onChange={(e) => onChange("status", e.target.value || null)}>
+      <option value="">No status</option>
+      {statuses.map((status) => <option key={status} value={status}>{statusName(status)}</option>)}
+    </select>
+    <select aria-label="Priority" value={values.priority} onChange={(e) => onChange("priority", e.target.value || null)}>
+      <option value="">No priority</option>
+      {PRIORITIES.map((priority) => <option key={priority} value={priority}>{cap(priority)}</option>)}
+    </select>
+    <Assignee value={values.assignee} onChange={(value) => onChange("assignee", value)} />
+    <Due value={values.due} late={Boolean(dueText(values.due)?.late) && values.status !== "done"} onChange={(value) => onChange("due", value)} />
+  </fieldset>;
 }
 
 /** When the task is due: a real date, picked from a calendar. */
@@ -148,6 +178,8 @@ function Due({ value, late, onChange }: { value: string; late: boolean; onChange
  * is, who it is for and when it is due. Each is a property of the note, changed in place.
  */
 export default function TaskProfile({ properties, onProperty, onOpen }: Props) {
+  const path = useStore(app, (s) => s.active);
+  const readOnly = useStore(app, (s) => s.sync.role === "viewer");
   const status = (properties.status ?? "").toLowerCase();
   const priority = (properties.priority ?? "").toLowerCase();
   const statuses = STATUSES.includes(status) || !status ? STATUSES : [status, ...STATUSES];
@@ -155,7 +187,11 @@ export default function TaskProfile({ properties, onProperty, onOpen }: Props) {
   const set = (key: string) => (next: string) => onProperty(key, next.trim() || null);
   return (
     <div className="cust">
-      <div className="cust-props">
+      <div className="task-profile-actions">
+        <SaveFeedback path={path} />
+        <button className="link" disabled={readOnly} onClick={() => path && void deleteEntry(path)}>Move task to trash</button>
+      </div>
+      <fieldset className="cust-props task-profile-fields" disabled={readOnly}>
         <Row icon="activity" name="Status">
           <label className="cust-pick">
             <span className="cust-health">
@@ -164,6 +200,7 @@ export default function TaskProfile({ properties, onProperty, onOpen }: Props) {
             </span>
             <Icon name="down" size={12} />
             <select aria-label="Status" value={status} onChange={(e) => onProperty("status", e.target.value || null)}>
+              <option value="">No status</option>
               {statuses.map((s) => (
                 <option key={s} value={s}>
                   {statusName(s)}
@@ -220,7 +257,7 @@ export default function TaskProfile({ properties, onProperty, onOpen }: Props) {
             </span>
           </Row>
         )}
-      </div>
+      </fieldset>
       <h3 className="cust-notes">Notes</h3>
     </div>
   );

@@ -87,6 +87,10 @@ struct Row {
 }
 
 impl Engine {
+    pub fn root(&self) -> &std::path::Path {
+        self.vault.root()
+    }
+
     pub fn open(vault: &Vault) -> Result<Self> {
         let dir = vault.root().join(META_DIR);
         fs::create_dir_all(&dir)?;
@@ -574,16 +578,17 @@ impl Engine {
         let Some(row) = self.row(id)? else {
             return Err(Error::UnknownDoc(id.to_string()));
         };
+        let Some(path) = row.path.as_deref() else {
+            return Err(Error::UnknownDoc(id.to_string()));
+        };
         let doc = self.new_doc();
         apply(&doc, &row.state)?;
         apply(&doc, update)?;
         let text = doc
             .get_or_insert_text("content")
             .get_string(&doc.transact());
-        if let Some(path) = row.path.as_deref() {
-            self.write_disk(path, &text)?;
-        }
-        self.save(id, &doc, Some(&text), row.path.as_deref())?;
+        self.write_disk(path, &text)?;
+        self.save(id, &doc, Some(&text), Some(path))?;
         self.queue(id, update.to_vec())
     }
 
@@ -1137,6 +1142,49 @@ mod tests {
         // And it stays deleted: nothing resurrects it on later rounds.
         exchange(&mut a, &mut b);
         assert_eq!(a.read("Gone.md"), None);
+    }
+
+    #[test]
+    fn retained_edits_follow_renames_but_refuse_deleted_documents() {
+        let (mut a, mut b) = (device(), device());
+        a.write("Task.md", "original\n");
+        exchange(&mut a, &mut b);
+        let id = a.engine.doc_id("Task.md").unwrap().unwrap();
+        let editor = Doc::new();
+        apply(&editor, &a.engine.state(&id).unwrap().unwrap()).unwrap();
+        let content = editor.get_or_insert_text("content");
+        let before = editor.transact().state_vector();
+        content.push(&mut editor.transact_mut(), "retained before rename\n");
+        let pending = editor.transact().encode_state_as_update_v1(&before);
+
+        b.engine.rename("Task.md", "Renamed.md").unwrap();
+        exchange(&mut a, &mut b);
+        a.engine.local_update(&id, &pending).unwrap();
+        exchange(&mut a, &mut b);
+        assert_eq!(a.read("Task.md"), None);
+        assert_eq!(a.read("Renamed.md"), b.read("Renamed.md"));
+        assert_eq!(
+            a.read("Renamed.md").as_deref(),
+            Some("original\nretained before rename\n")
+        );
+
+        let before = editor.transact().state_vector();
+        content.push(&mut editor.transact_mut(), "retained before deletion\n");
+        let pending = editor.transact().encode_state_as_update_v1(&before);
+        b.vault.delete("Renamed.md").unwrap();
+        exchange(&mut a, &mut b);
+        let state = a.engine.state(&id).unwrap();
+        assert!(a.engine.row(&id).unwrap().unwrap().path.is_none());
+        assert!(a.engine.outbox().unwrap().is_empty());
+        assert!(
+            matches!(a.engine.local_update(&id, &pending), Err(Error::UnknownDoc(doc)) if doc == id)
+        );
+        assert_eq!(a.engine.state(&id).unwrap(), state);
+        assert!(a.engine.outbox().unwrap().is_empty());
+        assert_eq!(a.read("Renamed.md"), None);
+        assert!(content
+            .get_string(&editor.transact())
+            .contains("retained before deletion"));
     }
 
     /// What broke for the first team to use Lokus: New note, type its title, then write.

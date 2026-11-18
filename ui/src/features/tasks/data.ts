@@ -1,9 +1,12 @@
 /** @part-of ui.tasks */
 import { runCore } from "../../bridge/core";
+import { app, hasUnsaved, save } from "../../shell/workspace";
 
 /** One piece of work: a note in the tasks folder marked `type: task`. */
 export interface Task {
   path: string;
+  root: string;
+  expected: Record<TaskField, unknown>;
   /** Its short name for people and the assistant: T-12. */
   key: string;
   number: number;
@@ -34,13 +37,17 @@ const word = (value: unknown) => (typeof value === "string" || typeof value === 
 
 /** Every task, the most pressing first within whatever order the caller groups them in. */
 export async function loadTasks(): Promise<Task[]> {
-  const rows = await runCore<Row[]>("props.rows", { folder: TASKS_FOLDER });
+  const root = app.get().vault?.root;
+  if (!root) return [];
+  const rows = await runCore<Row[]>("props.rows", { folder: TASKS_FOLDER }, root);
   return rows
     .filter((r) => r.props.type === "task")
     .map((r) => {
       const number = typeof r.props.number === "number" ? r.props.number : 0;
       return {
         path: r.path,
+        root,
+        expected: { status: r.props.status ?? null, priority: r.props.priority ?? null, assignee: r.props.assignee ?? null, due: r.props.due ?? null },
         number,
         key: `T-${number}`,
         title: r.path.split("/").pop()!.replace(/\.md$/i, ""),
@@ -61,15 +68,36 @@ const weight = (priority: string) => {
 };
 
 /** Add a task, or change one named by its key. Resolves to where its note is. */
-export async function recordTask(task: Partial<Omit<Task, "path" | "number" | "labels">> & { labels?: string[]; text?: string }): Promise<string> {
-  const made = await runCore<{ path: string }>("tasks.record", { task });
+export async function recordTask(task: Partial<Omit<Task, "path" | "root" | "expected" | "number" | "labels">> & { labels?: string[]; text?: string }): Promise<string> {
+  const made = await runCore<{ path: string }>("tasks.record", { task }, app.get().vault?.root);
   return made.path;
 }
 
+export type TaskField = "status" | "priority" | "assignee" | "due";
+
+export async function editTask(task: Task, field: TaskField, value: string | null): Promise<void> {
+  const root = task.root;
+  if (app.get().vault?.root !== root) throw new Error("Open the task's workspace before editing it.");
+  if (app.get().sync.role === "viewer") throw new Error("Only editors can change shared tasks.");
+  await save(task.path);
+  if (hasUnsaved(task.path)) throw new Error("Save the task's open tab before changing it here.");
+  if (app.get().sync.role === "viewer") throw new Error("Only editors can change shared tasks.");
+  await runCore("tasks.record", { task: { path: task.path, [field]: value, expected: { [field]: task.expected[field] } } }, root);
+}
+
+/** New boards write JSON arrays, which are also valid YAML flow sequences. */
+export function columnOrder(value: string | undefined): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.filter((item): item is string => typeof item === "string");
+  } catch { /* Older boards may use a plain comma-separated order. */ }
+  return value.replace(/^\[|\]$/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 /** The columns a board shows: the usual ones, then any other status the tasks use. */
-export function columnsOf(tasks: Task[]): string[] {
-  const others = [...new Set(tasks.map((t) => t.status).filter((s) => s && !STATUSES.includes(s)))];
-  return [...STATUSES, ...others];
+export function columnsOf(tasks: Task[], order: string[] = []): string[] {
+  return [...new Set([...STATUSES, ...order, ...tasks.map((t) => t.status)].filter(Boolean))];
 }
 
 /** "Dec 1", and whether it has passed. */

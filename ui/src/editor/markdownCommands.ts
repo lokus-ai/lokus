@@ -114,7 +114,13 @@ export function readFrontmatter(text: string): Frontmatter {
   const values: Record<string, string> = {};
   for (const line of text.slice(text.indexOf("\n") + 1, bodyEnd).split("\n")) {
     const m = /^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$/.exec(line);
-    if (m) values[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
+    if (m) {
+      let value = m[2].replace(/^(["'])(.*)\1$/, "$2");
+      if (m[2].startsWith('"')) {
+        try { value = JSON.parse(m[2]) as string; } catch { /* Preserve non-JSON YAML scalars. */ }
+      }
+      values[m[1]] = value;
+    }
   }
   return { end: bodyEnd + close[0].length, values };
 }
@@ -124,10 +130,10 @@ function yamlValue(value: string): string {
 }
 
 /** Add, change or (with `null`) remove one top-level frontmatter key. */
-export function setFrontmatterKey(state: EditorState, key: string, value: string | null): TransactionSpec {
+export function setFrontmatterKey(state: EditorState, key: string, value: string | string[] | null): TransactionSpec {
   const text = state.doc.toString();
   const fm = readFrontmatter(text);
-  const line = value === null ? "" : `${key}: ${yamlValue(value)}\n`;
+  const line = value === null ? "" : `${key}: ${Array.isArray(value) ? JSON.stringify(value) : yamlValue(value)}\n`;
   if (fm.end === 0) {
     return value === null ? {} : { changes: { from: 0, insert: `---\n${line}---\n\n` } };
   }

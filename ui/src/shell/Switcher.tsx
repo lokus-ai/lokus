@@ -48,7 +48,7 @@ export function WorkspaceSwitcher() {
   };
   const go = (root: string) => {
     close();
-    if (root !== vault?.root) void setVault(root).catch((e) => notify(said(e)));
+    void setVault(root).catch((e) => notify(said(e)));
   };
   const add = (e: FormEvent) => {
     e.preventDefault();
