@@ -35,7 +35,7 @@ interface Props {
   /** Create a note in the folder with one property set; resolves to its path. */
   onNew(folder: string, key?: string, value?: string): Promise<string | null>;
   /** Move a note, or a folder and everything in it, to the trash. */
-  onDelete(path: string): Promise<void>;
+  onDelete(path: string): Promise<boolean>;
 }
 
 /** The columns a team starts with, after the ones every list has. They can all be taken away. */

@@ -34,9 +34,9 @@ export async function runCore<T = unknown>(name: string, args?: Record<string, u
   }
 }
 
-export async function openVault(path: string): Promise<VaultInfo> {
+export async function openVault(path: string, root?: string): Promise<VaultInfo> {
   try {
-    return await invoke<VaultInfo>("vault_open", { path });
+    return await invoke<VaultInfo>("vault_open", { path, root });
   } catch (raw) {
     throw toCoreError(raw);
   }

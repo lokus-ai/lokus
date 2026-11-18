@@ -112,9 +112,16 @@ export function readFrontmatter(text: string): Frontmatter {
   if (!close) return none;
   const bodyEnd = 3 + close.index;
   const values: Record<string, string> = {};
-  for (const line of text.slice(text.indexOf("\n") + 1, bodyEnd).split("\n")) {
-    const m = /^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$/.exec(line);
-    if (m) values[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
+  const lines = text.slice(text.indexOf("\n") + 1, bodyEnd).split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^([A-Za-z_][\w-]*):[ \t]*(.*?)[ \t]*$/.exec(lines[i]);
+    if (m) {
+      let value = m[2].replace(/^(["'])(.*)\1$/, "$2");
+      if (m[2].startsWith('"')) {
+        try { value = JSON.parse(m[2]) as string; } catch { /* Preserve non-JSON YAML scalars. */ }
+      }
+      values[m[1]] = value;
+    }
   }
   return { end: bodyEnd + close[0].length, values };
 }
@@ -124,16 +131,17 @@ function yamlValue(value: string): string {
 }
 
 /** Add, change or (with `null`) remove one top-level frontmatter key. */
-export function setFrontmatterKey(state: EditorState, key: string, value: string | null): TransactionSpec {
+export function setFrontmatterKey(state: EditorState, key: string, value: string | string[] | null): TransactionSpec {
   const text = state.doc.toString();
   const fm = readFrontmatter(text);
-  const line = value === null ? "" : `${key}: ${yamlValue(value)}\n`;
+  const line = value === null ? "" : `${key}: ${Array.isArray(value) ? JSON.stringify(value) : yamlValue(value)}\n`;
   if (fm.end === 0) {
     return value === null ? {} : { changes: { from: 0, insert: `---\n${line}---\n\n` } };
   }
   const bodyStart = text.indexOf("\n") + 1;
   const closeStart = text.lastIndexOf("---", fm.end - 1);
-  const existing = new RegExp(`^${key}:.*\\n?`, "m").exec(text.slice(bodyStart, closeStart));
+  // A key owns its indented continuation lines, such as block-list entries.
+  const existing = new RegExp(`^${key}:.*\\n?(?:[ \\t]+.*\\n?)*`, "m").exec(text.slice(bodyStart, closeStart));
   if (existing) {
     const from = bodyStart + existing.index;
     return { changes: { from, to: from + existing[0].length, insert: line } };
