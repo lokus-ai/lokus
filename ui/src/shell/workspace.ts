@@ -982,13 +982,9 @@ export async function deleteEntry(path: string): Promise<boolean> {
   const root = app.get().vault?.root;
   if (!root) return false;
   try {
-    if (app.get().sync.role === "viewer") {
-      notify("Only editors can move shared tasks to the trash.");
-      return false;
-    }
     const opened = [...sessions.keys()].filter((p) => under(p, path));
     await Promise.all(opened.map((p) => save(p)));
-    if (app.get().vault?.root !== root || app.get().sync.role === "viewer") return false;
+    if (app.get().vault?.root !== root) return false;
     if (opened.some(hasUnsaved)) {
       notify("Changes could not be saved. Retry before moving this note to the trash.");
       return false;

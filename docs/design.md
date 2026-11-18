@@ -278,6 +278,8 @@ The team's work, kept the way customers are: one note each.
   preserving its body; explicit empty values clear a property. Clicked tasks are identified by
   their path, not by a possibly duplicated number.
 - **Custom columns** use the board note's existing `order` property, an array of status names.
+  A board whose `order` is written one entry per line is left as written: column edits there
+  are refused with a message asking for the `order: [a, b]` form, rather than rewriting the list.
   Empty custom columns survive reload and sync. Names are lowercase, one line, up to 30
   characters; duplicate names are refused. Only empty custom columns can be renamed or removed;
   populated columns require moving their tasks first. Built-in columns remain. The board's
