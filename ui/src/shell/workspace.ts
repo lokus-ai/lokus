@@ -231,7 +231,11 @@ export function renderMarkdown(parent: HTMLElement, text: string): () => void {
 }
 
 export function attachEditor(parent: HTMLElement): void {
-  if (editor) return;
+  if (editor) {
+    // The page went with its folder (the last workspace was left) and this is a new one: the editor moves onto it.
+    if (editor.view.dom.parentElement !== parent) parent.appendChild(editor.view.dom);
+    return;
+  }
   editor = new Editor(parent, {
     onChange(text) {
       const path = app.get().active;
@@ -640,7 +644,8 @@ function watchSync(): void {
         if (app.get().vault?.root !== root) return;
         if (saved && mine && !mine.some((w) => w.id === saved.workspace)) {
           await dropWorkspace(root, `${app.get().vault?.name ?? "This workspace"} was deleted, or you were removed from it. Its notes stay on this computer.`);
-          return;
+          // Still here: something unsaved could not be written, so the folder was kept. It reads as refused, as it is.
+          if (app.get().vault?.root !== root) return;
         }
         void unshareAll();
         app.set({ sync: { ...app.get().sync, status: "refused", reason: event.reason } });
