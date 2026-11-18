@@ -375,11 +375,18 @@ export function startWatching(): void {
 /** Make a watch for the person to change into their own, and open it. */
 export async function exampleWatch(): Promise<void> {
   const path = "watches/Example watch.md";
-  await runCore("note.create", {
-    path,
-    text: "---\ntype: watch\nevery: 60\n---\nCheck whether any customer has mentioned cancelling, pausing or a competitor since you last looked. If one has, tell me who, what they said and where.\n",
-  }).catch(() => {});
-  await refreshTree();
-  app.set({ settings: null });
-  await openNote(path);
+  try {
+    await runCore("note.create", {
+      path,
+      text: "---\ntype: watch\nevery: 60\n---\nCheck whether any customer has mentioned cancelling, pausing or a competitor since you last looked. If one has, tell me who, what they said and where.\n",
+    }).catch((e) => {
+      // An example that is already there is opened; another folder being open is said.
+      if ((e as { code?: string }).code === "vault_changed") throw e;
+    });
+    await refreshTree();
+    app.set({ settings: null });
+    await openNote(path);
+  } catch (e) {
+    notify(e instanceof Error ? e.message : String(e));
+  }
 }
