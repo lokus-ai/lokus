@@ -105,6 +105,15 @@ export function TeamSettings() {
   // Opening this page is a good moment to ask again whether anyone has invited this person.
   useEffect(() => void lookForInvites(), []);
 
+  // A relay of one's own that turned its token away is asked again with the one typed below, once that
+  // token has listed this team on this folder's own server: it goes nowhere else, and a token that is
+  // not a member never replaces the saved one.
+  const reconnect = () => {
+    const typed = accountToken ? "" : typedToken.trim();
+    if (!kept || !typed) return void resumeSync();
+    if (server !== kept.server || !here) return setMessage("That token does not open this team on its server.");
+    void connectSync(kept.server, kept.workspace, typed);
+  };
   const connect = (workspace: string) => void connectSync(server, workspace, accountToken ? null : token);
   const create = async (e: FormEvent) => {
     e.preventDefault();
@@ -284,8 +293,7 @@ export function TeamSettings() {
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
       {kept && (
         <Row label={here?.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
-          {/* A relay of one's own that turned its token away is asked again with the one typed below. */}
-          <button className="primary" onClick={() => void (!accountToken && typedToken.trim() ? connectSync(kept.server, kept.workspace, typedToken.trim()) : resumeSync())}>
+          <button className="primary" onClick={reconnect}>
             Reconnect
           </button>
         </Row>
