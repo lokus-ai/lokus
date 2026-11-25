@@ -832,7 +832,9 @@ confirms that everything it must not be able to do is refused.
   sign-in service refuses the refresh token and the keychain holds no newer one, never because
   the service was unreachable, busy or silent for 20 seconds. A second copy of Lokus on the same
   computer may have spent the token a moment earlier: the refused copy looks in the keychain for
-  up to 5 seconds for what that copy saved and uses it. When ChatGPT answers 401 to a request
+  up to 22 seconds (a little longer than that copy's renewal can take) for what it saved and
+  uses it. A copy that holds no sign-in asks the keychain again before saying so, so a sign-in
+  made or renewed in another copy is picked up without a restart. When ChatGPT answers 401 to a request
   (a long answer can outlive its token), the sign-in is renewed and that request sent once more;
   a second 401 is shown as an error and the sign-in is kept. A renewal that has
   started runs to its end even when the answer is stopped, so the new refresh token is always

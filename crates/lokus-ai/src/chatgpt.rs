@@ -124,7 +124,17 @@ fn failed(message: impl Into<String>) -> AiError {
 }
 
 pub fn signed_in() -> bool {
-    load().refresh_token.is_some()
+    current().refresh_token.is_some()
+}
+
+/// The sign-in to work with. When this copy holds none it asks the keychain again: another copy
+/// of Lokus may have signed in, or finished a slow renewal, since this one last looked.
+fn current() -> Session {
+    let session = load();
+    if session.refresh_token.is_some() {
+        return session;
+    }
+    reload()
 }
 
 /// Forget the tokens. The installation's ids are kept, so signing in again is quick.
@@ -137,7 +147,7 @@ pub fn sign_out() {
 static SIGN_OUTS: AtomicU64 = AtomicU64::new(0);
 
 fn forget_tokens() {
-    let old = load();
+    let old = reload();
     if old.host_id.is_empty() {
         forget(ACCOUNT);
         return;
@@ -176,7 +186,7 @@ async fn token_request(form: &[(&str, &str)]) -> std::result::Result<Value, Refu
         .post(format!("{}/api/accounts/oauth/token", auth_url()))
         .form(form)
         // A sign-in service that never answers is unreachable, not a refusal.
-        .timeout(Duration::from_secs(20))
+        .timeout(RENEWAL_ENDS_WITHIN)
         .send()
         .await
         .map_err(|_| Refused::Network)?;
@@ -214,8 +224,12 @@ fn accept(session: &mut Session, tokens: &Value) -> Result<()> {
 /// person out although the first had just renewed the sign-in (2026-11-25).
 static REFRESHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
-/// How long a refused renewal waits for another copy of Lokus to save the sign-in it just won.
-const WINNER_SAVES_WITHIN: Duration = Duration::from_secs(5);
+/// How long a renewal waits for the sign-in service to answer.
+const RENEWAL_ENDS_WITHIN: Duration = Duration::from_secs(20);
+
+/// How long a refused renewal waits for another copy of Lokus to save the sign-in it just won:
+/// a little longer than that copy's own renewal can take.
+const WINNER_SAVES_WITHIN: Duration = Duration::from_secs(22);
 
 /// A token that is good for a request right now, refreshing it if it is about to run out.
 pub async fn access_token() -> Result<String> {
@@ -240,7 +254,11 @@ async fn token(refused: Option<String>) -> Result<String> {
     let refused = refused.as_deref();
     let _one = REFRESHING.lock().await;
     let sign_outs = SIGN_OUTS.load(Ordering::SeqCst);
-    let mut session = if refused.is_some() { reload() } else { load() };
+    let mut session = if refused.is_some() {
+        reload()
+    } else {
+        current()
+    };
     // Tried again only while the keychain turns out to hold a newer sign-in than the one refused.
     loop {
         let (Some(refresh), Some(client)) =
@@ -297,7 +315,10 @@ async fn token(refused: Option<String>) -> Result<String> {
             Err(other) => return Err(other.into()),
         }
     }
-    forget_tokens();
+    // Only the sign-in that was refused is dropped, never one another copy saved this instant.
+    if reload().refresh_token == session.refresh_token {
+        forget_tokens();
+    }
     Err(failed(
         "your ChatGPT sign-in has expired; sign in again in Settings",
     ))
