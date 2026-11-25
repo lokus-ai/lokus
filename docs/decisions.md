@@ -190,7 +190,7 @@ question was open, nobody answered, and a default was taken: those are the easie
 - **Change:** (1) The box used to be emptied when the answer ended, and only if nothing had been typed meanwhile; it is now emptied the moment the message joins the conversation, and a failure, stop or model refusal puts the sent message back unless something newer has been written there. (2) Any refusal while renewing the ChatGPT sign-in, other than a network failure, used to sign the person out; renewals now run one at a time, a refusal first checks the keychain for a newer sign-in and uses it, and a busy or broken sign-in service keeps the sign-in.
 - **Why:** Both reproduced in the real macOS app (`pnpm dev`) against a local stand-in provider. With a 6 s streamed reply the sent words stayed in the box for the whole reply. With 20 s tokens, two requests spent the same single-use refresh token; the stand-in logged the second as `invalid_grant (already used)` and Settings showed ChatGPT signed out although the first had just been given new tokens.
 - **Decided by:** Devin, on that evidence, within Pratham's 2026-11-25 instruction: "The chat, for some reason, with OpenAI logged in, our API constantly logs it out, so it's irritating. When I do Enter after writing a prompt, the chat box does not get automatically emptied. Sometimes it does, sometimes it does not. Honestly, these two are the ones you have to get done right now: just fix and deploy."
-- **PR:** PRNUM, into `next`.
+- **PR:** [#615](https://github.com/lokus-ai/lokus/pull/615), into `next`.
 - **Reversal:** Revert this PR; no file format, keychain or storage change.
 
 ### Hold every core command to its window's folder
