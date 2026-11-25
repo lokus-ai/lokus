@@ -111,7 +111,7 @@ export function TeamSettings() {
   const reconnect = () => {
     const typed = accountToken ? "" : typedToken.trim();
     if (!kept || !typed) return void resumeSync();
-    if (server !== kept.server || !here) return setMessage("That token does not open this team on its server.");
+    if (server.trim().replace(/\/+$/, "") !== kept.server.replace(/\/+$/, "") || !here) return setMessage("That token does not open this team on its server.");
     void connectSync(kept.server, kept.workspace, typed);
   };
   const connect = (workspace: string) => void connectSync(server, workspace, accountToken ? null : token);
