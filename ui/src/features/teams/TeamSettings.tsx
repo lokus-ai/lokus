@@ -4,7 +4,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
-import { allNotes, app, connectSync, leaveWorkspace } from "../../shell/workspace";
+import { allNotes, app, connectSync, keptTeam, leaveWorkspace, resumeSync } from "../../shell/workspace";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
@@ -58,7 +58,9 @@ export function TeamSettings() {
 
   const token = accountToken ?? (typedToken.trim() || null);
   const connected = current.status === "connecting" || current.status === "online" || current.status === "offline";
-  const here = workspaces?.find((w) => w.id === current.workspace);
+  // A folder that belongs to a team still does when its connection was refused: it is reconnected, never shared anew.
+  const kept = connected ? null : keptTeam();
+  const here = workspaces?.find((w) => w.id === (kept?.workspace ?? current.workspace));
   const owner = current.role === "owner";
   const base = `/v1/workspaces/${current.workspace}`;
 
@@ -153,7 +155,7 @@ export function TeamSettings() {
           <div className="team-head-main">
             <strong>{teamName}</strong>
             <small>
-              <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]} {shared === 0 ? "Nothing is in this workspace yet." : `${shared} ${shared === 1 ? "note" : "notes"} shared.`}
+              <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]} {shared === 0 ? "Nothing is in this workspace yet." : `${shared} ${shared === 1 ? "note" : "notes"} in this workspace.`}
             </small>
           </div>
           {owner && token && (
@@ -280,6 +282,13 @@ export function TeamSettings() {
   return (
     <Section title="Team" hint={`Share ${vault ? `“${vault.name}”` : "this vault"} with other people. Everyone keeps a full copy and can work offline.`}>
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
+      {kept && (
+        <Row label={here?.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
+          <button className="primary" onClick={() => void resumeSync()}>
+            Reconnect
+          </button>
+        </Row>
+      )}
       <InvitedList />
       {!token && !ownServer ? (
         <Row label="Sign in first" hint="A team needs to know who you are.">
@@ -287,7 +296,7 @@ export function TeamSettings() {
             Sign in
           </button>
         </Row>
-      ) : (
+      ) : kept ? null : (
         <>
           {/* With a Lokus account, a team's folder connects by itself. A relay of one's own knows nobody until its address and token are typed, so there the folder is pointed at a team by hand. */}
           {ownServer && workspaces && workspaces.length > 0 && (

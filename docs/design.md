@@ -497,7 +497,11 @@ teams the person is in, and if this one is not among them it stops, says so once
 folder the same way; a team folder that is not open is dropped at the next look for teams, and so is one an
 earlier version left on the list after a Leave or Delete (it is named in that version's
 `lokus.sync.stopped`, which is read once and then removed). A
-refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped". A
+refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped";
+the folder still belongs to its team, so the Team page then names that team with a Reconnect
+button and does not offer to share the folder or join by code (pressing Share there made a second,
+empty-handed team of the same name), and the connection is asked for again by itself each time
+the window is looked at. A
 folder with words that could not be written to disk is not dropped: it stays open with the words
 on screen, says the save failed, and reads "Sync stopped" with the relay's reason, since its
 connection has ended and nothing retries; it goes from the list at the next start. The note
