@@ -207,8 +207,8 @@ static REFRESHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 pub async fn access_token() -> Result<String> {
     let _one = REFRESHING.lock().await;
     let mut session = load();
-    // A second try only when the keychain turns out to hold a newer sign-in than the one refused.
-    for _ in 0..2 {
+    // Tried again only while the keychain turns out to hold a newer sign-in than the one refused.
+    loop {
         let (Some(refresh), Some(client)) =
             (session.refresh_token.clone(), session.client_id.clone())
         else {
