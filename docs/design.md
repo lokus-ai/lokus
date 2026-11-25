@@ -791,8 +791,10 @@ confirms that everything it must not be able to do is refused.
   explicitly picked @ notes/folders and attached files. Each conversation in each workspace
   has its own draft in this window's memory; Earlier conversations also lists messages not
   sent yet, so New chat or a workspace switch leaves them reachable. Deleting a conversation
-  clears its draft. A successful answer clears the submitted draft only if it was not edited
-  while waiting; a failure, stop or model refusal keeps it. Sending waits for file imports.
+  clears its draft. Sending empties the box the moment the message joins the conversation,
+  not when the answer ends, so what is typed while a reply streams is a new draft. A failure,
+  stop or model refusal puts the sent message back in the box, unless something newer has
+  been written there. Sending waits for file imports.
   An import belongs to the draft and vault where it started, even if the panel closes or the
   conversation changes. If its vault is no longer open when the write starts, it reports an
   error rather than writing into the new workspace. Drafts are not synced, shared between
@@ -825,7 +827,18 @@ confirms that everything it must not be able to do is refused.
   the person's own ChatGPT Plus or Pro plan with no key. OpenAI's developer pages (read
   2026-11-12) say plan usage is open to open-source apps that run on the person's machine, which
   is what Lokus is; registration is automatic on first sign-in. The flow is OAuth with PKCE and a
-  redirect to `127.0.0.1`; requests go to the Responses API with `store: false`. If Lokus ever
+  redirect to `127.0.0.1`; requests go to the Responses API with `store: false`. A refresh token
+  works once, so the sign-in is renewed by one request at a time; it is dropped only when the
+  sign-in service refuses the refresh token and the keychain holds no newer one, never because
+  the service was unreachable, busy or silent for 20 seconds. A second copy of Lokus on the same
+  computer may have spent the token a moment earlier: the refused copy looks in the keychain for
+  up to 22 seconds (a little longer than that copy's renewal can take) for what it saved and
+  uses it. A copy that holds no sign-in asks the keychain again before saying so (unless the keychain refused to be read), so a sign-in
+  made or renewed in another copy is picked up without a restart. When ChatGPT answers 401 to a request
+  (a long answer can outlive its token), the sign-in is renewed and that request sent once more;
+  a second 401 is shown as an error and the sign-in is kept. A renewal that has
+  started runs to its end even when the answer is stopped, so the new refresh token is always
+  saved; if the person signed out meanwhile, they stay signed out. If Lokus ever
   ships a hosted or paid build, that build needs OpenAI's separate approval.
 
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
