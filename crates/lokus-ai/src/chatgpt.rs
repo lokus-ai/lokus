@@ -4,6 +4,7 @@
 //! machine. The flow is OAuth with PKCE and a redirect to a local port; the
 //! first sign-in also registers this installation and gets its client id.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
@@ -128,6 +129,14 @@ pub fn signed_in() -> bool {
 
 /// Forget the tokens. The installation's ids are kept, so signing in again is quick.
 pub fn sign_out() {
+    SIGN_OUTS.fetch_add(1, Ordering::SeqCst);
+    forget_tokens();
+}
+
+/// How many times the person has signed out here, so a renewal on its way can tell.
+static SIGN_OUTS: AtomicU64 = AtomicU64::new(0);
+
+fn forget_tokens() {
     let old = load();
     if old.host_id.is_empty() {
         forget(ACCOUNT);
@@ -230,6 +239,7 @@ async fn finished(refused: Option<String>) -> Result<String> {
 async fn token(refused: Option<String>) -> Result<String> {
     let refused = refused.as_deref();
     let _one = REFRESHING.lock().await;
+    let sign_outs = SIGN_OUTS.load(Ordering::SeqCst);
     let mut session = if refused.is_some() { reload() } else { load() };
     // Tried again only while the keychain turns out to hold a newer sign-in than the one refused.
     loop {
@@ -254,7 +264,7 @@ async fn token(refused: Option<String>) -> Result<String> {
         match token_request(&form).await {
             Ok(tokens) => {
                 // Signed out in Settings while this was on its way: stay signed out.
-                if reload().refresh_token.as_deref() != Some(refresh.as_str()) {
+                if SIGN_OUTS.load(Ordering::SeqCst) != sign_outs {
                     return Err(failed("sign in with ChatGPT in Settings first"));
                 }
                 accept(&mut session, &tokens)?;
@@ -287,7 +297,7 @@ async fn token(refused: Option<String>) -> Result<String> {
             Err(other) => return Err(other.into()),
         }
     }
-    sign_out();
+    forget_tokens();
     Err(failed(
         "your ChatGPT sign-in has expired; sign in again in Settings",
     ))
