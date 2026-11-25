@@ -210,16 +210,25 @@ const WINNER_SAVES_WITHIN: Duration = Duration::from_secs(5);
 
 /// A token that is good for a request right now, refreshing it if it is about to run out.
 pub async fn access_token() -> Result<String> {
-    token(None).await
+    finished(None).await
 }
 
 /// A token to try again with after the provider answered 401 to `refused`: the newer one if a
 /// renewal has happened since, otherwise the result of renewing now.
 pub async fn renewed(refused: &str) -> Result<String> {
-    token(Some(refused)).await
+    finished(Some(refused.to_owned())).await
 }
 
-async fn token(refused: Option<&str>) -> Result<String> {
+/// Runs the renewal to its end even if the answer that asked for it is stopped: a refresh token
+/// the service has already spent is worthless unless its replacement is saved.
+async fn finished(refused: Option<String>) -> Result<String> {
+    tokio::spawn(token(refused))
+        .await
+        .unwrap_or_else(|_| Err(failed("could not renew the ChatGPT sign-in; try again")))
+}
+
+async fn token(refused: Option<String>) -> Result<String> {
+    let refused = refused.as_deref();
     let _one = REFRESHING.lock().await;
     let mut session = if refused.is_some() { reload() } else { load() };
     // Tried again only while the keychain turns out to hold a newer sign-in than the one refused.
@@ -244,6 +253,10 @@ async fn token(refused: Option<&str>) -> Result<String> {
         ];
         match token_request(&form).await {
             Ok(tokens) => {
+                // Signed out in Settings while this was on its way: stay signed out.
+                if reload().refresh_token.as_deref() != Some(refresh.as_str()) {
+                    return Err(failed("sign in with ChatGPT in Settings first"));
+                }
                 accept(&mut session, &tokens)?;
                 save(&session);
                 return session
