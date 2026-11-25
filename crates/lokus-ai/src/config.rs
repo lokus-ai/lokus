@@ -610,6 +610,11 @@ pub fn kept_now(account: &str) -> Option<String> {
     kept(account)
 }
 
+/// Whether the keychain gave an answer for this account, rather than refusing to be read.
+pub fn answered(account: &str) -> bool {
+    ASKED.lock().is_ok_and(|asked| asked.contains_key(account))
+}
+
 pub fn forget(account: &str) {
     let _ = forget_checked(account);
 }

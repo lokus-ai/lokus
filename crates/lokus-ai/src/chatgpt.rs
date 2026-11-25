@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::config::{forget, keep, kept, kept_now};
+use crate::config::{answered, forget, keep, kept, kept_now};
 use crate::error::{AiError, Result};
 
 const ACCOUNT: &str = "chatgpt";
@@ -124,15 +124,15 @@ fn failed(message: impl Into<String>) -> AiError {
 }
 
 pub fn signed_in() -> bool {
-    load().refresh_token.is_some()
+    current().refresh_token.is_some()
 }
 
-/// The sign-in to send with. When this copy holds none it asks the keychain again: another copy
-/// of Lokus may have signed in, or finished a slow renewal, since this one last looked. Only a
-/// send does this, never Settings, so a keychain that was refused is not asked for on every look.
+/// The sign-in to work with. When this copy holds none it asks the keychain again: another copy
+/// of Lokus may have signed in, or finished a slow renewal, since this one last looked. A
+/// keychain that refused to be read is not asked twice.
 fn current() -> Session {
     let session = load();
-    if session.refresh_token.is_some() {
+    if session.refresh_token.is_some() || !answered(ACCOUNT) {
         return session;
     }
     reload()
