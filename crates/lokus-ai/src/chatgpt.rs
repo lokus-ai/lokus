@@ -4,7 +4,7 @@
 //! machine. The flow is OAuth with PKCE and a redirect to a local port; the
 //! first sign-in also registers this installation and gets its client id.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -166,6 +166,8 @@ async fn token_request(form: &[(&str, &str)]) -> std::result::Result<Value, Refu
     let response = reqwest::Client::new()
         .post(format!("{}/api/accounts/oauth/token", auth_url()))
         .form(form)
+        // A sign-in service that never answers is unreachable, not a refusal.
+        .timeout(Duration::from_secs(20))
         .send()
         .await
         .map_err(|_| Refused::Network)?;
@@ -203,10 +205,23 @@ fn accept(session: &mut Session, tokens: &Value) -> Result<()> {
 /// person out although the first had just renewed the sign-in (2026-11-25).
 static REFRESHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+/// How long a refused renewal waits for another copy of Lokus to save the sign-in it just won.
+const WINNER_SAVES_WITHIN: Duration = Duration::from_secs(5);
+
 /// A token that is good for a request right now, refreshing it if it is about to run out.
 pub async fn access_token() -> Result<String> {
+    token(None).await
+}
+
+/// A token to try again with after the provider answered 401 to `refused`: the newer one if a
+/// renewal has happened since, otherwise the result of renewing now.
+pub async fn renewed(refused: &str) -> Result<String> {
+    token(Some(refused)).await
+}
+
+async fn token(refused: Option<&str>) -> Result<String> {
     let _one = REFRESHING.lock().await;
-    let mut session = load();
+    let mut session = if refused.is_some() { reload() } else { load() };
     // Tried again only while the keychain turns out to hold a newer sign-in than the one refused.
     loop {
         let (Some(refresh), Some(client)) =
@@ -217,7 +232,7 @@ pub async fn access_token() -> Result<String> {
         if let Some(token) = session
             .access_token
             .clone()
-            .filter(|_| session.expires_at > now() + 60)
+            .filter(|token| session.expires_at > now() + 60 && Some(token.as_str()) != refused)
         {
             return Ok(token);
         }
@@ -236,20 +251,29 @@ pub async fn access_token() -> Result<String> {
                     .ok_or_else(|| failed("ChatGPT sent no access token"));
             }
             Err(Refused::Rejected(_)) => {
-                // Another copy of Lokus (a second app, the command line) may have renewed the
-                // sign-in since this one last read it; then that newer one is the one to use.
-                let stored = reload();
-                if stored.refresh_token.is_some() && stored.refresh_token != Some(refresh) {
-                    session = stored;
-                    continue;
+                // Another copy of Lokus may have spent this refresh token a moment ago and not
+                // have saved what it got yet: look again for a short while before giving up.
+                let gave_up = Instant::now() + WINNER_SAVES_WITHIN;
+                let newer = loop {
+                    let stored = reload();
+                    if stored.refresh_token.is_some()
+                        && stored.refresh_token.as_deref() != Some(refresh.as_str())
+                    {
+                        break Some(stored);
+                    }
+                    if Instant::now() >= gave_up {
+                        break None;
+                    }
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                };
+                match newer {
+                    Some(stored) => session = stored,
+                    None => break,
                 }
-                break;
             }
-            // Unreachable or busy says nothing about the sign-in: it is kept for the next try.
             Err(other) => return Err(other.into()),
         }
     }
-    // The sign-in is no longer good; it has to be done again.
     sign_out();
     Err(failed(
         "your ChatGPT sign-in has expired; sign in again in Settings",

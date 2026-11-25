@@ -460,7 +460,7 @@ pub async fn send(
     } else {
         format!("{SYSTEM}\n\n{}", briefing.trim())
     };
-    let key = credential(config.provider).await?;
+    let mut key = credential(config.provider).await?;
     let http = reqwest::Client::new();
     // A ChatGPT plan with no model is given the first one the plan recommends.
     if config.provider == Provider::ChatGpt && config.model().is_err() {
@@ -588,7 +588,13 @@ pub async fn send(
             let mut on_text = |delta: &str| emit(Event::Text { delta: delta.to_string() });
             // Attached files are put in here, for this request only; `messages` keeps their places.
             let wire = crate::files::expand(core.as_deref(), &messages, &mut attached);
-            let turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await?;
+            let mut turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
+            // A long answer can outlive the ChatGPT token it started with: renew it and ask once more.
+            if matches!(turn, Err(AiError::BadKey)) && config.provider == Provider::ChatGpt {
+                key = chatgpt::renewed(&key).await?;
+                turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
+            }
+            let turn = turn?;
             stop = turn.stop.clone();
             rounds += 1;
             read += turn.tokens.0;
@@ -686,12 +692,11 @@ pub async fn send(
     for connection in connections {
         connection.close().await;
     }
-    // A ChatGPT sign-in the service turns away is dead: forget it, so Settings stops saying
-    // "Signed in" and offers to sign in again.
+    // ChatGPT turned away a token that had just been renewed. The sign-in itself is only dropped
+    // when the sign-in service refuses to renew it, so say what happened and keep it.
     if matches!(result, Err(AiError::BadKey)) && config.provider == Provider::ChatGpt {
-        chatgpt::sign_out();
         return Err(AiError::Provider(
-            "ChatGPT no longer accepts this sign-in. Sign in with ChatGPT again in Settings, Assistant.".into(),
+            "ChatGPT did not accept this sign-in for the request. Try again; if it keeps happening, sign in with ChatGPT again in Settings, Assistant.".into(),
         ));
     }
     let model = config.model().unwrap_or_default().to_string();

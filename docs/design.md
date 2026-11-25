@@ -829,8 +829,12 @@ confirms that everything it must not be able to do is refused.
   is what Lokus is; registration is automatic on first sign-in. The flow is OAuth with PKCE and a
   redirect to `127.0.0.1`; requests go to the Responses API with `store: false`. A refresh token
   works once, so the sign-in is renewed by one request at a time; it is dropped only when the
-  sign-in service refuses the refresh token and the keychain holds no newer one (another copy of
-  Lokus may have renewed it), never because the service was unreachable or busy. If Lokus ever
+  sign-in service refuses the refresh token and the keychain holds no newer one, never because
+  the service was unreachable, busy or silent for 20 seconds. A second copy of Lokus on the same
+  computer may have spent the token a moment earlier: the refused copy looks in the keychain for
+  up to 5 seconds for what that copy saved and uses it. When ChatGPT answers 401 to a request
+  (a long answer can outlive its token), the sign-in is renewed and that request sent once more;
+  a second 401 is shown as an error and the sign-in is kept. If Lokus ever
   ships a hosted or paid build, that build needs OpenAI's separate approval.
 
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
