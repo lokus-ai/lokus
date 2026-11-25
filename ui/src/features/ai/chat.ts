@@ -50,8 +50,22 @@ export async function sendDraft(): Promise<void> {
   const store = chat.get().draft;
   const draft = store.get();
   if (draft.importing) return;
-  const sent = await ask(draft.text, draft.mentions.filter((m) => draft.text.includes(`@${m.name}`)).map((m) => m.path), draft.files);
-  if (sent && store.get() === draft) store.set(emptyDraft());
+  // The box is emptied the moment the message joins the conversation, not when the answer ends:
+  // waiting for the answer left the sent words in the box for as long as the reply took, and for
+  // good if anything was typed meanwhile (2026-11-25).
+  let taken = false;
+  const sent = await ask(
+    draft.text,
+    draft.mentions.filter((m) => draft.text.includes(`@${m.name}`)).map((m) => m.path),
+    draft.files,
+    () => {
+      taken = true;
+      store.set(emptyDraft());
+    },
+  );
+  // Not answered: what was sent goes back in the box, unless something newer is being written there.
+  const now = store.get();
+  if (taken && !sent && !now.text && !now.files.length && !now.importing) store.set(draft);
 }
 
 /** The largest file that can be attached; the same limit the vault puts on any file. */
@@ -344,7 +358,7 @@ function traced(id: string, began: number, question: string, outcome: AiOutcome 
 }
 
 /** Ask a question. `mentions` are the paths of notes (or folders, ending in "/") picked with @. */
-export async function ask(text: string, mentions: string[] = [], files: string[] = []): Promise<boolean> {
+export async function ask(text: string, mentions: string[] = [], files: string[] = [], taken?: () => void): Promise<boolean> {
   // A file sent with no words is still a question: what is this?
   const question = text.trim() || (files.length ? (files.length === 1 ? "Take a look at this file." : "Take a look at these files.") : "");
   if (!question || chat.get().busy || !vaultRoot || isSwitchingVault() || deleting.has(JSON.stringify([vaultRoot, chatId]))) return false;
@@ -361,6 +375,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
   }
   const note = app.get().active;
   chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: text.trim(), note: note ?? undefined, files: files.length ? files : undefined }] }));
+  taken?.();
   const sending = freshId();
   // The workspace the question is asked in: its notes and its connections answer it, or nothing does.
   const from = vaultRoot;

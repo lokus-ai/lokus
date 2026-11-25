@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::config::{forget, keep, kept};
+use crate::config::{forget, keep, kept, kept_now};
 use crate::error::{AiError, Result};
 
 const ACCOUNT: &str = "chatgpt";
@@ -42,6 +42,13 @@ struct Session {
 
 fn load() -> Session {
     kept(ACCOUNT)
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+/// What the keychain holds at this moment, not what this process last read from it.
+fn reload() -> Session {
+    kept_now(ACCOUNT)
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default()
 }
@@ -133,26 +140,49 @@ pub fn sign_out() {
     });
 }
 
-async fn token_request(form: &[(&str, &str)]) -> Result<Value> {
+/// Why the sign-in service did not hand over tokens.
+enum Refused {
+    /// It could not be reached.
+    Network,
+    /// It said no to what was sent: the code or refresh token is spent or revoked.
+    Rejected(String),
+    /// It answered, but not about the sign-in: busy, rate limited, broken.
+    Unavailable(u16),
+}
+
+impl From<Refused> for AiError {
+    fn from(refused: Refused) -> Self {
+        match refused {
+            Refused::Network => AiError::Network(auth_url()),
+            Refused::Rejected(code) => failed(format!("ChatGPT sign-in was refused ({code})")),
+            Refused::Unavailable(status) => failed(format!(
+                "ChatGPT's sign-in service is not answering ({status}); try again in a moment"
+            )),
+        }
+    }
+}
+
+async fn token_request(form: &[(&str, &str)]) -> std::result::Result<Value, Refused> {
     let response = reqwest::Client::new()
         .post(format!("{}/api/accounts/oauth/token", auth_url()))
         .form(form)
         .send()
         .await
-        .map_err(|_| AiError::Network(auth_url()))?;
-    let ok = response.status().is_success();
+        .map_err(|_| Refused::Network)?;
+    let status = response.status();
     let body: Value = response.json().await.unwrap_or_default();
-    if ok {
-        Ok(body)
-    } else {
-        let code = body["error"]
-            .as_str()
-            .or_else(|| body["error"]["code"].as_str());
-        Err(failed(format!(
-            "ChatGPT sign-in was refused ({})",
-            code.unwrap_or("no reason given")
-        )))
+    if status.is_success() {
+        return Ok(body);
     }
+    if !matches!(status.as_u16(), 400 | 401) {
+        return Err(Refused::Unavailable(status.as_u16()));
+    }
+    let code = body["error"]
+        .as_str()
+        .or_else(|| body["error"]["code"].as_str());
+    Err(Refused::Rejected(
+        code.unwrap_or("no reason given").to_string(),
+    ))
 }
 
 fn accept(session: &mut Session, tokens: &Value) -> Result<()> {
@@ -168,43 +198,62 @@ fn accept(session: &mut Session, tokens: &Value) -> Result<()> {
     Ok(())
 }
 
+/// One refresh at a time. A refresh token works once: two requests that both found the token
+/// run out used to spend the same one, the second was refused, and the refusal signed the
+/// person out although the first had just renewed the sign-in (2026-11-25).
+static REFRESHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// A token that is good for a request right now, refreshing it if it is about to run out.
 pub async fn access_token() -> Result<String> {
+    let _one = REFRESHING.lock().await;
     let mut session = load();
-    let (Some(refresh), Some(client)) = (session.refresh_token.clone(), session.client_id.clone())
-    else {
-        return Err(failed("sign in with ChatGPT in Settings first"));
-    };
-    if let Some(token) = session
-        .access_token
-        .clone()
-        .filter(|_| session.expires_at > now() + 60)
-    {
-        return Ok(token);
-    }
-    let form = [
-        ("grant_type", "refresh_token"),
-        ("refresh_token", refresh.as_str()),
-        ("client_id", client.as_str()),
-        ("resource", RESOURCE),
-    ];
-    match token_request(&form).await {
-        Ok(tokens) => {
-            accept(&mut session, &tokens)?;
-            save(&session);
-            session
-                .access_token
-                .ok_or_else(|| failed("ChatGPT sent no access token"))
+    // A second try only when the keychain turns out to hold a newer sign-in than the one refused.
+    for _ in 0..2 {
+        let (Some(refresh), Some(client)) =
+            (session.refresh_token.clone(), session.client_id.clone())
+        else {
+            return Err(failed("sign in with ChatGPT in Settings first"));
+        };
+        if let Some(token) = session
+            .access_token
+            .clone()
+            .filter(|_| session.expires_at > now() + 60)
+        {
+            return Ok(token);
         }
-        Err(AiError::Network(url)) => Err(AiError::Network(url)),
-        Err(_) => {
-            // The sign-in is no longer good; it has to be done again.
-            sign_out();
-            Err(failed(
-                "your ChatGPT sign-in has expired; sign in again in Settings",
-            ))
+        let form = [
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh.as_str()),
+            ("client_id", client.as_str()),
+            ("resource", RESOURCE),
+        ];
+        match token_request(&form).await {
+            Ok(tokens) => {
+                accept(&mut session, &tokens)?;
+                save(&session);
+                return session
+                    .access_token
+                    .ok_or_else(|| failed("ChatGPT sent no access token"));
+            }
+            Err(Refused::Rejected(_)) => {
+                // Another copy of Lokus (a second app, the command line) may have renewed the
+                // sign-in since this one last read it; then that newer one is the one to use.
+                let stored = reload();
+                if stored.refresh_token.is_some() && stored.refresh_token != Some(refresh) {
+                    session = stored;
+                    continue;
+                }
+                break;
+            }
+            // Unreachable or busy says nothing about the sign-in: it is kept for the next try.
+            Err(other) => return Err(other.into()),
         }
     }
+    // The sign-in is no longer good; it has to be done again.
+    sign_out();
+    Err(failed(
+        "your ChatGPT sign-in has expired; sign in again in Settings",
+    ))
 }
 
 /// Sign in. `show` is handed the address to open in a browser; this returns

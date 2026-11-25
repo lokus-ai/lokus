@@ -601,6 +601,15 @@ pub fn kept(account: &str) -> Option<String> {
     secret(account).or_else(|| MEMORY.lock().ok()?.get(account).cloned())
 }
 
+/// Like `kept`, but asks the keychain again instead of trusting what was read before: another
+/// copy of Lokus may have replaced the sign-in since.
+pub fn kept_now(account: &str) -> Option<String> {
+    if let Ok(mut asked) = ASKED.lock() {
+        asked.remove(account);
+    }
+    kept(account)
+}
+
 pub fn forget(account: &str) {
     let _ = forget_checked(account);
 }
