@@ -284,7 +284,8 @@ export function TeamSettings() {
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
       {kept && (
         <Row label={here?.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
-          <button className="primary" onClick={() => void resumeSync()}>
+          {/* A relay of one's own that turned its token away is asked again with the one typed below. */}
+          <button className="primary" onClick={() => void (!accountToken && typedToken.trim() ? connectSync(kept.server, kept.workspace, typedToken.trim()) : resumeSync())}>
             Reconnect
           </button>
         </Row>
