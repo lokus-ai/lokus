@@ -124,11 +124,12 @@ fn failed(message: impl Into<String>) -> AiError {
 }
 
 pub fn signed_in() -> bool {
-    current().refresh_token.is_some()
+    load().refresh_token.is_some()
 }
 
-/// The sign-in to work with. When this copy holds none it asks the keychain again: another copy
-/// of Lokus may have signed in, or finished a slow renewal, since this one last looked.
+/// The sign-in to send with. When this copy holds none it asks the keychain again: another copy
+/// of Lokus may have signed in, or finished a slow renewal, since this one last looked. Only a
+/// send does this, never Settings, so a keychain that was refused is not asked for on every look.
 fn current() -> Session {
     let session = load();
     if session.refresh_token.is_some() {
