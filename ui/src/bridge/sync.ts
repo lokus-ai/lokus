@@ -17,6 +17,8 @@ export type SyncEvent = { root: string } & (
   | { event: "skipped"; path: string }
   | { event: "offline"; reason: string }
   | { event: "refused"; reason: string }
+  | { event: "signin"; reason: string }
+  | { event: "renew" }
   | { event: "pulled"; edits: number }
   | { event: "published" | "wrote" | "trashed"; path: string }
   | { event: "renamed"; from: string; to: string }
@@ -68,6 +70,70 @@ export function syncStatus(): Promise<{ running: boolean; server?: string; works
 /** The team workspace a folder last synced with, or null for one that never did. */
 export function syncBound(root: string): Promise<string | null> {
   return invoke<string | null>("sync_bound", { root }).catch(() => null);
+}
+
+/** The team a folder belongs to: which relay, which workspace, a sign-in typed by hand (null: the account's), and the account last connected. */
+export interface Team {
+  server: string;
+  workspace: string;
+  token: string | null;
+  user?: string | null;
+  /** This computer connected the folder to this relay itself. A folder can come from anyone and name any relay. */
+  known?: boolean;
+}
+
+/** The relay built into this app, where an account's teams are. */
+export const HOME = ((import.meta.env.VITE_LOKUS_RELAY as string | undefined) ?? "").replace(/\/+$/, "");
+
+/**
+ * The team a folder belongs to, connected or not. It is kept in the folder. What an earlier
+ * version kept in the window's own storage is moved into the folder the first time it is asked
+ * for, and removed from here.
+ */
+export async function teamOf(root: string): Promise<Team | null> {
+  const key = `lokus.sync:${root}`;
+  const old = localStorage.getItem(key);
+  let team = await invoke<Team | null>("sync_team", { root }).catch(() => null);
+  if (old === null) return team;
+  if (!team) {
+    try {
+      const { server, workspace, token } = JSON.parse(old) as Team;
+      team = { server, workspace, token: token ?? null };
+      await keepTeam(root, team);
+    } catch (e) {
+      // The folder cannot be written to right now: left here for the next time. One that is gone, or unreadable words, is dropped.
+      // It is still this folder's team meanwhile.
+      if (!(e instanceof Gone || e instanceof SyntaxError)) return team;
+      team = null;
+    }
+  }
+  localStorage.removeItem(key);
+  return team;
+}
+
+/** What an earlier version kept in this window's storage for every folder goes to the folders. */
+export async function moveTeams(): Promise<void> {
+  for (const key of Object.keys(localStorage)) {
+    if (key.startsWith("lokus.sync:")) await teamOf(key.slice("lokus.sync:".length));
+  }
+}
+
+class Gone extends Error {}
+
+/** Remember the team a folder belongs to. Refused for a folder that is already another team's. */
+export async function keepTeam(root: string, team: Team): Promise<void> {
+  let kept: boolean;
+  try {
+    kept = await invoke<boolean>("sync_keep", { root, team: { user: null, ...team } });
+  } catch (raw) {
+    throw new Error((raw as { message?: string })?.message ?? "Could not remember this folder's team");
+  }
+  if (!kept) throw new Gone("That folder is not there any more");
+}
+
+/** The folder is no longer a team's: the member left, or the relay says they are not in it. */
+export function forgetTeam(root: string): Promise<void> {
+  return invoke("sync_forget", { root });
 }
 
 /** The shared document behind a note, or null if the note is not synced. */

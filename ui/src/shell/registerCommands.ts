@@ -4,7 +4,7 @@ import { aiSettings, saveAiConfig } from "../bridge/ai";
 import { identify } from "../bridge/analytics";
 import { runCore } from "../bridge/core";
 import { accountsAvailable, signOut } from "../bridge/auth";
-import { answer, answerAll, ask, chat, newChat } from "../features/ai/chat";
+import { answer, answerAll, ask, attachToChat, chat, compactChat, detach, newChat } from "../features/ai/chat";
 import { analyticsCommands } from "../features/analytics/commands";
 import { COVERS } from "../features/page-header/Cover";
 import { ICONS } from "../features/page-header/PageHeader";
@@ -20,6 +20,7 @@ import {
   deleteEntry,
   disconnectSync,
   getEditor,
+  GRAPH_TAB,
   notify,
   openCustomers,
   openDailyNote,
@@ -32,6 +33,9 @@ import {
   showGraph,
   stepTab,
 } from "./workspace";
+
+/** A command sent from a menu names the folder it was opened in, and is not run in another. */
+const here = (a: Record<string, unknown>) => typeof a.root !== "string" || a.root === app.get().vault?.root;
 
 const pick = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
@@ -98,7 +102,27 @@ export function registerAllCommands(): void {
       keys: "Mod-j",
       run: () => app.set((s) => ({ panel: s.panel?.kind === "ai" ? null : { kind: "ai" } })),
     },
-    { id: "ai.new", title: "Assistant: new chat", run: newChat },
+    { id: "ai.new", title: "Assistant: new chat",
+      slash: "clear", run: newChat,
+    },
+    {
+      id: "ai.compact",
+      title: "Assistant: compact this conversation",
+      slash: "compact",
+      takes: "what to keep, what to drop",
+      run: (a) => {
+        app.set({ panel: { kind: "ai" } });
+        return compactChat(String(a.note ?? a.text ?? ""));
+      },
+    },
+    {
+      id: "ai.context",
+      title: "Assistant: what is using the context",
+      slash: "context",
+      run: () => {
+        app.set({ panel: { kind: "ai" } });
+        chat.set((s) => ({ detail: !s.detail }));
+      }, },
     { id: "teams.open", title: "Team sync…", run: () => app.set({ settings: "team" }) },
     { id: "window.new", title: "New window", keys: "Mod-Shift-n", run: () => newWindow().catch((e) => notify(e instanceof Error ? e.message : String(e))) },
     { id: "onboarding.open", title: "Lokus: run the setup again", run: () => void import("../features/onboarding/onboarding").then((o) => o.onboarding.set({ open: true })) },
@@ -136,8 +160,9 @@ export function registerAllCommands(): void {
       id: "note.close",
       title: "Close tab",
       keys: "Mod-w",
-      run: () => {
-        const { active, view, file } = app.get();
+      run: (a) => {
+        const { active, view, file, tabs } = app.get();
+        if (typeof a.path === "string") return !here(a) || !tabs.includes(a.path) ? undefined : a.path === GRAPH_TAB ? closeGraph() : closeTab(a.path);
         if (view === "graph") return closeGraph();
         if (view === "file" && file) return closeTab(file);
         if (active) return closeTab(active);
@@ -147,9 +172,9 @@ export function registerAllCommands(): void {
     {
       id: "note.trash",
       title: "Move note to trash",
-      run: () => {
-        const { active } = app.get();
-        return active ? deleteEntry(active) : undefined;
+      run: (a) => {
+        const path = typeof a.path === "string" ? a.path : app.get().active;
+        return path && here(a) ? deleteEntry(path) : undefined;
       },
     },
     mark("editor.toggleBold", "Bold", "Mod-b", "**"),
@@ -227,13 +252,32 @@ export function registerAllCommands(): void {
     { id: "ai.state", title: "Assistant conversation", hidden: true, run: () => chat.get() },
     { id: "sync.connect", title: "Connect sync", hidden: true, run: (a) => connectSync(String(a.server), String(a.workspace), a.token ? String(a.token) : null) },
     { id: "sync.disconnect", title: "Disconnect sync", hidden: true, run: () => disconnectSync() },
+    {
+      id: "ai.attach",
+      title: "Assistant: ask about the open note or file",
+      run: (a) => {
+        const { view, file, active } = app.get();
+        const path = typeof a.path === "string" ? a.path : view === "file" ? file : active;
+        if (path && here(a)) attachToChat(path);
+      },
+    },
+    { id: "note.followBeside", title: "Follow link in a new tab", hidden: true, run: async (a) => {
+        if (here(a)) await openLink(String(a.target), true);
+      } },
+    { id: "ai.detach", title: "Assistant: take a file off the message", hidden: true, run: (a) => detach(String(a.path)) },
+    { id: "clipboard.copy", title: "Copy text", hidden: true, run: (a) => navigator.clipboard.writeText(String(a.text ?? "")).then(() => notify("Copied")) },
+    { id: "editor.insert", title: "Insert text into the note", hidden: true, run(a) {
+        editor().insert(String(a.text ?? ""));
+        return editorState();
+      } },
     { id: "note.open", title: "Open note", hidden: true, run: async (a) => {
+        if (!here(a)) return { active: app.get().active };
         await openNote(String(a.path));
         return { active: app.get().active };
       } },
     { id: "note.follow", title: "Follow a link", hidden: true, run: async (a) => {
-        await openLink(String(a.target));
-        return { active: app.get().active, ...editorState() };
+        if (here(a)) await openLink(String(a.target));
+        return { active: app.get().active, ...(getEditor() && app.get().view === "note" && app.get().active ? editorState() : {}) };
       } },
     { id: "editor.pasteFile", title: "Paste a file into the note", hidden: true, run: async (a) => {
         const bytes = Uint8Array.from(atob(String(a.base64 ?? "")), (c) => c.charCodeAt(0));

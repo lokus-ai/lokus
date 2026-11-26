@@ -144,10 +144,26 @@ pub async fn serve(
     let arrived = Notify::new();
     let connection = async {
         loop {
-            let presented = config.token.get();
+            let used = config.token.get();
             match session(&engine, &config, &mut changes, &report, &moved, &arrived).await {
-                // Refused with a sign-in that has since been replaced: try the new one.
-                Err(Error::Refused(_)) if config.token.get() != presented => continue,
+                // The sign-in ran out (the computer slept, or nothing renewed it). That is not
+                // the end of syncing: say so, and carry on the moment a new one is handed over.
+                Err(Error::SignIn(reason)) => {
+                    report(json!({ "event": "signin", "reason": reason }));
+                    // Asked again the moment there is another than the one refused (it may have
+                    // been replaced before the refusal arrived), and with whatever there is now and then.
+                    let stale = used;
+                    let waited = tokio::time::Instant::now();
+                    loop {
+                        let _ = with(&engine, |e| e.scan());
+                        tokio::time::sleep(RETRY).await;
+                        if config.token.get() != stale || waited.elapsed() > RENEW_CHECK {
+                            break;
+                        }
+                    }
+                    continue;
+                }
+                // This person is not in the workspace: only that ends it.
                 Err(Error::Refused(reason)) => return Err(Error::Refused(reason)),
                 Err(e) => report(json!({ "event": "offline", "reason": e.to_string() })),
                 Ok(()) => report(json!({ "event": "offline", "reason": "connection closed" })),
@@ -359,7 +375,8 @@ async fn session(
             .unwrap_or("the relay refused the connection")
             .to_string();
         return Err(match answer["code"].as_str() {
-            Some("forbidden") | Some("unauthorized") => Error::Refused(text),
+            Some("forbidden") => Error::Refused(text),
+            Some("unauthorized") => Error::SignIn(text),
             _ => Error::Net(text),
         });
     }
@@ -367,7 +384,9 @@ async fn session(
         json!({ "event": "online", "role": answer["role"], "user": answer["user"], "conn": answer["conn"] }),
     );
     let mut renew = tokio::time::interval(RENEW_CHECK);
+    renew.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     renew.tick().await;
+    let mut ticked = tokio::time::Instant::now();
     let mut heard = tokio::time::Instant::now();
     let mut in_flight: HashSet<i64> = HashSet::new();
     // Viewers receive everything and send nothing.
@@ -489,8 +508,10 @@ async fn session(
                     }
                     "error" => {
                         let text = value["message"].as_str().unwrap_or("refused").to_string();
-                        if matches!(value["code"].as_str(), Some("forbidden") | Some("unauthorized")) {
-                            return Err(Error::Refused(text));
+                        match value["code"].as_str() {
+                            Some("forbidden") => return Err(Error::Refused(text)),
+                            Some("unauthorized") => return Err(Error::SignIn(text)),
+                            _ => {}
                         }
                         report(json!({ "event": "relay_error", "message": text }));
                     }
@@ -498,10 +519,18 @@ async fn session(
                 }
             }
             _ = renew.tick() => {
+                // A check that came late means this app was held still (put to rest in the
+                // background), not that the relay said nothing: it is asked before it is doubted.
+                if ticked.elapsed() > RENEW_CHECK * 2 {
+                    heard = tokio::time::Instant::now();
+                }
+                ticked = tokio::time::Instant::now();
                 if heard.elapsed() > if pulling { PULL_WAIT } else { QUIET } {
                     return Err(Error::Net("the relay went quiet".into()));
                 }
                 out.send(Message::Ping(Default::default())).await.map_err(|e| Error::Net(e.to_string()))?;
+                // A moment for whoever holds the sign-in to renew it: a hidden window does not by itself.
+                report(json!({ "event": "renew" }));
                 // A newer sign-in arrived: hand it to the relay so this connection outlives the old one.
                 let latest = config.token.get();
                 if latest != presented {

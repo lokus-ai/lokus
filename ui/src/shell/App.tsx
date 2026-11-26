@@ -15,6 +15,7 @@ import { PluginView } from "../features/plugins/PluginView";
 import { isPicture, PageHeader } from "../features/page-header/PageHeader";
 import { SearchPalette } from "../features/search/SearchPalette";
 import { Boundary } from "./Boundary";
+import { fileMenu } from "./contextMenu";
 import { formatKeys, runCommand } from "./commands";
 import { Icon } from "./Icon";
 import { Palette } from "./Palette";
@@ -71,6 +72,7 @@ function Sidebar() {
   const open = useStore(app, (s) => s.sidebar);
   const narrow = useStore(app, (s) => s.narrow);
   const revealTree = useCallback(() => app.set({ sidebar: true }), []);
+  const newNoteIn = useCallback((folder: string) => void createNoteIn(folder), []);
 
   const startResize = (e: PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -146,13 +148,13 @@ function Sidebar() {
       <div className="sidebar-scroll">
         <FileTree
           key={root}
+          root={root ?? ""}
           entries={tree}
           active={active}
           onOpen={pick}
-          onNewNote={(folder) => void createNoteIn(folder)}
+          onNewNote={newNoteIn}
           onNewFolder={(path) => void createFolder(path)}
-          onRename={renameEntry}
-          onDelete={(path) => void deleteEntry(path)}
+          onRename={(from, to) => renameEntry(from, to, root)}
           onReveal={revealTree}
         />
       </div>
@@ -168,7 +170,7 @@ function Sidebar() {
   );
 }
 
-const SYNC_LABEL = { off: "Sync is off", online: "Synced", connecting: "Connecting…", offline: "Offline", refused: "Sync stopped" } as const;
+const SYNC_LABEL = { off: "Sync is off", online: "Synced", connecting: "Connecting…", offline: "Offline", refused: "Sync stopped", signin: "Sign in again" } as const;
 
 /** The foot of the sidebar: who is signed in and how sync is doing, with the account's actions in a menu. */
 function AccountBar({ act }: { act(id: string): void }) {
@@ -206,7 +208,7 @@ function AccountBar({ act }: { act(id: string): void }) {
       )}
       <button
         className={`account-row${menu ? " open" : ""}`}
-        onClick={() => (account || !accountsAvailable ? setMenu((m) => !m) : act("account.signIn"))}
+        onClick={() => ((account || !accountsAvailable) && sync.status !== "signin" ? setMenu((m) => !m) : act("account.signIn"))}
       >
         <span className="account-avatar">
           {account ? <Avatar name={name} picture={me?.picture} size={28} /> : <Icon name="account" />}
@@ -214,7 +216,7 @@ function AccountBar({ act }: { act(id: string): void }) {
         </span>
         <span className="account-text">
           <span className="tree-name">{account ? name : accountsAvailable ? "Sign in" : "This device"}</span>
-          <small className="tree-name">{account || !accountsAvailable ? SYNC_LABEL[sync.status] : "For sync and teams"}</small>
+          <small className="tree-name">{account || !accountsAvailable || sync.status === "signin" ? SYNC_LABEL[sync.status] : "For sync and teams"}</small>
         </span>
       </button>
       <NewsButton />
@@ -245,7 +247,7 @@ function Tabs() {
       </button>
       {tabs.map((path) =>
         path === GRAPH_TAB ? (
-          <div key={path} className={`tab${view === "graph" ? " active" : ""}`} onMouseDown={showGraph}>
+          <div key={path} className={`tab${view === "graph" ? " active" : ""}`} tabIndex={0} onMouseDown={(e) => e.button === 0 && showGraph()} onContextMenu={(e) => fileMenu(e, path, "tab")} onKeyDown={(e) => fileMenu(e, path, "tab")}>
             <Icon name="graph" size={14} />
             <span className="tree-name">Graph</span>
             <button className="tab-close" title="Close" onMouseDown={(e) => e.stopPropagation()} onClick={closeGraph}>
@@ -253,7 +255,8 @@ function Tabs() {
             </button>
           </div>
         ) : (
-        <div key={path} className={`tab${(view === "note" && path === active) || (view === "file" && path === file) ? " active" : ""}`} onMouseDown={(e) => {
+        <div key={path} className={`tab${(view === "note" && path === active) || (view === "file" && path === file) ? " active" : ""}`} tabIndex={0} onContextMenu={(e) => fileMenu(e, path, "tab")} onKeyDown={(e) => fileMenu(e, path, "tab")} onMouseDown={(e) => {
+          if (e.button !== 0) return;
           // The click leaves the keyboard in the note, the one on screen or the one coming forward.
           if (view === "note" && active && isNotePath(path)) e.preventDefault();
           void openNote(path);
