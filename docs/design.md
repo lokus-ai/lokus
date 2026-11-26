@@ -128,7 +128,8 @@ Small things that make it a daily driver, all plain commands over plain files:
   has the same menu wherever it is shown (`fileMenu`): Open (Close tab on a tab), Reveal in
   sidebar, Rename, Ask the assistant about this (files that are not notes), Move to trash. That
   covers sidebar files, tabs, the file viewer, linked mentions and the assistant's file cards (a
-  file still on an unsent message offers Remove from message in place of the trash). A sidebar
+  file still on an unsent message offers Remove from message in place of Rename and the
+  trash). A sidebar
   folder and the sidebar's empty space offer New note and New folder there; a folder adds Rename
   and Move to trash. A link in a note offers Open link, Open in new tab and Copy link; a
   customer row Open, Archive or Bring back, and Delete… (which still asks); a chat message Copy

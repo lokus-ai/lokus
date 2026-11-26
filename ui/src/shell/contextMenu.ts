@@ -184,7 +184,8 @@ export function fileMenu(event: MenuEvent, path: string, where: "tab" | "row" | 
     where === "tab" ? { id: "note.close", label: "Close tab" } : { id: "note.open", label: "Open" },
     ...(where === "tree" ? [{ id: "tree.newNote", label: "New note" }, { id: "tree.newFolder", label: "New folder" }] : [{ id: "tree.revealActive", label: "Reveal in sidebar" }]),
     null,
-    { id: "tree.rename", label: "Rename" },
+    // A file waiting on a message is named by its path, so it is renamed elsewhere.
+    ...(where === "draft" ? [] : [{ id: "tree.rename", label: "Rename" }]),
     ...(isNotePath(path) || where === "draft" ? [] : [{ id: "ai.attach", label: "Ask the assistant about this" }]),
     where === "draft" ? { id: "ai.detach", label: "Remove from message" } : { id: "note.trash", label: "Move to trash", danger: true },
   ], { args: { path, folder } });
