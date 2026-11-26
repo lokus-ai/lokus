@@ -64,7 +64,7 @@ pub fn limit(config: &Config) -> Option<u64> {
 
 /// How many tokens of conversation the provider says a model takes; none for a model it does
 /// not list, so nothing is assumed about a name that is new here. Read on 2026-11-26 from
-/// docs.anthropic.com "Models overview", developers.openai.com "Models" (one page per model),
+/// platform.claude.com "Models overview", developers.openai.com "Models" (one page per model),
 /// and for the ChatGPT sign-in the model list in openai/codex. Where a provider caps what may
 /// be sent below the window, the cap is the figure: the GPT-5 models with a 400,000 window
 /// take 272,000, the other 128,000 being kept for the answer (openai.com, "Introducing GPT-5
