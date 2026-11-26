@@ -112,7 +112,12 @@ const SEARCHED: i64 = 20_000;
 
 pub fn call(input: &Value) -> Result<String, String> {
     let db = open()?;
-    let word = |key: &str| input[key].as_str().unwrap_or_default().trim().to_string();
+    // A phone number or a year arrives as a number from the command line.
+    let word = |key: &str| match &input[key] {
+        Value::String(text) => text.trim().to_string(),
+        Value::Number(number) => number.to_string(),
+        _ => String::new(),
+    };
     let (chat, search) = (word("chat"), word("search").to_lowercase());
     let limit = input["limit"].as_u64().unwrap_or(30).clamp(1, 200) as usize;
     let like = if chat.is_empty() {
