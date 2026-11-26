@@ -1117,7 +1117,11 @@ export async function deleteEntry(path: string): Promise<boolean> {
     }
     // A trashed file that was in front gives its place to another tab.
     const { view, file } = app.get();
-    if (view === "file" && file && under(file, path)) await closeTab(file);
+    if (view === "file" && file && under(file, path)) {
+      // The rest of what was trashed goes first, so none of it is what comes forward.
+      app.set((s) => ({ tabs: s.tabs.filter((t) => t === file || !under(t, path) || sessions.has(t)) }));
+      await closeTab(file);
+    }
     const { tabs, active } = app.get();
     const rest = tabs.filter((t) => !under(t, path) || sessions.has(t));
     const lostActive = Boolean(active && !rest.includes(active));
