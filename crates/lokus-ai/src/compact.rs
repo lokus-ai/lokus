@@ -114,12 +114,19 @@ pub fn split(messages: &[Value], limit: Option<u64>) -> usize {
     let starts: Vec<usize> = (1..messages.len())
         .filter(|&i| !is_result(&messages[i]))
         .collect();
+    // The request being worked on is never summarised away, however much its steps have read.
+    let Some(asked) = starts
+        .iter()
+        .copied()
+        .rfind(|&i| messages[i]["role"] == "user")
+    else {
+        return 0;
+    };
     starts
         .iter()
         .copied()
         .find(|&i| weight(&messages[i..]) <= keep)
-        .or(starts.last().copied())
-        .unwrap_or(0)
+        .map_or(asked, |i| i.min(asked))
 }
 
 fn clip(text: &str, most: usize) -> String {
@@ -346,6 +353,13 @@ mod tests {
             json!({ "role": "assistant", "content": [{ "type": "tool_use", "id": "1", "name": "read_note", "input": {} }] }),
             json!({ "role": "user", "content": [{ "type": "tool_result", "tool_use_id": "1", "content": "short" }] }),
         ];
+        // The only request there is stays whole.
+        assert_eq!(split(&messages, None), 0);
+        let messages = [
+            messages,
+            vec![json!({ "role": "user", "content": "and then?" })],
+        ]
+        .concat();
         assert_eq!(split(&messages, None), 1);
         assert_eq!(split(&messages[..1], None), 0);
     }
