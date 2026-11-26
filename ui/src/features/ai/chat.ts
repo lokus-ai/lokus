@@ -594,9 +594,12 @@ function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usag
   // The cut-off question this window took up on opening is in the file whole once its own window finished it.
   // It is looked for after what the file held on opening, summarised since or not, so the same words asked
   // before do not pass for it. A file another window wrote over without it has no such message: it is kept.
-  const asked = JSON.stringify(unsummarised(resumed[0]));
+  // The file's writer orders a block's keys by name, so the two are compared with theirs ordered alike.
+  const said = (message: unknown) =>
+    JSON.stringify(unsummarised(message), (_, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
+  const asked = said(resumed[0]);
   const since = [...(kept.earlier ?? []), ...(kept.history ?? [])].slice(resumedAt);
-  const whole = !kept.unanswered && since.some((message) => JSON.stringify(unsummarised(message)) === asked);
+  const whole = !kept.unanswered && since.some((message) => said(message) === asked);
   const mine = whole ? own.fresh.filter((message) => !resumed.includes(message)) : own.fresh;
   const settled = kept.unanswered ? theirs.slice(0, Math.max(0, theirs.map((i) => i.kind).lastIndexOf("user"))) : theirs;
   return {
