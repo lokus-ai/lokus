@@ -23,6 +23,8 @@ export function toCoreError(raw: unknown): CoreError {
 export interface VaultInfo {
   name: string;
   root: string;
+  /** Whether the folder belongs to a team (told by the workspace list). */
+  team?: boolean;
 }
 
 let windowRoot: string | undefined;
@@ -70,6 +72,11 @@ export function onVaultChanged(handler: (paths: string[]) => void): () => void {
 /** Every workspace on this computer: the folders this person has opened in Lokus. */
 export function listVaults(): Promise<VaultInfo[]> {
   return invoke<VaultInfo[]>("vault_list");
+}
+
+/** Make a folder and put it on the workspace list, without opening it. */
+export function makeVault(root: string): Promise<void> {
+  return invoke("vault_make", { root });
 }
 
 /** Take a workspace off the list. Its folder stays where it is. */

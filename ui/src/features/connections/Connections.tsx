@@ -2,7 +2,7 @@
 import { track } from "../../bridge/analytics";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, saveAiConfig, saveMcpToken, setAiSecret } from "../../bridge/ai";
+import { type AiConfig, aiConnectors, type AiSettings, aiSettings, checkMcp, type Connector, type McpServer, mcpLogin, mcpLogout, openDiskAccess, saveAiConfig, saveMcpToken, setAiSecret } from "../../bridge/ai";
 import { openWeb } from "../../bridge/updates";
 import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
@@ -101,6 +101,72 @@ export function TokenConnection({ connector, root, from = "settings", onCancel, 
   );
 }
 
+/** Connect something read on this Mac (iMessage): nothing to sign in to, only macOS's permission, which is checked here. */
+export function LocalConnection({ connector, root, from = "settings", onCancel, onConnected }: {
+  connector: Connector;
+  root: string;
+  from?: "settings" | "setup";
+  onCancel(): void;
+  onConnected(server: McpServer, tools: Offered[]): void;
+}) {
+  const server = useMemo(() => ({ name: connector.id, url: connector.url, enabled: true }), [connector]);
+  // The tools when it can be read, the reason when it cannot, null while looking.
+  const [found, setFound] = useState<Offered[] | string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const active = useRef(true);
+  const look = useCallback(() => {
+    setFound(null);
+    void checkMcp(root, server).then(
+      (tools) => active.current && setFound(tools),
+      (e) => active.current && setFound(message(e)),
+    );
+  }, [root, server]);
+  useEffect(() => {
+    active.current = true;
+    look();
+    return () => { active.current = false; };
+  }, [look]);
+  const submit = async () => {
+    if (!Array.isArray(found) || busy) return;
+    setBusy(true);
+    try {
+      await mcpLogin(root, server);
+      track("connection_added", { service: connector.id, from });
+      if (active.current) onConnected(server, found);
+    } catch (e) {
+      track("connection_failed", { service: connector.id, from });
+      if (active.current) setFound(message(e));
+    }
+    if (active.current) setBusy(false);
+  };
+  return (
+    <div className="conn">
+      <form className="conn-list" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <div className="conn-line">
+          <Logo id={connector.id} name={connector.name} />
+          <div className="conn-main"><strong>Connect {connector.name}</strong><small>{connector.about}</small></div>
+        </div>
+        <div className="conn-own">
+          <button className="settings-button" autoFocus disabled={!Array.isArray(found) || busy} type="submit">{found === null ? "Checking…" : "Connect"}</button>
+          <button className="link" type="button" onClick={onCancel}>Cancel</button>
+        </div>
+        <div className="conn-detail">
+          {typeof found === "string"
+            ? <p className="settings-hint error" role="alert">{found}</p>
+            : <p className="settings-hint">Reading Messages needs Full Disk Access for Lokus, which you give in System Settings.</p>}
+          {Array.isArray(found) && <p><span className="conn-state">Full Disk Access is on</span></p>}
+          {typeof found === "string" && (
+            <div className="conn-detail-foot">
+              <button className="link" type="button" onClick={() => void openDiskAccess()}>Open System Settings</button>
+              <button className="link" type="button" onClick={look}>Check again</button>
+            </div>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 /**
  * Settings, Connections: the services the assistant can reach. Pick one by name and sign in;
  * nobody needs to know an address. A server that is not in the list can still be added by hand.
@@ -155,7 +221,7 @@ export function Connections() {
   };
   const connect = async (c: Connector) => {
     setNote(null);
-    if (c.token_url) {
+    if (c.token_url || !c.url) {
       setTokenConnection(c);
       return;
     }
@@ -297,8 +363,9 @@ export function Connections() {
     );
   };
 
+  const Screen = tokenConnection?.url ? TokenConnection : LocalConnection;
   if (tokenConnection) return (
-    <TokenConnection
+    <Screen
       root={root}
       connector={tokenConnection}
       onCancel={() => setTokenConnection(null)}
@@ -386,8 +453,8 @@ export function Connections() {
                   </strong>
                   <small>{c.about}</small>
                 </div>
-                <span className="conn-soon" title={c.ready === "not_built" ? "Runs on this Mac. Not built yet." : "This service only lets apps it has approved sign people in, and Lokus is not registered with it yet."}>
-                  Coming soon
+                <span className="conn-soon" title={c.ready === "mac_only" ? "Lokus reads Messages on a Mac. It is not available on this computer." : "This service only lets apps it has approved sign people in, and Lokus is not registered with it yet."}>
+                  {c.ready === "mac_only" ? "Mac only" : "Coming soon"}
                 </span>
               </div>
             </div>

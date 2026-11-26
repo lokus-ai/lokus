@@ -8,7 +8,7 @@ import { Icon } from "../../shell/Icon";
 import { useStore } from "../../shell/store";
 import { app } from "../../shell/workspace";
 import { Logo } from "../connections/logos";
-import { TokenConnection } from "../connections/Connections";
+import { LocalConnection, TokenConnection } from "../connections/Connections";
 import { identify } from "../../bridge/analytics";
 import { type Account, accountsAvailable, signInWithGoogle } from "../../bridge/auth";
 import { ConnectModel, useModel } from "../ai/Connect";
@@ -334,7 +334,7 @@ export default function Onboarding() {
     set({ [key]: id });
   };
   const connect = async (c: Connector) => {
-    if (c.token_url) {
+    if (c.token_url || !c.url) {
       setTokenConnection(c);
       return;
     }
@@ -349,7 +349,9 @@ export default function Onboarding() {
   };
 
   const ready = catalog.filter((c) => c.ready === "yes");
-  const coming = catalog.filter((c) => c.ready !== "yes");
+  // What only a Mac can read is not offered on another computer.
+  const coming = catalog.filter((c) => c.ready === "needs_registration");
+  const Screen = tokenConnection?.url ? TokenConnection : LocalConnection;
   const picked = ready.filter((c) => answers.tools.includes(c.id));
   let ask: ReactNode = null;
 
@@ -513,7 +515,7 @@ export default function Onboarding() {
     );
   } else if (step === "tools") {
     ask = tokenConnection ? (
-      <TokenConnection
+      <Screen
         root={vault?.root ?? ""}
         connector={tokenConnection}
         from="setup"
