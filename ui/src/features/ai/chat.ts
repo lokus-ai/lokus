@@ -611,6 +611,15 @@ type KeptBody = {
  * the conversation, folded away. Rust does the work; a failure or a stop changes nothing here.
  */
 export async function compactChat(note = ""): Promise<boolean> {
+  const box = chat.get().draft;
+  const done = await summarise(note);
+  // Not compacted: the note goes back in the box like a message that was not sent, unless something newer is there.
+  const now = box.get();
+  if (!done && note.trim() && !now.text && !now.files.length && !now.importing) box.set({ text: `/compact ${note.trim()}` });
+  return done;
+}
+
+async function summarise(note: string): Promise<boolean> {
   const root = vaultRoot;
   if (chat.get().busy || !root || isSwitchingVault() || !history.length) {
     if (!chat.get().busy && !history.length)
@@ -662,9 +671,6 @@ export async function compactChat(note = ""): Promise<boolean> {
         ],
         usage: kept.body.usage ?? null,
       });
-      // The note that was typed goes back in the box, to be sent again or changed.
-      if (note.trim())
-        chat.get().draft.set({ text: `/compact ${note.trim()}` });
     };
     const kept = await load();
     if (sending !== requestId) return false;
