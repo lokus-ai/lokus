@@ -140,12 +140,12 @@ interface MenuOptions {
 }
 
 // A right-click on a word selects it on a Mac, so what counts is what was selected before it.
-let selected: Node | null = null;
+let selected: Range | null = null;
 document.addEventListener(
   "mousedown",
   (e) => {
     const selection = getSelection();
-    if (e.button === 2) selected = selection && !selection.isCollapsed ? selection.anchorNode : null;
+    if (e.button === 2) selected = selection && !selection.isCollapsed ? selection.getRangeAt(0).cloneRange() : null;
   },
   true,
 );
@@ -159,8 +159,8 @@ export function openMenu(event: MenuEvent, label: string, items: (ContextMenuIte
   if (event.key !== undefined && event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
   const element = options.element ?? (event.currentTarget as HTMLElement);
   if ((event.target as Element).closest?.("input:not([type=checkbox]), textarea, select")) return;
-  if (event.key === undefined && selected && element.contains(selected)) return;
-  if (event.key === undefined && element.contains(getSelection()?.anchorNode ?? null)) getSelection()?.removeAllRanges();
+  if (event.key === undefined && selected?.intersectsNode(element)) return;
+  if (event.key === undefined && getSelection()?.rangeCount && getSelection()?.getRangeAt(0).intersectsNode(element)) getSelection()?.removeAllRanges();
   event.preventDefault();
   event.stopPropagation();
   const root = app.get().vault?.root;
