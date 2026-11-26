@@ -1115,6 +1115,9 @@ export async function deleteEntry(path: string): Promise<boolean> {
       if (shared) closeShared(shared);
       sessions.delete(open);
     }
+    // A trashed file that was in front gives its place to another tab.
+    const { view, file } = app.get();
+    if (view === "file" && file && under(file, path)) await closeTab(file);
     const { tabs, active } = app.get();
     const rest = tabs.filter((t) => !under(t, path) || sessions.has(t));
     const lostActive = Boolean(active && !rest.includes(active));
