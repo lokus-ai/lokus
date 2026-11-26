@@ -682,6 +682,11 @@ function savedSync(): { server: string; workspace: string; token: string | null 
   }
 }
 
+/** The team the open folder belongs to, connected or not. */
+export function keptTeam(): { server: string; workspace: string } | null {
+  return savedSync();
+}
+
 /** Connect the open folder to the team it was last told to keep, if it has one. */
 export async function resumeSync(): Promise<void> {
   const saved = savedSync();
@@ -703,6 +708,8 @@ export async function boot(): Promise<void> {
   });
   // Signing in or out in another window is noticed when this one is next looked at.
   window.addEventListener("focus", () => {
+    // A team's folder that was refused (a sign-in that ran out while the computer slept) asks again by itself.
+    if (app.get().sync.status === "refused") void resumeSync();
     void currentAccount().then((account) => {
       if ((account?.id ?? null) === (app.get().account?.id ?? null)) return;
       identify(account?.id ?? null);

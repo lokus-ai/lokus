@@ -4,7 +4,8 @@
 //! machine. The flow is OAuth with PKCE and a redirect to a local port; the
 //! first sign-in also registers this installation and gets its client id.
 
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
-use crate::config::{forget, keep, kept};
+use crate::config::{answered, forget, keep, kept, kept_now};
 use crate::error::{AiError, Result};
 
 const ACCOUNT: &str = "chatgpt";
@@ -42,6 +43,13 @@ struct Session {
 
 fn load() -> Session {
     kept(ACCOUNT)
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_default()
+}
+
+/// What the keychain holds at this moment, not what this process last read from it.
+fn reload() -> Session {
+    kept_now(ACCOUNT)
         .and_then(|json| serde_json::from_str(&json).ok())
         .unwrap_or_default()
 }
@@ -116,12 +124,31 @@ fn failed(message: impl Into<String>) -> AiError {
 }
 
 pub fn signed_in() -> bool {
-    load().refresh_token.is_some()
+    current().refresh_token.is_some()
+}
+
+/// The sign-in to work with. When this copy holds none it asks the keychain again: another copy
+/// of Lokus may have signed in, or finished a slow renewal, since this one last looked. A
+/// keychain that refused to be read is not asked twice.
+fn current() -> Session {
+    let session = load();
+    if session.refresh_token.is_some() || !answered(ACCOUNT) {
+        return session;
+    }
+    reload()
 }
 
 /// Forget the tokens. The installation's ids are kept, so signing in again is quick.
 pub fn sign_out() {
-    let old = load();
+    SIGN_OUTS.fetch_add(1, Ordering::SeqCst);
+    forget_tokens();
+}
+
+/// How many times the person has signed out here, so a renewal on its way can tell.
+static SIGN_OUTS: AtomicU64 = AtomicU64::new(0);
+
+fn forget_tokens() {
+    let old = reload();
     if old.host_id.is_empty() {
         forget(ACCOUNT);
         return;
@@ -133,26 +160,51 @@ pub fn sign_out() {
     });
 }
 
-async fn token_request(form: &[(&str, &str)]) -> Result<Value> {
+/// Why the sign-in service did not hand over tokens.
+enum Refused {
+    /// It could not be reached.
+    Network,
+    /// It said no to what was sent: the code or refresh token is spent or revoked.
+    Rejected(String),
+    /// It answered, but not about the sign-in: busy, rate limited, broken.
+    Unavailable(u16),
+}
+
+impl From<Refused> for AiError {
+    fn from(refused: Refused) -> Self {
+        match refused {
+            Refused::Network => AiError::Network(auth_url()),
+            Refused::Rejected(code) => failed(format!("ChatGPT sign-in was refused ({code})")),
+            Refused::Unavailable(status) => failed(format!(
+                "ChatGPT's sign-in service is not answering ({status}); try again in a moment"
+            )),
+        }
+    }
+}
+
+async fn token_request(form: &[(&str, &str)]) -> std::result::Result<Value, Refused> {
     let response = reqwest::Client::new()
         .post(format!("{}/api/accounts/oauth/token", auth_url()))
         .form(form)
+        // A sign-in service that never answers is unreachable, not a refusal.
+        .timeout(RENEWAL_ENDS_WITHIN)
         .send()
         .await
-        .map_err(|_| AiError::Network(auth_url()))?;
-    let ok = response.status().is_success();
+        .map_err(|_| Refused::Network)?;
+    let status = response.status();
     let body: Value = response.json().await.unwrap_or_default();
-    if ok {
-        Ok(body)
-    } else {
-        let code = body["error"]
-            .as_str()
-            .or_else(|| body["error"]["code"].as_str());
-        Err(failed(format!(
-            "ChatGPT sign-in was refused ({})",
-            code.unwrap_or("no reason given")
-        )))
+    if status.is_success() {
+        return Ok(body);
     }
+    if !matches!(status.as_u16(), 400 | 401) {
+        return Err(Refused::Unavailable(status.as_u16()));
+    }
+    let code = body["error"]
+        .as_str()
+        .or_else(|| body["error"]["code"].as_str());
+    Err(Refused::Rejected(
+        code.unwrap_or("no reason given").to_string(),
+    ))
 }
 
 fn accept(session: &mut Session, tokens: &Value) -> Result<()> {
@@ -168,43 +220,109 @@ fn accept(session: &mut Session, tokens: &Value) -> Result<()> {
     Ok(())
 }
 
+/// One refresh at a time. A refresh token works once: two requests that both found the token
+/// run out used to spend the same one, the second was refused, and the refusal signed the
+/// person out although the first had just renewed the sign-in (2026-11-25).
+static REFRESHING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// How long a renewal waits for the sign-in service to answer.
+const RENEWAL_ENDS_WITHIN: Duration = Duration::from_secs(20);
+
+/// How long a refused renewal waits for another copy of Lokus to save the sign-in it just won:
+/// a little longer than that copy's own renewal can take.
+const WINNER_SAVES_WITHIN: Duration = Duration::from_secs(22);
+
 /// A token that is good for a request right now, refreshing it if it is about to run out.
 pub async fn access_token() -> Result<String> {
-    let mut session = load();
-    let (Some(refresh), Some(client)) = (session.refresh_token.clone(), session.client_id.clone())
-    else {
-        return Err(failed("sign in with ChatGPT in Settings first"));
+    finished(None).await
+}
+
+/// A token to try again with after the provider answered 401 to `refused`: the newer one if a
+/// renewal has happened since, otherwise the result of renewing now.
+pub async fn renewed(refused: &str) -> Result<String> {
+    finished(Some(refused.to_owned())).await
+}
+
+/// Runs the renewal to its end even if the answer that asked for it is stopped: a refresh token
+/// the service has already spent is worthless unless its replacement is saved.
+async fn finished(refused: Option<String>) -> Result<String> {
+    tokio::spawn(token(refused))
+        .await
+        .unwrap_or_else(|_| Err(failed("could not renew the ChatGPT sign-in; try again")))
+}
+
+async fn token(refused: Option<String>) -> Result<String> {
+    let refused = refused.as_deref();
+    let _one = REFRESHING.lock().await;
+    let sign_outs = SIGN_OUTS.load(Ordering::SeqCst);
+    let mut session = if refused.is_some() {
+        reload()
+    } else {
+        current()
     };
-    if let Some(token) = session
-        .access_token
-        .clone()
-        .filter(|_| session.expires_at > now() + 60)
-    {
-        return Ok(token);
-    }
-    let form = [
-        ("grant_type", "refresh_token"),
-        ("refresh_token", refresh.as_str()),
-        ("client_id", client.as_str()),
-        ("resource", RESOURCE),
-    ];
-    match token_request(&form).await {
-        Ok(tokens) => {
-            accept(&mut session, &tokens)?;
-            save(&session);
-            session
-                .access_token
-                .ok_or_else(|| failed("ChatGPT sent no access token"))
+    // Tried again only while the keychain turns out to hold a newer sign-in than the one refused.
+    loop {
+        let (Some(refresh), Some(client)) =
+            (session.refresh_token.clone(), session.client_id.clone())
+        else {
+            return Err(failed("sign in with ChatGPT in Settings first"));
+        };
+        if let Some(token) = session
+            .access_token
+            .clone()
+            .filter(|token| session.expires_at > now() + 60 && Some(token.as_str()) != refused)
+        {
+            return Ok(token);
         }
-        Err(AiError::Network(url)) => Err(AiError::Network(url)),
-        Err(_) => {
-            // The sign-in is no longer good; it has to be done again.
-            sign_out();
-            Err(failed(
-                "your ChatGPT sign-in has expired; sign in again in Settings",
-            ))
+        let form = [
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh.as_str()),
+            ("client_id", client.as_str()),
+            ("resource", RESOURCE),
+        ];
+        match token_request(&form).await {
+            Ok(tokens) => {
+                // Signed out in Settings while this was on its way: stay signed out.
+                if SIGN_OUTS.load(Ordering::SeqCst) != sign_outs {
+                    return Err(failed("sign in with ChatGPT in Settings first"));
+                }
+                accept(&mut session, &tokens)?;
+                save(&session);
+                return session
+                    .access_token
+                    .ok_or_else(|| failed("ChatGPT sent no access token"));
+            }
+            Err(Refused::Rejected(_)) => {
+                // Another copy of Lokus may have spent this refresh token a moment ago and not
+                // have saved what it got yet: look again for a short while before giving up.
+                let gave_up = Instant::now() + WINNER_SAVES_WITHIN;
+                let newer = loop {
+                    let stored = reload();
+                    if stored.refresh_token.is_some()
+                        && stored.refresh_token.as_deref() != Some(refresh.as_str())
+                    {
+                        break Some(stored);
+                    }
+                    if Instant::now() >= gave_up {
+                        break None;
+                    }
+                    tokio::time::sleep(Duration::from_millis(250)).await;
+                };
+                match newer {
+                    Some(stored) => session = stored,
+                    None => break,
+                }
+            }
+            Err(other) => return Err(other.into()),
         }
     }
+    // Only the sign-in that was refused is dropped, never one another copy saved this instant.
+    if reload().refresh_token == session.refresh_token {
+        forget_tokens();
+    }
+    Err(failed(
+        "your ChatGPT sign-in has expired; sign in again in Settings",
+    ))
 }
 
 /// Sign in. `show` is handed the address to open in a browser; this returns
