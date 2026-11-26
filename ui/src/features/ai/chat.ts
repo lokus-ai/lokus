@@ -558,6 +558,8 @@ const stampKey = (root: string | undefined, id: string) => JSON.stringify([root,
  * turns out to have moved on, these go after what the file holds; nothing is found by position.
  */
 let fresh: unknown[] = [];
+/** What opening a conversation whose reply was cut off added for the model: the question again and how far the reply got. */
+let resumed: unknown[] = [];
 /** The person's turns in this window, counted, and how many of them a finished save has taken: a save that is counted twice changes nothing. */
 let turnsMade = 0;
 let turnsSaved = 0;
@@ -579,10 +581,12 @@ function lastTurns(items: Item[], turns: number): Item[] {
  */
 function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usage?: Usage | null; unanswered?: unknown }) {
   const theirs = kept.items ?? [];
+  // The cut-off question this window took up on opening is in the file whole once its own window finished it.
+  const mine = kept.unanswered ? own.fresh : own.fresh.filter((message) => !resumed.includes(message));
   const settled = kept.unanswered ? theirs.slice(0, Math.max(0, theirs.map((i) => i.kind).lastIndexOf("user"))) : theirs;
   return {
     items: [...settled, ...own.items.filter((i) => !(i.kind === "notice" && i.text === SUMMARISED))],
-    history: [...(kept.history ?? []), ...own.fresh],
+    history: [...(kept.history ?? []), ...mine],
     earlier: kept.earlier ?? [],
     compactions: kept.compactions ?? 0,
     // The file's count is of the conversation being carried on; this window's was of its older copy.
@@ -874,7 +878,7 @@ export async function openChat(id: string): Promise<void> {
   history = kept.body.history ?? [];
   let items = kept.body.items ?? [];
   const cut = kept.body.unanswered;
-  let resumed: unknown[] = [];
+  resumed = [];
   if (cut) {
     // The reply was interrupted. Tell the model what had been asked and how
     // far it got, and tell the person, so "keep going" picks up where it left off.
