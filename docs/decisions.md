@@ -368,7 +368,7 @@ the original decision dates, not the date of this backfill. The rows above remai
 - **Change:** iMessage was listed under Connections as "Coming soon" and could not be connected. On a Mac it now connects: the connect screen says reading Messages needs Full Disk Access, checks whether Lokus has it, and the assistant gains one read-only tool, `mcp__imessage__messages`, that returns recent messages. Lokus cannot send. On Windows and Linux the entry says "Mac only" and first-run setup does not offer it.
 - **Why:** The catalog entry had no address, reader or tool (`Ready::NotBuilt`), so the Connections page never offered Connect. In the real macOS app the made-up `chat.db` (real schema, 9 messages, 6 kept only as `attributedBody`) was read through the tool; with the file unreadable, and with the real file and no Full Disk Access, the answer was the one-sentence permission message.
 - **Decided by:** Devin, on that evidence, within the 2026-11-25 mandate relaying the owner's exact words: "Make the imessages connection work." Read-only, the Full Disk Access sentence and check, and unavailability off the Mac were explicit constraints of that mandate. Reading the file directly, the single tool and showing numbers instead of Contacts names are Devin's implementation decisions.
-- **PR:** PRNUM, into `next`.
+- **PR:** #620, into `next`.
 - **Reversal:** Revert this PR: iMessage returns to "Coming soon". A saved `imessage` connection is then an entry with no address that fails to connect and can be removed with Disconnect; nothing is stored outside `ai.json`.
 
 ### Manual and global folder collapse
