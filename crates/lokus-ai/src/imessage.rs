@@ -107,7 +107,8 @@ WHERE m.associated_message_type = 0 AND m.item_type = 0
 ORDER BY m.date DESC
 LIMIT ?2";
 
-/// How many messages are looked through for a search before giving up.
+/// How many messages are looked through before giving up: rows with nothing to show and rows a
+/// search does not match are passed over, so the count asked for cannot be the database's limit.
 const SEARCHED: i64 = 20_000;
 
 pub fn call(input: &Value) -> Result<String, String> {
@@ -125,14 +126,9 @@ pub fn call(input: &Value) -> Result<String, String> {
     } else {
         format!("%{chat}%")
     };
-    let scan = if search.is_empty() {
-        limit as i64
-    } else {
-        SEARCHED
-    };
     let failed = |e: rusqlite::Error| format!("Messages could not be read: {e}");
     let mut query = db.prepare(QUERY).map_err(failed)?;
-    let mut rows = query.query((&like, scan)).map_err(failed)?;
+    let mut rows = query.query((&like, SEARCHED)).map_err(failed)?;
     let mut lines = Vec::new();
     while let Some(row) = rows.next().map_err(failed)? {
         let text: Option<String> = row.get(3).map_err(failed)?;
