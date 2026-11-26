@@ -65,7 +65,8 @@ pub fn vault_list(app: AppHandle) -> Vec<Value> {
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| root.clone());
-            json!({ "name": name, "root": root })
+            let team = lokus_sync::team::kept(Path::new(root)).is_some();
+            json!({ "name": name, "root": root, "team": team })
         })
         .collect()
 }

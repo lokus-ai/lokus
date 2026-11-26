@@ -2,7 +2,7 @@
 import type { EditorState } from "@codemirror/state";
 
 import { identify, track, trackSync, reportError } from "../bridge/analytics";
-import { accessToken, type Account, currentAccount, onAccessToken } from "../bridge/auth";
+import { accessToken, type Account, currentAccount, keptAccount, onAccessToken, signedIn } from "../bridge/auth";
 import {
   CoreError,
   currentVault,
@@ -24,14 +24,14 @@ import {
   type VaultInfo,
 } from "../bridge/core";
 import { openWeb } from "../bridge/updates";
-import { relay, syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken } from "../bridge/sync";
+import { forgetTeam, keepTeam, moveTeams, relay, syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken, type Team, teamOf } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, flushShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
 import { preferences } from "./preferences";
 
 export interface SyncState {
-  status: "off" | "connecting" | "online" | "offline" | "refused";
+  status: "off" | "connecting" | "online" | "offline" | "refused" | "signin";
   server?: string;
   workspace?: string;
   role?: "owner" | "editor" | "viewer";
@@ -75,6 +75,8 @@ export interface AppState {
   account: Account | null;
   accountDialog: boolean;
   sync: SyncState;
+  /** The team the open folder belongs to, as its folder keeps it; read when the folder is opened. */
+  team: (Team & { root: string }) | null;
   /** Other people with the active note open. */
   peers: Peer[];
   notice: string | null;
@@ -107,6 +109,7 @@ export const app = createStore<AppState>({
   account: null,
   accountDialog: false,
   sync: { status: "off" },
+  team: null,
   peers: [],
   notice: null,
 });
@@ -427,32 +430,17 @@ async function unshareAll(): Promise<void> {
   app.set({ peers: [] });
 }
 
-const syncKey = () => `lokus.sync:${app.get().vault?.root ?? ""}`;
-
-/** The team workspace a folder syncs with, if it does. */
-export function syncedWith(root: string): string | null {
-  try {
-    return (JSON.parse(localStorage.getItem(`lokus.sync:${root}`) ?? "null") as { workspace?: string } | null)?.workspace ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Remember that a folder belongs to a team, without opening it. It connects when it is opened.
- * Used for a folder whose syncing was stopped by an earlier version: being in the team is what
- * decides, so it is put back with nobody asked.
- */
-export function keepSync(root: string, server: string, workspace: string): void {
-  if (!localStorage.getItem(`lokus.sync:${root}`)) localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token: null }));
+/** Write down (or, with null, forget) the team a folder belongs to, in the folder. */
+async function remember(root: string, team: Team | null): Promise<void> {
+  if (team) await keepTeam(root, team);
+  else await forgetTeam(root);
+  if (app.get().vault?.root === root) app.set({ team: team ? { ...team, root } : null });
 }
 
 /** Start syncing this vault with a team workspace. */
 /** The sign-in the connection was last given, and how to stop feeding it fresh ones. */
 let syncSignIn: string | null = null;
 let stopSignIns: (() => void) | null = null;
-/** Whether a refusal has already been answered with one fresh sign-in. */
-let retriedSignIn = false;
 /** The latest request to connect, so a retry for an older one does nothing. */
 let lastAsk = "";
 /** The connection, for what is counted about it: when it last came online, and when its first pull came in. */
@@ -472,6 +460,49 @@ function countSync(event: Parameters<typeof trackSync>[0], props: Record<string,
 }
 /** The workspace being left or deleted from here, so the relay's own word of it is not answered twice. */
 let leaving: string | null = null;
+/** The team folder with no connection running, because there was no sign-in to give it or the relay turned it away. It is asked again by itself. */
+let idle: string | null = null;
+/** The folder whose running connection is waiting for a new sign-in. */
+let wanting: string | null = null;
+const AGAIN = 5_000;
+
+/** A team folder is never left stopped: whatever kept it from connecting is tried again until it connects. */
+function later(root: string): void {
+  idle = root;
+  window.setTimeout(() => void wakeSync(root), AGAIN);
+}
+
+/** Connect the open team folder if nothing is doing so. Called when the window is returned to, someone signs in, or a moment has passed. */
+export async function wakeSync(root = app.get().vault?.root ?? ""): Promise<void> {
+  if (idle !== root || app.get().vault?.root !== root) return;
+  idle = null;
+  await resumeSync();
+}
+
+/**
+ * Give the running connection the account's current sign-in. The account library renews one
+ * that is about to run out when asked for it, which it does not do by itself in a hidden window.
+ * `must`: the relay has turned the old one away, so this is asked until a new one is there.
+ */
+async function renewSignIn(root: string, must: boolean): Promise<void> {
+  const saved = savedSync();
+  if (app.get().vault?.root !== root || !saved || (must && wanting !== root)) return;
+  if (saved.token !== null) {
+    // A token typed for a relay of one's own: only its owner can type another.
+    if (must) app.set({ sync: { ...app.get().sync, status: "refused", reason: "the relay did not take the access token" } });
+    return;
+  }
+  const fresh = await accessToken().catch(() => null);
+  if (app.get().vault?.root !== root) return;
+  if (fresh && fresh !== syncSignIn) {
+    syncSignIn = fresh;
+    return void syncToken(fresh);
+  }
+  if (!must) return;
+  // Signed out for good is the one thing the person has to do something about.
+  app.set({ sync: { ...app.get().sync, status: signedIn() ? "offline" : "signin", reason: signedIn() ? "renewing your sign-in" : undefined } });
+  window.setTimeout(() => void renewSignIn(root, true), AGAIN);
+}
 
 export async function connectSync(server: string, workspace: string, token: string | null, root = app.get().vault?.root ?? ""): Promise<void> {
   if (app.get().vault?.root !== root) return;
@@ -483,10 +514,14 @@ export async function connectSync(server: string, workspace: string, token: stri
     return app.get().vault?.root === root && current?.server === previous?.server && current?.workspace === previous?.workspace &&
       sync.server === connected.server && sync.workspace === connected.workspace;
   };
-  const useToken = token ?? (await accessToken());
+  const useToken = token ?? (await accessToken().catch(() => null));
   if (!ownsConnection()) return;
   if (!useToken) {
-    app.set({ sync: { ...app.get().sync, status: "refused", reason: "Sign in first" } });
+    // A folder of this team stays one with nobody signed in: it says so and connects when someone is.
+    if (previous?.workspace === workspace) {
+      app.set({ sync: { status: signedIn() ? "offline" : "signin", server, workspace, reason: signedIn() ? "renewing your sign-in" : undefined } });
+      later(root);
+    }
     return;
   }
   await saveAll();
@@ -494,7 +529,12 @@ export async function connectSync(server: string, workspace: string, token: stri
   const reconnecting = previous?.server === server && previous.workspace === workspace && connected.server === server && connected.workspace === workspace;
   if (unsaved() && !reconnecting) return notify("Changes could not be saved. Retry before changing the sync connection.");
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
-  localStorage.setItem(`lokus.sync:${root}`, JSON.stringify({ server, workspace, token }));
+  try {
+    await remember(root, { server, workspace, token, user: previous?.user ?? null });
+  } catch (e) {
+    return notify(String((e as Error)?.message ?? e));
+  }
+  idle = wanting = null;
   app.set({ sync: { status: "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
@@ -523,15 +563,16 @@ export async function connectSync(server: string, workspace: string, token: stri
     // Refused because another folder was opened meanwhile: that folder is not the one to say so.
     if (lastAsk !== asking || app.get().vault?.root !== root) return;
     countSync("sync_refused", { reason: String(e?.message ?? e) });
-    app.set({ sync: { ...app.get().sync, status: "refused", reason: String(e?.message ?? e) } });
+    // Could not be started just now. The folder is still its team's, so it is tried again.
+    app.set({ sync: { ...app.get().sync, status: "offline", reason: String(e?.message ?? e) } });
+    later(root);
   });
 }
 
-/** Stop the connection for now. Nothing remembers it as stopped: the folder connects again when it is next opened. */
+/** Stop the connection for now. The folder stays its team's and connects again when it is next opened. */
 export async function disconnectSync(): Promise<void> {
   await saveAll();
   if (unsaved()) return notify("Changes could not be saved. Retry before disconnecting.");
-  localStorage.removeItem(syncKey());
   stopSignIns?.();
   stopSignIns = null;
   await syncDisconnect();
@@ -540,17 +581,30 @@ export async function disconnectSync(): Promise<void> {
 }
 
 /**
- * This person is no longer in the team a folder synced with (they left, it was deleted, or an
- * owner removed them): stop syncing, take the folder off the workspace list and show another
- * workspace, or the start page when there is none. The folder and its notes stay on disk.
+ * The relay's own list says this person is no longer in a folder's team (an owner removed them,
+ * or the team was deleted): the folder stops being the team's. It stays on screen and on the
+ * workspace list, with its notes; the app does not pick another folder for anyone.
  */
-export async function dropWorkspace(root: string, said: string): Promise<void> {
-  if (!localStorage.getItem(`lokus.sync:${root}`)) return;
-  if (app.get().vault?.root !== root) {
-    localStorage.removeItem(`lokus.sync:${root}`);
-    await forgetVault(root);
-    return notify(said);
+export async function teamGone(root: string, said: string): Promise<void> {
+  await remember(root, null);
+  if (app.get().vault?.root === root) {
+    stopSignIns?.();
+    stopSignIns = null;
+    idle = wanting = null;
+    await syncDisconnect();
+    await unshareAll();
+    app.set({ sync: { status: "off" } });
   }
+  notify(said);
+}
+
+/**
+ * The person left the open folder's team, or deleted it, from here: stop syncing, take the
+ * folder off the workspace list and show another workspace, or the start page when there is
+ * none. The folder and its notes stay on disk.
+ */
+async function dropWorkspace(root: string, said: string): Promise<void> {
+  if (!savedSync()) return;
   await saveAll();
   if (unsaved()) return notify("Changes could not be saved. Retry before leaving this workspace.");
   // A reply still being written is put in its conversation while the folder is still open.
@@ -559,7 +613,7 @@ export async function dropWorkspace(root: string, said: string): Promise<void> {
   } catch {
     return notify("The conversation could not be saved. Retry before leaving this workspace.");
   }
-  localStorage.removeItem(`lokus.sync:${root}`);
+  await remember(root, null);
   stopSignIns?.();
   stopSignIns = null;
   await syncDisconnect();
@@ -618,8 +672,11 @@ function watchSync(): void {
         episode = { online: Date.now(), pulled: 0 };
       }
       if (event.role === "viewer" && sync.role !== "viewer") notify("You can read this workspace. Changes you make stay on this device.");
-      retriedSignIn = false;
+      idle = wanting = null;
       app.set({ sync: { ...sync, status: "online", role: event.role, user: event.user, reason: undefined } });
+      // Who it is connected as is kept with the folder: only that account's list of teams can say it has left.
+      const saved = savedSync();
+      if (saved && saved.user !== event.user) void remember(event.root, { server: saved.server, workspace: saved.workspace, token: saved.token, user: event.user }).catch(report);
     } else if (event.event === "role") {
       notify(event.role === "viewer" ? "An owner made you a viewer here. Changes you make now stay on this device." : `You are now ${event.role === "owner" ? "an owner" : "an editor"} of this workspace.`);
       app.set({ sync: { ...sync, role: event.role } });
@@ -628,32 +685,30 @@ function watchSync(): void {
       countSync("sync_offline", { reason: event.reason });
       app.set({ sync: { ...sync, status: "offline", reason: event.reason } });
     }
-    else if (event.event === "refused") {
+    else if (event.event === "renew") void renewSignIn(event.root, false);
+    else if (event.event === "signin") {
+      wanting = event.root;
+      void renewSignIn(event.root, true);
+    } else if (event.event === "refused") {
       void (async () => {
-        // A sign-in that ran out while the computer slept is answered once with a fresh one.
-        const saved = savedSync();
         const root = event.root;
-        const fresh = saved?.token === null && !retriedSignIn ? await accessToken().catch(() => null) : null;
-        if (app.get().vault?.root !== root) return;
-        if (saved && fresh && fresh !== syncSignIn) {
-          retriedSignIn = true;
-          await connectSync(saved.server, saved.workspace, null, root);
-          return;
-        }
+        const saved = savedSync();
         // Leaving or deleting from here makes the relay close this connection: that is not a failure.
-        if (leaving !== root) countSync("sync_refused", { reason: event.reason });
-        // Refused because the team is gone or this person is no longer in it: the relay's list of
-        // their teams says so. Then the workspace goes from this device, and nothing retries.
-        const token = saved && leaving !== root ? (saved.token ?? (await accessToken().catch(() => null))) : null;
-        const mine = saved && token ? await relay<{ id: string }[]>(saved.server, token, "GET", "/v1/workspaces").catch(() => null) : null;
+        if (leaving === root || !saved) return;
+        countSync("sync_refused", { reason: event.reason });
+        // The relay says this person is not in the team. Its list of their teams is what is believed,
+        // asked as the account the folder was connected with; anything short of that (no answer, no
+        // sign-in, another account) leaves the folder in its team, to be asked again.
+        const token = saved.token ?? (await accessToken().catch(() => null));
+        const who = saved.token === null ? ((await currentAccount().catch(() => null))?.id ?? null) : null;
+        const mine = token ? await relay<{ id: string }[]>(saved.server, token, "GET", "/v1/workspaces").catch(() => null) : null;
         if (app.get().vault?.root !== root) return;
-        if (saved && mine && !mine.some((w) => w.id === saved.workspace)) {
-          await dropWorkspace(root, `${app.get().vault?.name ?? "This workspace"} was deleted, or you were removed from it. Its notes stay on this computer.`);
-          // Still here: something unsaved could not be written, so the folder was kept. It reads as refused, as it is.
-          if (app.get().vault?.root !== root) return;
+        const same = saved.token !== null || !saved.user || saved.user === who;
+        if (mine && same && !mine.some((w) => w.id === saved.workspace)) {
+          return teamGone(root, `${app.get().vault?.name ?? "This workspace"} was deleted, or you were removed from it. Its notes stay on this computer.`);
         }
-        void unshareAll();
-        app.set({ sync: { ...app.get().sync, status: "refused", reason: event.reason } });
+        app.set({ sync: { ...app.get().sync, status: mine && !same ? "signin" : "offline", reason: event.reason } });
+        later(root);
       })();
     } else if (event.event === "pulled") {
       if (!episode.pulled && episode.online) {
@@ -672,25 +727,20 @@ function watchSync(): void {
   });
 }
 
-/** The connection this vault was last told to keep; a null token means "use the account's". */
-function savedSync(): { server: string; workspace: string; token: string | null } | null {
-  try {
-    return JSON.parse(localStorage.getItem(syncKey()) ?? "null");
-  } catch {
-    // a broken saved entry just means sync stays off
-    return null;
-  }
+/** The team the open folder belongs to; a null token means "use the account's". */
+function savedSync(): Team | null {
+  const { team, vault } = app.get();
+  return team && team.root === vault?.root ? team : null;
 }
 
-/** The team the open folder belongs to, connected or not. */
-export function keptTeam(): { server: string; workspace: string } | null {
-  return savedSync();
-}
-
-/** Connect the open folder to the team it was last told to keep, if it has one. */
+/** Connect the open folder to its team, if it has one. The folder says which. */
 export async function resumeSync(): Promise<void> {
-  const saved = savedSync();
-  if (saved) await connectSync(saved.server, saved.workspace, saved.token);
+  const root = app.get().vault?.root;
+  if (!root) return;
+  const team = await teamOf(root);
+  if (app.get().vault?.root !== root) return;
+  app.set({ team: team ? { ...team, root } : null });
+  if (team) await connectSync(team.server, team.workspace, team.token);
 }
 
 export async function boot(): Promise<void> {
@@ -707,20 +757,24 @@ export async function boot(): Promise<void> {
     if (!unsaved()) putAway(root);
   });
   // Signing in or out in another window is noticed when this one is next looked at.
-  window.addEventListener("focus", () => {
-    // A team's folder that was refused (a sign-in that ran out while the computer slept) asks again by itself.
-    if (app.get().sync.status === "refused") void resumeSync();
+  const askAccount = () =>
     void currentAccount().then((account) => {
       if ((account?.id ?? null) === (app.get().account?.id ?? null)) return;
       identify(account?.id ?? null);
       app.set({ account });
     }, () => {});
+  window.addEventListener("focus", () => {
+    void wakeSync();
+    askAccount();
   });
-  const [vault, account] = await Promise.all([currentVault(), currentAccount().catch(() => null)]);
+  // Who is signed in is read from this computer; the account service is asked after the window is up, not before.
+  const [vault, account] = await Promise.all([currentVault(), keptAccount().catch(() => null)]);
+  askAccount();
   identify(account?.id ?? null);
   app.set({ vault, account, ready: true });
   applyLayout();
   track("app_opened");
+  await moveTeams().catch(report);
   if (vault) {
     await refreshTree();
     await resumeSync();

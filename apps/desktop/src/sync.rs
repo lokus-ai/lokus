@@ -240,6 +240,31 @@ pub fn sync_bound(sync: State<'_, Sync>, root: String) -> Option<String> {
     lokus_sync::engine::bound(root)
 }
 
+/// The team a folder belongs to, connected or not. It is kept in the folder.
+#[tauri::command(async)]
+pub fn sync_team(root: String) -> Option<lokus_sync::team::Team> {
+    lokus_sync::team::kept(std::path::Path::new(&root))
+}
+
+/// Remember the team a folder belongs to. Refused for a folder that is already another team's.
+#[tauri::command(async)]
+pub fn sync_keep(root: String, team: lokus_sync::team::Team) -> Result<bool, Value> {
+    let root = std::path::Path::new(&root);
+    // False for a folder that is not there any more: there is nowhere to keep it.
+    if !root.is_dir() {
+        return Ok(false);
+    }
+    lokus_sync::team::keep(root, &team)
+        .map(|()| true)
+        .map_err(|e| fail("team", e))
+}
+
+/// The folder is no longer a team's: the member left, or the relay says they are not in it.
+#[tauri::command(async)]
+pub fn sync_forget(root: String) {
+    lokus_sync::team::forget(std::path::Path::new(&root));
+}
+
 /// The shared document behind a note, for an editor that is opening it.
 #[tauri::command(async)]
 pub fn sync_doc(sync: State<'_, Sync>, path: String) -> Result<Option<Value>, Value> {

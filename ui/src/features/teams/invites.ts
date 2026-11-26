@@ -1,10 +1,10 @@
 /** @part-of ui.teams */
 import { track } from "../../bridge/analytics";
 import { accessToken } from "../../bridge/auth";
-import { defaultVault, listVaults } from "../../bridge/core";
-import { relay, syncBound } from "../../bridge/sync";
+import { defaultVault, listVaults, makeVault } from "../../bridge/core";
+import { keepTeam, relay, syncBound, teamOf } from "../../bridge/sync";
 import { createStore } from "../../shell/store";
-import { allNotes, app, connectSync, dropWorkspace, keepSync, notify, resumeSync, saveAll, setVault, syncedWith, unsaved } from "../../shell/workspace";
+import { allNotes, app, connectSync, notify, setVault, teamGone, wakeSync } from "../../shell/workspace";
 
 /**
  * Invitations, from both ends.
@@ -156,70 +156,83 @@ let bringing = false;
 /**
  * A team this person is in always syncs on this computer; nobody is asked, and nothing turns
  * it off: being in the team is the answer.
- * - A folder here that synced with the team before (its sync state says which) is connected
+ * - A folder here that synced with the team before (the folder says which) is connected
  *   again: at once when it is the one open, otherwise when it is next opened.
  * - A team with no folder here gets one in Documents, never a folder of the person's notes.
+ *   It is added to the workspace list; the folder on screen stays the one the person chose,
+ *   and is only opened for someone who has none open.
  * - A folder kept for a team this person is no longer in (deleted, or removed while this
- *   computer was away) is taken off the workspace list; its notes stay on disk.
+ *   computer was away) stops being the team's; it stays on the list with its notes.
  */
+/** A team is being made for the open folder right now: until the folder is its own, a look would give it a second one. */
+let making = false;
+export async function whileMaking<T>(work: () => Promise<T>): Promise<T> {
+  making = true;
+  try {
+    return await work();
+  } finally {
+    making = false;
+  }
+}
+
 export async function bringTeams(): Promise<void> {
-  if (!HOME || bringing || settingUp() || invited.get().joining || !app.get().ready || !app.get().account) return;
+  const me = app.get().account?.id;
+  if (!HOME || bringing || making || settingUp() || invited.get().joining || !app.get().ready || !me) return;
   bringing = true;
   try {
     const token = await accessToken();
     if (!token) return;
     const mine = await relay<{ id: string; name: string }[]>(HOME, token, "GET", "/v1/workspaces");
+    if (app.get().account?.id !== me) return;
     const member = (id: string | null) => id !== null && mine.some((w) => w.id === id);
-    /** The team a folder belongs to: the one it is set to sync with, else the one its sync state was made for. */
-    const teamOf = async (root: string) => syncedWith(root) ?? (await syncBound(root));
+    /** The team a folder belongs to: the one it keeps, else the one its sync state was made for. */
+    const teamAt = async (root: string) => (await teamOf(root))?.workspace ?? (await syncBound(root));
     const here = new Set<string>();
-    const before = stoppedBefore();
     for (const v of await listVaults()) {
       const open = v.root === app.get().vault?.root;
-      const kept = syncedWith(v.root);
-      const team = kept ?? (await syncBound(v.root));
+      const kept = await teamOf(v.root);
+      const team = kept?.workspace ?? (await syncBound(v.root));
       if (member(team) && team) {
         here.add(team);
         if (kept) continue;
-        // Its syncing was stopped here once, or its setting was lost: put back with nobody asked.
+        // Its setting was lost: put back with nobody asked.
         if (open && !sharedAlready()) await connectSync(HOME, team, null, v.root);
-        else if (!open) keepSync(v.root, HOME, team);
-      } else if (kept && !open && savedHome(v.root)) {
+        else if (!open) await keepTeam(v.root, { server: HOME, workspace: team, token: null, user: me }).catch(() => {});
+      } else if (kept && !open && kept.server === HOME && kept.token === null && (!kept.user || kept.user === me)) {
         // The open folder is told by its own connection being refused; the others are told here.
-        await dropWorkspace(v.root, `${v.name} was deleted, or you were removed from it. Its notes stay on this computer.`);
-      } else if (!kept && team && before.includes(team)) {
-        // Left or deleted under an earlier version, which ended the connection and kept the folder on the list.
-        keepSync(v.root, HOME, team);
-        await dropWorkspace(v.root, `${v.name} is no longer one of your teams. Its notes stay on this computer.`);
+        // Only the list of the account the folder was connected with says so: another account's says nothing.
+        await teamGone(v.root, `${v.name} was deleted, or you were removed from it. Its notes stay on this computer.`);
       }
     }
-    // What the earlier version remembered as stopped has been acted on: reconnected or taken off the list.
+    // What an earlier version remembered as stopped means nothing now: a folder says for itself whose it is.
     localStorage.removeItem("lokus.sync.stopped");
-    // Last to first, so the first team is the one left on screen.
+    // Last to first, so the first team is the one a person with nothing open is shown.
     for (const w of mine.filter((w) => !here.has(w.id)).reverse()) {
       try {
         // The folder it had here before, when this computer still knows it; otherwise the first
         // of "name", "name 2", ... that holds nothing and is no other team's.
         let name = w.name;
         let at = await defaultVault(false, name);
-        for (let n = 2; (await teamOf(at.root)) !== w.id && ((await teamOf(at.root)) || !at.free); n++) {
+        for (let n = 2; (await teamAt(at.root)) !== w.id && ((await teamAt(at.root)) || !at.free); n++) {
           at = await defaultVault(false, (name = `${w.name} ${n}`));
         }
-        const had = syncedWith(at.root) === w.id;
-        // The folder on screen is about to change: what was typed there is written first.
-        await saveAll();
-        // A note that could not be written keeps its folder on screen; the teams wait for the next look.
-        if (unsaved()) return;
-        let root = at.root;
-        await setVault(at.root, async () => {
-          const made = await defaultVault(true, name);
-          root = made.root;
-          return made;
-        });
-        if (app.get().vault?.root !== root) return;
-        if (!had) await connectSync(HOME, w.id, null, root);
+        if (app.get().vault) {
+          // Someone is working in a folder: the team's is made beside it and waits in the list.
+          await makeVault(at.root);
+          await keepTeam(at.root, { server: HOME, workspace: w.id, token: null, user: me });
+          notify(`${w.name} is in your workspaces now`);
+        } else {
+          let root = at.root;
+          await setVault(at.root, async () => {
+            const made = await defaultVault(true, name);
+            root = made.root;
+            return made;
+          });
+          if (app.get().vault?.root !== root) return;
+          await connectSync(HOME, w.id, null, root);
+          notify(`${w.name} is on this computer now`);
+        }
         track("action", { feature: "team", action: "team_brought" });
-        notify(`${w.name} is on this computer now`);
       } catch {
         // this team is tried again at the next look; the others still come
       }
@@ -228,25 +241,6 @@ export async function bringTeams(): Promise<void> {
     // no relay or no sign-in right now: asked again when the window is next returned to
   } finally {
     bringing = false;
-  }
-}
-
-/** The teams an earlier version remembered as stopped, left or deleted on this computer. Read once more, then forgotten. */
-function stoppedBefore(): string[] {
-  try {
-    return (JSON.parse(localStorage.getItem("lokus.sync.stopped") ?? "null") as string[] | null) ?? [];
-  } catch {
-    return [];
-  }
-}
-
-/** Whether a folder's saved connection is to the built-in relay with the account's sign-in, which is what `bringTeams` asked about. */
-function savedHome(root: string): boolean {
-  try {
-    const saved = JSON.parse(localStorage.getItem(`lokus.sync:${root}`) ?? "null") as { server?: string; token?: string | null } | null;
-    return saved?.server === HOME && saved.token === null;
-  } catch {
-    return false;
   }
 }
 
@@ -270,8 +264,8 @@ export function watchInvites(setup: () => boolean): void {
     }
     if (now === who) return;
     who = now;
-    // A team folder opened while signed out was refused: the sign-in is what it was waiting for.
-    if (now && app.get().sync.status === "refused") void resumeSync();
+    // A team folder opened while signed out is waiting for exactly this.
+    if (now) void wakeSync();
     lookForTeams();
   });
   let due = 0;
