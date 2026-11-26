@@ -4,7 +4,7 @@ name: Release
 #
 # To release: in the pull request, change the one line in the file VERSION (and, if you like,
 # add news/<version with dashes>.md). When it is merged, this builds Lokus for both kinds of
-# Mac (signed and notarized), for Windows and for Linux, and puts it out: the files on a
+# Mac (signed, and notarized when Apple accepts the credentials), for Windows and for Linux, and puts it out: the files on a
 # GitHub pre-release, the news post, and the word to every installed copy that there is a new
 # version. A merge that leaves VERSION alone releases nothing.
 #
@@ -111,7 +111,6 @@ jobs:
           APPLE_API_KEY_PATH: ${{ runner.temp }}/notary.p8
           APPLE_API_KEY_ID: ${{ secrets.LOKUS_APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.LOKUS_APPLE_API_ISSUER }}
-          LOKUS_MUST_NOTARIZE: "1"
           LOKUS_RUST: stable
           VITE_SUPABASE_URL: ${{ vars.LOKUS_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.LOKUS_SUPABASE_KEY }}
