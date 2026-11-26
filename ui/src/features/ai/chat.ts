@@ -567,6 +567,9 @@ export async function compactChat(note = ""): Promise<boolean> {
   const id = chatId;
   requestId = sending;
   chat.set({ busy: true, compacting: true });
+  // Set when this window took the file as it stands: it is then shown, not written again,
+  // so a reply another window is still working on keeps its place in the file.
+  let took = false;
   try {
     // Another window may have compacted this conversation already: take its result, do not redo it.
     await saving;
@@ -580,6 +583,7 @@ export async function compactChat(note = ""): Promise<boolean> {
     // nothing from the older copy this window held.
     const adopt = (kept: { updated: number; body: KeptBody }) => {
       const already = (kept.body.compactions ?? 0) > compactions;
+      took = true;
       history = kept.body.history ?? [];
       earlier = kept.body.earlier ?? [];
       seen = null;
@@ -663,7 +667,7 @@ export async function compactChat(note = ""): Promise<boolean> {
     if (sending === requestId) {
       requestId = null;
       chat.set({ busy: false, compacting: false });
-      keep();
+      if (!took) keep();
     }
   }
 }
