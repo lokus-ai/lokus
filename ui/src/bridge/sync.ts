@@ -78,7 +78,12 @@ export interface Team {
   workspace: string;
   token: string | null;
   user?: string | null;
+  /** This computer connected the folder to this relay itself. A folder can come from anyone and name any relay. */
+  known?: boolean;
 }
+
+/** The relay built into this app, where an account's teams are. */
+export const HOME = ((import.meta.env.VITE_LOKUS_RELAY as string | undefined) ?? "").replace(/\/+$/, "");
 
 /**
  * The team a folder belongs to, connected or not. It is kept in the folder. What an earlier

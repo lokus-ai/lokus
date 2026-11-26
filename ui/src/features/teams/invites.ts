@@ -2,7 +2,7 @@
 import { track } from "../../bridge/analytics";
 import { accessToken } from "../../bridge/auth";
 import { defaultVault, listVaults, makeVault } from "../../bridge/core";
-import { keepTeam, relay, syncBound, teamOf } from "../../bridge/sync";
+import { HOME, keepTeam, relay, syncBound, teamOf } from "../../bridge/sync";
 import { createStore } from "../../shell/store";
 import { allNotes, app, connectSync, notify, setVault, teamGone, wakeSync } from "../../shell/workspace";
 
@@ -16,7 +16,7 @@ import { allNotes, app, connectSync, notify, setVault, teamGone, wakeSync } from
  */
 
 /** The relay this build syncs through; empty when the build has none. */
-export const HOME = ((import.meta.env.VITE_LOKUS_RELAY as string | undefined) ?? "").replace(/\/+$/, "");
+export { HOME };
 
 export type Role = "owner" | "editor" | "viewer";
 
@@ -216,7 +216,10 @@ export async function bringTeams(): Promise<void> {
         for (let n = 2; (await teamAt(at.root)) !== w.id && ((await teamAt(at.root)) || !at.free); n++) {
           at = await defaultVault(false, (name = `${w.name} ${n}`));
         }
-        if (app.get().vault) {
+        if (app.get().vault?.root === at.root) {
+          // The open folder is the one: it is empty and has the team's name.
+          await connectSync(HOME, w.id, null, at.root);
+        } else if (app.get().vault) {
           // Someone is working in a folder: the team's is made beside it and waits in the list.
           await makeVault(at.root);
           await keepTeam(at.root, { server: HOME, workspace: w.id, token: null, user: me });
