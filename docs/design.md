@@ -475,10 +475,17 @@ been, so a note made as "Untitled" and given its title offline never meets a tea
   applies at once.
 - A socket does not outlive its sign-in. The app hands each fresh account token (about hourly)
   to the running connection; a socket that is not renewed is closed a minute after its token
-  runs out.
+  runs out. The account library renews by itself only in a window that is on screen, so the
+  connection asks for the sign-in every 20 seconds (`renew`), which renews one that is about
+  to run out. A connection turned away for a sign-in that ran out (`unauthorized`) does not
+  end: it says so (`signin`), keeps scanning the folder, and connects again the moment a new
+  sign-in is handed to it. Only `forbidden` (not a member) ends a connection.
 - A socket that has gone silent is not trusted. The app asks the relay to answer every 20
   seconds; after 50 seconds of hearing nothing (a laptop that slept, a network that changed) it
-  drops the connection and opens a new one, and what either side missed arrives then. While
+  drops the connection and opens a new one, and what either side missed arrives then. A check
+  that itself came late (the app was held still: the computer slept, or the system rested it
+  in the background) is not counted as the relay's silence: the relay is asked first, and a
+  connection that is still good carries on with no gap. While
   what it missed is still arriving the wait is ten minutes: that comes as one message, heard
   only when all of it is here, and a team's whole history over a slow link takes longer than 50
   seconds. That one message may be up to 1 GB; the 16 MB a websocket takes by default
@@ -507,24 +514,55 @@ command line) is told the vault is already syncing. A burst of local edits is se
 change a role, remove someone, invite by email and cancel invitations, leave or delete.
 There is no separate team window, and no way to stop syncing: a member's folder syncs.
 
+**A folder stays in its team.** The team a folder belongs to is kept in the folder itself,
+`.lokus/team.json` (the relay, the workspace and the account last connected;
+`crates/lokus-sync/src/team.rs`, the only code that writes it). A folder can be handed to
+anyone, so it holds no token: a token typed for a relay of one's own, and the fact that this
+computer connected the folder to that relay, are in the app's own `relays.json` (readable by
+the person only; `apps/desktop/src/sync.rs`). A folder naming a relay that is neither the one
+built in nor one in that file is not connected by itself, so the account's sign-in is never
+sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. It
+goes where the folder goes, so a moved or renamed folder is still its team's, and it is there
+when the window's own storage is not. What earlier versions kept in the window's storage
+(`lokus.sync:<folder>`) is moved into the folder at the next start and removed from the
+window. Two things take it away: the member pressing Leave or Delete, and the relay's own list
+of that member's teams no longer naming it. Nothing else does: a sign-in that ran out, a
+connection turned away, a relay that is down or answers with an error, a token that could not
+be fetched all leave the folder in its team, and whatever kept it from connecting is tried
+again every five seconds and whenever the window is returned to or someone signs in. A folder
+in a team is never given to another (`sync_keep` refuses), and its Team page never offers
+Share, Join or Reconnect: it shows the team, and what the connection is doing. The one thing a
+person can be asked for is a sign-in that is truly gone: the sidebar and the Team page then
+read "Sign in again", one button, and after signing in the same folder connects to the same
+team. A sign-in that merely could not be renewed just now (no network, the account service
+down) is still shown as signed in and reads "Offline". A relay of one's own that turns its
+typed token away is the only case left that reads "Sync stopped", with a place to type another.
+
+**The account sign-in is one file the app owns** (`account.json` beside the app's settings,
+readable by the person only), not the window's storage. The account library reads it each time
+it wants the sign-in and writes it whole on every renewal (`account_kept`, `account_keep`), so
+two running copies of Lokus renew one sign-in: a renewal key works once, and a copy renewing
+with a key the other had already spent made the account service end the sign-in for both. A
+sign-in an earlier version kept in the window is moved into the file at the next start and
+removed from the window. The app never removes the file itself; only signing out, or the
+account service refusing the renewal key for good, does.
+
+**The app never changes the open folder by itself.** Only the person does: by picking one,
+by joining an invitation "in its own folder", or by leaving or deleting the open folder's team.
+
 **Leaving, deleting, being removed.** When Leave or Delete succeeds, the connection ends, the
-folder is taken off this device's workspace list and the app shows the next workspace on the
-list, or the start page when there is none, where the same one sentence is shown (`dropWorkspace` in `ui/src/shell/workspace.ts`;
-`vault_forget` also closes the folder when it is the open one, so the next start does not open
-it again). The folder and its notes stay on disk, and the page and the notice say so. The same
-happens on another member's device: when its connection is refused it asks the relay which
-teams the person is in, and if this one is not among them it stops, says so once and drops the
-folder the same way; a team folder that is not open is dropped at the next look for teams, and so is one an
-earlier version left on the list after a Leave or Delete (it is named in that version's
-`lokus.sync.stopped`, which is read once and then removed). A
-refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped";
-the folder still belongs to its team, so the Team page then names that team with a Reconnect
-button and does not offer to share the folder or join by code (pressing Share there made a second,
-empty-handed team of the same name), and the connection is asked for again by itself each time
-the window is looked at. A
-folder with words that could not be written to disk is not dropped: it stays open with the words
-on screen, says the save failed, and reads "Sync stopped" with the relay's reason, since its
-connection has ended and nothing retries; it goes from the list at the next start. The note
+folder stops being the team's, is taken off this device's workspace list and the app shows the
+next workspace on the list, or the start page when there is none, where the same one sentence
+is shown (`dropWorkspace` in `ui/src/shell/workspace.ts`; `vault_forget` also closes the folder
+when it is the open one, so the next start does not open it again). The folder and its notes
+stay on disk, and the page and the notice say so. On another member's device, when its
+connection is refused as not a member, it asks the relay which teams the person is in, as the
+account the folder was last connected with. If this team is not among them the folder stops
+being the team's and says so once; it stays open and on the list, as a private folder
+(`teamGone`). A team folder that is not open is told the same at the next look for teams. No
+answer from the relay, or an answer for another account, decides nothing. A
+folder with words that could not be written to disk stays open with the words on screen and
+says the save failed. The note
 editor is one object for the life of the window, and the page it sits on comes and goes with
 the folder, so the editor is put onto each new page (`attachEditor`).
 
@@ -623,8 +661,9 @@ workspace: switching in one switches them all.
 **A team comes by itself.** Being in a team is enough to have it on a computer.
 On sign-in, when the app starts and when its window is returned to, the app asks the relay
 which teams the person is in (`GET /v1/workspaces`); each one with no folder on this computer
-gets a folder in Documents named after it, is opened and starts syncing
-(`bringTeams` in `ui/src/features/teams/invites.ts`). Nobody is asked. The rules that keep it
+gets a folder in Documents named after it, added to the workspace list as that team's
+(`bringTeams` in `ui/src/features/teams/invites.ts`). It syncs when it is opened; it is opened
+by itself only for someone with no folder open. Nobody is asked. The rules that keep it
 safe:
 
 - It never lands in a folder holding files, nor in one that syncs with another team, nor
@@ -637,20 +676,19 @@ safe:
   connection begun for the last one: none runs behind a folder it was not asked for.
 - A folder that already synced with this team here is used again, so asking twice makes
   nothing twice.
-- What was being typed is written to its own folder before the team's folder takes the
-  screen. When a note there cannot be written (it changed on disk meanwhile), the folder
-  stays on screen and the teams wait for the next look. A team that cannot be given a
-  folder does not hold up the others.
+- The folder on screen stays on screen: the team's folder is made beside it (`vault_make`)
+  and a notice says it is in the workspace list. A team that cannot be given a folder does
+  not hold up the others.
 - Nothing turns a team's syncing off, and nothing has to be pressed to start it. A folder
-  that synced with a team before (its `.lokus/sync.sqlite` names the team; `sync_bound`) is
-  connected again when a member opens it, including one whose syncing an earlier version had
-  stopped. "Sync this vault here" is left only for a relay of one's own, which knows nobody
+  that synced with a team before (its `.lokus/team.json`, or failing that its
+  `.lokus/sync.sqlite`, names the team; `sync_team`, `sync_bound`) is connected again when a
+  member opens it. "Sync this vault here" is left only for a relay of one's own, which knows nobody
   until its address and token are typed. Creating a team (Share) and joining by invitation
   stay the person's own acts.
-- A folder kept for a team the person is no longer in is taken off the workspace list (see
+- A folder kept for a team the person is no longer in stops being the team's (see
   "Leaving, deleting, being removed").
-- One connection is open at a time, the open folder's. With several teams the first is left
-  on screen; the others sync when their folder is opened from the switcher.
+- One connection is open at a time, the open folder's. The others sync when their folder is
+  opened from the switcher.
 - First-run setup chooses the first folder itself; teams are brought when it closes. With
   no relay or no sign-in nothing is made and nothing is said; it is asked again later.
 - A team folder opened while signed out starts syncing when the person signs in.

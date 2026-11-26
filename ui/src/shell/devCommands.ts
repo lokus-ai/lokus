@@ -191,15 +191,52 @@ const commands: Command[] = [
         return "registered";
       });
       const status = await timed(() => sync.syncStatus());
-      const root = app.get().vault?.root ?? "";
       return {
         ui: app.get().sync,
         account: app.get().account?.email ?? null,
-        saved: JSON.parse(localStorage.getItem(`lokus.sync:${root}`) ?? "null"),
+        saved: app.get().team,
         accessToken: { ms: token.ms, ok: token.ok, length: token.ok && typeof token.v === "string" ? token.v.length : token.v },
         onAccessToken: watch,
         rust: status,
       };
+    },
+  },
+  {
+    // Where things stand, read without asking the account service or the relay anything.
+    id: "debug.state",
+    title: "Say what is open and how it syncs",
+    hidden: true,
+    async run() {
+      const { app } = await import("./workspace");
+      const { sync, account, vault } = app.get();
+      const said = (selector: string) => [...document.querySelectorAll<HTMLElement>(selector)].map((el) => el.innerText.trim()).filter(Boolean);
+      return { vault: vault?.root ?? null, sync, account: account?.email ?? null, label: said(".account-text small")[0] ?? null, toast: said(".toast")[0] ?? null, team: said(".settings")[0] ?? null, buttons: said(".settings button, .overlay button, .toast button"), stored: Object.keys(localStorage).filter((k) => k.startsWith("lokus.sync") || k.endsWith("-auth-token")).sort() };
+    },
+  },
+  {
+    // Sign a made-up address in with its password, as the account window does: `email=` and `password=`.
+    id: "account.signIn",
+    title: "Sign in with an email and password",
+    hidden: true,
+    async run(args) {
+      const { signIn } = await import("../bridge/auth");
+      const { app } = await import("./workspace");
+      const { leaveOnboarding } = await import("../features/onboarding/onboarding");
+      const account = await signIn(String(args.email ?? ""), String(args.password ?? ""));
+      leaveOnboarding(true);
+      app.set({ account });
+      return { account: account.email };
+    },
+  },
+  {
+    // Put back what an earlier version kept in the window's own storage: `key=` and `value=` (none removes it).
+    id: "debug.storage",
+    title: "Set one thing in the window's storage",
+    hidden: true,
+    run(args) {
+      if (typeof args.value === "string") localStorage.setItem(String(args.key), args.value);
+      else localStorage.removeItem(String(args.key));
+      return { keys: Object.keys(localStorage).sort() };
     },
   },
   {

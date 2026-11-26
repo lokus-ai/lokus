@@ -107,7 +107,10 @@ export function keptAnswers(): Answers | null {
 
 /** Show the setup to someone who has never been through it. */
 export function startOnboarding(): void {
-  if (localStorage.getItem(DONE) === null) onboarding.set({ open: true });
+  if (localStorage.getItem(DONE) !== null) return;
+  // A folder is already open: this person has been through it, and only the window's memory of that was lost.
+  if (app.get().vault) return localStorage.setItem(DONE, new Date().toISOString());
+  onboarding.set({ open: true });
 }
 
 export function leaveOnboarding(skipped: boolean, at = ""): void {
