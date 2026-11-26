@@ -596,7 +596,7 @@ function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usag
   // before do not pass for it. A file another window wrote over without it has no such message: it is kept.
   // The file's writer orders a block's keys by name, so the two are compared with theirs ordered alike.
   const said = (message: unknown) =>
-    JSON.stringify(unsummarised(message), (_, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
+    JSON.stringify(unsummarised(message), (_, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
   const asked = said(resumed[0]);
   const since = [...(kept.earlier ?? []), ...(kept.history ?? [])].slice(resumedAt);
   const whole = !kept.unanswered && since.some((message) => said(message) === asked);
