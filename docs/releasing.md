@@ -48,7 +48,9 @@ password manager and in the CI secrets, nowhere else.
 
 1. In the pull request, change the one line in the file `VERSION` (say to `2.0.1`).
 2. Add `news/2-0-1.md` if there is something to tell people (see below).
-3. Merge it. `.github/workflows/release.yml` builds both kinds of Mac (signed and notarized),
+3. Merge it. `.github/workflows/release.yml` builds both kinds of Mac (signed, and notarized
+   when Apple accepts the credentials; when it does not, the log says why and the version goes
+   out unnotarized, which macOS asks about once on a copy downloaded by hand),
    a Windows installer and a Linux AppImage (`deploy/release/desktop.sh`; no certificate, only
    our update signature), puts the files on a GitHub pre-release, posts the news, and tells
    installed copies. The Windows installer and the AppImage are installed and opened on the
