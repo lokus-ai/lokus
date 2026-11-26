@@ -518,7 +518,8 @@ export function AiPanel() {
   const [slashAt, setSlashAt] = useState<number | null>(0);
   const slashWord = /^\/([a-z]*)$/i.exec(draft)?.[1]?.toLowerCase();
   const slashes =
-    slashWord === undefined || slashAt === null
+    // With a file attached the text is a message (see `send`), so Enter sends it as the button does.
+    slashWord === undefined || slashAt === null || files.length
       ? []
       : slashCommands().filter((c) => c.slash!.startsWith(slashWord));
   const scroll = useRef<HTMLDivElement>(null);
