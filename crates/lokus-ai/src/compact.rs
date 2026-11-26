@@ -114,19 +114,22 @@ pub fn split(messages: &[Value], limit: Option<u64>) -> usize {
     let starts: Vec<usize> = (1..messages.len())
         .filter(|&i| !is_result(&messages[i]))
         .collect();
-    // The request being worked on is never summarised away, however much its steps have read.
-    let Some(asked) = starts
-        .iter()
-        .copied()
-        .rfind(|&i| messages[i]["role"] == "user")
-    else {
-        return 0;
-    };
-    starts
+    let fits = starts
         .iter()
         .copied()
         .find(|&i| weight(&messages[i..]) <= keep)
-        .map_or(asked, |i| i.min(asked))
+        .or(starts.last().copied())
+        .unwrap_or(0);
+    // A request still being worked on (the conversation ends with the person's message or a
+    // tool's result) is never summarised away, however much its steps have read.
+    if messages.last().is_some_and(|last| last["role"] == "user") {
+        let asked = starts
+            .iter()
+            .copied()
+            .rfind(|&i| messages[i]["role"] == "user");
+        return fits.min(asked.unwrap_or(0));
+    }
+    fits
 }
 
 fn clip(text: &str, most: usize) -> String {
@@ -362,5 +365,7 @@ mod tests {
         .concat();
         assert_eq!(split(&messages, None), 1);
         assert_eq!(split(&messages[..1], None), 0);
+        // Answered, the one request can be summarised and its answer carried over.
+        assert_eq!(split(&messages[..2], None), 1);
     }
 }
