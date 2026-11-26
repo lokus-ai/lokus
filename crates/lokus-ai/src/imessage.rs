@@ -102,8 +102,8 @@ LEFT JOIN handle h ON h.ROWID = m.handle_id
 LEFT JOIN chat_message_join j ON j.message_id = m.ROWID
 LEFT JOIN chat c ON c.ROWID = j.chat_id
 WHERE m.associated_message_type = 0 AND m.item_type = 0
-  AND (?1 = '' OR c.display_name LIKE ?1 OR c.chat_identifier LIKE ?1
-       OR (c.ROWID IS NULL AND h.id LIKE ?1))
+  AND (?1 = '' OR c.display_name LIKE ?1 ESCAPE '\\' OR c.chat_identifier LIKE ?1 ESCAPE '\\'
+       OR (c.ROWID IS NULL AND h.id LIKE ?1 ESCAPE '\\'))
 ORDER BY m.date DESC
 LIMIT ?2";
 
@@ -113,10 +113,12 @@ const SEARCHED: i64 = 20_000;
 
 pub fn call(input: &Value) -> Result<String, String> {
     let db = open()?;
-    // A phone number or a year arrives as a number from the command line.
+    // The command line reads a value as JSON where it can, so a phone number or a year
+    // arrives as a number and the word "true" as a boolean: each is the text that was typed.
     let word = |key: &str| match &input[key] {
         Value::String(text) => text.trim().to_string(),
         Value::Number(number) => number.to_string(),
+        Value::Bool(said) => said.to_string(),
         _ => String::new(),
     };
     let (chat, search) = (word("chat"), word("search").to_lowercase());
@@ -124,7 +126,12 @@ pub fn call(input: &Value) -> Result<String, String> {
     let like = if chat.is_empty() {
         String::new()
     } else {
-        format!("%{chat}%")
+        // What was asked for is matched as written: "_" and "%" are not wildcards here.
+        let literal = chat
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        format!("%{literal}%")
     };
     let failed = |e: rusqlite::Error| format!("Messages could not be read: {e}");
     let mut query = db.prepare(QUERY).map_err(failed)?;
