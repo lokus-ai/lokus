@@ -582,7 +582,10 @@ function lastTurns(items: Item[], turns: number): Item[] {
 function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usage?: Usage | null; unanswered?: unknown }) {
   const theirs = kept.items ?? [];
   // The cut-off question this window took up on opening is in the file whole once its own window finished it.
-  const mine = kept.unanswered ? own.fresh : own.fresh.filter((message) => !resumed.includes(message));
+  // A file another window wrote over without it has neither the mark nor the question: it is kept.
+  const asked = JSON.stringify(resumed[0]);
+  const whole = !kept.unanswered && (kept.history ?? []).some((message) => JSON.stringify(message) === asked);
+  const mine = whole ? own.fresh.filter((message) => !resumed.includes(message)) : own.fresh;
   const settled = kept.unanswered ? theirs.slice(0, Math.max(0, theirs.map((i) => i.kind).lastIndexOf("user"))) : theirs;
   return {
     items: [...settled, ...own.items.filter((i) => !(i.kind === "notice" && i.text === SUMMARISED))],
