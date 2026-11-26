@@ -260,6 +260,7 @@ macro_rules! commands {
             ai::ai_mcp_token_save,
             ai::ai_mcp_login,
             ai::ai_mcp_logout,
+            ai::ai_open_disk_access,
             ai::ai_chatgpt_login,
             ai::ai_chatgpt_logout,
             ai::ai_send,

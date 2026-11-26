@@ -10,6 +10,7 @@ pub mod compact;
 pub mod config;
 pub mod error;
 pub mod files;
+pub mod imessage;
 pub mod mcp;
 pub mod mcp_login;
 pub mod own_api;

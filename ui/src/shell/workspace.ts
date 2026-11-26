@@ -1070,10 +1070,11 @@ function closeGone(path: string): void {
 }
 
 /** Rename or move a note or a folder; open tabs follow it. */
-export async function renameEntry(from: string, to: string): Promise<boolean> {
+export async function renameEntry(from: string, to: string, root?: string): Promise<boolean> {
   if (from === to) return true;
   const vault = app.get().vault;
-  if (!vault) return false;
+  // A name typed for a file of the folder that was open then is not given to one of another.
+  if (!vault || (root !== undefined && vault.root !== root)) return false;
   try {
     await saveAll();
     if (app.get().vault !== vault) return false;
@@ -1113,6 +1114,13 @@ export async function deleteEntry(path: string): Promise<boolean> {
       const shared = sessions.get(open)?.shared;
       if (shared) closeShared(shared);
       sessions.delete(open);
+    }
+    // A trashed file that was in front gives its place to another tab.
+    const { view, file } = app.get();
+    if (view === "file" && file && under(file, path)) {
+      // The rest of what was trashed goes first, so none of it is what comes forward.
+      app.set((s) => ({ tabs: s.tabs.filter((t) => t === file || !under(t, path) || sessions.has(t)) }));
+      await closeTab(file);
     }
     const { tabs, active } = app.get();
     const rest = tabs.filter((t) => !under(t, path) || sessions.has(t));

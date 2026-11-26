@@ -10,14 +10,15 @@ export interface McpServer {
   enabled: boolean;
 }
 
-/** A service offered by name. `ready` says whether a person can connect it today. */
+/** A service offered by name. `ready` says whether a person can connect it today. An empty `url` means it is read on this computer (iMessage), with nothing to sign in to. */
 export interface Connector {
   id: string;
   name: string;
   about: string;
   url: string;
   kind: string;
-  ready: "yes" | "needs_registration" | "not_built";
+  /** `mac_only`: read on the computer itself, and this one is not a Mac. */
+  ready: "yes" | "needs_registration" | "mac_only";
   token_url: string | null;
 }
 
@@ -106,6 +107,8 @@ export const saveMcpToken = (root: string, server: McpServer, token: string) => 
 export const aiConnectors = () => call<Connector[]>("ai_connectors");
 /** Sign in to a tool server in the browser and keep it among `root`'s connections; resolves when the browser has come back. */
 export const mcpLogin = (root: string, server: McpServer) => call<void>("ai_mcp_login", { server, root });
+/** Show the Full Disk Access list in System Settings. */
+export const openDiskAccess = () => call<void>("ai_open_disk_access");
 export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logout", { name, root });
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");

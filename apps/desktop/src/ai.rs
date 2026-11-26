@@ -171,7 +171,7 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
         "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi), "chatgpt": has_key(Provider::ChatGpt) },
         "tokens": names(&|s| secret(&mcp_account(s)).is_some()),
         "api_keys": config.apis.iter().filter(|a| secret(&api_account(a)).is_some()).map(|a| a.name.as_str()).collect::<Vec<_>>(),
-        "signed_in": names(&lokus_ai::mcp_login::signed_in),
+        "signed_in": names(&|s| lokus_ai::imessage::is(s) || lokus_ai::mcp_login::signed_in(s)),
         "plugin_servers": plugin_servers(core.as_deref()),
     }))
 }
@@ -235,6 +235,14 @@ pub async fn ai_mcp_check(
     root: String,
 ) -> Result<Vec<Value>, Value> {
     let server = load(&app)?.place(&id_at(&root)?, server);
+    // Messages on this Mac is read where it is: checking it is trying to read it.
+    if lokus_ai::imessage::is(&server) {
+        lokus_ai::imessage::check().map_err(|e| fail("no_access", e))?;
+        return Ok(lokus_ai::imessage::tools()
+            .iter()
+            .map(|t| json!({ "name": t.name.trim_start_matches("mcp__imessage__"), "description": t.description, "asks": t.writes }))
+            .collect());
+    }
     let connection = match token {
         Some(token) => lokus_ai::mcp::check_token(&server, &token)
             .await
@@ -447,9 +455,14 @@ pub async fn ai_mcp_login(app: AppHandle, server: McpServer, root: String) -> Re
     };
     let at = id_at(&root)?;
     let server = Config::own(&at, server);
-    lokus_ai::mcp_login::login(&server, show)
-        .await
-        .map_err(|e| e.body())?;
+    if lokus_ai::imessage::is(&server) {
+        // Nothing to sign in to: it is connected once Messages can be read.
+        lokus_ai::imessage::check().map_err(|e| fail("no_access", e))?;
+    } else {
+        lokus_ai::mcp_login::login(&server, show)
+            .await
+            .map_err(|e| e.body())?;
+    }
     let dir = config_dir(&app)?;
     Config::let_go(&dir, &at, "mcp", &server.name).map_err(|e| e.body())?;
     let mut seen = Config::load(&dir).seen_from(&at);
@@ -459,6 +472,12 @@ pub async fn ai_mcp_login(app: AppHandle, server: McpServer, root: String) -> Re
     }
     settle(&app, &root);
     Ok(())
+}
+
+/// Show the Full Disk Access list in System Settings, where reading Messages is allowed.
+#[tauri::command]
+pub fn ai_open_disk_access() {
+    let _ = open::that("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
 }
 
 #[tauri::command(async)]

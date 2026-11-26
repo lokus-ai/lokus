@@ -276,6 +276,8 @@ enum Source {
     Loader,
     /// A call to one of the team's own systems; `true` when it may change something.
     Api(bool),
+    /// Messages on this Mac.
+    Messages,
 }
 
 /// Connected services describe their tools at length: four of them came to 437,000 characters,
@@ -521,7 +523,7 @@ pub async fn send(
     let servers = config
         .mcp
         .iter()
-        .filter(|s| s.enabled)
+        .filter(|s| s.enabled && !crate::imessage::is(s))
         .chain(extra_servers.iter());
     // All at once: four services one after another was several seconds before the first word.
     let servers: Vec<&McpServer> = servers.collect();
@@ -556,6 +558,18 @@ pub async fn send(
         system.push_str(&told);
         for tool in crate::own_api::tools() {
             sources.push(Source::Api(tool.writes));
+            offered.push(tool);
+        }
+    }
+
+    // Messages on this Mac: read where it is, with no server to connect to.
+    if config
+        .mcp
+        .iter()
+        .any(|s| s.enabled && crate::imessage::is(s))
+    {
+        for tool in crate::imessage::tools() {
+            sources.push(Source::Messages);
             offered.push(tool);
         }
     }
@@ -611,6 +625,7 @@ pub async fn send(
                 Source::Server(index, _) => connections[*index].server.clone(),
                 Source::Loader => "loader".to_string(),
                 Source::Api(_) => "own_api".to_string(),
+                Source::Messages => crate::imessage::ID.to_string(),
             };
             let entry = by_source.entry(from).or_default();
             entry.0 += 1;
@@ -732,6 +747,7 @@ pub async fn send(
                                 }
                             }
                             Some(Source::Api(write)) => crate::own_api::call(&config, *write, &input).await,
+                            Some(Source::Messages) => crate::imessage::call(&input),
                             Some(Source::Vault) => match &core {
                                 Some(core) => tools::run(core, &name, &input),
                                 None => Err("no vault is open".into()),

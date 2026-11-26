@@ -122,6 +122,26 @@ and fails unless every file is byte-identical.
 
 Small things that make it a daily driver, all plain commands over plain files:
 
+- **Right-click menus:** every surface that shows a thing has one menu, drawn by the shared
+  `ui/src/shell/contextMenu.ts` (`openMenu`), and every item in it is a registered command sent
+  the captured thing and the folder that was open, never the current selection. A note or file
+  has the same menu wherever it is shown (`fileMenu`): Open (Close tab on a tab), Reveal in
+  sidebar, Rename, Ask the assistant about this (files that are not notes), Move to trash. That
+  covers sidebar files, tabs, the file viewer, linked mentions and the assistant's file cards (a
+  file still on an unsent message offers Remove from message in place of Rename and the
+  trash). A sidebar
+  folder and the sidebar's empty space offer New note and New folder there; a folder adds Rename
+  and Move to trash. A link in a note offers Open link, Open in new tab and Copy link; a
+  customer row Open, Archive or Bring back, and Delete… (which still asks); a chat message Copy
+  and, for an answer, Insert into note; tables and task cards keep the menus described with them.
+  Right-click, the Menu key or Shift+F10 opens it (in a note, for the link the caret is in);
+  arrows, Home, End, Enter and Space work it; Escape or Tab closes it and puts focus back. The
+  thing stays outlined while its menu is open. The menu closes, and its command is not run, when
+  the thing leaves the screen, another folder opens or Settings opens; each command checks the
+  folder again itself, and Rename typed for one folder's file is refused once another folder is
+  open. Rename from any surface is the sidebar's inline rename (`tree.rename`), so a name is
+  only ever changed inside the open folder. Text being written (the note's own text, text boxes,
+  selected text) keeps the system's menu, for spelling and the clipboard.
 - **Folders in the sidebar:** opening a file shows its parents unless the person has closed
   them. A manually closed folder stays closed through edits, tab changes and renaming it
   in the sidebar; its nested folder choices follow the rename too. The separate
@@ -796,7 +816,8 @@ confirms that everything it must not be able to do is refused.
   formats, not with a real model). The connected model writes a summary of the conversation
   so far (`lokus-ai/src/compact.rs`), and the conversation carries on from that summary plus
   the most recent turns (about 24,000 characters of them, fewer for a small model; the cut is
-  never between a tool call and its result, and never after the request being worked on). `/compact` asks for it by hand, and whatever
+  never between a tool call and its result, and never after a request still being worked
+  on). `/compact` asks for it by hand, and whatever
   follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
   as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
   the provider's last count is at 80% of the model's limit the next message is preceded by a
@@ -823,6 +844,11 @@ confirms that everything it must not be able to do is refused.
   `/context`); arrows, Enter, Escape and typing to filter work it. They are the same named
   commands the palette and `lokus app` run. A message that starts with "/" and names no
   command is sent as written.
+- **Conversations belong to the workspace they were had in.** Each is a file in that folder's
+  `.lokus/chats/` (never synced), so Earlier conversations lists only the open workspace's,
+  the briefing's "recent conversations" are that workspace's, and both hold after a switch
+  and after a restart. Nothing is kept in one place for all workspaces, so a conversation
+  from before stays in the folder it was had in and is found there; none is moved or copied.
 - **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
   explicitly picked @ notes/folders and attached files. Each conversation in each workspace
   has its own draft in this window's memory; Earlier conversations also lists messages not
@@ -880,7 +906,7 @@ confirms that everything it must not be able to do is refused.
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
 (`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key. The
 flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
-Not built yet: saving conversations to disk, and compaction of very long ones.
+Not built yet: compaction of very long conversations.
 
 ### Working on its own (built; tried on a real workspace)
 
@@ -888,7 +914,10 @@ Not built yet: saving conversations to disk, and compaction of very long ones.
 changed in Settings, Assistant), 90 seconds after a customer fact is pushed in, and with any
 note in `watches/` marked `type: watch` (`every:` minutes) added to what it looks for. A look is
 an ordinary request with one difference: every tool that would change something is refused.
-What it finds goes through two tools into `.lokus/noticed/` (never synced):
+What it finds goes through two tools into the vault's `noticed/` folder (synced with the
+team). The list in a window is the open workspace's: opening another workspace takes the
+previous one's findings down at once and reads the new one's, without waiting for the window
+to be looked at again.
 
 - `report_finding`: a plain statement, the one thing recommended, up to three facts with their
   sources, an `action` it can carry out later, and the kind of `situation` with no names in it.
@@ -972,9 +1001,28 @@ changes something asks first unless the person has turned asking off.
 The list is `lokus_ai::catalog`: an id, a name, an address, and whether a person can connect
 today. Checked against the live servers on 2026-11-13:
 
-| Ready now | Waiting for Lokus to be registered with the service | Not built |
-|---|---|---|
-| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+| Ready now | Waiting for Lokus to be registered with the service |
+|---|---|
+| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, Slack (in the workspace its app was made in; see `deploy/slack/`), and iMessage (on a Mac; read on the computer, see below) | Gmail, Google Calendar, Google Drive, Asana, HubSpot |
+
+**iMessage** is the one entry that is not a tool server (`lokus_ai::imessage`). Messages keeps
+every conversation in one SQLite file, `~/Library/Messages/chat.db`, and macOS lets an app read
+it only once the person has given that app Full Disk Access. Connect opens a screen that says
+so in one sentence and tries to read the file: if it can, Connect saves the connection among
+the workspace's others (name `imessage`, no address, nothing in the keychain); if it cannot,
+the screen says Full Disk Access is needed, with a link to that list in System Settings and
+"Check again". The assistant then has one tool, `mcp__imessage__messages` (optional `chat`,
+`search`, `limit`: 30 messages by default, 200 at most), which returns the newest messages
+oldest first, each with its time, conversation and writer. It reads only: the file is opened
+read-only, the tool never asks, and there is no way to send. The permission is looked at again
+on every read, so access taken away later is answered with the same sentence rather than a
+failure. A message whose words Messages kept only in its styled form (`attributedBody`) is
+still read; reactions are left out; an attachment is shown as `[attachment]`. People appear as
+the number or address Messages has: names from Contacts are not read. On Windows and Linux the
+entry is listed as "Mac only" in Settings and is not offered in first-run setup.
+`lokus imessage [chat=] [search=] [limit=]` prints what the tool returns. Verified on macOS 26
+against a made-up `chat.db` built from the real schema, and against the real (empty) file
+without Full Disk Access; never against an account with real conversations.
 
 GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
 support a personal access token without registering the host app; browser OAuth still needs a
