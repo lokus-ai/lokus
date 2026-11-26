@@ -1022,7 +1022,13 @@ function stopReply(preserve: boolean): Promise<unknown> {
   }
   if (unanswered) interrupted(unanswered, "The user stopped this reply before it was finished.");
   unanswered = null;
-  chat.set((s) => ({ busy: false, items: [...settle(s.items), { kind: "notice", text: "Stopped." }] }));
+  // A summary made on the way never arrived with its conversation, so it is not kept either.
+  const made = summarised ? chat.get().items.findLast((i) => i.kind === "summary") : null;
+  summarised = false;
+  chat.set((s) => ({
+    busy: false,
+    items: [...settle(s.items.filter((i) => !(i === made && i.kind === "summary" && i.auto) && !(made && i.kind === "notice" && i.text === SUMMARISED))), { kind: "notice", text: "Stopped." }],
+  }));
   return preserve ? keep() : saving;
 }
 
