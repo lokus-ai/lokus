@@ -8,6 +8,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::config::{Config, Provider};
+use lokus_core::Core;
+
 use crate::error::{AiError, Result};
 use crate::provider;
 
@@ -300,6 +302,7 @@ pub async fn compact(
     key: &mut String,
     messages: &[Value],
     note: &str,
+    core: Option<&Core>,
 ) -> Result<Compacted> {
     let at = split(messages, limit(config));
     if at == 0 {
@@ -309,7 +312,11 @@ pub async fn compact(
     let most = limit(config).map_or(TRANSCRIPT, |tokens| (tokens as usize) * 2);
     let mut asked = format!(
         "<conversation>\n{}\n</conversation>",
-        transcript(&messages[..at], most)
+        // An attached file is read as the model was sent it, so a note can keep what is only in the file.
+        transcript(
+            &crate::files::expand(core, &messages[..at], &mut Default::default()),
+            most
+        )
     );
     if !note.trim().is_empty() {
         asked.push_str(&format!(
