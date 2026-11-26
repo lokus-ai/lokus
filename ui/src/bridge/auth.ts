@@ -12,12 +12,50 @@ function supabase(): Promise<SupabaseClient> {
   if (!URL || !ANON) throw new Error("Accounts are not configured in this build.");
   client ??= import("@supabase/supabase-js").then(({ createClient }) =>
     // PKCE: a browser sign-in comes back with a one-time code, never with the session itself.
-    createClient(URL, ANON, { auth: { persistSession: true, autoRefreshToken: true, flowType: "pkce", detectSessionInUrl: false } }),
+    createClient(URL, ANON, { auth: { persistSession: true, autoRefreshToken: true, flowType: "pkce", detectSessionInUrl: false, storage: kept } }),
   );
   return client;
 }
 
 const SESSION_KEY = URL ? `sb-${new globalThis.URL(URL).hostname.split(".")[0]}-auth-token` : "";
+
+/** The sign-in as last read or written here. `undefined`: not read yet. */
+let held: string | null | undefined;
+/**
+ * Where the account library keeps the sign-in: one file the app owns, read each time it is
+ * wanted. A window's own storage is not shared with another running copy of Lokus, so each copy
+ * renewed with its own remembered key, the second one presented a key the first had already
+ * spent, and the account service ended the sign-in for both. It also went with the window's
+ * storage when that was lost. What an earlier version kept in the window is moved over once.
+ */
+const kept = {
+  async getItem(key: string): Promise<string | null> {
+    if (key !== SESSION_KEY) return localStorage.getItem(key);
+    let value: string | null;
+    try {
+      value = await invoke<string | null>("account_kept");
+      const old = localStorage.getItem(key);
+      if (old !== null) {
+        if (value === null) await invoke("account_keep", { session: (value = old) });
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // Not answered: what was last seen stands; nobody is signed out by a failed read.
+      return held ?? localStorage.getItem(key);
+    }
+    return (held = value);
+  },
+  async setItem(key: string, value: string): Promise<void> {
+    if (key !== SESSION_KEY) return localStorage.setItem(key, value);
+    held = value;
+    await invoke("account_keep", { session: value });
+  },
+  async removeItem(key: string): Promise<void> {
+    if (key !== SESSION_KEY) return localStorage.removeItem(key);
+    held = null;
+    await invoke("account_keep", { session: null });
+  },
+};
 
 export interface Account {
   id: string;
@@ -63,11 +101,34 @@ export function pretendAccount(email: string, token: string): Account | null {
 export async function currentAccount(): Promise<Account | null> {
   if (standIn) return standIn.account;
   // No stored session means nobody is signed in; skip loading the library.
-  if (!accountsAvailable || !localStorage.getItem(SESSION_KEY)) return null;
+  if (!accountsAvailable || !(await kept.getItem(SESSION_KEY))) return null;
   const { data } = await (await supabase()).auth.getSession();
-  const user = data.session?.user;
+  // A sign-in that could not be renewed just now (no network, the service down) is still a
+  // sign-in: the library keeps it and tries again. Only one it has thrown away is gone.
+  const user = data.session?.user ?? stored()?.user;
   return user ? account(user) : null;
 }
+
+/** Who the kept sign-in belongs to, with nothing asked of the account service: the window opens without waiting for it. */
+export async function keptAccount(): Promise<Account | null> {
+  if (standIn) return standIn.account;
+  if (!accountsAvailable) return null;
+  await kept.getItem(SESSION_KEY);
+  const user = stored()?.user;
+  return user ? account(user) : null;
+}
+
+/** The sign-in as it is kept on this computer, whether or not it could be renewed just now. */
+function stored(): { user?: Parameters<typeof account>[0] } | null {
+  try {
+    return JSON.parse(held ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+/** Whether someone is signed in here, even if the sign-in cannot be renewed this minute. */
+export const signedIn = (): boolean => Boolean(standIn) || Boolean(accountsAvailable && stored()?.user);
 
 export async function signIn(email: string, password: string): Promise<Account> {
   const { data, error } = await (await supabase()).auth.signInWithPassword({ email, password });
@@ -122,7 +183,7 @@ export async function onAccessToken(handler: (token: string) => void): Promise<(
 /** The signed-in account's token, for the relay. */
 export async function accessToken(): Promise<string | null> {
   if (standIn) return standIn.token;
-  if (!accountsAvailable || !localStorage.getItem(SESSION_KEY)) return null;
+  if (!accountsAvailable || !(await kept.getItem(SESSION_KEY))) return null;
   const { data } = await (await supabase()).auth.getSession();
   return data.session?.access_token ?? null;
 }

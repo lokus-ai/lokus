@@ -21,6 +21,8 @@ const USAGE: &str = "usage:
   lokus ai --vault DIR q=QUESTION [provider=anthropic|openai|chatgpt] [model=ID] [base_url=URL]
            [approve=true] [mcp=URL] [login=true]       (ask the assistant; the key comes from the keychain,
                                           or ANTHROPIC_API_KEY / OPENAI_API_KEY)
+  lokus imessage [chat=WHO] [search=TEXT] [limit=N]
+                                          (what the assistant reads from Messages on this Mac)
 
   lokus release version=V server=URL darwin-aarch64=URL [more builds…]
                                           (publish a version people update to; checks every signature first)
@@ -60,6 +62,16 @@ fn main() -> ExitCode {
     }
     if !in_app && parsed.command == "ai" {
         return ai(&parsed);
+    }
+    // What the assistant's Messages tool returns, with no model in between.
+    if !in_app && parsed.command == "imessage" {
+        return match lokus_ai::imessage::call(&parsed.args) {
+            Ok(text) => {
+                println!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(message) => fail(json!({ "code": "no_access", "message": message })),
+        };
     }
     let result = if in_app {
         run_in_app(&parsed)
@@ -254,7 +266,12 @@ fn sync(p: &Parsed) -> ExitCode {
         token: lokus_sync::client::Token::new(token),
     };
     let outcome = runtime.block_on(lokus_sync::client::run(vault, config, |event| {
-        println!("{event}")
+        println!("{event}");
+        // Nothing here renews a token: one the relay will not take ends the command.
+        if event["event"] == "signin" {
+            eprintln!("{}", json!({ "code": "sync", "message": event["reason"] }));
+            std::process::exit(1);
+        }
     }));
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
@@ -310,6 +327,8 @@ fn ai(p: &Parsed) -> ExitCode {
         extra_servers: Vec::new(),
         briefing: String::new(),
         app: None,
+        used: 0,
+        unattended: false,
     };
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,

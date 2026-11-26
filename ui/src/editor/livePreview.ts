@@ -1,4 +1,5 @@
 /** @part-of ui.editor */
+import { openMenu } from "../shell/contextMenu";
 import { syntaxTree } from "@codemirror/language";
 import { type EditorState, type Range, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from "@codemirror/view";
@@ -205,9 +206,10 @@ function build(view: EditorView, hooks: PreviewHooks): DecorationSet {
           // An address written on the line below stays as text: a line break cannot be folded away here.
           const folded = !touches(state, node.from, node.to) && text.startsWith("[") && close > 0 && !text.slice(close).includes("\n");
           // Folded to its words, a link to a web page is followed with a click, as a link to a note is.
-          const url = folded ? node.node.getChild("URL") : null;
+          const url = node.node.getChild("URL");
           const web = url ? address(state, url) : "";
-          out.push(Decoration.mark({ class: "cm-link", attributes: web.startsWith("https://") ? { "data-target": web } : undefined }).range(node.from, node.to));
+          // While its brackets show, a click places the caret; its menu still knows where it goes.
+          out.push(Decoration.mark({ class: "cm-link", attributes: web.startsWith("https://") ? { [folded ? "data-target" : "data-href"]: web } : undefined }).range(node.from, node.to));
           if (folded) {
             out.push(hide.range(node.from, node.from + 1));
             out.push(hide.range(node.from + close, node.to));
@@ -805,6 +807,19 @@ function foldFrontmatter(state: EditorState): Range<Decoration>[] {
  * with the arrow keys, or hold Option (Alt) and click. While its brackets are showing it is
  * being edited, so clicks inside it place the caret as usual.
  */
+const LINK = ".cm-wikilink, .cm-link[data-target], .cm-link[data-href]";
+
+function linkMenu(event: MouseEvent | KeyboardEvent, link: HTMLElement | null, focus: () => void): boolean {
+  const target = link?.dataset.target ?? link?.dataset.href;
+  if (!link || !target) return false;
+  return openMenu(event, "Link", [
+    { id: "note.follow", label: "Open link" },
+    { id: "note.followBeside", label: "Open in new tab" },
+    null,
+    { id: "clipboard.copy", label: "Copy link" },
+  ], { element: link, args: { target, text: target }, valid: () => (link.dataset.target ?? link.dataset.href) === target, focus });
+}
+
 function linkClicks(open: (target: string, newTab: boolean) => void) {
   return EditorView.domEventHandlers({
     mousedown(event) {
@@ -815,6 +830,13 @@ function linkClicks(open: (target: string, newTab: boolean) => void) {
       event.preventDefault();
       open(target, event.metaKey || event.ctrlKey);
       return true;
+    },
+    contextmenu: (event, view) => linkMenu(event, (event.target as HTMLElement).closest<HTMLElement>(LINK), () => view.focus()),
+    // From the keyboard the menu is of the link the caret is in.
+    keydown(event, view) {
+      if (event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return false;
+      const at = view.domAtPos(view.state.selection.main.head).node;
+      return linkMenu(event, (at instanceof HTMLElement ? at : at.parentElement)?.closest<HTMLElement>(LINK) ?? null, () => view.focus());
     },
   });
 }

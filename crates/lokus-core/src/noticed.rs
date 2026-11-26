@@ -44,8 +44,11 @@ fn move_in(vault: &Vault) {
     let _ = fs::create_dir_all(dir(vault));
     for entry in entries.filter_map(|e| e.ok()) {
         let to = dir(vault).join(entry.file_name());
-        if to.exists() || fs::rename(entry.path(), &to).is_err() {
+        // One that cannot be moved stays where it is, to be tried again; it is never thrown away.
+        if to.exists() {
             let _ = fs::remove_file(entry.path());
+        } else {
+            let _ = fs::rename(entry.path(), &to);
         }
     }
     let _ = fs::remove_dir(&old);

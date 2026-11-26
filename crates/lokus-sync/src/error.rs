@@ -19,4 +19,8 @@ pub enum Error {
     InUse,
     #[error("the relay refused: {0}")]
     Refused(String),
+    #[error("sign in again: {0}")]
+    SignIn(String),
+    #[error("this folder already belongs to another team")]
+    OtherTeam,
 }

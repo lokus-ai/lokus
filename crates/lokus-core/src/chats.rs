@@ -78,8 +78,28 @@ pub fn list(vault: &Vault) -> Result<Vec<Summary>> {
 }
 
 /// Keep a conversation as it now stands. `body` is whatever the app needs to show and continue it.
-pub fn save(vault: &Vault, id: &str, title: &str, updated: i64, body: &Value) -> Result<()> {
+///
+/// `seen` is the `updated` of the file the caller worked from (0 for none yet). When it is
+/// given and the file has moved on since, nothing is written: a summary made of an old copy
+/// in one window used to replace turns another window had added (2026-11-26).
+pub fn save(
+    vault: &Vault,
+    id: &str,
+    title: &str,
+    updated: i64,
+    body: &Value,
+    seen: Option<i64>,
+) -> Result<()> {
     let path = file(vault, id)?;
+    // One writer at a time, so the look and the write are not parted by another window's.
+    static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let on_disk = read(&path).map_or(0, |chat| chat["updated"].as_i64().unwrap_or(0));
+    if seen.is_some_and(|seen| seen != on_disk) {
+        return Err(CoreError::Conflict(
+            "this conversation was added to in another window".into(),
+        ));
+    }
     let title: String = title
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -126,15 +146,44 @@ mod tests {
             "First   question\nwith a break",
             100,
             &json!({ "items": [1] }),
+            None,
         )
         .unwrap();
-        save(&vault, "chat-2", "Second", 200, &json!({ "items": [2] })).unwrap();
+        save(
+            &vault,
+            "chat-2",
+            "Second",
+            200,
+            &json!({ "items": [2] }),
+            None,
+        )
+        .unwrap();
         save(
             &vault,
             "chat-1",
             "First question",
             300,
             &json!({ "items": [1, 3] }),
+            None,
+        )
+        .unwrap();
+        // A copy made from the file as it was at 100 does not replace what was added at 300.
+        let stale = save(
+            &vault,
+            "chat-1",
+            "First",
+            400,
+            &json!({ "items": [9] }),
+            Some(100),
+        );
+        assert!(matches!(stale, Err(CoreError::Conflict(_))));
+        save(
+            &vault,
+            "chat-1",
+            "First question",
+            300,
+            &json!({ "items": [1, 3] }),
+            Some(300),
         )
         .unwrap();
 
@@ -151,7 +200,7 @@ mod tests {
 
         // It lives in the folder that is never synced, and an id cannot name anywhere else.
         assert!(dir.path().join(".lokus/chats/chat-2.json").exists());
-        assert!(save(&vault, "../escape", "x", 1, &json!({})).is_err());
+        assert!(save(&vault, "../escape", "x", 1, &json!({}), None).is_err());
         assert!(load(&vault, "../../etc/passwd").is_err());
 
         delete(&vault, "chat-2").unwrap();

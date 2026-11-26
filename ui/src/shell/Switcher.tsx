@@ -8,8 +8,6 @@ import { useStore } from "./store";
 import { app, chooseVault, notify, setVault } from "./workspace";
 
 const said = (e: unknown) => (e instanceof Error ? e.message : String(e));
-/** Whether a workspace is shared with a team: that is kept with the folder's sync settings. */
-const shared = (root: string) => localStorage.getItem(`lokus.sync:${root}`) !== null;
 const letter = (name: string) => (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpperCase();
 
 /**
@@ -19,7 +17,6 @@ const letter = (name: string) => (name.match(/[\p{L}\p{N}]/u)?.[0] ?? "L").toUpp
  */
 export function WorkspaceSwitcher() {
   const vault = useStore(app, (s) => s.vault);
-  const sync = useStore(app, (s) => s.sync);
   const waiting = useStore(invited, (s) => s.waiting);
   const joining = useStore(invited, (s) => s.joining);
   const [open, setOpen] = useState(false);
@@ -64,7 +61,7 @@ export function WorkspaceSwitcher() {
     void join(w, "new").then(close, (e) => notify(said(e)));
   };
   // Read again whenever sync changes, since sharing or stopping rewrites the saved setting.
-  const team = Boolean(vault && sync && shared(vault.root));
+  const team = useStore(app, (s) => Boolean(s.team && s.team.root === s.vault?.root));
 
   return (
     <div className="switcher" ref={box}>
@@ -99,7 +96,7 @@ export function WorkspaceSwitcher() {
                 <button role="menuitem" title={v.root} onClick={() => go(v.root)}>
                   <span className="vault-badge">{letter(v.name)}</span>
                   <span className="tree-name">{v.name}</span>
-                  {shared(v.root) && <span className="switcher-tag">Team</span>}
+                  {v.team && <span className="switcher-tag">Team</span>}
                   {v.root === vault?.root && <Icon name="check" size={13} />}
                 </button>
                 {v.root !== vault?.root && (

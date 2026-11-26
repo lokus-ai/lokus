@@ -184,6 +184,16 @@ fn vault_default(app: AppHandle, open: bool, name: Option<String>) -> Result<Val
     open_vault(&app, &folder.to_string_lossy(), None)
 }
 
+/// Make a folder and put it on the workspace list without opening it: a team that arrives
+/// gets its folder, and the folder on screen stays the one the person chose.
+#[tauri::command(async)]
+fn vault_make(app: AppHandle, root: String) -> Result<(), Value> {
+    std::fs::create_dir_all(&root)
+        .map_err(|e| json!({ "code": "io", "message": format!("Could not make {root}: {e}") }))?;
+    vaults::remember(&app, std::path::Path::new(&root));
+    Ok(())
+}
+
 /// The vault that is open, reopening the last one on first call.
 #[tauri::command(async)]
 fn vault_current(app: AppHandle, shell: State<'_, Shell>) -> Option<Value> {
@@ -243,6 +253,9 @@ macro_rules! commands {
             sync::sync_connect,
             sync::sync_disconnect,
             sync::sync_bound,
+            sync::sync_team,
+            sync::sync_keep,
+            sync::sync_forget,
             sync::sync_token,
             sync::sync_status,
             sync::sync_doc,
@@ -251,6 +264,8 @@ macro_rules! commands {
             sync::sync_awareness,
             sync::relay_call,
             account::account_browser_login,
+            account::account_kept,
+            account::account_keep,
             ai::ai_settings,
             ai::ai_settings_save,
             ai::ai_secret_set,
@@ -260,9 +275,11 @@ macro_rules! commands {
             ai::ai_mcp_token_save,
             ai::ai_mcp_login,
             ai::ai_mcp_logout,
+            ai::ai_open_disk_access,
             ai::ai_chatgpt_login,
             ai::ai_chatgpt_logout,
             ai::ai_send,
+            ai::ai_compact,
             ai::ai_stop,
             ai::ai_approve,
             ai::ai_act_done,
@@ -279,6 +296,7 @@ macro_rules! commands {
             #[cfg(desktop)]
             menus::menu_enabled,
             vault_default,
+            vault_make,
             vaults::vault_list,
             vaults::vault_forget,
             background::background_get,
