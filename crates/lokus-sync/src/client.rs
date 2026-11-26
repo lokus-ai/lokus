@@ -144,14 +144,15 @@ pub async fn serve(
     let arrived = Notify::new();
     let connection = async {
         loop {
+            let used = config.token.get();
             match session(&engine, &config, &mut changes, &report, &moved, &arrived).await {
                 // The sign-in ran out (the computer slept, or nothing renewed it). That is not
                 // the end of syncing: say so, and carry on the moment a new one is handed over.
                 Err(Error::SignIn(reason)) => {
                     report(json!({ "event": "signin", "reason": reason }));
-                    // Asked again with a new one at once, and with whatever there is now and then:
-                    // the one refused may already have been replaced when the refusal arrived.
-                    let stale = config.token.get();
+                    // Asked again the moment there is another than the one refused (it may have
+                    // been replaced before the refusal arrived), and with whatever there is now and then.
+                    let stale = used;
                     let waited = tokio::time::Instant::now();
                     loop {
                         let _ = with(&engine, |e| e.scan());

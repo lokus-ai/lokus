@@ -493,7 +493,8 @@ async function renewSignIn(root: string, must: boolean): Promise<void> {
     return;
   }
   const fresh = await accessToken().catch(() => null);
-  if (app.get().vault?.root !== root) return;
+  // Connected meanwhile (someone signed in while this was asking): nothing is wanted any more.
+  if (app.get().vault?.root !== root || (must && wanting !== root)) return;
   if (fresh && fresh !== syncSignIn) {
     syncSignIn = fresh;
     return void syncToken(fresh);
