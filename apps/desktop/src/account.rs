@@ -90,7 +90,10 @@ pub fn write_private(file: &std::path::Path, bytes: &[u8]) -> std::io::Result<()
         std::fs::create_dir_all(dir)?;
     }
     let draft = file.with_extension(format!("json.{}", std::process::id()));
-    // Made new, never opened: what is already there, a link or a file others can read, is not written into.
+    // Made new, never opened: what is already there, a link or a file others can read, is not written
+    // into. One at a time, so two saves a moment apart do not take each other's draft away.
+    static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
     let _ = std::fs::remove_file(&draft);
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create_new(true);
