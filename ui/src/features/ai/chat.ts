@@ -567,6 +567,16 @@ let turnsSaved = 0;
 let merges = 0;
 const SUMMARISED = "Earlier messages were summarised to make room.";
 
+/** How many messages the file held, summarised ones included, when the cut-off question was taken up. */
+let resumedAt = 0;
+
+/** What a message says, as blocks, without the summary a compaction put at its front. */
+function unsummarised(message: unknown): unknown[] {
+  const content = (message as { content?: unknown } | undefined)?.content;
+  const blocks: { type?: string; text?: unknown }[] = Array.isArray(content) ? content : [{ type: "text", text: content }];
+  return blocks.filter((b) => !(b.type === "text" && typeof b.text === "string" && b.text.startsWith("<conversation_summary>")));
+}
+
 /** The shown items from the person's `turns`-th turn from the end onward. */
 function lastTurns(items: Item[], turns: number): Item[] {
   if (!turns) return [];
@@ -582,9 +592,11 @@ function lastTurns(items: Item[], turns: number): Item[] {
 function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usage?: Usage | null; unanswered?: unknown }) {
   const theirs = kept.items ?? [];
   // The cut-off question this window took up on opening is in the file whole once its own window finished it.
-  // A file another window wrote over without it has neither the mark nor the question, summarised or not: it is kept.
-  const asked = JSON.stringify(resumed[0]);
-  const whole = !kept.unanswered && [...(kept.earlier ?? []), ...(kept.history ?? [])].some((message) => JSON.stringify(message) === asked);
+  // It is looked for after what the file held on opening, summarised since or not, so the same words asked
+  // before do not pass for it. A file another window wrote over without it has no such message: it is kept.
+  const asked = JSON.stringify(unsummarised(resumed[0]));
+  const since = [...(kept.earlier ?? []), ...(kept.history ?? [])].slice(resumedAt);
+  const whole = !kept.unanswered && since.some((message) => JSON.stringify(unsummarised(message)) === asked);
   const mine = whole ? own.fresh.filter((message) => !resumed.includes(message)) : own.fresh;
   const settled = kept.unanswered ? theirs.slice(0, Math.max(0, theirs.map((i) => i.kind).lastIndexOf("user"))) : theirs;
   return {
@@ -895,6 +907,7 @@ export async function openChat(id: string): Promise<void> {
     const steps = since.flatMap((i) => (i.kind === "tool" && i.status === "ok" ? [i.name] : []));
     const said = since.map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
     resumed = [cut, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(This reply was interrupted before it finished. Steps that had completed: ${steps.length ? steps.join(", ") : "none"}. Check what is already done before doing it again. The request above still stands.)` }] }];
+    resumedAt = history.length + (kept.body.earlier?.length ?? 0);
     history = [...history, ...resumed];
     items = [...items.map((i) => (i.kind === "tool" && (i.status === "running" || i.status === "asking") ? { ...i, status: "failed" as const, result: "The reply was interrupted before this finished" } : i)), { kind: "notice", text: "This reply was cut off before it finished. Say “keep going” and it carries on from here." }];
   }
