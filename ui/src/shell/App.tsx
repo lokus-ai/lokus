@@ -170,7 +170,7 @@ function Sidebar() {
   );
 }
 
-const SYNC_LABEL = { off: "Sync is off", online: "Synced", connecting: "Connecting…", offline: "Offline", refused: "Sync stopped" } as const;
+const SYNC_LABEL = { off: "Sync is off", online: "Synced", connecting: "Connecting…", offline: "Offline", refused: "Sync stopped", signin: "Sign in again" } as const;
 
 /** The foot of the sidebar: who is signed in and how sync is doing, with the account's actions in a menu. */
 function AccountBar({ act }: { act(id: string): void }) {
@@ -208,7 +208,7 @@ function AccountBar({ act }: { act(id: string): void }) {
       )}
       <button
         className={`account-row${menu ? " open" : ""}`}
-        onClick={() => (account || !accountsAvailable ? setMenu((m) => !m) : act("account.signIn"))}
+        onClick={() => ((account || !accountsAvailable) && sync.status !== "signin" ? setMenu((m) => !m) : act("account.signIn"))}
       >
         <span className="account-avatar">
           {account ? <Avatar name={name} picture={me?.picture} size={28} /> : <Icon name="account" />}
@@ -216,7 +216,7 @@ function AccountBar({ act }: { act(id: string): void }) {
         </span>
         <span className="account-text">
           <span className="tree-name">{account ? name : accountsAvailable ? "Sign in" : "This device"}</span>
-          <small className="tree-name">{account || !accountsAvailable ? SYNC_LABEL[sync.status] : "For sync and teams"}</small>
+          <small className="tree-name">{account || !accountsAvailable || sync.status === "signin" ? SYNC_LABEL[sync.status] : "For sync and teams"}</small>
         </span>
       </button>
       <NewsButton />

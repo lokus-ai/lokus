@@ -4,12 +4,12 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { accessToken } from "../../bridge/auth";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
-import { allNotes, app, connectSync, keptTeam, leaveWorkspace, resumeSync } from "../../shell/workspace";
+import { allNotes, app, connectSync, leaveWorkspace, resumeSync } from "../../shell/workspace";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
 import { type Invite, InviteDialog, InvitedList, PendingRows } from "./Invite";
-import { HOME, lookForInvites, type Role } from "./invites";
+import { HOME, lookForInvites, type Role, whileMaking } from "./invites";
 
 interface Workspace {
   id: string;
@@ -28,6 +28,7 @@ const STATUS: Record<string, string> = {
   connecting: "Connecting…",
   online: "Up to date.",
   offline: "Offline. Your edits are kept and sent when the connection returns.",
+  signin: "Sign in again to keep syncing. Your edits are kept and sent once you have.",
 };
 /** Settings, Team: sync this vault with other people, and say who they are and what they may do. */
 export function TeamSettings() {
@@ -57,9 +58,12 @@ export function TeamSettings() {
   }, [account]);
 
   const token = accountToken ?? (typedToken.trim() || null);
-  const connected = current.status === "connecting" || current.status === "online" || current.status === "offline";
-  // A folder that belongs to a team still does when its connection was refused: it is reconnected, never shared anew.
-  const kept = connected ? null : keptTeam();
+  const linked = useStore(app, (s) => (s.team && s.team.root === s.vault?.root ? s.team : null));
+  // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
+  const refused = current.status === "refused";
+  const connected = !refused && (current.status !== "off" || linked !== null);
+  // Only a relay of one's own that turned its typed token away waits for the person: they type another.
+  const kept = refused ? linked : null;
   const here = workspaces?.find((w) => w.id === (kept?.workspace ?? current.workspace));
   const owner = current.role === "owner";
   const base = `/v1/workspaces/${current.workspace}`;
@@ -110,7 +114,9 @@ export function TeamSettings() {
   // not a member never replaces the saved one.
   const reconnect = () => {
     const typed = accountToken ? "" : typedToken.trim();
-    if (!kept || !typed) return void resumeSync();
+    // A relay of one's own with no token kept for it and no account: only a typed token opens it.
+    if (kept && !typed && !accountToken && !kept.token && kept.server.replace(/\/+$/, "") !== HOME) return setMessage("Type this relay's access token to reconnect.");
+    if (!kept || !typed) return void resumeSync(true);
     if (server.trim().replace(/\/+$/, "") !== kept.server.replace(/\/+$/, "") || !here) return setMessage("That token does not open this team on its server.");
     void connectSync(kept.server, kept.workspace, typed);
   };
@@ -118,11 +124,12 @@ export function TeamSettings() {
   const create = async (e: FormEvent) => {
     e.preventDefault();
     if (!token) return;
-    const made = await attempt(() => relay<Workspace>(server, token, "POST", "/v1/workspaces", { name }));
-    if (made) {
+    await whileMaking(async () => {
+      const made = await attempt(() => relay<Workspace>(server, token, "POST", "/v1/workspaces", { name }));
+      if (!made) return;
       setName("");
-      connect(made.id);
-    }
+      await connectSync(server, made.id, accountToken ? null : token);
+    });
   };
   const join = async (e: FormEvent) => {
     e.preventDefault();
@@ -152,7 +159,7 @@ export function TeamSettings() {
     setConfirming(null);
   };
   const owners = members.filter((m) => m.role === "owner").length;
-  const teamName = here?.name ?? "Workspace";
+  const teamName = here?.name ?? vault?.name ?? "Workspace";
   // Only what is in this folder is shared. Notes in a person's other workspaces are not.
   const tree = useStore(app, (st) => st.tree);
   const shared = tree ? allNotes().length : 0;
@@ -164,13 +171,20 @@ export function TeamSettings() {
           <div className="team-head-main">
             <strong>{teamName}</strong>
             <small>
-              <span className={`sync-dot ${current.status}`} /> {STATUS[current.status]} {shared === 0 ? "Nothing is in this workspace yet." : `${shared} ${shared === 1 ? "note" : "notes"} in this workspace.`}
+              <span className={`sync-dot ${current.status}`} /> {STATUS[current.status] ?? STATUS.connecting} {shared === 0 ? "Nothing is in this workspace yet." : `${shared} ${shared === 1 ? "note" : "notes"} in this workspace.`}
             </small>
           </div>
-          {owner && token && (
-            <button className="primary team-invite-button" onClick={() => setInviting(true)}>
-              Invite people
+          {current.status === "signin" ? (
+            <button className="primary team-invite-button" onClick={() => app.set({ settings: null, accountDialog: true })}>
+              Sign in again
             </button>
+          ) : (
+            owner &&
+            token && (
+              <button className="primary team-invite-button" onClick={() => setInviting(true)}>
+                Invite people
+              </button>
+            )
           )}
         </div>
         {inviting && owner && token && (

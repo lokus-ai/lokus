@@ -10,14 +10,15 @@ export interface McpServer {
   enabled: boolean;
 }
 
-/** A service offered by name. `ready` says whether a person can connect it today. */
+/** A service offered by name. `ready` says whether a person can connect it today. An empty `url` means it is read on this computer (iMessage), with nothing to sign in to. */
 export interface Connector {
   id: string;
   name: string;
   about: string;
   url: string;
   kind: string;
-  ready: "yes" | "needs_registration" | "not_built";
+  /** `mac_only`: read on the computer itself, and this one is not a Mac. */
+  ready: "yes" | "needs_registration" | "mac_only";
   token_url: string | null;
 }
 
@@ -61,7 +62,8 @@ export type AiEvent =
   | { type: "text"; delta: string }
   | { type: "tool"; id: string; name: string; input: Record<string, unknown>; asks: boolean }
   | { type: "tool_done"; id: string; ok: boolean; result: string }
-  | { type: "notice"; message: string };
+  | { type: "notice"; message: string }
+  | { type: "compacted"; summary: string; kept_turns: number };
 
 export interface AiOutcome {
   /** Messages to add to the conversation. Opaque here; they are sent back as they are. */
@@ -75,6 +77,17 @@ export interface AiOutcome {
   tools: string[];
   /** What the first request was made of, in characters, by part. */
   context: { instructions: number; briefing: number; conversation: number; tools: Record<string, { count: number; chars: number }> };
+  /** Every message this request added, whether or not a summary was made on the way. */
+  turn: unknown[];
+  /** Set when the conversation was compacted on the way: carry on from this, then `messages`. */
+  replaced: unknown[] | null;
+  /** How many messages from the front of what was sent the summary stands in for. */
+  dropped: number;
+  /** Tokens the provider counted for the last request and its answer (0 when it does not say), and the model's limit when known. */
+  used: number;
+  limit: number | null;
+  /** What the conversation is made of, in characters by kind. */
+  parts: Record<string, number>;
 }
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -96,12 +109,37 @@ export const saveMcpToken = (root: string, server: McpServer, token: string) => 
 export const aiConnectors = () => call<Connector[]>("ai_connectors");
 /** Sign in to a tool server in the browser and keep it among `root`'s connections; resolves when the browser has come back. */
 export const mcpLogin = (root: string, server: McpServer) => call<void>("ai_mcp_login", { server, root });
+/** Show the Full Disk Access list in System Settings. */
+export const openDiskAccess = () => call<void>("ai_open_disk_access");
 export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logout", { name, root });
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
 /** `briefing` is the conversation's standing context; send the same text for every message of a chat. `root` is the workspace it was asked in: if another is open by now, the request is refused. */
-export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string) => call<AiOutcome>("ai_send", { chat, messages, briefing, root });
+export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string, used = 0, unattended = false) => call<AiOutcome>("ai_send", { chat, messages, briefing, root, used, unattended });
+
+/** A conversation after its earlier part was summarised: what to carry on from, and the summary. */
+export interface AiCompacted {
+  messages: unknown[];
+  summary: string;
+  /** How many of the person's own turns were carried over whole, after the summary. */
+  kept_turns: number;
+  /** How many messages from the front of what was sent the summary stands in for. */
+  replaced: number;
+  input_tokens: number;
+  output_tokens: number;
+  limit: number | null;
+  parts: Record<string, number>;
+}
+/** `chat` names this request (for Stop); `conversation` is what two windows must not compact at once. */
+export const aiCompact = (
+  chat: string,
+  conversation: string,
+  messages: unknown[],
+  note: string,
+  root?: string,
+) =>
+  call<AiCompacted>("ai_compact", { chat, conversation, messages, note, root });
 /** Tell the assistant what happened when the window carried out one of its app tools. */
 export const aiActDone = (id: string, ok: boolean, result: string) => call<void>("ai_act_done", { id, ok, result });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });

@@ -240,6 +240,88 @@ pub fn sync_bound(sync: State<'_, Sync>, root: String) -> Option<String> {
     lokus_sync::engine::bound(root)
 }
 
+/// A folder's team as the window is told it: what the folder says, and what this computer has
+/// for that relay. A folder can come from anyone, so it carries no token, and a relay it names
+/// is `known` only when this computer connected the folder to it.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct TeamHere {
+    #[serde(flatten)]
+    team: lokus_sync::team::Team,
+    token: Option<String>,
+    #[serde(default)]
+    known: bool,
+}
+
+type Relays = std::collections::BTreeMap<String, Option<String>>;
+
+fn relays_file(app: &AppHandle) -> Option<std::path::PathBuf> {
+    Some(app.path().app_config_dir().ok()?.join("relays.json"))
+}
+
+/// The teams this computer connected a folder to, each with the token typed for it, if one was.
+fn relays(app: &AppHandle) -> Relays {
+    relays_file(app)
+        .and_then(|file| std::fs::read(file).ok())
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn relay_key(team: &lokus_sync::team::Team) -> String {
+    format!("{} {}", team.server.trim_end_matches('/'), team.workspace)
+}
+
+fn keep_relays(app: &AppHandle, relays: &Relays) -> std::io::Result<()> {
+    let file = relays_file(app).ok_or(std::io::ErrorKind::NotFound)?;
+    crate::account::write_private(&file, &serde_json::to_vec(relays).unwrap_or_default())
+}
+
+/// The team a folder belongs to, connected or not. It is kept in the folder.
+#[tauri::command(async)]
+pub fn sync_team(app: AppHandle, root: String) -> Option<TeamHere> {
+    let team = lokus_sync::team::kept(std::path::Path::new(&root))?;
+    let here = relays(&app).get(&relay_key(&team)).cloned();
+    Some(TeamHere {
+        team,
+        known: here.is_some(),
+        token: here.flatten(),
+    })
+}
+
+/// Remember the team a folder belongs to. Refused for a folder that is already another team's.
+#[tauri::command(async)]
+pub fn sync_keep(app: AppHandle, root: String, team: TeamHere) -> Result<bool, Value> {
+    let root = std::path::Path::new(&root);
+    // False for a folder that is not there any more: there is nowhere to keep it.
+    if !root.is_dir() {
+        return Ok(false);
+    }
+    if lokus_sync::team::kept(root).is_some_and(|old| old.workspace != team.team.workspace) {
+        return Err(fail("team", lokus_sync::Error::OtherTeam));
+    }
+    // The token first: a folder never says it is a team's while its token went unkept.
+    let mut all = relays(&app);
+    let key = relay_key(&team.team);
+    if all.get(&key) != Some(&team.token) {
+        all.insert(key, team.token);
+        keep_relays(&app, &all).map_err(|e| fail("team", e))?;
+    }
+    lokus_sync::team::keep(root, &team.team).map_err(|e| fail("team", e))?;
+    Ok(true)
+}
+
+/// The folder is no longer a team's: the member left, or the relay says they are not in it.
+#[tauri::command(async)]
+pub fn sync_forget(app: AppHandle, root: String) {
+    let root = std::path::Path::new(&root);
+    if let Some(team) = lokus_sync::team::kept(root) {
+        let mut all = relays(&app);
+        if all.remove(&relay_key(&team)).is_some() {
+            let _ = keep_relays(&app, &all);
+        }
+    }
+    lokus_sync::team::forget(root);
+}
+
 /// The shared document behind a note, for an editor that is opening it.
 #[tauri::command(async)]
 pub fn sync_doc(sync: State<'_, Sync>, path: String) -> Result<Option<Value>, Value> {

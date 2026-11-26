@@ -202,6 +202,12 @@ pub struct Request {
     pub briefing: String,
     /// Runs a tool in the app's window; absent when there is no window (the command line).
     pub app: Option<AppRunner>,
+    /// How many tokens the provider counted the last time this conversation was sent; 0 when it
+    /// has not said. Near the model's limit, the conversation is compacted before it is sent.
+    pub used: u64,
+    /// Nobody asked: the assistant is looking by itself (Noticed). What is private to the
+    /// person and was not asked about, their Messages, is then not on offer.
+    pub unattended: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -223,6 +229,8 @@ pub enum Event {
     },
     /// Something the person should know that is not part of the answer.
     Notice { message: String },
+    /// The conversation got too long and its earlier part was summarised to make room.
+    Compacted { summary: String, kept_turns: usize },
 }
 
 #[derive(Debug, Serialize)]
@@ -240,6 +248,20 @@ pub struct Outcome {
     /// How big the first request was, by part, in characters: the instructions, each source of
     /// tools with how many it offered, and the conversation. For seeing what a request is made of.
     pub context: Value,
+    /// Set when the conversation was compacted on the way: the conversation to carry on from,
+    /// in place of everything sent in. `messages` are then added to this.
+    pub replaced: Option<Vec<Value>>,
+    /// Every message this request added, those from before a compaction on the way too, for a
+    /// window that has to put its turn after another window's instead of taking the summary.
+    pub turn: Vec<Value>,
+    /// How many messages from the front of the conversation the summary stands in for.
+    pub dropped: usize,
+    /// How full the model's room is after this reply: the tokens the provider counted for the
+    /// last request and its answer (0 when it does not say), the model's limit when known, and
+    /// what the conversation is made of, in characters by kind.
+    pub used: u64,
+    pub limit: Option<u64>,
+    pub parts: Value,
 }
 
 /// Asks the person to allow a tool call; resolves to their answer.
@@ -260,6 +282,8 @@ enum Source {
     Loader,
     /// A call to one of the team's own systems; `true` when it may change something.
     Api(bool),
+    /// Messages on this Mac.
+    Messages,
 }
 
 /// Connected services describe their tools at length: four of them came to 437,000 characters,
@@ -442,6 +466,63 @@ pub async fn credential(provider: Provider) -> Result<String> {
     }
 }
 
+/// Ask the model for its next turn. Every request goes through here, a reply and a summary
+/// alike, so both renew a ChatGPT sign-in the same way: a token can run out under a long
+/// answer, and is renewed and the request asked once more.
+pub(crate) async fn turn(
+    http: &provider::Client,
+    config: &Config,
+    key: &mut String,
+    system: &str,
+    tools: &[Tool],
+    messages: &[Value],
+    on_text: &mut (dyn FnMut(&str) + Send),
+) -> Result<provider::Turn> {
+    let turn = provider::turn(http, config, key, system, tools, messages, on_text).await;
+    if !matches!(turn, Err(AiError::BadKey)) || config.provider != Provider::ChatGpt {
+        return turn;
+    }
+    *key = chatgpt::renewed(key).await?;
+    match provider::turn(http, config, key, system, tools, messages, on_text).await {
+        // ChatGPT turned away a token that had just been renewed. The sign-in itself is only
+        // dropped when the sign-in service refuses to renew it, so say what happened and keep it.
+        Err(AiError::BadKey) => Err(AiError::Provider(
+            "ChatGPT did not accept this sign-in for the request. Try again; if it keeps happening, sign in with ChatGPT again in Settings, Assistant.".into(),
+        )),
+        turn => turn,
+    }
+}
+
+/// Compact a conversation because the person asked: the model summarises the earlier part,
+/// keeping and dropping what `note` says. Returns the conversation to carry on from; the one
+/// passed in is untouched, so a failure or a stop changes nothing.
+pub async fn compact(
+    mut config: Config,
+    messages: &[Value],
+    note: &str,
+    core: Option<&Core>,
+) -> Result<Value> {
+    let mut key = credential(config.provider).await?;
+    let http = reqwest::Client::new();
+    if config.provider == Provider::ChatGpt && config.model().is_err() {
+        let listed = provider::models(&http, &config, &key).await?;
+        config.model = listed.into_iter().next().unwrap_or_default();
+    }
+    config.model()?;
+    let done = crate::compact::compact(&http, &config, &mut key, messages, note).await?;
+    let wire = crate::files::expand(core, &done.messages, &mut Default::default());
+    Ok(json!({
+        "messages": done.messages,
+        "summary": done.summary,
+    "kept_turns": done.kept_turns,
+        "replaced": done.replaced,
+        "input_tokens": done.input_tokens,
+        "output_tokens": done.output_tokens,
+        "limit": crate::compact::limit(&config),
+        "parts": crate::compact::measure(&wire),
+    }))
+}
+
 pub async fn send(
     request: Request,
     emit: impl Fn(Event) + Send + Sync,
@@ -454,6 +535,8 @@ pub async fn send(
         extra_servers,
         briefing,
         app,
+        used,
+        unattended,
     } = request;
     let mut system = if briefing.trim().is_empty() {
         SYSTEM.to_string()
@@ -474,7 +557,7 @@ pub async fn send(
     let servers = config
         .mcp
         .iter()
-        .filter(|s| s.enabled)
+        .filter(|s| s.enabled && !crate::imessage::is(s))
         .chain(extra_servers.iter());
     // All at once: four services one after another was several seconds before the first word.
     let servers: Vec<&McpServer> = servers.collect();
@@ -509,6 +592,20 @@ pub async fn send(
         system.push_str(&told);
         for tool in crate::own_api::tools() {
             sources.push(Source::Api(tool.writes));
+            offered.push(tool);
+        }
+    }
+
+    // Messages on this Mac: read where it is, with no server to connect to. Only in a
+    // conversation the person is in: a look nobody asked for does not read their messages.
+    if !unattended
+        && config
+            .mcp
+            .iter()
+            .any(|s| s.enabled && crate::imessage::is(s))
+    {
+        for tool in crate::imessage::tools() {
+            sources.push(Source::Messages);
             offered.push(tool);
         }
     }
@@ -564,6 +661,7 @@ pub async fn send(
                 Source::Server(index, _) => connections[*index].server.clone(),
                 Source::Loader => "loader".to_string(),
                 Source::Api(_) => "own_api".to_string(),
+                Source::Messages => crate::imessage::ID.to_string(),
             };
             let entry = by_source.entry(from).or_default();
             entry.0 += 1;
@@ -579,31 +677,75 @@ pub async fn send(
     };
 
     let mut added: Vec<Value> = Vec::new();
+    let mut whole: Vec<Value> = Vec::new();
     let mut attached = std::collections::HashMap::new();
     let mut stop = String::from("end_turn");
-    let (mut rounds, mut read, mut written, mut used) = (0u32, 0u64, 0u64, Vec::<String>::new());
+    let limit = crate::compact::limit(&config);
+    let (mut filled, mut replaced, mut tried) = (used, None::<Vec<Value>>, false);
+    let mut dropped = 0;
+    let made = std::sync::Mutex::new(None::<Event>);
+    let (mut rounds, mut read, mut written, mut called) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
         for _ in 0..MAX_ROUNDS {
             lighten(&mut messages);
-            let mut on_text = |delta: &str| emit(Event::Text { delta: delta.to_string() });
+            // Nearly full: summarise the earlier part first, so this request does not fail.
+            // If that does not work the conversation goes as it is, and may still fit.
+            if crate::compact::near(limit, filled) && !tried {
+                tried = true;
+                match crate::compact::compact(&http, &config, &mut key, &messages, "").await {
+                    Ok(done) => {
+                        *made.lock().unwrap() = Some(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
+                        dropped = done.replaced;
+                        messages = done.messages;
+                        replaced = Some(messages.clone());
+                        added.clear();
+                        filled = 0;
+                    }
+                    Err(e) => emit(Event::Notice {
+                        message: format!("This conversation is nearly full and could not be compacted ({e}). It was sent as it is."),
+                    }),
+                }
+            }
+            // A summary made on the way is only spoken of once the request it made room for is
+            // taken: one the provider still refuses leaves the conversation as it was.
+            let announce = || {
+                if let Some(event) = made.lock().unwrap().take() {
+                    emit(event);
+                }
+            };
+            let mut on_text = |delta: &str| {
+                announce();
+                emit(Event::Text { delta: delta.to_string() })
+            };
             // Attached files are put in here, for this request only; `messages` keeps their places.
             let wire = crate::files::expand(core.as_deref(), &messages, &mut attached);
-            let mut turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
-            // A long answer can outlive the ChatGPT token it started with: renew it and ask once more.
-            if matches!(turn, Err(AiError::BadKey)) && config.provider == Provider::ChatGpt {
-                key = chatgpt::renewed(&key).await?;
-                turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
+            let mut turn = self::turn(&http, &config, &mut key, &system, &offered, &wire, &mut on_text).await;
+            // The provider says it no longer fits: compact once and ask again.
+            if turn.as_ref().err().is_some_and(crate::compact::overflowed) && !tried {
+                tried = true;
+                if let Ok(done) = crate::compact::compact(&http, &config, &mut key, &messages, "").await {
+                    *made.lock().unwrap() = Some(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
+                    dropped = done.replaced;
+                    messages = done.messages;
+                    replaced = Some(messages.clone());
+                    added.clear();
+                    let wire = crate::files::expand(core.as_deref(), &messages, &mut attached);
+                    turn = self::turn(&http, &config, &mut key, &system, &offered, &wire, &mut on_text).await;
+                }
             }
             let turn = turn?;
+            announce();
+            filled = turn.tokens.0 + turn.tokens.1;
             stop = turn.stop.clone();
             rounds += 1;
             read += turn.tokens.0;
             written += turn.tokens.1;
             let reply = json!({ "role": "assistant", "content": turn.content });
             messages.push(reply.clone());
+            whole.push(reply.clone());
             added.push(reply);
             let calls: Vec<&Value> = turn.content.iter().filter(|b| b["type"] == "tool_use").collect();
-            used.extend(calls.iter().filter_map(|c| c["name"].as_str().map(str::to_string)));
+            called.extend(calls.iter().filter_map(|c| c["name"].as_str().map(str::to_string)));
             if calls.is_empty() {
                 break;
             }
@@ -650,6 +792,7 @@ pub async fn send(
                                 }
                             }
                             Some(Source::Api(write)) => crate::own_api::call(&config, *write, &input).await,
+                            Some(Source::Messages) => crate::imessage::call(&input),
                             Some(Source::Vault) => match &core {
                                 Some(core) => tools::run(core, &name, &input),
                                 None => Err("no vault is open".into()),
@@ -677,6 +820,7 @@ pub async fn send(
             }
             let reply = json!({ "role": "user", "content": results });
             messages.push(reply.clone());
+            whole.push(reply.clone());
             added.push(reply);
             if turn.stop != "tool_use" {
                 break;
@@ -692,23 +836,26 @@ pub async fn send(
     for connection in connections {
         connection.close().await;
     }
-    // ChatGPT turned away a token that had just been renewed. The sign-in itself is only dropped
-    // when the sign-in service refuses to renew it, so say what happened and keep it.
-    if matches!(result, Err(AiError::BadKey)) && config.provider == Provider::ChatGpt {
-        return Err(AiError::Provider(
-            "ChatGPT did not accept this sign-in for the request. Try again; if it keeps happening, sign in with ChatGPT again in Settings, Assistant.".into(),
-        ));
-    }
     let model = config.model().unwrap_or_default().to_string();
     result.map(|()| Outcome {
         messages: added,
+        turn: whole,
         stop,
         model,
         rounds,
         input_tokens: read,
         output_tokens: written,
-        tools: used,
+        tools: called,
         context,
+        replaced,
+        dropped,
+        used: filled,
+        limit,
+        parts: crate::compact::measure(&crate::files::expand(
+            core.as_deref(),
+            &messages,
+            &mut attached,
+        )),
     })
 }
 

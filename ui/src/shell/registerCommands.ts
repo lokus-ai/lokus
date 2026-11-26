@@ -4,7 +4,7 @@ import { aiSettings, saveAiConfig } from "../bridge/ai";
 import { identify } from "../bridge/analytics";
 import { runCore } from "../bridge/core";
 import { accountsAvailable, signOut } from "../bridge/auth";
-import { answer, answerAll, ask, attachToChat, chat, detach, newChat } from "../features/ai/chat";
+import { answer, answerAll, ask, attachToChat, chat, compactChat, detach, newChat } from "../features/ai/chat";
 import { analyticsCommands } from "../features/analytics/commands";
 import { COVERS } from "../features/page-header/Cover";
 import { ICONS } from "../features/page-header/PageHeader";
@@ -102,7 +102,27 @@ export function registerAllCommands(): void {
       keys: "Mod-j",
       run: () => app.set((s) => ({ panel: s.panel?.kind === "ai" ? null : { kind: "ai" } })),
     },
-    { id: "ai.new", title: "Assistant: new chat", run: newChat },
+    { id: "ai.new", title: "Assistant: new chat",
+      slash: "clear", run: newChat,
+    },
+    {
+      id: "ai.compact",
+      title: "Assistant: compact this conversation",
+      slash: "compact",
+      takes: "what to keep, what to drop",
+      run: (a) => {
+        app.set({ panel: { kind: "ai" } });
+        return compactChat(String(a.note ?? a.text ?? ""));
+      },
+    },
+    {
+      id: "ai.context",
+      title: "Assistant: what is using the context",
+      slash: "context",
+      run: () => {
+        app.set({ panel: { kind: "ai" } });
+        chat.set((s) => ({ detail: !s.detail }));
+      }, },
     { id: "teams.open", title: "Team sync…", run: () => app.set({ settings: "team" }) },
     { id: "window.new", title: "New window", keys: "Mod-Shift-n", run: () => newWindow().catch((e) => notify(e instanceof Error ? e.message : String(e))) },
     { id: "onboarding.open", title: "Lokus: run the setup again", run: () => void import("../features/onboarding/onboarding").then((o) => o.onboarding.set({ open: true })) },

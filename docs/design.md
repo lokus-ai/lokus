@@ -475,10 +475,17 @@ been, so a note made as "Untitled" and given its title offline never meets a tea
   applies at once.
 - A socket does not outlive its sign-in. The app hands each fresh account token (about hourly)
   to the running connection; a socket that is not renewed is closed a minute after its token
-  runs out.
+  runs out. The account library renews by itself only in a window that is on screen, so the
+  connection asks for the sign-in every 20 seconds (`renew`), which renews one that is about
+  to run out. A connection turned away for a sign-in that ran out (`unauthorized`) does not
+  end: it says so (`signin`), keeps scanning the folder, and connects again the moment a new
+  sign-in is handed to it. Only `forbidden` (not a member) ends a connection.
 - A socket that has gone silent is not trusted. The app asks the relay to answer every 20
   seconds; after 50 seconds of hearing nothing (a laptop that slept, a network that changed) it
-  drops the connection and opens a new one, and what either side missed arrives then. While
+  drops the connection and opens a new one, and what either side missed arrives then. A check
+  that itself came late (the app was held still: the computer slept, or the system rested it
+  in the background) is not counted as the relay's silence: the relay is asked first, and a
+  connection that is still good carries on with no gap. While
   what it missed is still arriving the wait is ten minutes: that comes as one message, heard
   only when all of it is here, and a team's whole history over a slow link takes longer than 50
   seconds. That one message may be up to 1 GB; the 16 MB a websocket takes by default
@@ -507,24 +514,55 @@ command line) is told the vault is already syncing. A burst of local edits is se
 change a role, remove someone, invite by email and cancel invitations, leave or delete.
 There is no separate team window, and no way to stop syncing: a member's folder syncs.
 
+**A folder stays in its team.** The team a folder belongs to is kept in the folder itself,
+`.lokus/team.json` (the relay, the workspace and the account last connected;
+`crates/lokus-sync/src/team.rs`, the only code that writes it). A folder can be handed to
+anyone, so it holds no token: a token typed for a relay of one's own, and the fact that this
+computer connected the folder to that relay, are in the app's own `relays.json` (readable by
+the person only; `apps/desktop/src/sync.rs`). A folder naming a relay that is neither the one
+built in nor one in that file is not connected by itself, so the account's sign-in is never
+sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. It
+goes where the folder goes, so a moved or renamed folder is still its team's, and it is there
+when the window's own storage is not. What earlier versions kept in the window's storage
+(`lokus.sync:<folder>`) is moved into the folder at the next start and removed from the
+window. Two things take it away: the member pressing Leave or Delete, and the relay's own list
+of that member's teams no longer naming it. Nothing else does: a sign-in that ran out, a
+connection turned away, a relay that is down or answers with an error, a token that could not
+be fetched all leave the folder in its team, and whatever kept it from connecting is tried
+again every five seconds and whenever the window is returned to or someone signs in. A folder
+in a team is never given to another (`sync_keep` refuses), and its Team page never offers
+Share, Join or Reconnect: it shows the team, and what the connection is doing. The one thing a
+person can be asked for is a sign-in that is truly gone: the sidebar and the Team page then
+read "Sign in again", one button, and after signing in the same folder connects to the same
+team. A sign-in that merely could not be renewed just now (no network, the account service
+down) is still shown as signed in and reads "Offline". A relay of one's own that turns its
+typed token away is the only case left that reads "Sync stopped", with a place to type another.
+
+**The account sign-in is one file the app owns** (`account.json` beside the app's settings,
+readable by the person only), not the window's storage. The account library reads it each time
+it wants the sign-in and writes it whole on every renewal (`account_kept`, `account_keep`), so
+two running copies of Lokus renew one sign-in: a renewal key works once, and a copy renewing
+with a key the other had already spent made the account service end the sign-in for both. A
+sign-in an earlier version kept in the window is moved into the file at the next start and
+removed from the window. The app never removes the file itself; only signing out, or the
+account service refusing the renewal key for good, does.
+
+**The app never changes the open folder by itself.** Only the person does: by picking one,
+by joining an invitation "in its own folder", or by leaving or deleting the open folder's team.
+
 **Leaving, deleting, being removed.** When Leave or Delete succeeds, the connection ends, the
-folder is taken off this device's workspace list and the app shows the next workspace on the
-list, or the start page when there is none, where the same one sentence is shown (`dropWorkspace` in `ui/src/shell/workspace.ts`;
-`vault_forget` also closes the folder when it is the open one, so the next start does not open
-it again). The folder and its notes stay on disk, and the page and the notice say so. The same
-happens on another member's device: when its connection is refused it asks the relay which
-teams the person is in, and if this one is not among them it stops, says so once and drops the
-folder the same way; a team folder that is not open is dropped at the next look for teams, and so is one an
-earlier version left on the list after a Leave or Delete (it is named in that version's
-`lokus.sync.stopped`, which is read once and then removed). A
-refusal for any other reason (a sign-in that ran out) keeps the folder and shows "Sync stopped";
-the folder still belongs to its team, so the Team page then names that team with a Reconnect
-button and does not offer to share the folder or join by code (pressing Share there made a second,
-empty-handed team of the same name), and the connection is asked for again by itself each time
-the window is looked at. A
-folder with words that could not be written to disk is not dropped: it stays open with the words
-on screen, says the save failed, and reads "Sync stopped" with the relay's reason, since its
-connection has ended and nothing retries; it goes from the list at the next start. The note
+folder stops being the team's, is taken off this device's workspace list and the app shows the
+next workspace on the list, or the start page when there is none, where the same one sentence
+is shown (`dropWorkspace` in `ui/src/shell/workspace.ts`; `vault_forget` also closes the folder
+when it is the open one, so the next start does not open it again). The folder and its notes
+stay on disk, and the page and the notice say so. On another member's device, when its
+connection is refused as not a member, it asks the relay which teams the person is in, as the
+account the folder was last connected with. If this team is not among them the folder stops
+being the team's and says so once; it stays open and on the list, as a private folder
+(`teamGone`). A team folder that is not open is told the same at the next look for teams. No
+answer from the relay, or an answer for another account, decides nothing. A
+folder with words that could not be written to disk stays open with the words on screen and
+says the save failed. The note
 editor is one object for the life of the window, and the page it sits on comes and goes with
 the folder, so the editor is put onto each new page (`attachEditor`).
 
@@ -623,8 +661,9 @@ workspace: switching in one switches them all.
 **A team comes by itself.** Being in a team is enough to have it on a computer.
 On sign-in, when the app starts and when its window is returned to, the app asks the relay
 which teams the person is in (`GET /v1/workspaces`); each one with no folder on this computer
-gets a folder in Documents named after it, is opened and starts syncing
-(`bringTeams` in `ui/src/features/teams/invites.ts`). Nobody is asked. The rules that keep it
+gets a folder in Documents named after it, added to the workspace list as that team's
+(`bringTeams` in `ui/src/features/teams/invites.ts`). It syncs when it is opened; it is opened
+by itself only for someone with no folder open. Nobody is asked. The rules that keep it
 safe:
 
 - It never lands in a folder holding files, nor in one that syncs with another team, nor
@@ -637,20 +676,19 @@ safe:
   connection begun for the last one: none runs behind a folder it was not asked for.
 - A folder that already synced with this team here is used again, so asking twice makes
   nothing twice.
-- What was being typed is written to its own folder before the team's folder takes the
-  screen. When a note there cannot be written (it changed on disk meanwhile), the folder
-  stays on screen and the teams wait for the next look. A team that cannot be given a
-  folder does not hold up the others.
+- The folder on screen stays on screen: the team's folder is made beside it (`vault_make`)
+  and a notice says it is in the workspace list. A team that cannot be given a folder does
+  not hold up the others.
 - Nothing turns a team's syncing off, and nothing has to be pressed to start it. A folder
-  that synced with a team before (its `.lokus/sync.sqlite` names the team; `sync_bound`) is
-  connected again when a member opens it, including one whose syncing an earlier version had
-  stopped. "Sync this vault here" is left only for a relay of one's own, which knows nobody
+  that synced with a team before (its `.lokus/team.json`, or failing that its
+  `.lokus/sync.sqlite`, names the team; `sync_team`, `sync_bound`) is connected again when a
+  member opens it. "Sync this vault here" is left only for a relay of one's own, which knows nobody
   until its address and token are typed. Creating a team (Share) and joining by invitation
   stay the person's own acts.
-- A folder kept for a team the person is no longer in is taken off the workspace list (see
+- A folder kept for a team the person is no longer in stops being the team's (see
   "Leaving, deleting, being removed").
-- One connection is open at a time, the open folder's. With several teams the first is left
-  on screen; the others sync when their folder is opened from the switcher.
+- One connection is open at a time, the open folder's. The others sync when their folder is
+  opened from the switcher.
 - First-run setup chooses the first folder itself; teams are brought when it closes. With
   no relay or no sign-in nothing is made and nothing is said; it is asked again later.
 - A team folder opened while signed out starts syncing when the person signs in.
@@ -806,11 +844,76 @@ confirms that everything it must not be able to do is refused.
   waits for the person to allow it unless they switch that off, as does any tool-server action
   not marked read-only. Acting on the app (open a note at a heading, show the graph) never asks;
   the window carries these out. Every result is capped, and a cut result says how to see the rest.
-- **Context.** One loop, one conversation, only ever added to. Each conversation starts with a
+- **Context.** One loop, one conversation, added to until it nears the model's limit (see
+  Compaction below). Each conversation starts with a
   briefing that then never changes: the date, the shape of the vault, and the person's standing
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Compaction** (built; tried in the real app with a stand-in provider speaking all three
+  formats, not with a real model). The connected model writes a summary of the conversation
+  so far (`lokus-ai/src/compact.rs`), and the conversation carries on from that summary plus
+  the most recent turns (about 24,000 characters of them, fewer for a small model; the cut is
+  never between a tool call and its result, and never after a request still being worked
+  on). `/compact` asks for it by hand, and whatever
+  follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
+  as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
+  the provider's last count is at 80% of the model's limit the next message is preceded by a
+  compaction, and a request the provider refuses as too long is compacted and sent once more;
+  either way the pending message is sent, and one quiet line says earlier messages were
+  summarised, once the provider has taken the shorter request (not when it refuses that one
+  too). Only what is sent to the model changes. The conversation file keeps every
+  message as it was sent (`earlier`, beside the shortened `history`), and the chat shows them folded under "Earlier, summarised" above the summary. A
+  compaction that fails or is stopped changes nothing, and a summary that cannot stand for
+  what it replaces is a failure: one the model declined to write (stop reason `refusal`), a
+  reply with no non-empty `<summary>…</summary>` block (the request asks for the summary
+  inside those tags and only what is inside is kept, so an apology is not taken for a
+  summary and a one-line summary is not refused for its length), and one no shorter than
+  what it replaces or itself past the 80% mark. The summary request is made the way
+  every other request is (`chat::turn`), so a ChatGPT sign-in that has run out is renewed
+  and the request sent once more. The desktop app lets one compaction run per workspace and
+  conversation, so a second window is turned away. A compaction applies only to the
+  conversation as its file stands: the window reads the file first and, when another window
+  has added to it or compacted it, shows that instead and summarises nothing; and the writer
+  of the file (`chats.save` with `seen`, the `updated` of the file worked from) refuses a
+  summary made from a file that has moved on since. Every save of a conversation names
+  `seen`, an ordinary send's too: two windows that both sent in one conversation used to
+  overwrite each other's turns. A send refused this way reads the file, puts its own turn
+  after the other window's, and saves again, before the model is asked, so neither turn is
+  lost and the message is sent once, with the other window's turns in front of it. A line
+  that only says a compaction did not happen ("already being compacted", "could not
+  compact", "added to in another window") is shown in that window and never written to the
+  file, and a compaction that did not happen writes nothing at all.
+  A provider that never answers is waited on as for any other request.
+  Checked by `checks/flows/compaction.sh`, which drives the running app.
+- **Context used.** The chat box always shows how full the conversation is ("58% of
+  context"): the input tokens the provider itself counted on the last reply, against the
+  model's limit. Limits are a short table by model in `compact.rs`, read from the
+  providers' own pages on 2026-11-26 (the Claude models listed there with 1,000,000, by name,
+  and 200,000 for Opus/Sonnet/Haiku 4.5 and older; GPT-5.4 to 5.6 1,050,000; GPT-4.1
+  1,047,576; GPT-4o, o1-mini and o1-preview 128,000; o1/o3/o4-mini 200,000; a ChatGPT sign-in
+  272,000 for GPT-5.5 and 5.6). Where a provider caps what may be sent below the window the
+  cap is the limit: GPT-5 to 5.3 and the GPT-5.4 mini and nano have a 400,000 window of which
+  a conversation may fill 272,000, so 80% of 400,000 would never have come.
+  `LOKUS_CONTEXT_LIMIT` overrides it, and a model the table does not name (a new Claude name
+  included) or a model at another address has no known limit. Nothing is estimated: a
+  provider that sends no count shows "Context unknown", an unknown limit shows the count
+  alone, and automatic compaction then relies on the provider's refusal. Clicking the meter
+  or `/context` shows what the space goes to (messages, the summary, tool results, attached
+  notes and files, the workspace briefing, the instructions, the tools on offer) as shares by
+  length of text, which are labelled as such, with a Compact button.
+- **Slash commands.** A "/" at the start of the message box lists the commands that carry a
+  `slash` name in the one command registry (`/compact`, `/clear` for a new conversation,
+  `/context`); arrows, Enter, Escape and typing to filter work it. Only a command that takes
+  words (`/compact`) keeps what follows it; words after one that takes none (`/clear the
+  cache folder`) make it an ordinary message, so nothing typed is thrown away. They are the same named
+  commands the palette and `lokus app` run. A message that starts with "/" and names no
+  command is sent as written.
+- **Conversations belong to the workspace they were had in.** Each is a file in that folder's
+  `.lokus/chats/` (never synced), so Earlier conversations lists only the open workspace's,
+  the briefing's "recent conversations" are that workspace's, and both hold after a switch
+  and after a restart. Nothing is kept in one place for all workspaces, so a conversation
+  from before stays in the folder it was had in and is found there; none is moved or copied.
 - **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
   explicitly picked @ notes/folders and attached files. Each conversation in each workspace
   has its own draft in this window's memory; Earlier conversations also lists messages not
@@ -868,7 +971,7 @@ confirms that everything it must not be able to do is refused.
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
 (`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key. The
 flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
-Not built yet: saving conversations to disk, and compaction of very long ones.
+Not built yet: compaction of very long conversations.
 
 ### Working on its own (built; tried on a real workspace)
 
@@ -876,7 +979,10 @@ Not built yet: saving conversations to disk, and compaction of very long ones.
 changed in Settings, Assistant), 90 seconds after a customer fact is pushed in, and with any
 note in `watches/` marked `type: watch` (`every:` minutes) added to what it looks for. A look is
 an ordinary request with one difference: every tool that would change something is refused.
-What it finds goes through two tools into `.lokus/noticed/` (never synced):
+What it finds goes through two tools into the vault's `noticed/` folder (synced with the
+team). The list in a window is the open workspace's: opening another workspace takes the
+previous one's findings down at once and reads the new one's, without waiting for the window
+to be looked at again.
 
 - `report_finding`: a plain statement, the one thing recommended, up to three facts with their
   sources, an `action` it can carry out later, and the kind of `situation` with no names in it.
@@ -960,9 +1066,31 @@ changes something asks first unless the person has turned asking off.
 The list is `lokus_ai::catalog`: an id, a name, an address, and whether a person can connect
 today. Checked against the live servers on 2026-11-13:
 
-| Ready now | Waiting for Lokus to be registered with the service | Not built |
-|---|---|---|
-| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+| Ready now | Waiting for Lokus to be registered with the service |
+|---|---|
+| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, Slack (in the workspace its app was made in; see `deploy/slack/`), and iMessage (on a Mac; read on the computer, see below) | Gmail, Google Calendar, Google Drive, Asana, HubSpot |
+
+**iMessage** is the one entry that is not a tool server (`lokus_ai::imessage`). Messages keeps
+every conversation in one SQLite file, `~/Library/Messages/chat.db`, and macOS lets an app read
+it only once the person has given that app Full Disk Access. Connect opens a screen that says
+so in one sentence and tries to read the file: if it can, Connect saves the connection among
+the workspace's others (name `imessage`, no address, nothing in the keychain); if it cannot,
+the screen says Full Disk Access is needed, with a link to that list in System Settings and
+"Check again". The assistant then has one tool, `mcp__imessage__messages` (optional `chat`,
+`search`, `limit`: 30 messages by default, 200 at most), which returns the newest messages
+oldest first, each with its time, conversation and writer. It reads only: the file is opened
+read-only, the tool never asks, and there is no way to send. The tool is on offer only in a
+conversation the person is in: a look the assistant takes by itself (Noticed, `unattended` on
+the request) is not given it, so private messages are never read with nobody asking. `chat`
+and `search` are matched as written ("_" and "%" are not wildcards). The permission is looked at again
+on every read, so access taken away later is answered with the same sentence rather than a
+failure. A message whose words Messages kept only in its styled form (`attributedBody`) is
+still read; reactions are left out; an attachment is shown as `[attachment]`. People appear as
+the number or address Messages has: names from Contacts are not read. On Windows and Linux the
+entry is listed as "Mac only" in Settings and is not offered in first-run setup.
+`lokus imessage [chat=] [search=] [limit=]` prints what the tool returns. Verified on macOS 26
+against a made-up `chat.db` built from the real schema, and against the real (empty) file
+without Full Disk Access; never against an account with real conversations.
 
 GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
 support a personal access token without registering the host app; browser OAuth still needs a

@@ -14,6 +14,9 @@ export interface Command {
   keys?: string;
   /** Hidden commands exist for scripts and tests, not for people. */
   hidden?: boolean;
+  /** The word that runs it from the assistant's chat box ("compact" for /compact), and what may follow it. */
+  slash?: string;
+  takes?: string;
   run(args: Record<string, unknown>): unknown;
 }
 

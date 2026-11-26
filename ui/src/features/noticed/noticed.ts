@@ -201,7 +201,7 @@ export async function check(reason = "This is a routine look.", asked = false): 
   let problem = "";
   try {
     const briefing = await brief();
-    const outcome = await aiSend(id, [{ role: "user", content: request(since, state.items, watches, reason) }], briefing, root);
+    const outcome = await aiSend(id, [{ role: "user", content: request(since, state.items, watches, reason) }], briefing, root, 0, true);
     const { config } = await aiSettings();
     traceChat({ trace: id, provider: config.provider, model: outcome.model, seconds: (Date.now() - now) / 1000, rounds: outcome.rounds, inputTokens: outcome.input_tokens, outputTokens: outcome.output_tokens, tools: outcome.tools, stop: outcome.stop, error: "", made: { background: 1 }, question: "", answer: "" });
     const due = JSON.parse(localStorage.getItem(DUE) ?? "{}") as Record<string, number>;
@@ -309,9 +309,18 @@ let timer = 0;
 let soon = 0;
 let reload = 0;
 
-/** Keep the list current in this window: when the assistant finishes a step (it may have left something), and when the window is looked at again. */
+/** Keep the list current in this window: when another workspace is opened, when the assistant finishes a step (it may have left something), and when the window is looked at again. */
 export function followNoticed(): void {
   void loadNoticed();
+  // Another workspace's findings are taken down the moment this window opens a different one.
+  let shown = app.get().vault?.root;
+  app.subscribe(() => {
+    const root = app.get().vault?.root;
+    if (root === shown) return;
+    shown = root;
+    noticed.set({ items: [], problem: "" });
+    void loadNoticed(root);
+  });
   onAiEvent((_, event) => {
     if (event.type !== "tool_done") return;
     window.clearTimeout(reload);

@@ -66,7 +66,8 @@ if [ -n "$APPLE_API_KEY_PATH" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_AP
 else
   NOTARY="--keychain-profile lokus"
 fi
-if xcrun notarytool history $NOTARY >/dev/null 2>&1; then
+# What Apple answered is kept: when it refuses, the reason is printed below instead of lost.
+if REFUSED=$(xcrun notarytool history $NOTARY 2>&1 >/dev/null); then
   # Apple checks a copy of the app; the ticket it gives back is attached to the app itself.
   ZIP="$OUT/notarize.zip"
   ditto -c -k --keepParent "$APP" "$ZIP"
@@ -80,7 +81,8 @@ if xcrun notarytool history $NOTARY >/dev/null 2>&1; then
   echo "notarized"
 else
   NOTARIZED=no
-  echo "NOT NOTARIZED: no stored credentials. A downloaded copy will be blocked by macOS until this is done."
+  echo "NOT NOTARIZED: Apple did not accept the notarization credentials. A downloaded copy will be blocked by macOS until this is done."
+  echo "notarytool said: ${REFUSED:-nothing}"
   # A release made by the pipeline goes straight to people; one Apple has not checked must not.
   [ -z "$LOKUS_MUST_NOTARIZE" ] || { echo "stopping: this release has to be notarized"; exit 1; }
 fi
