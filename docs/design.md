@@ -122,6 +122,26 @@ and fails unless every file is byte-identical.
 
 Small things that make it a daily driver, all plain commands over plain files:
 
+- **Right-click menus:** every surface that shows a thing has one menu, drawn by the shared
+  `ui/src/shell/contextMenu.ts` (`openMenu`), and every item in it is a registered command sent
+  the captured thing and the folder that was open, never the current selection. A note or file
+  has the same menu wherever it is shown (`fileMenu`): Open (Close tab on a tab), Reveal in
+  sidebar, Rename, Ask the assistant about this (files that are not notes), Move to trash. That
+  covers sidebar files, tabs, the file viewer, linked mentions and the assistant's file cards (a
+  file still on an unsent message offers Remove from message in place of Rename and the
+  trash). A sidebar
+  folder and the sidebar's empty space offer New note and New folder there; a folder adds Rename
+  and Move to trash. A link in a note offers Open link, Open in new tab and Copy link; a
+  customer row Open, Archive or Bring back, and Delete… (which still asks); a chat message Copy
+  and, for an answer, Insert into note; tables and task cards keep the menus described with them.
+  Right-click, the Menu key or Shift+F10 opens it (in a note, for the link the caret is in);
+  arrows, Home, End, Enter and Space work it; Escape or Tab closes it and puts focus back. The
+  thing stays outlined while its menu is open. The menu closes, and its command is not run, when
+  the thing leaves the screen, another folder opens or Settings opens; each command checks the
+  folder again itself, and Rename typed for one folder's file is refused once another folder is
+  open. Rename from any surface is the sidebar's inline rename (`tree.rename`), so a name is
+  only ever changed inside the open folder. Text being written (the note's own text, text boxes,
+  selected text) keeps the system's menu, for spelling and the clipboard.
 - **Folders in the sidebar:** opening a file shows its parents unless the person has closed
   them. A manually closed folder stays closed through edits, tab changes and renaming it
   in the sidebar; its nested folder choices follow the rename too. The separate

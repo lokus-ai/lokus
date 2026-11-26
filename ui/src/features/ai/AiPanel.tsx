@@ -1,4 +1,6 @@
 /** @part-of ui.ai */
+import { runCommand } from "../../shell/commands";
+import { fileMenu, type MenuEvent, openMenu } from "../../shell/contextMenu";
 import { ConnectModel, useModel } from "./Connect";
 import lokusMark from "./lokus.svg";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -75,15 +77,25 @@ function Rendered({ text }: { text: string }) {
   return <div ref={mount} />;
 }
 
+/** The menu of one message of the conversation. */
+function messageMenu(event: MenuEvent, text: string, answer = false): void {
+  if ((event.target as Element).closest("button, a")) return;
+  openMenu(event, "Message", [
+    { id: "clipboard.copy", label: "Copy" },
+    answer ? { id: "editor.insert", label: "Insert into note", disabled: !getEditor() || !app.get().active || app.get().view !== "note" } : null,
+  ], { args: { text } });
+}
+
 /** An answer, rendered the way a note is. While it streams it is plain text. */
 function Answer({ text, live }: { text: string; live: boolean }) {
   if (live) return <div className="ai-answer plain">{text}</div>;
+  const menu = (e: MenuEvent) => messageMenu(e, text, true);
   return (
-    <div className="ai-answer">
+    <div className="ai-answer" tabIndex={0} onContextMenu={menu} onKeyDown={menu}>
       <Rendered text={text} />
       <div className="ai-actions">
-        <button onClick={() => void navigator.clipboard.writeText(text).then(() => notify("Copied"))}>Copy</button>
-        {getEditor() && app.get().active && <button onClick={() => getEditor()?.insert(text)}>Insert into note</button>}
+        <button onClick={() => void runCommand("clipboard.copy", { text })}>Copy</button>
+        {getEditor() && app.get().active && <button onClick={() => void runCommand("editor.insert", { text }).catch(() => {})}>Insert into note</button>}
       </div>
     </div>
   );
@@ -299,9 +311,10 @@ function Mode() {
 function FileCard({ path, onRemove, small }: { path: string; onRemove?: () => void; small?: boolean }) {
   const root = useStore(app, (s) => s.vault?.root);
   const picture = kindOf(path) === "image" && root;
+  const menu = (e: MenuEvent) => fileMenu(e, path, onRemove ? "draft" : "row");
   return (
     <span className={`ai-file${picture ? " picture" : ""}${small ? " small" : ""}`} title={path}>
-      <button className="ai-file-open" onClick={() => void openNote(path)}>
+      <button className="ai-file-open" onClick={() => void openNote(path)} onContextMenu={menu} onKeyDown={menu}>
         {picture ? (
           <img src={vaultFileUrl(root, path)} alt={fileName(path)} />
         ) : (
@@ -679,7 +692,7 @@ export function AiPanel() {
                   ))}
                 </div>
               )}
-              {item.text && <div className="ai-user">{item.text}</div>}
+              {item.text && <div className="ai-user" tabIndex={0} onContextMenu={(e) => messageMenu(e, item.text)} onKeyDown={(e) => messageMenu(e, item.text)}>{item.text}</div>}
             </div>
           ) : item.kind === "assistant" ? (
             // A reply that is only white space (some models send one before using a tool) is not shown.

@@ -1,4 +1,5 @@
 /** @part-of ui.backlinks */
+import { fileMenu } from "../../shell/contextMenu";
 import { useEffect, useState } from "react";
 
 import { type Mention, runCore } from "../../bridge/core";
@@ -36,7 +37,7 @@ export function Backlinks({ path, version, onOpen }: Props) {
       </button>
       {open &&
         mentions.map((m) => (
-          <button key={`${m.path}:${m.line}`} className="backlink" onClick={() => onOpen(m.path)}>
+          <button key={`${m.path}:${m.line}`} className="backlink" onClick={() => onOpen(m.path)} onContextMenu={(e) => fileMenu(e, m.path)} onKeyDown={(e) => fileMenu(e, m.path)}>
             <span className="backlink-title">{m.title}</span>
             <span className="backlink-context">{m.context}</span>
           </button>

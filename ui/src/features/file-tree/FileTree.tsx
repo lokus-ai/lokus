@@ -1,25 +1,21 @@
 /** @part-of ui.file-tree */
-import { type MouseEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import type { Entry } from "../../bridge/core";
 import { registerCommands, unregisterCommands } from "../../shell/commands";
+import { fileMenu, openMenu } from "../../shell/contextMenu";
 import { Icon } from "../../shell/Icon";
 
 interface Props {
+  /** The folder these are the files of; a command sent for another one is not run. */
+  root: string;
   entries: Entry[];
   active: string | null;
   onOpen(path: string): void;
   onNewNote(folder: string): void;
   onNewFolder(path: string): void;
   onRename(from: string, to: string): Promise<boolean>;
-  onDelete(path: string): void;
   onReveal(): void;
-}
-
-interface Menu {
-  x: number;
-  y: number;
-  entry: Entry | null;
 }
 
 /** What the inline text box is doing: renaming a row or naming a new folder. */
@@ -27,6 +23,14 @@ type Editing = { kind: "rename"; entry: Entry } | { kind: "folder"; parent: stri
 
 const parentOf = (path: string) => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
 const join = (folder: string, name: string) => (folder ? `${folder}/${name}` : name);
+const find = (entries: Entry[], path: string): Entry | null => {
+  for (const entry of entries) {
+    if (entry.path === path) return entry;
+    const inside = path.startsWith(`${entry.path}/`) ? find(entry.children ?? [], path) : null;
+    if (inside) return inside;
+  }
+  return null;
+};
 const clean = (name: string) => name.trim().replace(/[\\/:]/g, "-");
 
 function NameInput({ initial, depth, onDone }: { initial: string; depth: number; onDone(value: string | null): void }) {
@@ -49,22 +53,21 @@ function NameInput({ initial, depth, onDone }: { initial: string; depth: number;
   );
 }
 
-export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRename, onDelete, onReveal }: Props) {
+export function FileTree({ root, entries, active, onOpen, onNewNote, onNewFolder, onRename, onReveal }: Props) {
   const [open, setOpen] = useState<Map<string, boolean>>(() => new Map());
   const tree = useRef<HTMLElement>(null);
-  const [revealRequest, setRevealRequest] = useState(0);
-  const [menu, setMenu] = useState<Menu | null>(null);
+  const [reveal, setReveal] = useState<{ path: string } | null>(null);
   const [editing, setEditing] = useState<Editing>(null);
 
   useLayoutEffect(() => {
-    if (!revealRequest) return;
+    if (!reveal) return;
     const frame = requestAnimationFrame(() => {
-      const row = tree.current?.querySelector<HTMLElement>(".tree-row.active");
+      const row = [...(tree.current?.querySelectorAll<HTMLElement>(".tree-row") ?? [])].find((el) => el.dataset.path === reveal.path);
       row?.focus({ preventScroll: true });
       row?.scrollIntoView({ block: "nearest" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [revealRequest]);
+  }, [reveal]);
 
   useEffect(() => {
     registerCommands([
@@ -82,49 +85,81 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
           };
           collapse(entries);
           setOpen(closed);
-          setMenu(null);
           setEditing(null);
         },
       },
       {
         id: "tree.revealActive",
         title: "Reveal active file in sidebar",
-        run() {
-          if (!active) return;
-          setOpen((prev) => {
-            const next = new Map(prev);
-            for (let folder = parentOf(active); folder; folder = parentOf(folder)) next.set(folder, true);
-            return next;
-          });
-          onReveal();
-          setRevealRequest((request) => request + 1);
+        run(a) {
+          const path = typeof a.path === "string" ? a.path : active;
+          if (!path || !here(a)) return;
+          show(path);
+          setReveal({ path });
+        },
+      },
+      {
+        id: "tree.rename",
+        title: "Rename the open note or file…",
+        run(a) {
+          const entry = here(a) ? find(entries, typeof a.path === "string" ? a.path : (active ?? "")) : null;
+          if (!entry) return;
+          show(entry.path);
+          setEditing({ kind: "rename", entry });
+        },
+      },
+      {
+        id: "tree.newFolder",
+        title: "New folder",
+        run(a) {
+          if (!here(a)) return;
+          const parent = typeof a.folder === "string" ? a.folder : "";
+          if (parent) show(`${parent}/`);
+          else onReveal();
+          setEditing({ kind: "folder", parent });
+        },
+      },
+      {
+        id: "tree.newNote",
+        title: "New note in a folder",
+        hidden: true,
+        run(a) {
+          if (!here(a)) return;
+          const parent = typeof a.folder === "string" ? a.folder : "";
+          if (parent) show(`${parent}/`);
+          onNewNote(parent);
         },
       },
     ]);
-    return () => unregisterCommands(["tree.collapseAll", "tree.revealActive"]);
-  }, [entries, active, onReveal]);
+    return () => unregisterCommands(["tree.collapseAll", "tree.revealActive", "tree.rename", "tree.newFolder", "tree.newNote"]);
+  }, [root, entries, active, onReveal, onNewNote]);
 
-  useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("mousedown", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("mousedown", close);
-      window.removeEventListener("blur", close);
-    };
-  }, [menu]);
-
-  const expand = (path: string) => setOpen((prev) => new Map(prev).set(path, true));
+  const here = (a: Record<string, unknown>) => typeof a.root !== "string" || a.root === root;
+  /** Open the folders above a path and bring the sidebar out. */
+  const show = (path: string) => {
+    setOpen((prev) => {
+      const next = new Map(prev);
+      for (let folder = parentOf(path); folder; folder = parentOf(folder)) next.set(folder, true);
+      return next;
+    });
+    onReveal();
+  };
   const toggle = (path: string) =>
     setOpen((prev) => {
       const expanded = prev.get(path) ?? Boolean(active?.startsWith(`${path}/`));
       return new Map(prev).set(path, !expanded);
     });
-  const showMenu = (e: MouseEvent, entry: Entry | null) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY, entry });
+  // New things go inside the folder that was clicked, or beside the file that was.
+  const menu = (e: Parameters<typeof openMenu>[0], entry: Entry | null) => {
+    if (!entry) return openMenu(e, "Files", [{ id: "tree.newNote", label: "New note" }, { id: "tree.newFolder", label: "New folder" }], { args: { folder: "" } });
+    if (entry.kind !== "folder") return fileMenu(e, entry.path, "tree", parentOf(entry.path));
+    openMenu(e, entry.name, [
+      { id: "tree.newNote", label: "New note" },
+      { id: "tree.newFolder", label: "New folder" },
+      null,
+      { id: "tree.rename", label: "Rename" },
+      { id: "note.trash", label: "Move to trash", danger: true },
+    ], { args: { path: entry.path, folder: entry.path } });
   };
 
   const finishRename = async (entry: Entry, value: string | null) => {
@@ -168,8 +203,10 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
                 className="tree-row"
                 style={indent}
                 aria-expanded={expanded}
+                data-path={entry.path}
                 onClick={() => toggle(entry.path)}
-                onContextMenu={(e) => showMenu(e, entry)}
+                onContextMenu={(e) => menu(e, entry)}
+                onKeyDown={(e) => menu(e, entry)}
               >
                 <span className={`tree-caret${expanded ? " open" : ""}`}><Icon name="chevron" size={14} /></span>
                 <span className="tree-name">{entry.name}</span>
@@ -184,8 +221,10 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
             key={entry.path}
             className={`tree-row${entry.path === active ? " active" : ""}`}
             style={indent}
+            data-path={entry.path}
             onClick={() => onOpen(entry.path)}
-            onContextMenu={(e) => showMenu(e, entry)}
+            onContextMenu={(e) => menu(e, entry)}
+            onKeyDown={(e) => menu(e, entry)}
           >
             <span className="tree-caret"><Icon name={isNote ? "note" : "file"} size={14} /></span>
             <span className="tree-name">{isNote ? entry.name.replace(/\.md$/i, "") : entry.name}</span>
@@ -195,46 +234,10 @@ export function FileTree({ entries, active, onOpen, onNewNote, onNewFolder, onRe
     </>
   );
 
-  // New things go inside the folder that was clicked, or beside the file that was.
-  const target = menu?.entry ? (menu.entry.kind === "folder" ? menu.entry.path : parentOf(menu.entry.path)) : "";
-  const act = (run: () => void) => () => {
-    setMenu(null);
-    run();
-  };
-
   return (
-    <nav ref={tree} className="tree" aria-label="Files" onContextMenu={(e) => showMenu(e, null)}>
+    <nav ref={tree} className="tree" aria-label="Files" tabIndex={-1} onContextMenu={(e) => menu(e, null)}>
       {entries.length === 0 && !editing && <p className="tree-empty">This vault is empty. Right-click to add a note.</p>}
       {rows(entries, 0, "")}
-      {menu && (
-        <div className="menu" style={{ left: menu.x, top: menu.y }} onMouseDown={(e) => e.stopPropagation()}>
-          <button
-            onClick={act(() => {
-              if (target) expand(target);
-              onNewNote(target);
-            })}
-          >
-            New note
-          </button>
-          <button
-            onClick={act(() => {
-              if (target) expand(target);
-              setEditing({ kind: "folder", parent: target });
-            })}
-          >
-            New folder
-          </button>
-          {menu.entry && (
-            <>
-              <hr />
-              <button onClick={act(() => setEditing({ kind: "rename", entry: menu.entry! }))}>Rename</button>
-              <button className="danger" onClick={act(() => onDelete(menu.entry!.path))}>
-                Move to trash
-              </button>
-            </>
-          )}
-        </div>
-      )}
     </nav>
   );
 }
