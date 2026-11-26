@@ -968,9 +968,28 @@ changes something asks first unless the person has turned asking off.
 The list is `lokus_ai::catalog`: an id, a name, an address, and whether a person can connect
 today. Checked against the live servers on 2026-11-13:
 
-| Ready now | Waiting for Lokus to be registered with the service | Not built |
-|---|---|---|
-| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+| Ready now | Waiting for Lokus to be registered with the service |
+|---|---|
+| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, Slack (in the workspace its app was made in; see `deploy/slack/`), and iMessage (on a Mac; read on the computer, see below) | Gmail, Google Calendar, Google Drive, Asana, HubSpot |
+
+**iMessage** is the one entry that is not a tool server (`lokus_ai::imessage`). Messages keeps
+every conversation in one SQLite file, `~/Library/Messages/chat.db`, and macOS lets an app read
+it only once the person has given that app Full Disk Access. Connect opens a screen that says
+so in one sentence and tries to read the file: if it can, Connect saves the connection among
+the workspace's others (name `imessage`, no address, nothing in the keychain); if it cannot,
+the screen says Full Disk Access is needed, with a link to that list in System Settings and
+"Check again". The assistant then has one tool, `mcp__imessage__messages` (optional `chat`,
+`search`, `limit`: 30 messages by default, 200 at most), which returns the newest messages
+oldest first, each with its time, conversation and writer. It reads only: the file is opened
+read-only, the tool never asks, and there is no way to send. The permission is looked at again
+on every read, so access taken away later is answered with the same sentence rather than a
+failure. A message whose words Messages kept only in its styled form (`attributedBody`) is
+still read; reactions are left out; an attachment is shown as `[attachment]`. People appear as
+the number or address Messages has: names from Contacts are not read. On Windows and Linux the
+entry is listed as "Mac only" in Settings and is not offered in first-run setup.
+`lokus imessage [chat=] [search=] [limit=]` prints what the tool returns. Verified on macOS 26
+against a made-up `chat.db` built from the real schema, and against the real (empty) file
+without Full Disk Access; never against an account with real conversations.
 
 GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
 support a personal access token without registering the host app; browser OAuth still needs a

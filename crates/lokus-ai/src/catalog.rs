@@ -4,7 +4,8 @@
 //! A connector is a tool server (MCP) run by the service itself. Each entry here was checked
 //! against the live server on 2026-11-13: its address, and whether an app nobody has registered
 //! with that service may sign a person in. GitHub also supports a personal access token,
-//! without registering Lokus (GitHub's MCP documentation, checked 2026-11-16).
+//! without registering Lokus (GitHub's MCP documentation, checked 2026-11-16). iMessage is the
+//! one entry that is not a server: Lokus reads Messages on the Mac it runs on (`imessage`).
 
 use serde::Serialize;
 
@@ -16,8 +17,8 @@ pub enum Ready {
     Yes,
     /// The service only lets apps it has registered sign people in, and Lokus is not one yet.
     NeedsRegistration,
-    /// Runs on this computer rather than at a service; not built yet.
-    NotBuilt,
+    /// Read from this computer rather than at a service, and this computer is not a Mac.
+    MacOnly,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -27,7 +28,7 @@ pub struct Connector {
     pub name: &'static str,
     /// What connecting it lets the assistant do, in a sentence.
     pub about: &'static str,
-    /// Empty when there is no server to reach yet.
+    /// Empty when it is read on this computer and there is no server to reach.
     pub url: &'static str,
     pub kind: &'static str,
     pub ready: Ready,
@@ -247,9 +248,13 @@ pub fn all() -> Vec<Connector> {
             id: "imessage",
             name: "iMessage",
             kind: "Messages",
-            about: "Read your conversations on this Mac and send messages you approve.",
+            about: "Read recent conversations on this Mac. Lokus cannot send.",
             url: "",
-            ready: Ready::NotBuilt,
+            ready: if cfg!(target_os = "macos") {
+                Ready::Yes
+            } else {
+                Ready::MacOnly
+            },
             token_url: None,
             app: None,
         },
@@ -285,7 +290,7 @@ mod tests {
                 "{}",
                 c.id
             );
-            assert_eq!(c.url.is_empty(), c.ready == Ready::NotBuilt, "{}", c.id);
+            assert_eq!(c.url.is_empty(), c.id == crate::imessage::ID, "{}", c.id);
             assert!(
                 c.url.is_empty() || c.url.starts_with("https://"),
                 "{} must be reached over https",
