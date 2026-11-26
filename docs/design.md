@@ -791,6 +791,11 @@ confirms that everything it must not be able to do is refused.
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Conversations belong to the workspace they were had in.** Each is a file in that folder's
+  `.lokus/chats/` (never synced), so Earlier conversations lists only the open workspace's,
+  the briefing's "recent conversations" are that workspace's, and both hold after a switch
+  and after a restart. Nothing is kept in one place for all workspaces, so a conversation
+  from before stays in the folder it was had in and is found there; none is moved or copied.
 - **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
   explicitly picked @ notes/folders and attached files. Each conversation in each workspace
   has its own draft in this window's memory; Earlier conversations also lists messages not
@@ -848,7 +853,7 @@ confirms that everything it must not be able to do is refused.
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
 (`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key. The
 flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
-Not built yet: saving conversations to disk, and compaction of very long ones.
+Not built yet: compaction of very long conversations.
 
 ### Working on its own (built; tried on a real workspace)
 
@@ -856,7 +861,10 @@ Not built yet: saving conversations to disk, and compaction of very long ones.
 changed in Settings, Assistant), 90 seconds after a customer fact is pushed in, and with any
 note in `watches/` marked `type: watch` (`every:` minutes) added to what it looks for. A look is
 an ordinary request with one difference: every tool that would change something is refused.
-What it finds goes through two tools into `.lokus/noticed/` (never synced):
+What it finds goes through two tools into the vault's `noticed/` folder (synced with the
+team). The list in a window is the open workspace's: opening another workspace takes the
+previous one's findings down at once and reads the new one's, without waiting for the window
+to be looked at again.
 
 - `report_finding`: a plain statement, the one thing recommended, up to three facts with their
   sources, an `action` it can carry out later, and the kind of `situation` with no names in it.

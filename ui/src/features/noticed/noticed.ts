@@ -309,9 +309,18 @@ let timer = 0;
 let soon = 0;
 let reload = 0;
 
-/** Keep the list current in this window: when the assistant finishes a step (it may have left something), and when the window is looked at again. */
+/** Keep the list current in this window: when another workspace is opened, when the assistant finishes a step (it may have left something), and when the window is looked at again. */
 export function followNoticed(): void {
   void loadNoticed();
+  // Another workspace's findings are taken down the moment this window opens a different one.
+  let shown = app.get().vault?.root;
+  app.subscribe(() => {
+    const root = app.get().vault?.root;
+    if (root === shown) return;
+    shown = root;
+    noticed.set({ items: [], problem: "" });
+    void loadNoticed(root);
+  });
   onAiEvent((_, event) => {
     if (event.type !== "tool_done") return;
     window.clearTimeout(reload);
