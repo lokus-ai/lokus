@@ -532,6 +532,8 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
 let summarised = false;
 /** How many times this conversation has been compacted, so a second window can tell it already was. */
 let compactions = 0;
+/** The `updated` of this conversation's file as this window last read or wrote it; 0 for none. */
+let stamp = 0;
 /** What the summaries stand in for, exactly as it was sent: kept in the file, never sent again. */
 let earlier: unknown[] = [];
 
@@ -568,36 +570,49 @@ export async function compactChat(note = ""): Promise<boolean> {
   try {
     // Another window may have compacted this conversation already: take its result, do not redo it.
     await saving;
-    const kept = await runCore<{ body: KeptBody }>(
-      "chats.load",
-      { id },
-      root,
-    ).catch(() => null);
-    if (sending !== requestId) return false;
-    if (kept && (kept.body.compactions ?? 0) > compactions) {
-      history = kept.body.history ?? history;
-      earlier = kept.body.earlier ?? earlier;
+    const load = () =>
+      runCore<{ updated: number; body: KeptBody }>(
+        "chats.load",
+        { id },
+        root,
+      ).catch(() => null);
+    // Another window added to it or compacted it: show what is in the file, and summarise
+    // nothing from the older copy this window held.
+    const adopt = (kept: { updated: number; body: KeptBody }) => {
+      const already = (kept.body.compactions ?? 0) > compactions;
+      history = kept.body.history ?? [];
+      earlier = kept.body.earlier ?? [];
       seen = null;
-      compactions = kept.body.compactions ?? compactions;
+      compactions = kept.body.compactions ?? 0;
+      stamp = kept.updated;
       chat.set({
         items: [
           ...(kept.body.items ?? []),
           {
             kind: "notice",
-            text: "This conversation was already compacted in another window.",
+            text: already
+              ? "This conversation was already compacted in another window."
+              : "This conversation was added to in another window. It is shown as it is now; compact again if it still needs it.",
           },
         ],
         usage: kept.body.usage ?? null,
       });
+      // The note that was typed goes back in the box, to be sent again or changed.
+      if (note.trim())
+        chat.get().draft.set({ text: `/compact ${note.trim()}` });
+    };
+    const kept = await load();
+    if (sending !== requestId) return false;
+    if (kept && kept.updated !== stamp) {
+      adopt(kept);
       return false;
     }
     const before = chat.get().usage;
     const done = await aiCompact(sending, id, history, note, root);
     if (sending !== requestId) return false;
+    const was = { history, earlier, items: chat.get().items };
     earlier = [...earlier, ...history.slice(0, done.replaced)];
     history = done.messages;
-    seen = null;
-    compactions += 1;
     update((items) =>
       fold(settle(items), done.kept_turns, {
         kind: "summary",
@@ -605,6 +620,21 @@ export async function compactChat(note = ""): Promise<boolean> {
         note: note.trim() || undefined,
       }),
     );
+    // The file is the judge: it takes the summary only if it is still the one summarised.
+    try {
+      await keep(stamp);
+    } catch (e) {
+      if (sending !== requestId) return false;
+      ({ history, earlier } = was);
+      chat.set({ items: was.items });
+      const now = (e as { code?: string }).code === "conflict" && (await load());
+      if (sending !== requestId) return false;
+      if (!now) throw e;
+      adopt(now);
+      return false;
+    }
+    seen = null;
+    compactions += 1;
     // The provider has not counted the shorter conversation yet; the next reply says.
     chat.set({
       usage: {
@@ -642,7 +672,7 @@ export async function compactChat(note = ""): Promise<boolean> {
  * Keep this conversation on this device, so it can be found and continued later. It goes in the
  * folder that is never synced: a conversation is the person's own until they choose to share it.
  */
-function keep(): Promise<unknown> {
+function keep(from?: number): Promise<unknown> {
   if (deleting.has(JSON.stringify([vaultRoot, chatId]))) return saving;
   const items = settle(chat.get().items);
   const first = items.find((i) => i.kind === "user");
@@ -652,8 +682,12 @@ function keep(): Promise<unknown> {
   const root = vaultRoot;
   const saved = { id: chatId, title: first.text, updated: Date.now(), body: { items, history,
       usage: chat.get().usage ?? undefined,
-      compactions, ...(earlier.length ? { earlier } : {}), ...(unanswered ? { unanswered } : {}), } };
-  const persisted = saving.then(() => runCore("chats.save", saved, root));
+      compactions: compactions + (from === undefined ? 0 : 1), ...(earlier.length ? { earlier } : {}), ...(unanswered ? { unanswered } : {}), } };
+  const persisted = saving
+    .then(() => runCore("chats.save", from === undefined ? saved : { ...saved, seen: from }, root))
+    .then(() => {
+      if (saved.id === chatId && root === vaultRoot) stamp = saved.updated;
+    });
   // Drain failed writes too; only the caller requiring this snapshot must refuse on its error.
   saving = persisted.catch((e) => {
     if (root === vaultRoot) notify(e instanceof Error ? e.message : String(e));
@@ -706,7 +740,7 @@ export async function openChat(id: string): Promise<void> {
     chat.set({ history: false });
     return;
   }
-  let kept: { body: KeptBody };
+  let kept: { updated?: number; body: KeptBody };
   try {
     await saving;
     if (ticket !== opening || root !== vaultRoot) return;
@@ -741,6 +775,7 @@ export async function openChat(id: string): Promise<void> {
   carried = null;
   seen = null;
   compactions = kept.body.compactions ?? 0;
+  stamp = kept.updated ?? 0;
   earlier = kept.body.earlier ?? [];
   chat.set({ items, busy: false, history: false, draft: draftFor(id),
     usage: kept.body.usage ?? null,
@@ -923,6 +958,7 @@ export function newChat(): boolean {
   carried = null;
   seen = null;
   compactions = 0;
+  stamp = 0;
   earlier = [];
   chat.set({ items: [], busy: false, history: false, draft: draftFor(chatId),
     usage: null,

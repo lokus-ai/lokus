@@ -380,13 +380,18 @@ function mentionAt(text: string, caret: number): { from: number; query: string }
 
 /** The commands the chat box runs, by the word after the slash. They are ordinary commands: the palette runs them too. */
 const slashCommands = (): Command[] => listCommands().filter((c) => c.slash);
-/** `/word rest` at the very start of the box, when the word is a command; anything else is a message. */
+/**
+ * `/word rest` at the very start of the box, when the word is a command. Words after a command
+ * that takes none make it a message: nothing typed is thrown away.
+ */
 function slashOf(text: string): { command: Command; rest: string } | null {
   const [, word, rest] =
     /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(text.trim()) ?? [];
   const command =
     word && slashCommands().find((c) => c.slash === word.toLowerCase());
-  return command ? { command, rest: rest ?? "" } : null;
+  return command && (command.takes || !rest)
+    ? { command, rest: rest ?? "" }
+    : null;
 }
 
 const PARTS: [string, string][] = [

@@ -19,6 +19,9 @@ const KEEP_RECENT: usize = 24_000;
 const RESULT_SHOWN: usize = 1_500;
 /// The most conversation the summariser is shown when the model's room is not known.
 const TRANSCRIPT: usize = 300_000;
+/// A summary under this many characters, of a conversation ten times as long, is not one: a
+/// sentence of apology is about fifty, and a note may fairly ask for only a line or two.
+const SHORT: usize = 80;
 /// Marks the message that holds a summary, so it can be told apart from what the person wrote.
 pub const SUMMARY_TAG: &str = "<conversation_summary>";
 
@@ -59,9 +62,13 @@ pub fn limit(config: &Config) -> Option<u64> {
     window(config.provider, &model)
 }
 
-/// The context window the provider publishes for a model; none for a model it does not list.
-/// Read on 2026-11-26 from docs.anthropic.com "Models overview", developers.openai.com
-/// "Models" (one page per model), and for the ChatGPT sign-in the model list in openai/codex.
+/// How many tokens of conversation the provider says a model takes; none for a model it does
+/// not list, so nothing is assumed about a name that is new here. Read on 2026-11-26 from
+/// docs.anthropic.com "Models overview", developers.openai.com "Models" (one page per model),
+/// and for the ChatGPT sign-in the model list in openai/codex. Where a provider caps what may
+/// be sent below the window, the cap is the figure: the GPT-5 models with a 400,000 window
+/// take 272,000, the other 128,000 being kept for the answer (openai.com, "Introducing GPT-5
+/// for developers").
 fn window(provider: Provider, model: &str) -> Option<u64> {
     // A name stands for its dated and suffixed forms: "gpt-5.2" for "gpt-5.2-2025-12-11".
     let named = |name: &str| {
@@ -83,11 +90,27 @@ fn window(provider: Provider, model: &str) -> Option<u64> {
             // The first Claude 4 names carry only a date: "claude-opus-4-20250514".
             let dated = ["claude-opus-4-2025", "claude-sonnet-4-2025"];
             let old = dated.iter().any(|d| model.starts_with(d)) || model.starts_with("claude-3");
-            match model.starts_with("claude-") {
-                true if old => Some(200_000),
-                true => Some(1_000_000),
-                false => None,
-            }
+            old.then_some(200_000)
+        })
+        .or_else(|| {
+            let big = [
+                "claude-fable-5-2",
+                "claude-fable-5-1",
+                "claude-fable-5",
+                "claude-mythos-5-2",
+                "claude-mythos-5-1",
+                "claude-mythos-5",
+                "claude-opus-5-5",
+                "claude-opus-5",
+                "claude-opus-4-8",
+                "claude-opus-4-7",
+                "claude-opus-4-6",
+                "claude-sonnet-5-5",
+                "claude-sonnet-5",
+                "claude-sonnet-4-6",
+                "claude-haiku-5-5",
+            ];
+            big.iter().any(|name| named(name)).then_some(1_000_000)
         }),
         Provider::OpenAi => {
             let small = model.contains("-mini") || model.contains("-nano");
@@ -98,20 +121,21 @@ fn window(provider: Provider, model: &str) -> Option<u64> {
                 return None;
             }
             if small && named("gpt-5.4") {
-                return Some(400_000);
+                return Some(272_000);
             }
             first(&[
                 ("gpt-5.6", 1_050_000),
                 ("gpt-5.5", 1_050_000),
                 ("gpt-5.4", 1_050_000),
-                ("gpt-5.3", 400_000),
-                ("gpt-5.2", 400_000),
-                ("gpt-5.1", 400_000),
-                ("gpt-5", 400_000),
+                ("gpt-5.3", 272_000),
+                ("gpt-5.2", 272_000),
+                ("gpt-5.1", 272_000),
+                ("gpt-5", 272_000),
                 ("gpt-4.1", 1_047_576),
                 ("gpt-4o", 128_000),
                 ("gpt-4-turbo", 128_000),
                 ("o1-mini", 128_000),
+                ("o1-preview", 128_000),
                 ("o1", 200_000),
                 ("o3", 200_000),
                 ("o4-mini", 200_000),
@@ -265,7 +289,7 @@ pub struct Compacted {
 pub async fn compact(
     http: &provider::Client,
     config: &Config,
-    key: &str,
+    key: &mut String,
     messages: &[Value],
     note: &str,
 ) -> Result<Compacted> {
@@ -286,7 +310,8 @@ pub async fn compact(
         ));
     }
     asked.push_str("\n\nWrite the summary now.");
-    let turn = provider::turn(
+    let read = asked.len();
+    let turn = crate::chat::turn(
         http,
         config,
         key,
@@ -305,10 +330,24 @@ pub async fn compact(
         .join("")
         .trim()
         .to_string();
-    if summary.is_empty() {
-        return Err(AiError::Provider(
-            "The model wrote no summary, so the conversation was left as it was.".into(),
-        ));
+    // What stands in for the earlier messages has to be a summary of them. A model that
+    // declined, or answered in a line what took pages, would have its answer kept as all that
+    // is known, and one that wrote more than it read would leave no more room than before.
+    let unusable = if turn.stop == "refusal" {
+        Some("The model declined to summarise this conversation")
+    } else if summary.is_empty() {
+        Some("The model wrote no summary")
+    } else if summary.len() < SHORT && read > SHORT * 10 {
+        Some("The model's summary was too short to stand for what was said")
+    } else if summary.len() >= weight(&messages[..at])
+        || near(limit(config), (summary.len() / 4) as u64)
+    {
+        Some("The model's summary was no shorter than what it would replace")
+    } else {
+        None
+    };
+    if let Some(why) = unusable {
+        return Err(AiError::Provider(format!("{why}.")));
     }
     let told = json!({ "type": "text", "text": format!(
         "{SUMMARY_TAG}\nThe earlier part of this conversation was put away to make room. This is a summary of it; carry on from here.\n\n{summary}\n</conversation_summary>"
@@ -399,7 +438,6 @@ pub fn measure(messages: &[Value]) -> Value {
 mod tests {
     use super::*;
 
-    /// The carried-over part never starts with a tool's result, whose call would be gone.
     #[test]
     fn a_window_is_the_published_one_for_that_exact_model() {
         // "claude" used to mean 200,000 and "gpt-5" 400,000 for every model so named.
@@ -419,18 +457,24 @@ mod tests {
             window(Provider::Anthropic, "claude-opus-4-6"),
             Some(1_000_000)
         );
+        // A Claude name the docs do not list is not assumed to be a large one.
+        assert_eq!(window(Provider::Anthropic, "claude-opus-6"), None);
+        assert_eq!(window(Provider::OpenAi, "o1-preview"), Some(128_000));
+        assert_eq!(window(Provider::OpenAi, "o1-2024-12-17"), Some(200_000));
         assert_eq!(window(Provider::OpenAi, "gpt-5.5"), Some(1_050_000));
-        assert_eq!(window(Provider::OpenAi, "gpt-5.4-mini"), Some(400_000));
+        // 400,000 in all, of which a conversation may fill 272,000: 80% of 400,000 never came.
+        assert_eq!(window(Provider::OpenAi, "gpt-5.4-mini"), Some(272_000));
         assert_eq!(
             window(Provider::OpenAi, "gpt-5.2-chat-latest"),
             Some(128_000)
         );
-        assert_eq!(window(Provider::OpenAi, "gpt-5-mini"), Some(400_000));
+        assert_eq!(window(Provider::OpenAi, "gpt-5-mini"), Some(272_000));
         assert_eq!(window(Provider::OpenAi, "gpt-5.7"), None);
         assert_eq!(window(Provider::ChatGpt, "gpt-5.5"), Some(272_000));
         assert_eq!(window(Provider::ChatGpt, "gpt-5.2"), None);
     }
 
+    /// The carried-over part never starts with a tool's result, whose call would be gone.
     #[test]
     fn the_cut_never_parts_a_tool_call_from_its_result() {
         let big = "x".repeat(KEEP_RECENT);

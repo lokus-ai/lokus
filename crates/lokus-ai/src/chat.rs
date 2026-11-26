@@ -460,6 +460,33 @@ pub async fn credential(provider: Provider) -> Result<String> {
     }
 }
 
+/// Ask the model for its next turn. Every request goes through here, a reply and a summary
+/// alike, so both renew a ChatGPT sign-in the same way: a token can run out under a long
+/// answer, and is renewed and the request asked once more.
+pub(crate) async fn turn(
+    http: &provider::Client,
+    config: &Config,
+    key: &mut String,
+    system: &str,
+    tools: &[Tool],
+    messages: &[Value],
+    on_text: &mut (dyn FnMut(&str) + Send),
+) -> Result<provider::Turn> {
+    let turn = provider::turn(http, config, key, system, tools, messages, on_text).await;
+    if !matches!(turn, Err(AiError::BadKey)) || config.provider != Provider::ChatGpt {
+        return turn;
+    }
+    *key = chatgpt::renewed(key).await?;
+    match provider::turn(http, config, key, system, tools, messages, on_text).await {
+        // ChatGPT turned away a token that had just been renewed. The sign-in itself is only
+        // dropped when the sign-in service refuses to renew it, so say what happened and keep it.
+        Err(AiError::BadKey) => Err(AiError::Provider(
+            "ChatGPT did not accept this sign-in for the request. Try again; if it keeps happening, sign in with ChatGPT again in Settings, Assistant.".into(),
+        )),
+        turn => turn,
+    }
+}
+
 /// Compact a conversation because the person asked: the model summarises the earlier part,
 /// keeping and dropping what `note` says. Returns the conversation to carry on from; the one
 /// passed in is untouched, so a failure or a stop changes nothing.
@@ -469,14 +496,14 @@ pub async fn compact(
     note: &str,
     core: Option<&Core>,
 ) -> Result<Value> {
-    let key = credential(config.provider).await?;
+    let mut key = credential(config.provider).await?;
     let http = reqwest::Client::new();
     if config.provider == Provider::ChatGpt && config.model().is_err() {
         let listed = provider::models(&http, &config, &key).await?;
         config.model = listed.into_iter().next().unwrap_or_default();
     }
     config.model()?;
-    let done = crate::compact::compact(&http, &config, &key, messages, note).await?;
+    let done = crate::compact::compact(&http, &config, &mut key, messages, note).await?;
     let wire = crate::files::expand(core, &done.messages, &mut Default::default());
     Ok(json!({
         "messages": done.messages,
@@ -646,6 +673,7 @@ pub async fn send(
     let limit = crate::compact::limit(&config);
     let (mut filled, mut replaced, mut tried) = (used, None::<Vec<Value>>, false);
     let mut dropped = 0;
+    let made = std::sync::Mutex::new(None::<Event>);
     let (mut rounds, mut read, mut written, mut called) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
         for _ in 0..MAX_ROUNDS {
@@ -654,9 +682,9 @@ pub async fn send(
             // If that does not work the conversation goes as it is, and may still fit.
             if crate::compact::near(limit, filled) && !tried {
                 tried = true;
-                match crate::compact::compact(&http, &config, &key, &messages, "").await {
+                match crate::compact::compact(&http, &config, &mut key, &messages, "").await {
                     Ok(done) => {
-                        emit(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
+                        *made.lock().unwrap() = Some(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
                         dropped = done.replaced;
                         messages = done.messages;
                         replaced = Some(messages.clone());
@@ -668,29 +696,35 @@ pub async fn send(
                     }),
                 }
             }
-            let mut on_text = |delta: &str| emit(Event::Text { delta: delta.to_string() });
+            // A summary made on the way is only spoken of once the request it made room for is
+            // taken: one the provider still refuses leaves the conversation as it was.
+            let announce = || {
+                if let Some(event) = made.lock().unwrap().take() {
+                    emit(event);
+                }
+            };
+            let mut on_text = |delta: &str| {
+                announce();
+                emit(Event::Text { delta: delta.to_string() })
+            };
             // Attached files are put in here, for this request only; `messages` keeps their places.
             let wire = crate::files::expand(core.as_deref(), &messages, &mut attached);
-            let mut turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
-            // A long answer can outlive the ChatGPT token it started with: renew it and ask once more.
-            if matches!(turn, Err(AiError::BadKey)) && config.provider == Provider::ChatGpt {
-                key = chatgpt::renewed(&key).await?;
-                turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
-            }
+            let mut turn = self::turn(&http, &config, &mut key, &system, &offered, &wire, &mut on_text).await;
             // The provider says it no longer fits: compact once and ask again.
             if turn.as_ref().err().is_some_and(crate::compact::overflowed) && !tried {
                 tried = true;
-                if let Ok(done) = crate::compact::compact(&http, &config, &key, &messages, "").await {
-                    emit(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
+                if let Ok(done) = crate::compact::compact(&http, &config, &mut key, &messages, "").await {
+                    *made.lock().unwrap() = Some(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
                     dropped = done.replaced;
                     messages = done.messages;
                     replaced = Some(messages.clone());
                     added.clear();
                     let wire = crate::files::expand(core.as_deref(), &messages, &mut attached);
-                    turn = provider::turn(&http, &config, &key, &system, &offered, &wire, &mut on_text).await;
+                    turn = self::turn(&http, &config, &mut key, &system, &offered, &wire, &mut on_text).await;
                 }
             }
             let turn = turn?;
+            announce();
             filled = turn.tokens.0 + turn.tokens.1;
             stop = turn.stop.clone();
             rounds += 1;
@@ -789,13 +823,6 @@ pub async fn send(
     }
     for connection in connections {
         connection.close().await;
-    }
-    // ChatGPT turned away a token that had just been renewed. The sign-in itself is only dropped
-    // when the sign-in service refuses to renew it, so say what happened and keep it.
-    if matches!(result, Err(AiError::BadKey)) && config.provider == Provider::ChatGpt {
-        return Err(AiError::Provider(
-            "ChatGPT did not accept this sign-in for the request. Try again; if it keeps happening, sign in with ChatGPT again in Settings, Assistant.".into(),
-        ));
     }
     let model = config.model().unwrap_or_default().to_string();
     result.map(|()| Outcome {

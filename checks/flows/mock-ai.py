@@ -39,6 +39,12 @@ def script(messages):
 # question only from sentences that are actually in the request it was sent.
 TALK = os.environ.get("MOCK_TALK") == "1"
 LIMIT = int(os.environ.get("MOCK_LIMIT", "0"))
+# MOCK_SUMMARY makes the summary a bad one: "refusal" (declined, with that stop reason), "short"
+# (the same sentence as an ordinary answer) or "long" (longer than what it was given).
+SUMMARY = os.environ.get("MOCK_SUMMARY", "")
+# The token a ChatGPT sign-in is good with. POST /expire makes the one in use run out early,
+# as the real service does: the next request is refused until the sign-in is renewed.
+PLAN = ["plan-token"]
 
 
 def texts(value, out):
@@ -91,6 +97,10 @@ def talk(body):
                 seen.add(line)
                 lines.append(line)
         answer = "## Decisions\n" + "\n".join(lines[:40] or ["- Nothing was decided."])
+        if SUMMARY in ("refusal", "short"):
+            answer = "I can't help with summarising this conversation."
+        if SUMMARY == "long":
+            answer = talked + "\n" + talked
     else:
         question = last.split("</app_state>")[-1].strip()
         earlier = "\n".join(said[:-1])
@@ -110,6 +120,7 @@ def talk(body):
 
 def talk_events(path, body):
     answer, counted = talk(body)
+    refused = SUMMARY == "refusal" and answer.startswith("I can't help with summarising")
     usage = None if os.environ.get("MOCK_NO_USAGE") == "1" else (counted, len(answer) // 4)
     if path == "/v1/messages":
         ev = lambda kind, data: f"event: {kind}\ndata: {json.dumps({'type': kind, **data})}\n\n"
@@ -118,7 +129,7 @@ def talk_events(path, body):
             ev("content_block_start", {"index": 0, "content_block": {"type": "text", "text": ""}}),
             ev("content_block_delta", {"index": 0, "delta": {"type": "text_delta", "text": answer}}),
             ev("content_block_stop", {"index": 0}),
-            ev("message_delta", {"delta": {"stop_reason": "end_turn"}, **({"usage": {"output_tokens": usage[1]}} if usage else {})}),
+            ev("message_delta", {"delta": {"stop_reason": "refusal" if refused else "end_turn"}, **({"usage": {"output_tokens": usage[1]}} if usage else {})}),
             ev("message_stop", {}),
         ]
     if path == "/responses":
@@ -275,7 +286,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/accounts/oauth/token":
             form = dict(pair.split("=", 1) for pair in raw.decode().split("&"))
             SEEN.append({"path": self.path, "key": None, "body": {k: form.get(k) for k in ("grant_type", "client_id")}})
-            return self.json(200, {"access_token": "plan-token", "refresh_token": "plan-refresh", "expires_in": 3600, "scope": "openid offline_access resource.invoke chatgpt.tokens.use.direct"})
+            return self.json(200, {"access_token": PLAN[0], "refresh_token": "plan-refresh", "expires_in": 3600, "scope": "openid offline_access resource.invoke chatgpt.tokens.use.direct"})
+        if self.path == "/expire":
+            PLAN[0] = f"plan-token-{len(SEEN)}"
+            return self.json(200, {})
         if self.path == "/token":
             return self.json(200, {"access_token": "signed-in-token", "token_type": "Bearer", "expires_in": 3600, "refresh_token": "r1"})
         body = json.loads(raw or b"{}")
@@ -298,7 +312,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("x-api-key") == "wrong":
             return self.json(401, {"error": {"type": "authentication_error", "message": "invalid x-api-key"}})
         if TALK and self.path in ("/v1/messages", "/responses", "/chat/completions"):
-            if self.path == "/responses" and self.headers.get("authorization") != "Bearer plan-token":
+            if self.path == "/responses" and self.headers.get("authorization") != f"Bearer {PLAN[0]}":
                 return self.json(401, {"detail": "not signed in"})
             counted = len(json.dumps(body)) // 4
             SEEN[-1]["counted"] = counted
@@ -315,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/v1/messages":
             return sse(self, anthropic_events(step))
         if self.path == "/responses":
-            if self.headers.get("authorization") != "Bearer plan-token":
+            if self.headers.get("authorization") != f"Bearer {PLAN[0]}":
                 return self.json(401, {"detail": "not signed in"})
             done = sum(1 for item in body["input"] if item.get("type") == "function_call_output")
             steps = [("search_notes", {"query": "launch"}), ("edit_note", {"path": "Plan.md", "old_text": "Launch: TBD", "new_text": "Launch: 1 March"})]
