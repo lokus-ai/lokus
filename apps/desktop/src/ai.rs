@@ -25,6 +25,9 @@ pub struct Ai {
     waiting: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
     /// Tool calls the window is carrying out (opening a note, showing a view).
     acting: Arc<Mutex<HashMap<String, Answer>>>,
+    /// Conversations being compacted, by workspace and chat, so two windows on the same
+    /// conversation do not both summarise it.
+    compacting: Mutex<std::collections::HashSet<String>>,
 }
 
 fn fail(code: &str, message: impl ToString) -> Value {
@@ -168,7 +171,7 @@ pub fn ai_settings(app: AppHandle) -> Result<Value, Value> {
         "keys": { "anthropic": has_key(Provider::Anthropic), "openai": has_key(Provider::OpenAi), "chatgpt": has_key(Provider::ChatGpt) },
         "tokens": names(&|s| secret(&mcp_account(s)).is_some()),
         "api_keys": config.apis.iter().filter(|a| secret(&api_account(a)).is_some()).map(|a| a.name.as_str()).collect::<Vec<_>>(),
-        "signed_in": names(&lokus_ai::mcp_login::signed_in),
+        "signed_in": names(&|s| lokus_ai::imessage::is(s) || lokus_ai::mcp_login::signed_in(s)),
         "plugin_servers": plugin_servers(core.as_deref()),
     }))
 }
@@ -232,6 +235,14 @@ pub async fn ai_mcp_check(
     root: String,
 ) -> Result<Vec<Value>, Value> {
     let server = load(&app)?.place(&id_at(&root)?, server);
+    // Messages on this Mac is read where it is: checking it is trying to read it.
+    if lokus_ai::imessage::is(&server) {
+        lokus_ai::imessage::check().map_err(|e| fail("no_access", e))?;
+        return Ok(lokus_ai::imessage::tools()
+            .iter()
+            .map(|t| json!({ "name": t.name.trim_start_matches("mcp__imessage__"), "description": t.description, "asks": t.writes }))
+            .collect());
+    }
     let connection = match token {
         Some(token) => lokus_ai::mcp::check_token(&server, &token)
             .await
@@ -275,6 +286,8 @@ pub async fn ai_send(
     messages: Vec<Value>,
     briefing: String,
     root: Option<String>,
+    used: Option<u64>,
+    unattended: Option<bool>,
 ) -> Result<Value, Value> {
     // App tools run in the window: it is told what to do and answers through `ai_act_done`.
     let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
@@ -307,6 +320,8 @@ pub async fn ai_send(
         core,
         briefing,
         app: Some(act),
+        used: used.unwrap_or(0),
+        unattended: unattended.unwrap_or(false),
     };
     let waiting = app.state::<Ai>().waiting.clone();
     let approve: Approver = Arc::new(move |id: &str| {
@@ -335,6 +350,63 @@ pub async fn ai_send(
     }
     match result {
         Ok(Ok(outcome)) => serde_json::to_value(outcome).map_err(|e| fail("ai", e)),
+        Ok(Err(e)) => Err(e.body()),
+        Err(_) => Err(fail("stopped", "stopped")),
+    }
+}
+
+/// Summarise the earlier part of a conversation to make room, steered by the person's `note`.
+/// The reply is the conversation to carry on from. Stopping it (`ai_stop`) or a failure leaves
+/// the conversation as it was: nothing is changed until the window takes the reply.
+#[tauri::command]
+pub async fn ai_compact(
+    app: AppHandle,
+    chat: String,
+    conversation: String,
+    messages: Vec<Value>,
+    note: String,
+    root: Option<String>,
+) -> Result<Value, Value> {
+    let core = app.state::<Shell>().core();
+    let open = core.as_deref().map(root_of).unwrap_or_default();
+    if root.is_some_and(|asked| asked != open) {
+        return Err(
+            json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+        );
+    }
+    let at = core.as_deref().map(id_of).transpose()?.unwrap_or_default();
+    let config = load(&app)?.seen_from(&at);
+    // Every window of the app shares this, so a second window asking is turned away.
+    let lock = format!("{open}\n{conversation}");
+    let free = app
+        .state::<Ai>()
+        .compacting
+        .lock()
+        .is_ok_and(|mut busy| busy.insert(lock.clone()));
+    if !free {
+        return Err(fail(
+            "compacting",
+            "This conversation is already being compacted.",
+        ));
+    }
+    let (done, outcome) = oneshot::channel::<Result<Value, AiError>>();
+    let task = tauri::async_runtime::spawn(async move {
+        let _ = done.send(lokus_ai::compact_chat(config, &messages, &note, core.as_deref()).await);
+    });
+    if let Ok(mut running) = app.state::<Ai>().running.lock() {
+        if let Some(old) = running.insert(chat.clone(), task) {
+            old.abort();
+        }
+    }
+    let result = outcome.await;
+    if let Ok(mut running) = app.state::<Ai>().running.lock() {
+        running.remove(&chat);
+    }
+    if let Ok(mut busy) = app.state::<Ai>().compacting.lock() {
+        busy.remove(&lock);
+    }
+    match result {
+        Ok(Ok(value)) => Ok(value),
         Ok(Err(e)) => Err(e.body()),
         Err(_) => Err(fail("stopped", "stopped")),
     }
@@ -385,9 +457,14 @@ pub async fn ai_mcp_login(app: AppHandle, server: McpServer, root: String) -> Re
     };
     let at = id_at(&root)?;
     let server = Config::own(&at, server);
-    lokus_ai::mcp_login::login(&server, show)
-        .await
-        .map_err(|e| e.body())?;
+    if lokus_ai::imessage::is(&server) {
+        // Nothing to sign in to: it is connected once Messages can be read.
+        lokus_ai::imessage::check().map_err(|e| fail("no_access", e))?;
+    } else {
+        lokus_ai::mcp_login::login(&server, show)
+            .await
+            .map_err(|e| e.body())?;
+    }
     let dir = config_dir(&app)?;
     Config::let_go(&dir, &at, "mcp", &server.name).map_err(|e| e.body())?;
     let mut seen = Config::load(&dir).seen_from(&at);
@@ -397,6 +474,12 @@ pub async fn ai_mcp_login(app: AppHandle, server: McpServer, root: String) -> Re
     }
     settle(&app, &root);
     Ok(())
+}
+
+/// Show the Full Disk Access list in System Settings, where reading Messages is allowed.
+#[tauri::command]
+pub fn ai_open_disk_access() {
+    let _ = open::that("x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles");
 }
 
 #[tauri::command(async)]

@@ -1,4 +1,5 @@
 /** @part-of ui.ai */
+import { fileMenu, type MenuEvent, openMenu } from "../../shell/contextMenu";
 import { ConnectModel, useModel } from "./Connect";
 import lokusMark from "./lokus.svg";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -6,13 +7,16 @@ import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { type Entry, vaultFileUrl } from "../../bridge/core";
 
 import { Icon } from "../../shell/Icon";
+import { type Command, listCommands, runCommand } from "../../shell/commands";
 import { useStore } from "../../shell/store";
 import { allFiles, app, getEditor, notify, openNote, renderMarkdown } from "../../shell/workspace";
 import { aiSettings, saveAiConfig } from "../../bridge/ai";
 import { Logo } from "../connections/logos";
 import { type Customer, loadCustomers, show as shown, threads, tone } from "../customers/data";
 import { fileName, fileTag, kindOf } from "../files/files";
-import { answer, answerAll, attachFile, chat, detach, forgetChat, type Item, type Kept, type Target, keptChats, openChat, reply, sendDraft, stop } from "./chat";
+import { answer, answerAll, attachFile, chat,
+  compactChat, detach, forgetChat, type Item, type Kept, type Target,
+  type Usage, keptChats, openChat, reply, sendDraft, stop } from "./chat";
 import { ModelPicker } from "./ModelPicker";
 
 const TOOLS: Record<string, (input: Record<string, unknown>) => string> = {
@@ -75,15 +79,25 @@ function Rendered({ text }: { text: string }) {
   return <div ref={mount} />;
 }
 
+/** The menu of one message of the conversation. */
+function messageMenu(event: MenuEvent, text: string, answer = false): void {
+  if ((event.target as Element).closest("button, a")) return;
+  openMenu(event, "Message", [
+    { id: "clipboard.copy", label: "Copy" },
+    answer ? { id: "editor.insert", label: "Insert into note", disabled: !getEditor() || !app.get().active || app.get().view !== "note" } : null,
+  ], { args: { text } });
+}
+
 /** An answer, rendered the way a note is. While it streams it is plain text. */
 function Answer({ text, live }: { text: string; live: boolean }) {
   if (live) return <div className="ai-answer plain">{text}</div>;
+  const menu = (e: MenuEvent) => messageMenu(e, text, true);
   return (
-    <div className="ai-answer">
+    <div className="ai-answer" tabIndex={0} onContextMenu={menu} onKeyDown={menu}>
       <Rendered text={text} />
       <div className="ai-actions">
-        <button onClick={() => void navigator.clipboard.writeText(text).then(() => notify("Copied"))}>Copy</button>
-        {getEditor() && app.get().active && <button onClick={() => getEditor()?.insert(text)}>Insert into note</button>}
+        <button onClick={() => void runCommand("clipboard.copy", { text })}>Copy</button>
+        {getEditor() && app.get().active && <button onClick={() => void runCommand("editor.insert", { text }).catch(() => {})}>Insert into note</button>}
       </div>
     </div>
   );
@@ -299,9 +313,10 @@ function Mode() {
 function FileCard({ path, onRemove, small }: { path: string; onRemove?: () => void; small?: boolean }) {
   const root = useStore(app, (s) => s.vault?.root);
   const picture = kindOf(path) === "image" && root;
+  const menu = (e: MenuEvent) => fileMenu(e, path, onRemove ? "draft" : "row");
   return (
     <span className={`ai-file${picture ? " picture" : ""}${small ? " small" : ""}`} title={path}>
-      <button className="ai-file-open" onClick={() => void openNote(path)}>
+      <button className="ai-file-open" onClick={() => void openNote(path)} onContextMenu={menu} onKeyDown={menu}>
         {picture ? (
           <img src={vaultFileUrl(root, path)} alt={fileName(path)} />
         ) : (
@@ -363,6 +378,123 @@ function mentionAt(text: string, caret: number): { from: number; query: string }
   return found ? { from: caret - found[2].length - 1, query: found[2].toLowerCase() } : null;
 }
 
+/** The commands the chat box runs, by the word after the slash. They are ordinary commands: the palette runs them too. */
+const slashCommands = (): Command[] => listCommands().filter((c) => c.slash);
+/**
+ * `/word rest` at the very start of the box, when the word is a command. Words after a command
+ * that takes none make it a message: nothing typed is thrown away.
+ */
+function slashOf(text: string): { command: Command; rest: string } | null {
+  const [, word, rest] =
+    /^\/([a-z]+)(?:\s+([\s\S]*))?$/i.exec(text.trim()) ?? [];
+  const command =
+    word && slashCommands().find((c) => c.slash === word.toLowerCase());
+  return command && (command.takes || !rest)
+    ? { command, rest: rest ?? "" }
+    : null;
+}
+
+const PARTS: [string, string][] = [
+  ["messages", "Messages"],
+  ["summary", "Summary of earlier messages"],
+  ["tool_results", "Tool results"],
+  ["attached", "Attached notes and files"],
+  ["briefing", "Workspace briefing"],
+  ["instructions", "Assistant instructions"],
+  ["tools", "Tools on offer"],
+];
+const count = (n: number) => n.toLocaleString("en-US");
+
+/** How full the model's room is, in the provider's own count; "unknown" when it gave none. */
+function meterText(usage: Usage | null): string {
+  if (!usage) return "Context: new chat";
+  if (!usage.used) return usage.pending ? "Compacted" : "Context unknown";
+  if (!usage.limit) return `${count(usage.used)} tokens`;
+  return `${Math.min(100, Math.round((usage.used / usage.limit) * 100))}% of context`;
+}
+
+/** What is using the room, so the person can see what to drop, and a way to make room. */
+function ContextDetail({
+  usage,
+  busy,
+  onClose,
+}: {
+  usage: Usage | null;
+  busy: boolean;
+  onClose: () => void;
+}) {
+  const parts = usage?.parts ?? {};
+  const total = PARTS.reduce((n, [key]) => n + (parts[key] ?? 0), 0);
+  const full = usage?.used && usage.limit ? usage.used / usage.limit : 0;
+  return (
+    <div
+      className="ai-context-detail"
+      role="dialog"
+      aria-label="Context used"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="ai-context-head">
+        <strong>{meterText(usage)}</strong>
+        <button aria-label="Close" onClick={onClose}>
+          <Icon name="close" size={12} />
+        </button>
+      </div>
+      <p>
+        {!usage
+          ? "Nothing has been sent yet. The count appears after the first reply."
+          : usage.pending
+            ? "Compacted. The provider counts the shorter conversation on the next reply."
+            : !usage.used
+              ? `${usage.model || "This model"} did not report a token count${usage.limit ? `; its limit is ${count(usage.limit)} tokens` : ""}. Lokus will not guess one.`
+              : usage.limit
+                ? `${count(usage.used)} of ${count(usage.limit)} tokens, as counted by ${usage.model}.`
+                : `${count(usage.used)} tokens, as counted by ${usage.model}. This model's limit is unknown.`}
+      </p>
+      {usage?.limit && usage.used > 0 && (
+        <div className={`ai-context-bar${full >= 0.8 ? " high" : ""}`}>
+          <span style={{ width: `${Math.min(100, full * 100)}%` }} />
+        </div>
+      )}
+      {total > 0 && (
+        <>
+          <ul>
+            {PARTS.filter(([key]) => key !== "summary" || parts.summary > 0)
+              .sort((a, b) => (parts[b[0]] ?? 0) - (parts[a[0]] ?? 0))
+              .map(([key, label]) => (
+                <li key={key}>
+                  <span>{label}</span>
+                  <i>
+                    <b
+                      style={{ width: `${((parts[key] ?? 0) / total) * 100}%` }}
+                    />
+                  </i>
+                  <em>{Math.round(((parts[key] ?? 0) / total) * 100)}%</em>
+                </li>
+              ))}
+          </ul>
+          <small>
+            Shares are by length of text. Pictures are not counted in them.
+          </small>
+        </>
+      )}
+      <div className="ai-context-actions">
+        <button
+          disabled={busy || !usage}
+          onClick={() => {
+            onClose();
+            void compactChat();
+          }}
+        >
+          Compact
+        </button>
+        <span>
+          Or type <code>/compact</code> and say what to keep
+        </span>
+      </div>
+    </div>
+  );
+}
+
 const STARTERS = ["Summarise the open note", "What is still unfinished in this note?", "Which notes are related to this one?"];
 /** Offered as well once a service is connected, since the question can then reach outside the notes. */
 const WITH_SERVICES = "What needs my attention across my tools today?";
@@ -379,6 +511,16 @@ export function AiPanel() {
   /** The `@word` under the caret and which suggestion is highlighted; null when not picking. */
   const [picking, setPicking] = useState<{ from: number; query: string; at: number } | null>(null);
   useEffect(() => setPicking(null), [composer]);
+  const usage = useStore(chat, (s) => s.usage);
+  const detail = useStore(chat, (s) => s.detail);
+  const compacting = useStore(chat, (s) => s.compacting);
+  /** Which command is highlighted while `/word` is being typed; null once dismissed with Escape. */
+  const [slashAt, setSlashAt] = useState<number | null>(0);
+  const slashWord = /^\/([a-z]*)$/i.exec(draft)?.[1]?.toLowerCase();
+  const slashes =
+    slashWord === undefined || slashAt === null
+      ? []
+      : slashCommands().filter((c) => c.slash!.startsWith(slashWord));
   const scroll = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   /** Things worth doing right now, read from the customers; offered before the first question. */
@@ -413,9 +555,15 @@ export function AiPanel() {
     );
   }, [settingsOpen, at]);
 
+  const summaries = items.filter((i) => i.kind === "summary").length;
+  const was = useRef({ summaries, compacting });
+
   useLayoutEffect(() => {
-    scroll.current?.scrollTo({ top: scroll.current.scrollHeight });
-  }, [items]);
+    // After a compaction asked for by hand, show the summary rather than the end.
+    const top = was.current.compacting && summaries > was.current.summaries;
+    was.current = { summaries, compacting };
+    scroll.current?.scrollTo({ top: top ? 0: scroll.current.scrollHeight });
+  }, [items, compacting]);
   useEffect(() => input.current?.focus(), [items.length === 0]);
   // The box grows with what is typed, up to a few lines.
   useLayoutEffect(() => {
@@ -445,6 +593,13 @@ export function AiPanel() {
   };
   const send = () => {
     if ((!draft.trim() && !files.length) || busy || importing) return;
+    // A command typed in the box is run, not sent. A slash that names no command is a message.
+    const slash = files.length ? null : slashOf(draft);
+    if (slash) {
+      setDraft("");
+      void runCommand(slash.command.id, { text: slash.rest });
+      return;
+    }
     void sendDraft();
     setPicking(null);
   };
@@ -466,7 +621,42 @@ export function AiPanel() {
       el?.setSelectionRange(place, place);
     });
   };
+  const pick = (command: Command) => {
+    // A command that takes words waits for them; the others run at once.
+    if (command.takes) setDraft(`/${command.slash} `);
+    else {
+      setDraft("");
+      void runCommand(command.id, {});
+    }
+    input.current?.focus();
+  };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashes.length && slashAt !== null) {
+      const at = Math.min(slashAt, slashes.length - 1);
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashAt(
+          (at + (e.key === "ArrowDown" ? 1 : -1) + slashes.length) %
+            slashes.length,
+        );
+        return;
+      }
+      if (
+        (e.key === "Enter" || e.key === "Tab") &&
+        !e.shiftKey &&
+        !e.nativeEvent.isComposing
+      ) {
+        e.preventDefault();
+        pick(slashes[at]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setSlashAt(null);
+        return;
+      }
+    }
     if (picking && options.length) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
@@ -520,6 +710,44 @@ export function AiPanel() {
           ))}
         </div>
       )}
+      {detail && (
+        <ContextDetail
+          usage={usage}
+          busy={busy}
+          onClose={() => chat.set({ detail: false })}
+        />
+      )}
+      {slashes.length > 0 && (
+        <div
+          className="ai-mentions ai-slashes"
+          role="listbox"
+          aria-label="Commands"
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {slashes.map((c, i) => (
+            <button
+              key={c.id}
+              role="option"
+              aria-selected={i === Math.min(slashAt ?? 0, slashes.length - 1)}
+              className={
+                i === Math.min(slashAt ?? 0, slashes.length - 1) ? "active" : ""
+              }
+              onMouseEnter={() => setSlashAt(i)}
+              onClick={() => pick(c)}
+            >
+              <span className="ai-slash-word">
+                /{c.slash}
+                {c.takes && <small> [{c.takes}]</small>}
+              </span>
+              <small className="tree-name">
+                {c.title
+                  .replace(/^Assistant: /, "")
+                  .replace(/^./, (x) => x.toUpperCase())}
+              </small>
+            </button>
+          ))}
+        </div>
+      )}
       {picking && options.length > 0 && (
         <div className="ai-mentions" onMouseDown={(e) => e.preventDefault()}>
           {options.map((t, i) => (
@@ -553,9 +781,10 @@ export function AiPanel() {
         ref={input}
         rows={1}
         value={draft}
-        placeholder="Ask about your notes, @ to point at one, + to attach a file"
+        placeholder="Ask about your notes, @ to point at one, / for commands"
         onChange={(e) => {
           setDraft(e.target.value);
+          setSlashAt(0);
           track(e.target.value, e.target.selectionStart);
         }}
         onKeyDown={onKey}
@@ -607,6 +836,14 @@ export function AiPanel() {
           </button>
         )}
       </div>
+    <button
+        className={`ai-meter${usage?.used && usage.limit && usage.used / usage.limit >= 0.8 ? " high" : ""}`}
+        title="What is using the context"
+        aria-expanded={detail}
+        onClick={() => void runCommand("ai.context")}
+      >
+        {meterText(usage)}
+      </button>
     </div>
   );
 
@@ -650,10 +887,7 @@ export function AiPanel() {
     );
   }
 
-  return (
-    <div className="ai">
-      <div className="ai-scroll" ref={scroll}>
-        {blocks(items, busy).map((block, i) => {
+  const show = (list: Item[], live: boolean)=>blocks(list, live).map((block, i) => {
           if (block.kind === "steps") {
             const files = made(block.steps);
             return (
@@ -679,7 +913,7 @@ export function AiPanel() {
                   ))}
                 </div>
               )}
-              {item.text && <div className="ai-user">{item.text}</div>}
+              {item.text && <div className="ai-user" tabIndex={0} onContextMenu={(e) => messageMenu(e, item.text)} onKeyDown={(e) => messageMenu(e, item.text)}>{item.text}</div>}
             </div>
           ) : item.kind === "assistant" ? (
             // A reply that is only white space (some models send one before using a tool) is not shown.
@@ -688,14 +922,43 @@ export function AiPanel() {
             <Tool key={i} item={item} />
           ) : item.kind === "question" ? (
             <Question key={i} item={item} />
-          ) : (
+          ) : item.kind === "summary" ? (
+        <details key={i} className="ai-notice ai-summary">
+          <summary>
+            {item.auto
+              ? "Compacted automatically to make room"
+              : item.note
+                ? `Compacted, keeping: ${item.note}`
+                : "Compacted"}{" "}
+            · show the summary
+          </summary>
+          <div className="ai-answer plain">{item.text}</div>
+        </details>
+      ) : (
             <div key={i} className={`ai-notice${item.error ? " error" : ""}`}>
               <span>{item.text.replace(/^./, (c) => c.toUpperCase())}</span>
               {(item.code === "no_key" || item.code === "bad_key") && <button onClick={() => app.set({ settings: "assistant" })}>Open settings</button>}
             </div>
           );
-        })}
-        {waiting && <div className="ai-thinking">Thinking…</div>}
+        });
+  /** Everything above the newest summary is folded away, still readable. */
+  const cut = items.map((i) => i.kind).lastIndexOf("summary");
+
+  return (
+    <div className="ai">
+      <div className="ai-scroll" ref={scroll}>
+        {cut > 0 && (
+          <details className="ai-earlier">
+            <summary>Earlier, summarised</summary>
+            <div className="ai-earlier-body">
+              {show(items.slice(0, cut), false)}
+            </div>
+          </details>
+        )}
+        {show(items.slice(Math.max(cut, 0)), busy)}
+        {waiting && ( <div className="ai-thinking">
+            {compacting ? "Compacting…" : "Thinking…"}</div>
+        )}
       </div>
       {compose}
     </div>

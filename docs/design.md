@@ -122,6 +122,26 @@ and fails unless every file is byte-identical.
 
 Small things that make it a daily driver, all plain commands over plain files:
 
+- **Right-click menus:** every surface that shows a thing has one menu, drawn by the shared
+  `ui/src/shell/contextMenu.ts` (`openMenu`), and every item in it is a registered command sent
+  the captured thing and the folder that was open, never the current selection. A note or file
+  has the same menu wherever it is shown (`fileMenu`): Open (Close tab on a tab), Reveal in
+  sidebar, Rename, Ask the assistant about this (files that are not notes), Move to trash. That
+  covers sidebar files, tabs, the file viewer, linked mentions and the assistant's file cards (a
+  file still on an unsent message offers Remove from message in place of Rename and the
+  trash). A sidebar
+  folder and the sidebar's empty space offer New note and New folder there; a folder adds Rename
+  and Move to trash. A link in a note offers Open link, Open in new tab and Copy link; a
+  customer row Open, Archive or Bring back, and Delete… (which still asks); a chat message Copy
+  and, for an answer, Insert into note; tables and task cards keep the menus described with them.
+  Right-click, the Menu key or Shift+F10 opens it (in a note, for the link the caret is in);
+  arrows, Home, End, Enter and Space work it; Escape or Tab closes it and puts focus back. The
+  thing stays outlined while its menu is open. The menu closes, and its command is not run, when
+  the thing leaves the screen, another folder opens or Settings opens; each command checks the
+  folder again itself, and Rename typed for one folder's file is refused once another folder is
+  open. Rename from any surface is the sidebar's inline rename (`tree.rename`), so a name is
+  only ever changed inside the open folder. Text being written (the note's own text, text boxes,
+  selected text) keeps the system's menu, for spelling and the clipboard.
 - **Folders in the sidebar:** opening a file shows its parents unless the person has closed
   them. A manually closed folder stays closed through edits, tab changes and renaming it
   in the sidebar; its nested folder choices follow the rename too. The separate
@@ -819,11 +839,76 @@ confirms that everything it must not be able to do is refused.
   waits for the person to allow it unless they switch that off, as does any tool-server action
   not marked read-only. Acting on the app (open a note at a heading, show the graph) never asks;
   the window carries these out. Every result is capped, and a cut result says how to see the rest.
-- **Context.** One loop, one conversation, only ever added to. Each conversation starts with a
+- **Context.** One loop, one conversation, added to until it nears the model's limit (see
+  Compaction below). Each conversation starts with a
   briefing that then never changes: the date, the shape of the vault, and the person's standing
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Compaction** (built; tried in the real app with a stand-in provider speaking all three
+  formats, not with a real model). The connected model writes a summary of the conversation
+  so far (`lokus-ai/src/compact.rs`), and the conversation carries on from that summary plus
+  the most recent turns (about 24,000 characters of them, fewer for a small model; the cut is
+  never between a tool call and its result, and never after a request still being worked
+  on). `/compact` asks for it by hand, and whatever
+  follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
+  as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
+  the provider's last count is at 80% of the model's limit the next message is preceded by a
+  compaction, and a request the provider refuses as too long is compacted and sent once more;
+  either way the pending message is sent, and one quiet line says earlier messages were
+  summarised, once the provider has taken the shorter request (not when it refuses that one
+  too). Only what is sent to the model changes. The conversation file keeps every
+  message as it was sent (`earlier`, beside the shortened `history`), and the chat shows them folded under "Earlier, summarised" above the summary. A
+  compaction that fails or is stopped changes nothing, and a summary that cannot stand for
+  what it replaces is a failure: one the model declined to write (stop reason `refusal`), a
+  reply with no non-empty `<summary>…</summary>` block (the request asks for the summary
+  inside those tags and only what is inside is kept, so an apology is not taken for a
+  summary and a one-line summary is not refused for its length), and one no shorter than
+  what it replaces or itself past the 80% mark. The summary request is made the way
+  every other request is (`chat::turn`), so a ChatGPT sign-in that has run out is renewed
+  and the request sent once more. The desktop app lets one compaction run per workspace and
+  conversation, so a second window is turned away. A compaction applies only to the
+  conversation as its file stands: the window reads the file first and, when another window
+  has added to it or compacted it, shows that instead and summarises nothing; and the writer
+  of the file (`chats.save` with `seen`, the `updated` of the file worked from) refuses a
+  summary made from a file that has moved on since. Every save of a conversation names
+  `seen`, an ordinary send's too: two windows that both sent in one conversation used to
+  overwrite each other's turns. A send refused this way reads the file, puts its own turn
+  after the other window's, and saves again, before the model is asked, so neither turn is
+  lost and the message is sent once, with the other window's turns in front of it. A line
+  that only says a compaction did not happen ("already being compacted", "could not
+  compact", "added to in another window") is shown in that window and never written to the
+  file, and a compaction that did not happen writes nothing at all.
+  A provider that never answers is waited on as for any other request.
+  Checked by `checks/flows/compaction.sh`, which drives the running app.
+- **Context used.** The chat box always shows how full the conversation is ("58% of
+  context"): the input tokens the provider itself counted on the last reply, against the
+  model's limit. Limits are a short table by model in `compact.rs`, read from the
+  providers' own pages on 2026-11-26 (the Claude models listed there with 1,000,000, by name,
+  and 200,000 for Opus/Sonnet/Haiku 4.5 and older; GPT-5.4 to 5.6 1,050,000; GPT-4.1
+  1,047,576; GPT-4o, o1-mini and o1-preview 128,000; o1/o3/o4-mini 200,000; a ChatGPT sign-in
+  272,000 for GPT-5.5 and 5.6). Where a provider caps what may be sent below the window the
+  cap is the limit: GPT-5 to 5.3 and the GPT-5.4 mini and nano have a 400,000 window of which
+  a conversation may fill 272,000, so 80% of 400,000 would never have come.
+  `LOKUS_CONTEXT_LIMIT` overrides it, and a model the table does not name (a new Claude name
+  included) or a model at another address has no known limit. Nothing is estimated: a
+  provider that sends no count shows "Context unknown", an unknown limit shows the count
+  alone, and automatic compaction then relies on the provider's refusal. Clicking the meter
+  or `/context` shows what the space goes to (messages, the summary, tool results, attached
+  notes and files, the workspace briefing, the instructions, the tools on offer) as shares by
+  length of text, which are labelled as such, with a Compact button.
+- **Slash commands.** A "/" at the start of the message box lists the commands that carry a
+  `slash` name in the one command registry (`/compact`, `/clear` for a new conversation,
+  `/context`); arrows, Enter, Escape and typing to filter work it. Only a command that takes
+  words (`/compact`) keeps what follows it; words after one that takes none (`/clear the
+  cache folder`) make it an ordinary message, so nothing typed is thrown away. They are the same named
+  commands the palette and `lokus app` run. A message that starts with "/" and names no
+  command is sent as written.
+- **Conversations belong to the workspace they were had in.** Each is a file in that folder's
+  `.lokus/chats/` (never synced), so Earlier conversations lists only the open workspace's,
+  the briefing's "recent conversations" are that workspace's, and both hold after a switch
+  and after a restart. Nothing is kept in one place for all workspaces, so a conversation
+  from before stays in the folder it was had in and is found there; none is moved or copied.
 - **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
   explicitly picked @ notes/folders and attached files. Each conversation in each workspace
   has its own draft in this window's memory; Earlier conversations also lists messages not
@@ -881,7 +966,7 @@ confirms that everything it must not be able to do is refused.
 Checked by `checks/flows/assistant.sh` against a stand-in provider and tool server
 (`checks/flows/mock-ai.py`): the full loop in both formats, a declined edit, a refused key. The
 flow's stand-in sign-ins go to a keychain of their own (`LOKUS_KEYCHAIN`), not the app's.
-Not built yet: saving conversations to disk, and compaction of very long ones.
+Not built yet: compaction of very long conversations.
 
 ### Working on its own (built; tried on a real workspace)
 
@@ -889,7 +974,10 @@ Not built yet: saving conversations to disk, and compaction of very long ones.
 changed in Settings, Assistant), 90 seconds after a customer fact is pushed in, and with any
 note in `watches/` marked `type: watch` (`every:` minutes) added to what it looks for. A look is
 an ordinary request with one difference: every tool that would change something is refused.
-What it finds goes through two tools into `.lokus/noticed/` (never synced):
+What it finds goes through two tools into the vault's `noticed/` folder (synced with the
+team). The list in a window is the open workspace's: opening another workspace takes the
+previous one's findings down at once and reads the new one's, without waiting for the window
+to be looked at again.
 
 - `report_finding`: a plain statement, the one thing recommended, up to three facts with their
   sources, an `action` it can carry out later, and the kind of `situation` with no names in it.
@@ -973,9 +1061,31 @@ changes something asks first unless the person has turned asking off.
 The list is `lokus_ai::catalog`: an id, a name, an address, and whether a person can connect
 today. Checked against the live servers on 2026-11-13:
 
-| Ready now | Waiting for Lokus to be registered with the service | Not built |
-|---|---|---|
-| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, and Slack (in the workspace its app was made in; see `deploy/slack/`) | Gmail, Google Calendar, Google Drive, Asana, HubSpot | iMessage (runs on the Mac, not at a service) |
+| Ready now | Waiting for Lokus to be registered with the service |
+|---|---|
+| GitHub (personal access token), Linear, Notion, Granola, Sentry, Jira and Confluence, Stripe, Intercom, Zapier, Slack (in the workspace its app was made in; see `deploy/slack/`), and iMessage (on a Mac; read on the computer, see below) | Gmail, Google Calendar, Google Drive, Asana, HubSpot |
+
+**iMessage** is the one entry that is not a tool server (`lokus_ai::imessage`). Messages keeps
+every conversation in one SQLite file, `~/Library/Messages/chat.db`, and macOS lets an app read
+it only once the person has given that app Full Disk Access. Connect opens a screen that says
+so in one sentence and tries to read the file: if it can, Connect saves the connection among
+the workspace's others (name `imessage`, no address, nothing in the keychain); if it cannot,
+the screen says Full Disk Access is needed, with a link to that list in System Settings and
+"Check again". The assistant then has one tool, `mcp__imessage__messages` (optional `chat`,
+`search`, `limit`: 30 messages by default, 200 at most), which returns the newest messages
+oldest first, each with its time, conversation and writer. It reads only: the file is opened
+read-only, the tool never asks, and there is no way to send. The tool is on offer only in a
+conversation the person is in: a look the assistant takes by itself (Noticed, `unattended` on
+the request) is not given it, so private messages are never read with nobody asking. `chat`
+and `search` are matched as written ("_" and "%" are not wildcards). The permission is looked at again
+on every read, so access taken away later is answered with the same sentence rather than a
+failure. A message whose words Messages kept only in its styled form (`attributedBody`) is
+still read; reactions are left out; an attachment is shown as `[attachment]`. People appear as
+the number or address Messages has: names from Contacts are not read. On Windows and Linux the
+entry is listed as "Mac only" in Settings and is not offered in first-run setup.
+`lokus imessage [chat=] [search=] [limit=]` prints what the tool returns. Verified on macOS 26
+against a made-up `chat.db` built from the real schema, and against the real (empty) file
+without Full Disk Access; never against an account with real conversations.
 
 GitHub's [official remote MCP instructions](https://github.com/github/github-mcp-server#remote-github-mcp-server)
 support a personal access token without registering the host app; browser OAuth still needs a

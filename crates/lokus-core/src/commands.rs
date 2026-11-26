@@ -227,7 +227,7 @@ pub const COMMANDS: &[CommandSpec] = &[
         Write,
     ),
     spec("chats.list", "Conversations with the assistant kept on this device", "", Private),
-    spec("chats.save", "Keep a conversation with the assistant", "id, title, updated, body", Private),
+    spec("chats.save", "Keep a conversation with the assistant", "id, title, updated, body, seen", Private),
     spec("chats.load", "One kept conversation", "id", Private),
     spec("chats.delete", "Forget a kept conversation", "id", Private),
     spec("logs.search", "Find log lines sent by the team's own systems, newest first", "query?, level?, stream?, about?, hours?=24, limit?=40", Private),
@@ -512,7 +512,7 @@ fn dispatch(core: &Core, name: &str, args: Value) -> Result<Value> {
         "chats.list" => out(crate::chats::list(vault)?),
         "chats.save" => {
             let a: ChatArgs = parse(name, args)?;
-            crate::chats::save(vault, &a.id, &a.title, a.updated, &a.body)?;
+            crate::chats::save(vault, &a.id, &a.title, a.updated, &a.body, a.seen)?;
             Ok(Value::Null)
         }
         "chats.load" => {
@@ -647,6 +647,8 @@ struct ChatArgs {
     updated: i64,
     #[serde(default)]
     body: Value,
+    #[serde(default)]
+    seen: Option<i64>,
 }
 
 fn parse<T: DeserializeOwned>(command: &str, args: Value) -> Result<T> {
