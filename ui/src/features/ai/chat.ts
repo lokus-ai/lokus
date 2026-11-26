@@ -12,7 +12,8 @@ export type Item =
   | { kind: "assistant"; text: string; live: boolean }
   | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; status: "asking" | "running" | "ok" | "failed"; result?: string }
   | { kind: "question"; id: string; question: string; options: string[]; multiple: boolean; answer?: string }
-  | { kind: "notice"; text: string; error?: boolean; code?: string }
+  /** `passing` marks a line about this window only (a compaction that did not happen): shown, never kept in the file. */
+  | { kind: "notice"; text: string; error?: boolean; code?: string; passing?: boolean }
   /** Everything above this was summarised to make room. It stays in the conversation, folded away. */
   | { kind: "summary"; text: string; note?: string; auto?: boolean };
 
@@ -463,8 +464,11 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     const message = { role: "user", content: files.length ? [{ type: "text", text: said }, ...files.map((path) => ({ type: "attachment", path }))] : said };
     pending = message;
     unanswered = message;
-    // Kept at once, before the first step: a reply cut off early is still found again.
-    keep();
+    // Kept at once, before the first step: a reply cut off early is still found again. The
+    // save is waited for, because it is also where another window's newer turns are taken in:
+    // the model is then sent the conversation as the file has it, with this message after.
+    await keep().catch(() => undefined);
+    if (sending !== requestId) return false;
     const context = briefing ?? (await brief()) + (carried ? `\n\nThe user is carrying on a conversation that was shared with their workspace. What was said in it, for you to build on:\n<shared_conversation>\n${carried}\n</shared_conversation>` : "");
     if (sending !== requestId) return false;
     briefing = context;
@@ -532,8 +536,16 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
 let summarised = false;
 /** How many times this conversation has been compacted, so a second window can tell it already was. */
 let compactions = 0;
-/** The `updated` of this conversation's file as this window last read or wrote it; 0 for none. */
-let stamp = 0;
+/**
+ * The `updated` of each conversation's file as this window last read or wrote it (none: 0).
+ * Every save names it, and the writer of the file refuses a save made from an older file.
+ */
+const stamps = new Map<string, number>();
+const stampKey = (root: string | undefined, id: string) => JSON.stringify([root, id]);
+/** How much of `history` and of the shown items the file held when this window last read it or saved a finished turn: what comes after is this window's own. */
+let synced = { history: 0, items: 0 };
+/** Counts the times the file was found changed and taken in, so a save captured before that is not written over it. */
+let merges = 0;
 /** What the summaries stand in for, exactly as it was sent: kept in the file, never sent again. */
 let earlier: unknown[] = [];
 
@@ -567,9 +579,8 @@ export async function compactChat(note = ""): Promise<boolean> {
   const id = chatId;
   requestId = sending;
   chat.set({ busy: true, compacting: true });
-  // Set when this window took the file as it stands: it is then shown, not written again,
-  // so a reply another window is still working on keeps its place in the file.
-  let took = false;
+  // A compaction that did not happen writes nothing: what it says is about this window, and
+  // a write would make the file look added to under a window that is compacting it.
   try {
     // Another window may have compacted this conversation already: take its result, do not redo it.
     await saving;
@@ -583,17 +594,19 @@ export async function compactChat(note = ""): Promise<boolean> {
     // nothing from the older copy this window held.
     const adopt = (kept: { updated: number; body: KeptBody }) => {
       const already = (kept.body.compactions ?? 0) > compactions;
-      took = true;
       history = kept.body.history ?? [];
       earlier = kept.body.earlier ?? [];
       seen = null;
       compactions = kept.body.compactions ?? 0;
-      stamp = kept.updated;
+      stamps.set(stampKey(root, id), kept.updated);
+      synced = { history: history.length, items: (kept.body.items ?? []).length };
+      merges += 1;
       chat.set({
         items: [
           ...(kept.body.items ?? []),
           {
             kind: "notice",
+            passing: true,
             text: already
               ? "This conversation was already compacted in another window."
               : "This conversation was added to in another window. It is shown as it is now; compact again if it still needs it.",
@@ -607,16 +620,24 @@ export async function compactChat(note = ""): Promise<boolean> {
     };
     const kept = await load();
     if (sending !== requestId) return false;
-    if (kept && kept.updated !== stamp) {
+    if (kept && kept.updated !== (stamps.get(stampKey(root, id)) ?? 0)) {
       adopt(kept);
       return false;
     }
     const before = chat.get().usage;
     const done = await aiCompact(sending, id, history, note, root);
     if (sending !== requestId) return false;
-    const was = { history, earlier, items: chat.get().items };
+    const was = { history, earlier, items: chat.get().items, usage: before };
     earlier = [...earlier, ...history.slice(0, done.replaced)];
     history = done.messages;
+    compactions += 1;
+    // The provider has not counted the shorter conversation yet; the next reply says.
+    chat.set({
+      usage: {
+        ...usageOf(0, done.limit, before?.model ?? "", done.parts),
+        pending: true,
+      },
+    });
     update((items) =>
       fold(settle(items), done.kept_turns, {
         kind: "summary",
@@ -626,11 +647,12 @@ export async function compactChat(note = ""): Promise<boolean> {
     );
     // The file is the judge: it takes the summary only if it is still the one summarised.
     try {
-      await keep(stamp);
+      await keep(false);
     } catch (e) {
       if (sending !== requestId) return false;
       ({ history, earlier } = was);
-      chat.set({ items: was.items });
+      compactions -= 1;
+      chat.set({ items: was.items, usage: was.usage });
       const now = (e as { code?: string }).code === "conflict" && (await load());
       if (sending !== requestId) return false;
       if (!now) throw e;
@@ -638,14 +660,6 @@ export async function compactChat(note = ""): Promise<boolean> {
       return false;
     }
     seen = null;
-    compactions += 1;
-    // The provider has not counted the shorter conversation yet; the next reply says.
-    chat.set({
-      usage: {
-        ...usageOf(0, done.limit, before?.model ?? "", done.parts),
-        pending: true,
-      },
-    });
     return true;
   } catch (e) {
     if (sending !== requestId) return false;
@@ -654,6 +668,7 @@ export async function compactChat(note = ""): Promise<boolean> {
       ...items,
       {
         kind: "notice",
+        passing: true,
         text:
           err.code === "stopped"
             ? "Stopped. The conversation is as it was."
@@ -667,7 +682,6 @@ export async function compactChat(note = ""): Promise<boolean> {
     if (sending === requestId) {
       requestId = null;
       chat.set({ busy: false, compacting: false });
-      if (!took) keep();
     }
   }
 }
@@ -676,22 +690,63 @@ export async function compactChat(note = ""): Promise<boolean> {
  * Keep this conversation on this device, so it can be found and continued later. It goes in the
  * folder that is never synced: a conversation is the person's own until they choose to share it.
  */
-function keep(from?: number): Promise<unknown> {
+function keep(merge = true): Promise<unknown> {
   if (deleting.has(JSON.stringify([vaultRoot, chatId]))) return saving;
-  const items = settle(chat.get().items);
-  const first = items.find((i) => i.kind === "user");
+  const first = chat.get().items.find((i) => i.kind === "user");
   if (!first || first.kind !== "user") return saving;
+  const root = vaultRoot;
+  const key = stampKey(root, chatId);
   // While a reply is still being worked on, the request it answers is kept beside it, so a
   // conversation cut off by the app closing can be told apart from a finished one and resumed.
-  const root = vaultRoot;
-  const saved = { id: chatId, title: first.text, updated: Date.now(), body: { items, history,
-      usage: chat.get().usage ?? undefined,
-      compactions: compactions + (from === undefined ? 0 : 1), ...(earlier.length ? { earlier } : {}), ...(unanswered ? { unanswered } : {}), } };
-  const persisted = saving
-    .then(() => runCore("chats.save", from === undefined ? saved : { ...saved, seen: from }, root))
-    .then(() => {
-      if (saved.id === chatId && root === vaultRoot) stamp = saved.updated;
-    });
+  const snapshot = () => {
+    const shown = chat.get().items;
+    return {
+      shown: shown.length,
+      turn: !unanswered,
+      saved: { id: chatId, title: first.text, updated: Date.now(), body: { items: settle(shown).filter((i) => !(i.kind === "notice" && i.passing)), history,
+        usage: chat.get().usage ?? undefined,
+        compactions, ...(earlier.length ? { earlier } : {}), ...(unanswered ? { unanswered } : {}), } },
+    };
+  };
+  let captured = snapshot();
+  const taken = merges;
+  const write = async (): Promise<void> => {
+    const here = captured.saved.id === chatId && root === vaultRoot;
+    // The file was taken in after this was captured: what is in memory now holds it and more.
+    if (here && taken !== merges) captured = snapshot();
+    for (let tries = 0; ; tries++) {
+      const { saved, shown, turn } = captured;
+      try {
+        await runCore("chats.save", { ...saved, seen: stamps.get(key) ?? 0 }, root);
+        stamps.set(key, saved.updated);
+        if (saved.id === chatId && root === vaultRoot && turn) synced = { history: saved.body.history.length, items: shown };
+        return;
+      } catch (e) {
+        const current = saved.id === chatId && root === vaultRoot;
+        if ((e as { code?: string }).code !== "conflict" || !merge || !current || tries > 2) throw e;
+        // Another window added to this conversation. Its turns come first, then this window's
+        // own since it last read the file, and the two are saved together: neither is lost.
+        const kept = await runCore<{ updated: number; body: KeptBody }>("chats.load", { id: saved.id }, root).catch(() => null);
+        if (saved.id !== chatId || root !== vaultRoot) throw e;
+        // The file is gone (deleted elsewhere): what this window holds is all there is.
+        if (!kept) {
+          stamps.set(key, 0);
+          continue;
+        }
+        const theirs = kept.body.items ?? [];
+        history = [...(kept.body.history ?? []), ...history.slice(synced.history)];
+        earlier = kept.body.earlier ?? [];
+        compactions = kept.body.compactions ?? 0;
+        seen = null;
+        chat.set((s) => ({ items: [...theirs, ...s.items.slice(synced.items)], usage: kept.body.usage ?? s.usage }));
+        synced = { history: (kept.body.history ?? []).length, items: theirs.length };
+        stamps.set(key, kept.updated);
+        merges += 1;
+        captured = snapshot();
+      }
+    }
+  };
+  const persisted = saving.then(write);
   // Drain failed writes too; only the caller requiring this snapshot must refuse on its error.
   saving = persisted.catch((e) => {
     if (root === vaultRoot) notify(e instanceof Error ? e.message : String(e));
@@ -717,7 +772,7 @@ function canLeaveChat(): boolean {
 /** Save as it goes, a moment after each step, so little is lost if the app closes mid-reply. */
 function keepSoon(): void {
   window.clearTimeout(keeping);
-  keeping = window.setTimeout(keep, 500);
+  keeping = window.setTimeout(() => void keep(), 500);
 }
 
 export async function keptChats(): Promise<Kept[]> {
@@ -779,7 +834,8 @@ export async function openChat(id: string): Promise<void> {
   carried = null;
   seen = null;
   compactions = kept.body.compactions ?? 0;
-  stamp = kept.updated ?? 0;
+  stamps.set(stampKey(root, id), kept.updated ?? 0);
+  synced = { history: (kept.body.history ?? []).length, items: (kept.body.items ?? []).length };
   earlier = kept.body.earlier ?? [];
   chat.set({ items, busy: false, history: false, draft: draftFor(id),
     usage: kept.body.usage ?? null,
@@ -903,7 +959,7 @@ function stopReply(preserve: boolean): Promise<unknown> {
       compacting: false,
       items: [
         ...s.items,
-        { kind: "notice", text: "Stopped. The conversation is as it was." },
+        { kind: "notice", passing: true, text: "Stopped. The conversation is as it was." },
       ],
     }));
     return saving;
@@ -962,7 +1018,7 @@ export function newChat(): boolean {
   carried = null;
   seen = null;
   compactions = 0;
-  stamp = 0;
+  synced = { history: 0, items: 0 };
   earlier = [];
   chat.set({ items: [], busy: false, history: false, draft: draftFor(chatId),
     usage: null,

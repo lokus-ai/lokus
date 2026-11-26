@@ -39,8 +39,10 @@ def script(messages):
 # question only from sentences that are actually in the request it was sent.
 TALK = os.environ.get("MOCK_TALK") == "1"
 LIMIT = int(os.environ.get("MOCK_LIMIT", "0"))
-# MOCK_SUMMARY makes the summary a bad one: "refusal" (declined, with that stop reason), "short"
-# (the same sentence as an ordinary answer) or "long" (longer than what it was given).
+# MOCK_SUMMARY makes the summary a bad one: "refusal" (declined, with that stop reason), "junk"
+# (an apology in place of a summary, as an ordinary answer), "long" (longer than what it was
+# given); or a good one that is one short line ("brief"). A summary is written inside
+# <summary> tags when the request asks for that.
 SUMMARY = os.environ.get("MOCK_SUMMARY", "")
 # The token a ChatGPT sign-in is good with. POST /expire makes the one in use run out early,
 # as the real service does: the next request is refused until the sign-in is renewed.
@@ -97,10 +99,16 @@ def talk(body):
                 seen.add(line)
                 lines.append(line)
         answer = "## Decisions\n" + "\n".join(lines[:40] or ["- Nothing was decided."])
-        if SUMMARY in ("refusal", "short"):
-            answer = "I can't help with summarising this conversation."
+        if SUMMARY == "brief":
+            answer = "- Team plan: $18 per seat per month."
         if SUMMARY == "long":
             answer = talked + "\n" + talked
+        if "<summary>" in system:
+            answer = f"Here is the summary.\n<summary>\n{answer}\n</summary>"
+        if SUMMARY == "refusal":
+            answer = "I can't help with summarising this conversation."
+        if SUMMARY == "junk":
+            answer = "Sorry, I am not able to produce a summary of this conversation right now. Please try again later."
     else:
         question = last.split("</app_state>")[-1].strip()
         earlier = "\n".join(said[:-1])

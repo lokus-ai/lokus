@@ -827,17 +827,25 @@ confirms that everything it must not be able to do is refused.
   too). Only what is sent to the model changes. The conversation file keeps every
   message as it was sent (`earlier`, beside the shortened `history`), and the chat shows them folded under "Earlier, summarised" above the summary. A
   compaction that fails or is stopped changes nothing, and a summary that cannot stand for
-  what it replaces is a failure: one the model declined to write (stop reason `refusal`), an
-  empty one, one under 80 characters for ten times as much conversation, and one no shorter
-  than what it replaces or itself past the 80% mark. The summary request is made the way
+  what it replaces is a failure: one the model declined to write (stop reason `refusal`), a
+  reply with no non-empty `<summary>…</summary>` block (the request asks for the summary
+  inside those tags and only what is inside is kept, so an apology is not taken for a
+  summary and a one-line summary is not refused for its length), and one no shorter than
+  what it replaces or itself past the 80% mark. The summary request is made the way
   every other request is (`chat::turn`), so a ChatGPT sign-in that has run out is renewed
   and the request sent once more. The desktop app lets one compaction run per workspace and
   conversation, so a second window is turned away. A compaction applies only to the
   conversation as its file stands: the window reads the file first and, when another window
   has added to it or compacted it, shows that instead and summarises nothing; and the writer
   of the file (`chats.save` with `seen`, the `updated` of the file worked from) refuses a
-  summary made from a file that has moved on since. An ordinary send carries no `seen`: two
-  windows that both send in one conversation still overwrite each other's turns, as before.
+  summary made from a file that has moved on since. Every save of a conversation names
+  `seen`, an ordinary send's too: two windows that both sent in one conversation used to
+  overwrite each other's turns. A send refused this way reads the file, puts its own turn
+  after the other window's, and saves again, before the model is asked, so neither turn is
+  lost and the message is sent once, with the other window's turns in front of it. A line
+  that only says a compaction did not happen ("already being compacted", "could not
+  compact", "added to in another window") is shown in that window and never written to the
+  file, and a compaction that did not happen writes nothing at all.
   A provider that never answers is waited on as for any other request.
   Checked by `checks/flows/compaction.sh`, which drives the running app.
 - **Context used.** The chat box always shows how full the conversation is ("58% of

@@ -19,9 +19,6 @@ const KEEP_RECENT: usize = 24_000;
 const RESULT_SHOWN: usize = 1_500;
 /// The most conversation the summariser is shown when the model's room is not known.
 const TRANSCRIPT: usize = 300_000;
-/// A summary under this many characters, of a conversation ten times as long, is not one: a
-/// sentence of apology is about fifty, and a note may fairly ask for only a line or two.
-const SHORT: usize = 80;
 /// Marks the message that holds a summary, so it can be told apart from what the person wrote.
 pub const SUMMARY_TAG: &str = "<conversation_summary>";
 
@@ -39,7 +36,9 @@ Notes, tasks, customers or files that were created or changed, and anything the 
 ## Still to do
 What is unfinished or was promised.
 
-Leave out pleasantries, repeated attempts and raw tool output. Be specific rather than short: an exact figure beats a description of it. If the user gave a note on what to keep or drop, it overrides everything above: keep in full what it asks to keep, and leave out entirely what it asks to drop, without mentioning that it was dropped. Write plain Markdown with no preamble and no closing remark.";
+Leave out pleasantries, repeated attempts and raw tool output. Be specific rather than short: an exact figure beats a description of it. If the user gave a note on what to keep or drop, it overrides everything above: keep in full what it asks to keep, and leave out entirely what it asks to drop, without mentioning that it was dropped. Write plain Markdown.
+
+Put the summary, and nothing else, between <summary> and </summary>. Only what is between them is kept; a reply without them is thrown away and the conversation is left as it was.";
 
 /// How many tokens the chosen model can hold, when that is known. `LOKUS_CONTEXT_LIMIT` says it
 /// for a model this list does not know (a compatible service, a stand-in).
@@ -268,6 +267,15 @@ fn transcript(messages: &[Value], most: usize) -> String {
     format!("{head}\n\n[The middle of the conversation is left out here: it was too long to read at once.]\n\n{tail}")
 }
 
+/// The summary in a reply: what is between `<summary>` and `</summary>`; none when the reply
+/// has no such block or the block is empty.
+fn summary_in(reply: &str) -> Option<String> {
+    let (_, rest) = reply.split_once("<summary>")?;
+    let (inside, _) = rest.rsplit_once("</summary>")?;
+    let inside = inside.trim();
+    (!inside.is_empty()).then(|| inside.to_string())
+}
+
 /// What a compaction made.
 #[derive(Debug, Clone, Serialize)]
 pub struct Compacted {
@@ -309,8 +317,7 @@ pub async fn compact(
             note.trim()
         ));
     }
-    asked.push_str("\n\nWrite the summary now.");
-    let read = asked.len();
+    asked.push_str("\n\nWrite the summary now, inside <summary> tags.");
     let turn = crate::chat::turn(
         http,
         config,
@@ -321,24 +328,22 @@ pub async fn compact(
         &mut |_| {},
     )
     .await?;
-    let summary: String = turn
+    let reply: String = turn
         .content
         .iter()
         .filter(|b| b["type"] == "text")
         .filter_map(|b| b["text"].as_str())
         .collect::<Vec<_>>()
-        .join("")
-        .trim()
-        .to_string();
+        .join("");
+    let summary = summary_in(&reply).unwrap_or_default();
     // What stands in for the earlier messages has to be a summary of them. A model that
-    // declined, or answered in a line what took pages, would have its answer kept as all that
-    // is known, and one that wrote more than it read would leave no more room than before.
+    // declined or apologised would have that answer kept as all that is known, so a summary is
+    // told from any other reply by the tags it was asked to write it in, not by its length: a
+    // note may fairly ask for one line. One that wrote more than it read leaves no more room.
     let unusable = if turn.stop == "refusal" {
         Some("The model declined to summarise this conversation")
     } else if summary.is_empty() {
         Some("The model wrote no summary")
-    } else if summary.len() < SHORT && read > SHORT * 10 {
-        Some("The model's summary was too short to stand for what was said")
     } else if summary.len() >= weight(&messages[..at])
         || near(limit(config), (summary.len() / 4) as u64)
     {
@@ -472,6 +477,22 @@ mod tests {
         assert_eq!(window(Provider::OpenAi, "gpt-5.7"), None);
         assert_eq!(window(Provider::ChatGpt, "gpt-5.5"), Some(272_000));
         assert_eq!(window(Provider::ChatGpt, "gpt-5.2"), None);
+    }
+
+    /// "Sorry, I am not able to produce a summary" was once kept as the summary, and a
+    /// one-line summary the person had asked for was once refused as too short.
+    #[test]
+    fn a_summary_is_what_is_inside_the_tags_however_short() {
+        assert_eq!(
+            summary_in("Here it is.\n<summary>\n- Team: $18\n</summary>\nDone.").as_deref(),
+            Some("- Team: $18")
+        );
+        assert_eq!(
+            summary_in("Sorry, I am not able to produce a summary."),
+            None
+        );
+        assert_eq!(summary_in("<summary>  </summary>"), None);
+        assert_eq!(summary_in("<summary>cut off"), None);
     }
 
     /// The carried-over part never starts with a tool's result, whose call would be gone.
