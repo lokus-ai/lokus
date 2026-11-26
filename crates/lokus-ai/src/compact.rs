@@ -48,15 +48,6 @@ pub fn limit(config: &Config) -> Option<u64> {
         return Some(told);
     }
     let model = config.model().ok()?.to_lowercase();
-    // The providers' published context windows.
-    let known: &[(&str, u64)] = &[
-        ("claude", 200_000),
-        ("gpt-5", 400_000),
-        ("gpt-4.1", 1_047_576),
-        ("gpt-4o", 128_000),
-        ("o3", 200_000),
-        ("o4", 200_000),
-    ];
     // A compatible service at another address may serve a model under a borrowed name.
     if config.provider == Provider::OpenAi
         && !config
@@ -65,10 +56,71 @@ pub fn limit(config: &Config) -> Option<u64> {
     {
         return None;
     }
-    known
-        .iter()
-        .find(|(name, _)| model.starts_with(name))
-        .map(|(_, size)| *size)
+    window(config.provider, &model)
+}
+
+/// The context window the provider publishes for a model; none for a model it does not list.
+/// Read on 2026-11-26 from docs.anthropic.com "Models overview", developers.openai.com
+/// "Models" (one page per model), and for the ChatGPT sign-in the model list in openai/codex.
+fn window(provider: Provider, model: &str) -> Option<u64> {
+    // A name stands for its dated and suffixed forms: "gpt-5.2" for "gpt-5.2-2025-12-11".
+    let named = |name: &str| {
+        model
+            .strip_prefix(name)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('-'))
+    };
+    let first = |table: &[(&str, u64)]| table.iter().find(|(n, _)| named(n)).map(|(_, size)| *size);
+    match provider {
+        Provider::Anthropic => first(&[
+            ("claude-opus-4-5", 200_000),
+            ("claude-opus-4-1", 200_000),
+            ("claude-opus-4-0", 200_000),
+            ("claude-sonnet-4-5", 200_000),
+            ("claude-sonnet-4-0", 200_000),
+            ("claude-haiku-4-5", 200_000),
+        ])
+        .or_else(|| {
+            // The first Claude 4 names carry only a date: "claude-opus-4-20250514".
+            let dated = ["claude-opus-4-2025", "claude-sonnet-4-2025"];
+            let old = dated.iter().any(|d| model.starts_with(d)) || model.starts_with("claude-3");
+            match model.starts_with("claude-") {
+                true if old => Some(200_000),
+                true => Some(1_000_000),
+                false => None,
+            }
+        }),
+        Provider::OpenAi => {
+            let small = model.contains("-mini") || model.contains("-nano");
+            if model.starts_with("gpt-5") && model.contains("-chat") {
+                return Some(128_000);
+            }
+            if small && (named("gpt-5.5") || named("gpt-5.6")) {
+                return None;
+            }
+            if small && named("gpt-5.4") {
+                return Some(400_000);
+            }
+            first(&[
+                ("gpt-5.6", 1_050_000),
+                ("gpt-5.5", 1_050_000),
+                ("gpt-5.4", 1_050_000),
+                ("gpt-5.3", 400_000),
+                ("gpt-5.2", 400_000),
+                ("gpt-5.1", 400_000),
+                ("gpt-5", 400_000),
+                ("gpt-4.1", 1_047_576),
+                ("gpt-4o", 128_000),
+                ("gpt-4-turbo", 128_000),
+                ("o1-mini", 128_000),
+                ("o1", 200_000),
+                ("o3", 200_000),
+                ("o4-mini", 200_000),
+                ("codex-mini", 200_000),
+            ])
+        }
+        // What a ChatGPT sign-in is given is smaller than the same name on a key.
+        Provider::ChatGpt => first(&[("gpt-5.6", 272_000), ("gpt-5.5", 272_000)]),
+    }
 }
 
 /// Whether a conversation that last took `used` tokens should be compacted before going on.
@@ -348,6 +400,37 @@ mod tests {
     use super::*;
 
     /// The carried-over part never starts with a tool's result, whose call would be gone.
+    #[test]
+    fn a_window_is_the_published_one_for_that_exact_model() {
+        // "claude" used to mean 200,000 and "gpt-5" 400,000 for every model so named.
+        assert_eq!(
+            window(Provider::Anthropic, "claude-opus-5-5"),
+            Some(1_000_000)
+        );
+        assert_eq!(
+            window(Provider::Anthropic, "claude-haiku-4-5-20251001"),
+            Some(200_000)
+        );
+        assert_eq!(
+            window(Provider::Anthropic, "claude-opus-4-20250514"),
+            Some(200_000)
+        );
+        assert_eq!(
+            window(Provider::Anthropic, "claude-opus-4-6"),
+            Some(1_000_000)
+        );
+        assert_eq!(window(Provider::OpenAi, "gpt-5.5"), Some(1_050_000));
+        assert_eq!(window(Provider::OpenAi, "gpt-5.4-mini"), Some(400_000));
+        assert_eq!(
+            window(Provider::OpenAi, "gpt-5.2-chat-latest"),
+            Some(128_000)
+        );
+        assert_eq!(window(Provider::OpenAi, "gpt-5-mini"), Some(400_000));
+        assert_eq!(window(Provider::OpenAi, "gpt-5.7"), None);
+        assert_eq!(window(Provider::ChatGpt, "gpt-5.5"), Some(272_000));
+        assert_eq!(window(Provider::ChatGpt, "gpt-5.2"), None);
+    }
+
     #[test]
     fn the_cut_never_parts_a_tool_call_from_its_result() {
         let big = "x".repeat(KEEP_RECENT);

@@ -831,9 +831,12 @@ confirms that everything it must not be able to do is refused.
   Checked by `checks/flows/compaction.sh`, which drives the running app.
 - **Context used.** The chat box always shows how full the conversation is ("58% of
   context"): the input tokens the provider itself counted on the last reply, against the
-  model's limit. Limits are a short table by model family in `compact.rs` (Claude 200,000;
-  GPT-5 400,000; GPT-4.1 1,047,576; GPT-4o 128,000; o3/o4 200,000), `LOKUS_CONTEXT_LIMIT`
-  overrides it, and a model at another address has no known limit. Nothing is estimated: a
+  model's limit. Limits are a short table by model in `compact.rs`, read from the
+  providers' own pages on 2026-11-26 (Claude 1,000,000, and 200,000 for Opus/Sonnet/Haiku 4.5
+  and older; GPT-5.4 to 5.6 1,050,000 and their mini/nano 400,000; GPT-5 to 5.3 400,000;
+  GPT-4.1 1,047,576; GPT-4o 128,000; o1/o3/o4-mini 200,000; a ChatGPT sign-in 272,000 for
+  GPT-5.5 and 5.6). `LOKUS_CONTEXT_LIMIT` overrides it, and a model the table does not name
+  or a model at another address has no known limit. Nothing is estimated: a
   provider that sends no count shows "Context unknown", an unknown limit shows the count
   alone, and automatic compaction then relies on the provider's refusal. Clicking the meter
   or `/context` shows what the space goes to (messages, the summary, tool results, attached

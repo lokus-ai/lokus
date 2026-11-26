@@ -306,6 +306,10 @@ class Handler(BaseHTTPRequestHandler):
                 message = f"prompt is too long: {counted} tokens > {LIMIT} maximum" if self.path == "/v1/messages" else f"This model's maximum context length is {LIMIT} tokens. However, your messages resulted in {counted} tokens."
                 return self.json(400, {"error": {"type": "invalid_request_error", "code": "context_length_exceeded", "message": message}})
             time.sleep(float(os.environ.get("MOCK_SLOW", "0")) if "You are compacting a conversation" in json.dumps([body.get("system"), body.get("instructions"), (body.get("messages") or [None])[0]]) else 0)
+            # "read my messages" has the stand-in ask for the iMessage tool once, on the Claude path.
+            last = (body.get("messages") or [{}])[-1].get("content")
+            if self.path == "/v1/messages" and "read my messages" in json.dumps(last) and "tool_result" not in json.dumps(last):
+                return sse(self, anthropic_events(("mcp__imessage__messages", {"limit": 20})))
             return sse(self, talk_events(self.path, body))
         step = script(body["messages"]) if "messages" in body else None
         if self.path == "/v1/messages":
