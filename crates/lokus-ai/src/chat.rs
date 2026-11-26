@@ -248,6 +248,8 @@ pub struct Outcome {
     /// Set when the conversation was compacted on the way: the conversation to carry on from,
     /// in place of everything sent in. `messages` are then added to this.
     pub replaced: Option<Vec<Value>>,
+    /// How many messages from the front of the conversation the summary stands in for.
+    pub dropped: usize,
     /// How full the model's room is after this reply: the tokens the provider counted for the
     /// last request and its answer (0 when it does not say), the model's limit when known, and
     /// what the conversation is made of, in characters by kind.
@@ -628,6 +630,7 @@ pub async fn send(
     let mut stop = String::from("end_turn");
     let limit = crate::compact::limit(&config);
     let (mut filled, mut replaced, mut tried) = (used, None::<Vec<Value>>, false);
+    let mut dropped = 0;
     let (mut rounds, mut read, mut written, mut called) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
         for _ in 0..MAX_ROUNDS {
@@ -639,6 +642,7 @@ pub async fn send(
                 match crate::compact::compact(&http, &config, &key, &messages, "").await {
                     Ok(done) => {
                         emit(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
+                        dropped = done.replaced;
                         messages = done.messages;
                         replaced = Some(messages.clone());
                         added.clear();
@@ -663,6 +667,7 @@ pub async fn send(
                 tried = true;
                 if let Ok(done) = crate::compact::compact(&http, &config, &key, &messages, "").await {
                     emit(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
+                    dropped = done.replaced;
                     messages = done.messages;
                     replaced = Some(messages.clone());
                     added.clear();
@@ -787,6 +792,7 @@ pub async fn send(
         tools: called,
         context,
         replaced,
+        dropped,
         used: filled,
         limit,
         parts: crate::compact::measure(&crate::files::expand(

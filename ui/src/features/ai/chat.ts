@@ -473,10 +473,11 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     if (sending !== requestId) return false;
     traced(sending, began, question, outcome, "");
     // Compacted on the way: carry on from the summary, which already holds this question.
-    history = outcome.replaced
-      ? [...outcome.replaced, ...outcome.messages]
-      : [...history, message, ...outcome.messages];
-    if (outcome.replaced) compactions += 1;
+    if (outcome.replaced) {
+      earlier = [...earlier, ...history.slice(0, outcome.dropped)];
+      history = [...outcome.replaced, ...outcome.messages];
+      compactions += 1;
+    } else history = [...history, message, ...outcome.messages];
     chat.set({
       usage: usageOf(
         outcome.used,
@@ -530,10 +531,13 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
 let summarised = false;
 /** How many times this conversation has been compacted, so a second window can tell it already was. */
 let compactions = 0;
+/** What the summaries stand in for, exactly as it was sent: kept in the file, never sent again. */
+let earlier: unknown[] = [];
 
 type KeptBody = {
   items?: Item[];
   history?: unknown[];
+  earlier?: unknown[];
   unanswered?: { role: string; content: string };
   usage?: Usage;
   compactions?: number;
@@ -571,6 +575,7 @@ export async function compactChat(note = ""): Promise<boolean> {
     if (sending !== requestId) return false;
     if (kept && (kept.body.compactions ?? 0) > compactions) {
       history = kept.body.history ?? history;
+      earlier = kept.body.earlier ?? earlier;
       compactions = kept.body.compactions ?? compactions;
       chat.set({
         items: [
@@ -587,6 +592,7 @@ export async function compactChat(note = ""): Promise<boolean> {
     const before = chat.get().usage;
     const done = await aiCompact(sending, id, history, note, root);
     if (sending !== requestId) return false;
+    earlier = [...earlier, ...history.slice(0, done.replaced)];
     history = done.messages;
     compactions += 1;
     update((items) =>
@@ -643,7 +649,7 @@ function keep(): Promise<unknown> {
   const root = vaultRoot;
   const saved = { id: chatId, title: first.text, updated: Date.now(), body: { items, history,
       usage: chat.get().usage ?? undefined,
-      compactions, ...(unanswered ? { unanswered } : {}), } };
+      compactions, ...(earlier.length ? { earlier } : {}), ...(unanswered ? { unanswered } : {}), } };
   const persisted = saving.then(() => runCore("chats.save", saved, root));
   // Drain failed writes too; only the caller requiring this snapshot must refuse on its error.
   saving = persisted.catch((e) => {
@@ -732,6 +738,7 @@ export async function openChat(id: string): Promise<void> {
   carried = null;
   seen = null;
   compactions = kept.body.compactions ?? 0;
+  earlier = kept.body.earlier ?? [];
   chat.set({ items, busy: false, history: false, draft: draftFor(id),
     usage: kept.body.usage ?? null,
     detail: false,
@@ -913,6 +920,7 @@ export function newChat(): boolean {
   carried = null;
   seen = null;
   compactions = 0;
+  earlier = [];
   chat.set({ items: [], busy: false, history: false, draft: draftFor(chatId),
     usage: null,
     detail: false,

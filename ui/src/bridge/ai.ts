@@ -78,6 +78,8 @@ export interface AiOutcome {
   context: { instructions: number; briefing: number; conversation: number; tools: Record<string, { count: number; chars: number }> };
   /** Set when the conversation was compacted on the way: carry on from this, then `messages`. */
   replaced: unknown[] | null;
+  /** How many messages from the front of what was sent the summary stands in for. */
+  dropped: number;
   /** Tokens the provider counted for the last request and its answer (0 when it does not say), and the model's limit when known. */
   used: number;
   limit: number | null;
@@ -117,6 +119,8 @@ export interface AiCompacted {
   summary: string;
   /** How many of the person's own turns were carried over whole, after the summary. */
   kept_turns: number;
+  /** How many messages from the front of what was sent the summary stands in for. */
+  replaced: number;
   input_tokens: number;
   output_tokens: number;
   limit: number | null;

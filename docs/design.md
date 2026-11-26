@@ -796,14 +796,14 @@ confirms that everything it must not be able to do is refused.
   formats, not with a real model). The connected model writes a summary of the conversation
   so far (`lokus-ai/src/compact.rs`), and the conversation carries on from that summary plus
   the most recent turns (about 24,000 characters of them, fewer for a small model; the cut is
-  never between a tool call and its result). `/compact` asks for it by hand, and whatever
+  never between a tool call and its result, and never after the request being worked on). `/compact` asks for it by hand, and whatever
   follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
   as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
   the provider's last count is at 80% of the model's limit the next message is preceded by a
   compaction, and a request the provider refuses as too long is compacted and sent once more;
   either way the pending message is sent, and one quiet line says earlier messages were
   summarised. Only what is sent to the model changes. The conversation file keeps every
-  message, and the chat shows them folded under "Earlier, summarised" above the summary. A
+  message as it was sent (`earlier`, beside the shortened `history`), and the chat shows them folded under "Earlier, summarised" above the summary. A
   compaction that fails or is stopped changes nothing. The desktop app lets one compaction run
   per workspace and conversation, so a second window is turned away, and a window that finds
   the file already compacted takes that result instead of doing it again.
