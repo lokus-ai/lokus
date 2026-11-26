@@ -90,8 +90,10 @@ pub fn write_private(file: &std::path::Path, bytes: &[u8]) -> std::io::Result<()
         std::fs::create_dir_all(dir)?;
     }
     let draft = file.with_extension(format!("json.{}", std::process::id()));
+    // Made new, never opened: what is already there, a link or a file others can read, is not written into.
+    let _ = std::fs::remove_file(&draft);
     let mut options = std::fs::OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.write(true).create_new(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
     std::io::Write::write_all(&mut options.open(&draft)?, bytes)?;
