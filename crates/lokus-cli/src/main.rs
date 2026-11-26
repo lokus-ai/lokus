@@ -266,7 +266,12 @@ fn sync(p: &Parsed) -> ExitCode {
         token: lokus_sync::client::Token::new(token),
     };
     let outcome = runtime.block_on(lokus_sync::client::run(vault, config, |event| {
-        println!("{event}")
+        println!("{event}");
+        // Nothing here renews a token: one the relay will not take ends the command.
+        if event["event"] == "signin" {
+            eprintln!("{}", json!({ "code": "sync", "message": event["reason"] }));
+            std::process::exit(1);
+        }
     }));
     match outcome {
         Ok(()) => ExitCode::SUCCESS,
