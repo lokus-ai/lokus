@@ -323,6 +323,7 @@ fn ai(p: &Parsed) -> ExitCode {
         briefing: String::new(),
         app: None,
         used: 0,
+        unattended: false,
     };
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,

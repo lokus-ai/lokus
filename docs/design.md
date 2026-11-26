@@ -1033,7 +1033,10 @@ the screen says Full Disk Access is needed, with a link to that list in System S
 "Check again". The assistant then has one tool, `mcp__imessage__messages` (optional `chat`,
 `search`, `limit`: 30 messages by default, 200 at most), which returns the newest messages
 oldest first, each with its time, conversation and writer. It reads only: the file is opened
-read-only, the tool never asks, and there is no way to send. The permission is looked at again
+read-only, the tool never asks, and there is no way to send. The tool is on offer only in a
+conversation the person is in: a look the assistant takes by itself (Noticed, `unattended` on
+the request) is not given it, so private messages are never read with nobody asking. `chat`
+and `search` are matched as written ("_" and "%" are not wildcards). The permission is looked at again
 on every read, so access taken away later is answered with the same sentence rather than a
 failure. A message whose words Messages kept only in its styled form (`attributedBody`) is
 still read; reactions are left out; an attachment is shown as `[attachment]`. People appear as

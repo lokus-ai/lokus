@@ -114,7 +114,7 @@ export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logo
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
 /** `briefing` is the conversation's standing context; send the same text for every message of a chat. `root` is the workspace it was asked in: if another is open by now, the request is refused. */
-export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string, used = 0) => call<AiOutcome>("ai_send", { chat, messages, briefing, root, used });
+export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string, used = 0, unattended = false) => call<AiOutcome>("ai_send", { chat, messages, briefing, root, used, unattended });
 
 /** A conversation after its earlier part was summarised: what to carry on from, and the summary. */
 export interface AiCompacted {

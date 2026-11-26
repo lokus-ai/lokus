@@ -205,6 +205,9 @@ pub struct Request {
     /// How many tokens the provider counted the last time this conversation was sent; 0 when it
     /// has not said. Near the model's limit, the conversation is compacted before it is sent.
     pub used: u64,
+    /// Nobody asked: the assistant is looking by itself (Noticed). What is private to the
+    /// person and was not asked about, their Messages, is then not on offer.
+    pub unattended: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -530,6 +533,7 @@ pub async fn send(
         briefing,
         app,
         used,
+        unattended,
     } = request;
     let mut system = if briefing.trim().is_empty() {
         SYSTEM.to_string()
@@ -589,11 +593,13 @@ pub async fn send(
         }
     }
 
-    // Messages on this Mac: read where it is, with no server to connect to.
-    if config
-        .mcp
-        .iter()
-        .any(|s| s.enabled && crate::imessage::is(s))
+    // Messages on this Mac: read where it is, with no server to connect to. Only in a
+    // conversation the person is in: a look nobody asked for does not read their messages.
+    if !unattended
+        && config
+            .mcp
+            .iter()
+            .any(|s| s.enabled && crate::imessage::is(s))
     {
         for tool in crate::imessage::tools() {
             sources.push(Source::Messages);

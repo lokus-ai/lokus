@@ -201,7 +201,7 @@ export async function check(reason = "This is a routine look.", asked = false): 
   let problem = "";
   try {
     const briefing = await brief();
-    const outcome = await aiSend(id, [{ role: "user", content: request(since, state.items, watches, reason) }], briefing, root);
+    const outcome = await aiSend(id, [{ role: "user", content: request(since, state.items, watches, reason) }], briefing, root, 0, true);
     const { config } = await aiSettings();
     traceChat({ trace: id, provider: config.provider, model: outcome.model, seconds: (Date.now() - now) / 1000, rounds: outcome.rounds, inputTokens: outcome.input_tokens, outputTokens: outcome.output_tokens, tools: outcome.tools, stop: outcome.stop, error: "", made: { background: 1 }, question: "", answer: "" });
     const due = JSON.parse(localStorage.getItem(DUE) ?? "{}") as Record<string, number>;

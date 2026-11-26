@@ -287,6 +287,7 @@ pub async fn ai_send(
     briefing: String,
     root: Option<String>,
     used: Option<u64>,
+    unattended: Option<bool>,
 ) -> Result<Value, Value> {
     // App tools run in the window: it is told what to do and answers through `ai_act_done`.
     let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
@@ -320,6 +321,7 @@ pub async fn ai_send(
         briefing,
         app: Some(act),
         used: used.unwrap_or(0),
+        unattended: unattended.unwrap_or(false),
     };
     let waiting = app.state::<Ai>().waiting.clone();
     let approve: Approver = Arc::new(move |id: &str| {
