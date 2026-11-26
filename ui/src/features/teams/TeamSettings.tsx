@@ -37,9 +37,11 @@ export function TeamSettings() {
   const vault = useStore(app, (s) => s.vault);
   const profiles = useProfiles();
   const [accountToken, setAccountToken] = useState<string | null>(null);
-  const [server, setServer] = useState(current.server ?? HOME);
+  const linked = useStore(app, (s) => (s.team && s.team.root === s.vault?.root ? s.team : null));
+  const at = (current.server ?? linked?.server ?? HOME).replace(/\/+$/, "");
+  const [server, setServer] = useState(at);
   // With a home server built in, nobody is asked where the server is unless they run their own.
-  const [ownServer, setOwnServer] = useState(!HOME || (current.server !== undefined && current.server !== HOME));
+  const [ownServer, setOwnServer] = useState(!HOME || at !== HOME);
   const [typedToken, setTypedToken] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -58,7 +60,6 @@ export function TeamSettings() {
   }, [account]);
 
   const token = accountToken ?? (typedToken.trim() || null);
-  const linked = useStore(app, (s) => (s.team && s.team.root === s.vault?.root ? s.team : null));
   // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
   const refused = current.status === "refused";
   const connected = !refused && (current.status !== "off" || linked !== null);
@@ -80,9 +81,12 @@ export function TeamSettings() {
 
   const load = useCallback(async () => {
     if (!token || !server) return;
+    // A folder from someone else can name any relay: the account's sign-in is not shown to one this
+    // computer has not used until the person presses Reconnect.
+    if (accountToken && linked && !linked.known && linked.server.replace(/\/+$/, "") !== HOME && server.trim().replace(/\/+$/, "") !== HOME) return;
     const found = await attempt(() => relay<Workspace[]>(server, token, "GET", "/v1/workspaces"));
     if (found) setWorkspaces(found);
-  }, [attempt, server, token]);
+  }, [accountToken, attempt, linked, server, token]);
 
   // Asked again once connected, so a workspace made a moment ago is known by its name.
   useEffect(() => {

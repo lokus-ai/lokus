@@ -521,7 +521,9 @@ anyone, so it holds no token: a token typed for a relay of one's own, and the fa
 computer connected the folder to that relay, are in the app's own `relays.json` (readable by
 the person only; `apps/desktop/src/sync.rs`). A folder naming a relay that is neither the one
 built in nor one in that file is not connected by itself, so the account's sign-in is never
-sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. It
+sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. The file is
+read only as a plain file in a plain `.lokus`, and written as a new draft moved into place, so
+a link left in a received folder is never read or written through. It
 goes where the folder goes, so a moved or renamed folder is still its team's, and it is there
 when the window's own storage is not. What earlier versions kept in the window's storage
 (`lokus.sync:<folder>`) is moved into the folder at the next start and removed from the

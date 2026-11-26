@@ -434,7 +434,7 @@ async function unshareAll(): Promise<void> {
 async function remember(root: string, team: Team | null): Promise<void> {
   if (team) await keepTeam(root, team);
   else await forgetTeam(root);
-  if (app.get().vault?.root === root) app.set({ team: team ? { ...team, root } : null });
+  if (app.get().vault?.root === root) app.set({ team: team ? { ...team, known: true, root } : null });
 }
 
 /** Start syncing this vault with a team workspace. */
@@ -747,7 +747,8 @@ export async function resumeSync(byHand = false): Promise<void> {
   // A folder from someone else can name any relay. The account's sign-in goes by itself only to
   // the relay built in, or to one this computer connected the folder to; another waits for a press.
   if (!byHand && !team.known && team.server.replace(/\/+$/, "") !== HOME) {
-    return app.set({ sync: { status: "refused", server: team.server, workspace: team.workspace, reason: "this folder names a relay this computer has not used; reconnect to use it" } });
+    // Its address is left out of what the rest of the app reads, so nothing asks it anything meanwhile.
+    return app.set({ sync: { status: "refused", reason: "this folder names a relay this computer has not used; reconnect to use it" } });
   }
   await connectSync(team.server, team.workspace, team.token);
 }
@@ -832,7 +833,7 @@ export async function setVault(path: string, create?: () => Promise<VaultInfo>):
     if (current?.server !== connection.server || current.workspace !== connection.workspace) {
       throw new Error("The sync connection changed. Open the original team before retrying.");
     }
-    await connectSync(connection.server, connection.workspace, connection.token, previous.root);
+    await resumeSync();
   };
   if (previous?.root === path) {
     switching = true;
