@@ -102,7 +102,8 @@ LEFT JOIN handle h ON h.ROWID = m.handle_id
 LEFT JOIN chat_message_join j ON j.message_id = m.ROWID
 LEFT JOIN chat c ON c.ROWID = j.chat_id
 WHERE m.associated_message_type = 0 AND m.item_type = 0
-  AND (?1 = '' OR c.display_name LIKE ?1 OR c.chat_identifier LIKE ?1 OR h.id LIKE ?1)
+  AND (?1 = '' OR c.display_name LIKE ?1 OR c.chat_identifier LIKE ?1
+       OR (c.ROWID IS NULL AND h.id LIKE ?1))
 ORDER BY m.date DESC
 LIMIT ?2";
 
