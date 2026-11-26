@@ -812,13 +812,12 @@ const LINK = ".cm-wikilink, .cm-link[data-target], .cm-link[data-href]";
 function linkMenu(event: MouseEvent | KeyboardEvent, link: HTMLElement | null, focus: () => void): boolean {
   const target = link?.dataset.target ?? link?.dataset.href;
   if (!link || !target) return false;
-  openMenu(event, "Link", [
+  return openMenu(event, "Link", [
     { id: "note.follow", label: "Open link" },
     { id: "note.followBeside", label: "Open in new tab" },
     null,
     { id: "clipboard.copy", label: "Copy link" },
   ], { element: link, args: { target, text: target }, valid: () => (link.dataset.target ?? link.dataset.href) === target, focus });
-  return true;
 }
 
 function linkClicks(open: (target: string, newTab: boolean) => void) {

@@ -153,13 +153,13 @@ document.addEventListener(
 /**
  * The menu of one thing on screen, for a right-click, the Menu key or Shift+F10. It closes when
  * the thing leaves the screen or another folder opens, and its commands never run after that.
- * Text boxes and selected text keep the system's own menu.
+ * Text boxes and selected text keep the system's own menu: it then says false.
  */
-export function openMenu(event: MenuEvent, label: string, items: (ContextMenuItem | null)[], options: MenuOptions = {}): void {
-  if (event.key !== undefined && event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return;
+export function openMenu(event: MenuEvent, label: string, items: (ContextMenuItem | null)[], options: MenuOptions = {}): boolean {
+  if (event.key !== undefined && event.key !== "ContextMenu" && !(event.key === "F10" && event.shiftKey)) return false;
   const element = options.element ?? (event.currentTarget as HTMLElement);
-  if ((event.target as Element).closest?.("input:not([type=checkbox]), textarea, select")) return;
-  if (event.key === undefined && selected?.intersectsNode(element)) return;
+  if ((event.target as Element).closest?.("input:not([type=checkbox]), textarea, select")) return false;
+  if (event.key === undefined && selected?.intersectsNode(element)) return false;
   if (event.key === undefined && getSelection()?.rangeCount && getSelection()?.getRangeAt(0).intersectsNode(element)) getSelection()?.removeAllRanges();
   event.preventDefault();
   event.stopPropagation();
@@ -175,6 +175,7 @@ export function openMenu(event: MenuEvent, label: string, items: (ContextMenuIte
     restoreFocus: options.focus ?? (() => element.focus({ preventScroll: true })),
     run: (id) => { void runCommand(id, { ...options.args, root }).catch(() => notify("That could not be done.")); },
   });
+  return true;
 }
 
 /** The menu of a note or a file, the same wherever it is shown; the sidebar adds its own to it. */
