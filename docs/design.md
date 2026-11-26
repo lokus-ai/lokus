@@ -857,7 +857,8 @@ confirms that everything it must not be able to do is refused.
   never between a tool call and its result, and never after a request still being worked
   on). `/compact` asks for it by hand, and whatever
   follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
-  as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
+  as what to keep and what to drop, overriding the usual rules. The summariser reads each attached
+  file's text as the model was sent it, not only its name, so a note can keep what is only in a file. It also happens by itself: when
   the provider's last count is at 80% of the model's limit the next message is preceded by a
   compaction, and a request the provider refuses as too long is compacted and sent once more;
   either way the pending message is sent, and one quiet line says earlier messages were
