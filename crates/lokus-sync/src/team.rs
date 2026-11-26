@@ -14,8 +14,6 @@ use crate::{Error, Result};
 pub struct Team {
     pub server: String,
     pub workspace: String,
-    /// A sign-in typed by hand for someone's own server; `None` means the account's.
-    pub token: Option<String>,
     /// The account that was last connected, so another account's list of teams decides nothing.
     #[serde(default)]
     pub user: Option<String>,
@@ -61,7 +59,6 @@ mod tests {
         let team = |workspace: &str| Team {
             server: "s".into(),
             workspace: workspace.into(),
-            token: None,
             user: None,
         };
         keep(dir.path(), &team("one")).unwrap();

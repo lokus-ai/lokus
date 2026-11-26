@@ -515,8 +515,13 @@ change a role, remove someone, invite by email and cancel invitations, leave or 
 There is no separate team window, and no way to stop syncing: a member's folder syncs.
 
 **A folder stays in its team.** The team a folder belongs to is kept in the folder itself,
-`.lokus/team.json` (the relay, the workspace, a token typed for a relay of one's own, and the
-account last connected; `crates/lokus-sync/src/team.rs`, the only code that writes it). It
+`.lokus/team.json` (the relay, the workspace and the account last connected;
+`crates/lokus-sync/src/team.rs`, the only code that writes it). A folder can be handed to
+anyone, so it holds no token: a token typed for a relay of one's own, and the fact that this
+computer connected the folder to that relay, are in the app's own `relays.json` (readable by
+the person only; `apps/desktop/src/sync.rs`). A folder naming a relay that is neither the one
+built in nor one in that file is not connected by itself, so the account's sign-in is never
+sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. It
 goes where the folder goes, so a moved or renamed folder is still its team's, and it is there
 when the window's own storage is not. What earlier versions kept in the window's storage
 (`lokus.sync:<folder>`) is moved into the folder at the next start and removed from the

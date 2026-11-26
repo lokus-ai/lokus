@@ -114,7 +114,7 @@ export function TeamSettings() {
   // not a member never replaces the saved one.
   const reconnect = () => {
     const typed = accountToken ? "" : typedToken.trim();
-    if (!kept || !typed) return void resumeSync();
+    if (!kept || !typed) return void resumeSync(true);
     if (server.trim().replace(/\/+$/, "") !== kept.server.replace(/\/+$/, "") || !here) return setMessage("That token does not open this team on its server.");
     void connectSync(kept.server, kept.workspace, typed);
   };

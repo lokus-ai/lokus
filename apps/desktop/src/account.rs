@@ -83,6 +83,21 @@ fn kept_in(app: &AppHandle) -> Option<std::path::PathBuf> {
     Some(app.path().app_config_dir().ok()?.join("account.json"))
 }
 
+/// Write a file only this person can read, whole beside it and moved into place: another copy
+/// of Lokus never reads half of one.
+pub fn write_private(file: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    if let Some(dir) = file.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let draft = file.with_extension(format!("json.{}", std::process::id()));
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    std::io::Write::write_all(&mut options.open(&draft)?, bytes)?;
+    std::fs::rename(draft, file)
+}
+
 /// The account sign-in as the account library last saved it, from any copy of Lokus.
 #[tauri::command(async)]
 pub fn account_kept(app: AppHandle) -> Option<String> {
@@ -97,18 +112,6 @@ pub fn account_keep(app: AppHandle, session: Option<String>) -> Result<(), Value
         let _ = std::fs::remove_file(file);
         return Ok(());
     };
-    let write = || -> std::io::Result<()> {
-        if let Some(dir) = file.parent() {
-            std::fs::create_dir_all(dir)?;
-        }
-        // Written whole beside it and moved into place: another copy never reads half of one.
-        let draft = file.with_extension(format!("json.{}", std::process::id()));
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-        std::io::Write::write_all(&mut options.open(&draft)?, session.as_bytes())?;
-        std::fs::rename(draft, &file)
-    };
-    write().map_err(|e| failed(format!("Could not keep the sign-in: {e}")))
+    write_private(&file, session.as_bytes())
+        .map_err(|e| failed(format!("Could not keep the sign-in: {e}")))
 }

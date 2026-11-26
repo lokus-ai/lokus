@@ -24,7 +24,7 @@ import {
   type VaultInfo,
 } from "../bridge/core";
 import { openWeb } from "../bridge/updates";
-import { forgetTeam, keepTeam, moveTeams, relay, syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken, type Team, teamOf } from "../bridge/sync";
+import { forgetTeam, HOME, keepTeam, moveTeams, relay, syncRename, onSyncEvent, syncConnect, syncDisconnect, syncToken, type Team, teamOf } from "../bridge/sync";
 import { Editor, previewMarkdown } from "../editor/editor";
 import { closeShared, flushShared, openShared, type Peer, peersOf, setIdentity, type Shared, startCollab } from "./collab";
 import { createStore } from "./store";
@@ -586,6 +586,8 @@ export async function disconnectSync(): Promise<void> {
  * workspace list, with its notes; the app does not pick another folder for anyone.
  */
 export async function teamGone(root: string, said: string): Promise<void> {
+  // What is still being typed is put on disk first: after this the notes are plain files again.
+  if (app.get().vault?.root === root) await saveAll().catch(() => {});
   await remember(root, null);
   if (app.get().vault?.root === root) {
     stopSignIns?.();
@@ -734,13 +736,19 @@ function savedSync(): Team | null {
 }
 
 /** Connect the open folder to its team, if it has one. The folder says which. */
-export async function resumeSync(): Promise<void> {
+export async function resumeSync(byHand = false): Promise<void> {
   const root = app.get().vault?.root;
   if (!root) return;
   const team = await teamOf(root);
   if (app.get().vault?.root !== root) return;
   app.set({ team: team ? { ...team, root } : null });
-  if (team) await connectSync(team.server, team.workspace, team.token);
+  if (!team) return;
+  // A folder from someone else can name any relay. The account's sign-in goes by itself only to
+  // the relay built in, or to one this computer connected the folder to; another waits for a press.
+  if (!byHand && !team.known && team.server.replace(/\/+$/, "") !== HOME) {
+    return app.set({ sync: { status: "refused", server: team.server, workspace: team.workspace, reason: "this folder names a relay this computer has not used; reconnect to use it" } });
+  }
+  await connectSync(team.server, team.workspace, team.token);
 }
 
 export async function boot(): Promise<void> {
