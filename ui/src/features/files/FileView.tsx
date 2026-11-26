@@ -1,4 +1,5 @@
 /** @part-of ui.files */
+import { fileMenu } from "../../shell/contextMenu";
 import { useEffect, useState } from "react";
 
 import { runCore, vaultFileUrl } from "../../bridge/core";
@@ -86,7 +87,7 @@ export function FileView({ path }: { path: string }) {
   const kind = kindOf(path);
   const url = vaultFileUrl(vault.root, path);
   return (
-    <div className="file-view">
+    <div className="file-view" tabIndex={-1} onContextMenu={(e) => fileMenu(e, path, "tab")} onKeyDown={(e) => fileMenu(e, path, "tab")}>
       <header className="file-head">
         <strong>{fileName(path)}</strong>
         <span className="file-tag">{fileTag(path)}</span>

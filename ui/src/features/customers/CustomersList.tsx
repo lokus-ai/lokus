@@ -3,7 +3,10 @@ import { track } from "../../bridge/analytics";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { runCore } from "../../bridge/core";
+import { registerCommands, unregisterCommands } from "../../shell/commands";
+import { type MenuEvent, openMenu } from "../../shell/contextMenu";
 import { Icon, type IconName } from "../../shell/Icon";
+import { app } from "../../shell/workspace";
 import {
   ago,
   attention,
@@ -63,6 +66,14 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<{ key: string; down: boolean } | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
+  const actions = useRef<Record<string, (path: string) => void>>({});
+  useEffect(() => {
+    const ids = ["customers.archive", "customers.delete"];
+    registerCommands(ids.map((id) => ({ id, title: id.replace(".", " "), hidden: true, run: (a) => {
+      if (typeof a.path === "string" && (typeof a.root !== "string" || a.root === app.get().vault?.root)) actions.current[id]?.(a.path);
+    } })));
+    return () => unregisterCommands(ids);
+  }, []);
   const addMenu = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<{ path: string; key: string } | null>(null);
   const [fresh, setFresh] = useState({ name: "", kind: "text" as Kind });
@@ -228,6 +239,26 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
     for (const c of list) await onDelete(c.path);
     clear();
     setTick((t) => t + 1);
+  };
+  // A row's commands find the customer again by its note; one that has gone is left alone.
+  actions.current = {
+    "customers.archive": (path) => {
+      const c = everyone.find((c) => c.path === path);
+      if (c) void setArchived([c], !isArchived(c));
+    },
+    "customers.delete": (path) => {
+      if (!everyone.some((c) => c.path === path)) return;
+      setPicked(new Set([path]));
+      setConfirming(true);
+    },
+  };
+  const rowMenu = (e: MenuEvent, c: Customer) => {
+    openMenu(e, c.name, [
+      { id: "note.open", label: "Open" },
+      { id: "customers.archive", label: isArchived(c) ? "Bring back to the list" : "Archive" },
+      null,
+      { id: "customers.delete", label: "Delete…", danger: true },
+    ], { args: { path: c.path }, element: (e.currentTarget as HTMLElement).closest("tr") ?? undefined });
   };
   const create = async () => {
     track("action", { feature: "customers", action: "created" });
@@ -488,7 +519,7 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
                   {group.rows.map((c) => {
                     const said = why(c);
                     return (
-                      <tr key={c.path} className={picked.has(c.path) ? "picked" : ""} onClick={() => onOpen(c.path)}>
+                      <tr key={c.path} className={picked.has(c.path) ? "picked" : ""} tabIndex={0} onClick={() => onOpen(c.path)} onContextMenu={(e) => rowMenu(e, c)} onKeyDown={(e) => rowMenu(e, c)}>
                         <td>
                           <span className="custs-name">
                             <input
@@ -545,29 +576,9 @@ export default function CustomersList({ folder, version, onOpen, onNew, onDelete
                           );
                         })}
                         <td className="custs-actions" onClick={(e) => e.stopPropagation()}>
-                          <span className="cust-menu-at">
-                            <button className="cust-more" title="Archive or delete" aria-expanded={menu === c.path} onClick={() => setMenu(menu === c.path ? null : c.path)}>
-                              <Icon name="more" size={14} />
-                            </button>
-                            {menu === c.path && (
-                              <div className="cust-menu">
-                                <button onClick={() => void setArchived([c], !isArchived(c))}>
-                                  <Icon name={isArchived(c) ? "open" : "hide"} size={14} />
-                                  {isArchived(c) ? "Bring back to the list" : "Archive"}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    setPicked(new Set([c.path]));
-                                    setConfirming(true);
-                                    setMenu(null);
-                                  }}
-                                >
-                                  <Icon name="close" size={14} />
-                                  Delete…
-                                </button>
-                              </div>
-                            )}
-                          </span>
+                          <button className="cust-more" title="Archive or delete" aria-haspopup="menu" onClick={(e) => rowMenu(e, c)}>
+                            <Icon name="more" size={14} />
+                          </button>
                         </td>
                       </tr>
                     );

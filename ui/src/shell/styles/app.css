@@ -353,6 +353,8 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
 .context-menu button:focus { background: var(--bg-hover); outline: 1px solid var(--accent); outline-offset: -1px; }
 .context-menu button:disabled { color: var(--fg-3); background: none; }
 .cm-table .cm-context-target { outline: 1px solid var(--accent); outline-offset: -1px; }
+/* The thing a menu is about, while the menu is open. */
+.context-target { outline: 1px solid var(--accent); outline-offset: -1px; }
 
 /* Search */
 .palette.wide { width: min(720px, 92vw); }

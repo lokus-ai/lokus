@@ -1070,10 +1070,11 @@ function closeGone(path: string): void {
 }
 
 /** Rename or move a note or a folder; open tabs follow it. */
-export async function renameEntry(from: string, to: string): Promise<boolean> {
+export async function renameEntry(from: string, to: string, root?: string): Promise<boolean> {
   if (from === to) return true;
   const vault = app.get().vault;
-  if (!vault) return false;
+  // A name typed for a file of the folder that was open then is not given to one of another.
+  if (!vault || (root !== undefined && vault.root !== root)) return false;
   try {
     await saveAll();
     if (app.get().vault !== vault) return false;
