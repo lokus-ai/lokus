@@ -295,13 +295,17 @@ pub fn sync_keep(app: AppHandle, root: String, team: TeamHere) -> Result<bool, V
     if !root.is_dir() {
         return Ok(false);
     }
-    lokus_sync::team::keep(root, &team.team).map_err(|e| fail("team", e))?;
+    if lokus_sync::team::kept(root).is_some_and(|old| old.workspace != team.team.workspace) {
+        return Err(fail("team", lokus_sync::Error::OtherTeam));
+    }
+    // The token first: a folder never says it is a team's while its token went unkept.
     let mut all = relays(&app);
     let key = relay_key(&team.team);
     if all.get(&key) != Some(&team.token) {
         all.insert(key, team.token);
         keep_relays(&app, &all).map_err(|e| fail("team", e))?;
     }
+    lokus_sync::team::keep(root, &team.team).map_err(|e| fail("team", e))?;
     Ok(true)
 }
 
