@@ -21,6 +21,8 @@ const USAGE: &str = "usage:
   lokus ai --vault DIR q=QUESTION [provider=anthropic|openai|chatgpt] [model=ID] [base_url=URL]
            [approve=true] [mcp=URL] [login=true]       (ask the assistant; the key comes from the keychain,
                                           or ANTHROPIC_API_KEY / OPENAI_API_KEY)
+  lokus imessage [chat=WHO] [search=TEXT] [limit=N]
+                                          (what the assistant reads from Messages on this Mac)
 
   lokus release version=V server=URL darwin-aarch64=URL [more builds…]
                                           (publish a version people update to; checks every signature first)
@@ -60,6 +62,16 @@ fn main() -> ExitCode {
     }
     if !in_app && parsed.command == "ai" {
         return ai(&parsed);
+    }
+    // What the assistant's Messages tool returns, with no model in between.
+    if !in_app && parsed.command == "imessage" {
+        return match lokus_ai::imessage::call(&parsed.args) {
+            Ok(text) => {
+                println!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(message) => fail(json!({ "code": "no_access", "message": message })),
+        };
     }
     let result = if in_app {
         run_in_app(&parsed)
