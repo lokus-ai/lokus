@@ -488,7 +488,8 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
       ),
     });
     pending = null;
-    seen = state.attached;
+    // After a compaction the note's text may be in the part put away, so it is attached afresh.
+    seen = outcome.replaced ? null : state.attached;
     update((items) => (STOPPED[outcome.stop] ? [...settle(items), { kind: "notice", text: STOPPED[outcome.stop] }] : settle(items)));
     return outcome.stop !== "refusal";
   } catch (e) {
@@ -576,6 +577,7 @@ export async function compactChat(note = ""): Promise<boolean> {
     if (kept && (kept.body.compactions ?? 0) > compactions) {
       history = kept.body.history ?? history;
       earlier = kept.body.earlier ?? earlier;
+      seen = null;
       compactions = kept.body.compactions ?? compactions;
       chat.set({
         items: [
@@ -594,6 +596,7 @@ export async function compactChat(note = ""): Promise<boolean> {
     if (sending !== requestId) return false;
     earlier = [...earlier, ...history.slice(0, done.replaced)];
     history = done.messages;
+    seen = null;
     compactions += 1;
     update((items) =>
       fold(settle(items), done.kept_turns, {
