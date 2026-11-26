@@ -585,6 +585,31 @@ kbd { font-family: var(--font-ui); font-size: var(--text-caption); color: var(--
 .ai-mentions button.active { background: var(--bg-hover); }
 .ai-mentions .icon { flex: none; color: var(--fg-3); }
 .ai-mentions small { margin-left: auto; padding-left: 12px; color: var(--fg-3); font-size: var(--text-caption); flex: 0 1 auto; }
+/* Commands typed with a slash, the context meter and what compaction leaves behind. */
+.ai-slashes button { height: 30px; }
+.ai-slash-word { flex: none; font-weight: 500; }
+.ai-slash-word small { margin: 0; padding: 0; font-weight: 400; }
+.ai-meter { display: block; height: 20px; margin: 4px -6px -4px auto; padding: 0 6px; border-radius: var(--radius-xs); color: var(--fg-3); font-size: var(--text-caption); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ai-meter:hover, .ai-meter[aria-expanded="true"] { background: var(--bg-hover); color: var(--fg-2); }
+.ai-meter.high { color: var(--danger); }
+.ai-context-detail { position: absolute; z-index: 6; left: 0; right: 0; bottom: calc(100% + 6px); display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--bg); border-radius: var(--radius-md); box-shadow: var(--shadow-pop); cursor: default; font-size: var(--text-small); }
+.ai-context-head { display: flex; align-items: center; justify-content: space-between; }
+.ai-context-head button { width: 22px; height: 22px; display: grid; place-items: center; border-radius: var(--radius-xs); color: var(--fg-3); }
+.ai-context-head button:hover { background: var(--bg-hover); }
+.ai-context-detail p, .ai-context-detail small { margin: 0; color: var(--fg-3); font-size: var(--text-caption); line-height: 1.5; }
+.ai-context-bar, .ai-context-detail li i { display: block; height: 4px; border-radius: 2px; background: var(--bg-hover); overflow: hidden; }
+.ai-context-bar span, .ai-context-detail li b { display: block; height: 100%; border-radius: 2px; background: var(--fg-3); }
+.ai-context-bar.high span { background: var(--danger); }
+.ai-context-detail ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ai-context-detail li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 34px; align-items: center; gap: 8px; }
+.ai-context-detail li em { font-style: normal; text-align: right; color: var(--fg-3); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.ai-context-actions { display: flex; align-items: center; gap: 10px; color: var(--fg-3); font-size: var(--text-caption); }
+.ai-context-actions button { height: 26px; padding: 0 10px; border-radius: var(--radius-sm); background: var(--fg); color: var(--bg); font-size: var(--text-caption); font-weight: 500; }
+.ai-context-actions button:disabled { opacity: 0.4; }
+.ai-earlier > summary, .ai-summary > summary { cursor: pointer; color: var(--fg-3); font-size: var(--text-caption); }
+.ai-earlier > summary:hover, .ai-summary > summary:hover { color: var(--fg-2); }
+.ai-earlier-body { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); opacity: 0.75; }
+.ai-summary .ai-answer { margin-top: 8px; white-space: pre-wrap; color: var(--fg-2); }
 .ai-context { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 22px; padding: 0 7px; border-radius: var(--radius-xs); background: var(--bg-hover); color: var(--fg-2); font-size: var(--text-caption); cursor: default; }
 .ai-context .icon { flex: none; color: var(--fg-3); }
 .ai-compose textarea { display: block; width: 100%; padding: 0 4px 0 0; border: 0; outline: 0; resize: none; background: none; font: inherit; font-size: var(--text-small); line-height: 1.5; color: inherit; }

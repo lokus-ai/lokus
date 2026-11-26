@@ -786,11 +786,43 @@ confirms that everything it must not be able to do is refused.
   waits for the person to allow it unless they switch that off, as does any tool-server action
   not marked read-only. Acting on the app (open a note at a heading, show the graph) never asks;
   the window carries these out. Every result is capped, and a cut result says how to see the rest.
-- **Context.** One loop, one conversation, only ever added to. Each conversation starts with a
+- **Context.** One loop, one conversation, added to until it nears the model's limit (see
+  Compaction below). Each conversation starts with a
   briefing that then never changes: the date, the shape of the vault, and the person's standing
   instructions from the note `Assistant.md`. Each message carries a small `<app_state>` block
   (open note, selection); the open note's text is attached only when it is new or has changed.
   Note text and tool results are treated as information, never as instructions.
+- **Compaction** (built; tried in the real app with a stand-in provider speaking all three
+  formats, not with a real model). The connected model writes a summary of the conversation
+  so far (`lokus-ai/src/compact.rs`), and the conversation carries on from that summary plus
+  the most recent turns (about 24,000 characters of them, fewer for a small model; the cut is
+  never between a tool call and its result). `/compact` asks for it by hand, and whatever
+  follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
+  as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
+  the provider's last count is at 80% of the model's limit the next message is preceded by a
+  compaction, and a request the provider refuses as too long is compacted and sent once more;
+  either way the pending message is sent, and one quiet line says earlier messages were
+  summarised. Only what is sent to the model changes. The conversation file keeps every
+  message, and the chat shows them folded under "Earlier, summarised" above the summary. A
+  compaction that fails or is stopped changes nothing. The desktop app lets one compaction run
+  per workspace and conversation, so a second window is turned away, and a window that finds
+  the file already compacted takes that result instead of doing it again.
+  Checked by `checks/flows/compaction.sh`, which drives the running app.
+- **Context used.** The chat box always shows how full the conversation is ("58% of
+  context"): the input tokens the provider itself counted on the last reply, against the
+  model's limit. Limits are a short table by model family in `compact.rs` (Claude 200,000;
+  GPT-5 400,000; GPT-4.1 1,047,576; GPT-4o 128,000; o3/o4 200,000), `LOKUS_CONTEXT_LIMIT`
+  overrides it, and a model at another address has no known limit. Nothing is estimated: a
+  provider that sends no count shows "Context unknown", an unknown limit shows the count
+  alone, and automatic compaction then relies on the provider's refusal. Clicking the meter
+  or `/context` shows what the space goes to (messages, the summary, tool results, attached
+  notes and files, the workspace briefing, the instructions, the tools on offer) as shares by
+  length of text, which are labelled as such, with a Compact button.
+- **Slash commands.** A "/" at the start of the message box lists the commands that carry a
+  `slash` name in the one command registry (`/compact`, `/clear` for a new conversation,
+  `/context`); arrows, Enter, Escape and typing to filter work it. They are the same named
+  commands the palette and `lokus app` run. A message that starts with "/" and names no
+  command is sent as written.
 - **Unsent drafts.** Closing and reopening the assistant keeps the entire message: text,
   explicitly picked @ notes/folders and attached files. Each conversation in each workspace
   has its own draft in this window's memory; Earlier conversations also lists messages not

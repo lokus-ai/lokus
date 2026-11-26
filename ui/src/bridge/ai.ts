@@ -59,9 +59,16 @@ export interface AiSettings {
 
 export type AiEvent =
   | { type: "text"; delta: string }
-  | { type: "tool"; id: string; name: string; input: Record<string, unknown>; asks: boolean }
+  | {
+      type: "tool";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+      asks: boolean;
+    }
   | { type: "tool_done"; id: string; ok: boolean; result: string }
-  | { type: "notice"; message: string };
+  | { type: "notice"; message: string }
+  | { type: "compacted"; summary: string; kept_turns: number };
 
 export interface AiOutcome {
   /** Messages to add to the conversation. Opaque here; they are sent back as they are. */
@@ -74,10 +81,25 @@ export interface AiOutcome {
   output_tokens: number;
   tools: string[];
   /** What the first request was made of, in characters, by part. */
-  context: { instructions: number; briefing: number; conversation: number; tools: Record<string, { count: number; chars: number }> };
+  context: {
+    instructions: number;
+    briefing: number;
+    conversation: number;
+    tools: Record<string, { count: number; chars: number }>;
+  };
+  /** Set when the conversation was compacted on the way: carry on from this, then `messages`. */
+  replaced: unknown[] | null;
+  /** Tokens the provider counted for the last request and its answer (0 when it does not say), and the model's limit when known. */
+  used: number;
+  limit: number | null;
+  /** What the conversation is made of, in characters by kind. */
+  parts: Record<string, number>;
 }
 
-async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+async function call<T>(
+  command: string,
+  args?: Record<string, unknown>,
+): Promise<T> {
   try {
     return await invoke<T>(command, args);
   } catch (raw) {
@@ -86,36 +108,96 @@ async function call<T>(command: string, args?: Record<string, unknown>): Promise
 }
 
 export const aiSettings = () => call<AiSettings>("ai_settings");
-export const saveAiConfig = (config: AiConfig) => call<void>("ai_settings_save", { config });
+export const saveAiConfig = (config: AiConfig) =>
+  call<void>("ai_settings_save", { config });
 /** Store a provider key, or a key of one of the workspace `root`'s connections, in the keychain; an empty value removes it. */
-export const setAiSecret = (kind: "provider" | "mcp" | "api", name: string, value: string, root = "") => call<void>("ai_secret_set", { kind, name, value, root });
+export const setAiSecret = (
+  kind: "provider" | "mcp" | "api",
+  name: string,
+  value: string,
+  root = "",
+) => call<void>("ai_secret_set", { kind, name, value, root });
 export const aiModels = () => call<string[]>("ai_models");
 // A connection belongs to one workspace: `root` is the folder of the one it is made, checked or removed in.
-export const checkMcp = (root: string, server: McpServer, token?: string) => call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", { server, token, root });
-export const saveMcpToken = (root: string, server: McpServer, token: string) => call<void>("ai_mcp_token_save", { server, token, root });
+export const checkMcp = (root: string, server: McpServer, token?: string) =>
+  call<{ name: string; description: string; asks: boolean }[]>("ai_mcp_check", {
+    server,
+    token,
+    root,
+  });
+export const saveMcpToken = (root: string, server: McpServer, token: string) =>
+  call<void>("ai_mcp_token_save", { server, token, root });
 export const aiConnectors = () => call<Connector[]>("ai_connectors");
 /** Sign in to a tool server in the browser and keep it among `root`'s connections; resolves when the browser has come back. */
-export const mcpLogin = (root: string, server: McpServer) => call<void>("ai_mcp_login", { server, root });
-export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logout", { name, root });
+export const mcpLogin = (root: string, server: McpServer) =>
+  call<void>("ai_mcp_login", { server, root });
+export const mcpLogout = (root: string, name: string) =>
+  call<void>("ai_mcp_logout", { name, root });
 /** Sign in with ChatGPT in the browser; resolves when the browser has come back. */
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
 /** `briefing` is the conversation's standing context; send the same text for every message of a chat. `root` is the workspace it was asked in: if another is open by now, the request is refused. */
-export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string) => call<AiOutcome>("ai_send", { chat, messages, briefing, root });
+export const aiSend = (
+  chat: string,
+  messages: unknown[],
+  briefing: string,
+  root?: string,
+  used = 0,
+) => call<AiOutcome>("ai_send", { chat, messages, briefing, root, used });
+
+/** A conversation after its earlier part was summarised: what to carry on from, and the summary. */
+export interface AiCompacted {
+  messages: unknown[];
+  summary: string;
+  /** How many of the person's own turns were carried over whole, after the summary. */
+  kept_turns: number;
+  input_tokens: number;
+  output_tokens: number;
+  limit: number | null;
+  parts: Record<string, number>;
+}
+/** `chat` names this request (for Stop); `conversation` is what two windows must not compact at once. */
+export const aiCompact = (
+  chat: string,
+  conversation: string,
+  messages: unknown[],
+  note: string,
+  root?: string,
+) =>
+  call<AiCompacted>("ai_compact", { chat, conversation, messages, note, root });
 /** Tell the assistant what happened when the window carried out one of its app tools. */
-export const aiActDone = (id: string, ok: boolean, result: string) => call<void>("ai_act_done", { id, ok, result });
+export const aiActDone = (id: string, ok: boolean, result: string) =>
+  call<void>("ai_act_done", { id, ok, result });
 export const aiStop = (chat: string) => call<void>("ai_stop", { chat });
-export const aiApprove = (id: string, allow: boolean) => call<void>("ai_approve", { id, allow });
+export const aiApprove = (id: string, allow: boolean) =>
+  call<void>("ai_approve", { id, allow });
 
 /** The assistant asks the window to do something in the app (open a note, show a view). */
-export function onAiAct(handler: (chat: string, id: string, name: string, input: Record<string, unknown>) => void): () => void {
-  const stop = listen<{ chat: string; id: string; name: string; input: Record<string, unknown> }>("ai:act", ({ payload }) =>
+export function onAiAct(
+  handler: (
+    chat: string,
+    id: string,
+    name: string,
+    input: Record<string, unknown>,
+  ) => void,
+): () => void {
+  const stop = listen<{
+    chat: string;
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+  }>("ai:act", ({ payload }) =>
     handler(payload.chat, payload.id, payload.name, payload.input),
   );
   return () => void stop.then((off) => off());
 }
 
-export function onAiEvent(handler: (chat: string, event: AiEvent) => void): () => void {
-  const stop = listen<{ chat: string; event: AiEvent }>("ai:event", ({ payload }) => handler(payload.chat, payload.event));
+export function onAiEvent(
+  handler: (chat: string, event: AiEvent) => void,
+): () => void {
+  const stop = listen<{ chat: string; event: AiEvent }>(
+    "ai:event",
+    ({ payload }) => handler(payload.chat, payload.event),
+  );
   return () => void stop.then((off) => off());
 }

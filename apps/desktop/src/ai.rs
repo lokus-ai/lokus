@@ -25,6 +25,9 @@ pub struct Ai {
     waiting: Arc<Mutex<HashMap<String, oneshot::Sender<bool>>>>,
     /// Tool calls the window is carrying out (opening a note, showing a view).
     acting: Arc<Mutex<HashMap<String, Answer>>>,
+    /// Conversations being compacted, by workspace and chat, so two windows on the same
+    /// conversation do not both summarise it.
+    compacting: Mutex<std::collections::HashSet<String>>,
 }
 
 fn fail(code: &str, message: impl ToString) -> Value {
@@ -275,6 +278,7 @@ pub async fn ai_send(
     messages: Vec<Value>,
     briefing: String,
     root: Option<String>,
+    used: Option<u64>,
 ) -> Result<Value, Value> {
     // App tools run in the window: it is told what to do and answers through `ai_act_done`.
     let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
@@ -307,6 +311,7 @@ pub async fn ai_send(
         core,
         briefing,
         app: Some(act),
+        used: used.unwrap_or(0),
     };
     let waiting = app.state::<Ai>().waiting.clone();
     let approve: Approver = Arc::new(move |id: &str| {
@@ -335,6 +340,63 @@ pub async fn ai_send(
     }
     match result {
         Ok(Ok(outcome)) => serde_json::to_value(outcome).map_err(|e| fail("ai", e)),
+        Ok(Err(e)) => Err(e.body()),
+        Err(_) => Err(fail("stopped", "stopped")),
+    }
+}
+
+/// Summarise the earlier part of a conversation to make room, steered by the person's `note`.
+/// The reply is the conversation to carry on from. Stopping it (`ai_stop`) or a failure leaves
+/// the conversation as it was: nothing is changed until the window takes the reply.
+#[tauri::command]
+pub async fn ai_compact(
+    app: AppHandle,
+    chat: String,
+    conversation: String,
+    messages: Vec<Value>,
+    note: String,
+    root: Option<String>,
+) -> Result<Value, Value> {
+    let core = app.state::<Shell>().core();
+    let open = core.as_deref().map(root_of).unwrap_or_default();
+    if root.is_some_and(|asked| asked != open) {
+        return Err(
+            json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+        );
+    }
+    let at = core.as_deref().map(id_of).transpose()?.unwrap_or_default();
+    let config = load(&app)?.seen_from(&at);
+    // Every window of the app shares this, so a second window asking is turned away.
+    let lock = format!("{open}\n{conversation}");
+    let free = app
+        .state::<Ai>()
+        .compacting
+        .lock()
+        .is_ok_and(|mut busy| busy.insert(lock.clone()));
+    if !free {
+        return Err(fail(
+            "compacting",
+            "This conversation is already being compacted.",
+        ));
+    }
+    let (done, outcome) = oneshot::channel::<Result<Value, AiError>>();
+    let task = tauri::async_runtime::spawn(async move {
+        let _ = done.send(lokus_ai::compact_chat(config, &messages, &note, core.as_deref()).await);
+    });
+    if let Ok(mut running) = app.state::<Ai>().running.lock() {
+        if let Some(old) = running.insert(chat.clone(), task) {
+            old.abort();
+        }
+    }
+    let result = outcome.await;
+    if let Ok(mut running) = app.state::<Ai>().running.lock() {
+        running.remove(&chat);
+    }
+    if let Ok(mut busy) = app.state::<Ai>().compacting.lock() {
+        busy.remove(&lock);
+    }
+    match result {
+        Ok(Ok(value)) => Ok(value),
         Ok(Err(e)) => Err(e.body()),
         Err(_) => Err(fail("stopped", "stopped")),
     }

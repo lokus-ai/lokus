@@ -14,6 +14,9 @@ export interface Command {
   keys?: string;
   /** Hidden commands exist for scripts and tests, not for people. */
   hidden?: boolean;
+  /** The word that runs it from the assistant's chat box ("compact" for /compact), and what may follow it. */
+  slash?: string;
+  takes?: string;
   run(args: Record<string, unknown>): unknown;
 }
 
@@ -37,7 +40,10 @@ export function listCommands(): Command[] {
   return [...registry.values()];
 }
 
-export async function runCommand(id: string, args: Record<string, unknown> = {}): Promise<unknown> {
+export async function runCommand(
+  id: string,
+  args: Record<string, unknown> = {},
+): Promise<unknown> {
   const command = registry.get(id);
   if (!command) return runCore(id, args);
   if (!command.hidden) track("command_run", { id });
@@ -60,7 +66,23 @@ function chord(e: KeyboardEvent): string {
 export function formatKeys(keys: string): string {
   return keys
     .split("-")
-    .map((k) => (isMac ? (k === "Mod" ? "⌘" : k === "Ctrl" ? "⌃" : k === "Shift" ? "⇧" : k === "Alt" ? "⌥" : k.toUpperCase()) : k === "Mod" ? "Ctrl" : k.length > 1 ? k : k.toUpperCase()))
+    .map((k) =>
+      isMac
+        ? k === "Mod"
+          ? "⌘"
+          : k === "Ctrl"
+            ? "⌃"
+            : k === "Shift"
+              ? "⇧"
+              : k === "Alt"
+                ? "⌥"
+                : k.toUpperCase()
+        : k === "Mod"
+          ? "Ctrl"
+          : k.length > 1
+            ? k
+            : k.toUpperCase(),
+    )
     .join(isMac ? "" : "+");
 }
 

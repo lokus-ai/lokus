@@ -263,6 +263,7 @@ macro_rules! commands {
             ai::ai_chatgpt_login,
             ai::ai_chatgpt_logout,
             ai::ai_send,
+            ai::ai_compact,
             ai::ai_stop,
             ai::ai_approve,
             ai::ai_act_done,
