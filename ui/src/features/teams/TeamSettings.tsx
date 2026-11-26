@@ -114,6 +114,8 @@ export function TeamSettings() {
   // not a member never replaces the saved one.
   const reconnect = () => {
     const typed = accountToken ? "" : typedToken.trim();
+    // A relay of one's own with no token kept for it and no account: only a typed token opens it.
+    if (kept && !typed && !accountToken && !kept.token && kept.server.replace(/\/+$/, "") !== HOME) return setMessage("Type this relay's access token to reconnect.");
     if (!kept || !typed) return void resumeSync(true);
     if (server.trim().replace(/\/+$/, "") !== kept.server.replace(/\/+$/, "") || !here) return setMessage("That token does not open this team on its server.");
     void connectSync(kept.server, kept.workspace, typed);
