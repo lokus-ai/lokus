@@ -251,6 +251,9 @@ pub struct Outcome {
     /// Set when the conversation was compacted on the way: the conversation to carry on from,
     /// in place of everything sent in. `messages` are then added to this.
     pub replaced: Option<Vec<Value>>,
+    /// Every message this request added, those from before a compaction on the way too, for a
+    /// window that has to put its turn after another window's instead of taking the summary.
+    pub turn: Vec<Value>,
     /// How many messages from the front of the conversation the summary stands in for.
     pub dropped: usize,
     /// How full the model's room is after this reply: the tokens the provider counted for the
@@ -674,6 +677,7 @@ pub async fn send(
     };
 
     let mut added: Vec<Value> = Vec::new();
+    let mut whole: Vec<Value> = Vec::new();
     let mut attached = std::collections::HashMap::new();
     let mut stop = String::from("end_turn");
     let limit = crate::compact::limit(&config);
@@ -738,6 +742,7 @@ pub async fn send(
             written += turn.tokens.1;
             let reply = json!({ "role": "assistant", "content": turn.content });
             messages.push(reply.clone());
+            whole.push(reply.clone());
             added.push(reply);
             let calls: Vec<&Value> = turn.content.iter().filter(|b| b["type"] == "tool_use").collect();
             called.extend(calls.iter().filter_map(|c| c["name"].as_str().map(str::to_string)));
@@ -815,6 +820,7 @@ pub async fn send(
             }
             let reply = json!({ "role": "user", "content": results });
             messages.push(reply.clone());
+            whole.push(reply.clone());
             added.push(reply);
             if turn.stop != "tool_use" {
                 break;
@@ -833,6 +839,7 @@ pub async fn send(
     let model = config.model().unwrap_or_default().to_string();
     result.map(|()| Outcome {
         messages: added,
+        turn: whole,
         stop,
         model,
         rounds,

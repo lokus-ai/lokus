@@ -448,7 +448,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     });
   }
   const note = app.get().active;
-  ownTurns += 1;
+  turnsMade += 1;
   chat.set((s) => ({ busy: true, items: [...s.items, { kind: "user", text: text.trim(), note: note ?? undefined, files: files.length ? files : undefined }] }));
   taken?.();
   const sending = freshId();
@@ -487,10 +487,11 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
       history = [...outcome.replaced, ...outcome.messages];
       compactions += 1;
     } else {
-      history = [...history, message, ...outcome.messages];
+      // `turn` is every step of this reply, those from before a summary made on the way too.
+      history = [...history, message, ...outcome.turn];
       if (outcome.replaced) update((items) => items.filter((i) => !(i.kind === "summary" && i.auto && i === items.findLast((x) => x.kind === "summary")) && !(i.kind === "notice" && i.text === SUMMARISED)));
     }
-    fresh = [...fresh, message, ...outcome.messages];
+    fresh = [...fresh, message, ...outcome.turn];
     chat.set({
       usage: usageOf(
         outcome.used,
@@ -557,7 +558,9 @@ const stampKey = (root: string | undefined, id: string) => JSON.stringify([root,
  * turns out to have moved on, these go after what the file holds; nothing is found by position.
  */
 let fresh: unknown[] = [];
-let ownTurns = 0;
+/** The person's turns in this window, counted, and how many of them a finished save has taken: a save that is counted twice changes nothing. */
+let turnsMade = 0;
+let turnsSaved = 0;
 /** Counts the times the file was found changed and taken in, so a save captured before that is not written over it. */
 let merges = 0;
 const SUMMARISED = "Earlier messages were summarised to make room.";
@@ -582,7 +585,8 @@ function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usag
     history: [...(kept.history ?? []), ...own.fresh],
     earlier: kept.earlier ?? [],
     compactions: kept.compactions ?? 0,
-    usage: own.usage ?? kept.usage ?? null,
+    // The file's count is of the conversation being carried on; this window's was of its older copy.
+    usage: kept.usage ?? own.usage ?? null,
   };
 }
 /** What the summaries stand in for, exactly as it was sent: kept in the file, never sent again. */
@@ -639,7 +643,7 @@ export async function compactChat(note = ""): Promise<boolean> {
       compactions = kept.body.compactions ?? 0;
       stamps.set(stampKey(root, id), kept.updated);
       fresh = [];
-      ownTurns = 0;
+      turnsSaved = turnsMade;
       merges += 1;
       chat.set({
         items: [
@@ -743,7 +747,7 @@ function keep(merge = true): Promise<unknown> {
   const snapshot = () => {
     const shown = chat.get().items;
     return {
-      own: { fresh, turns: ownTurns, items: kept(lastTurns(shown, ownTurns)), usage: chat.get().usage, unanswered },
+      own: { fresh, made: turnsMade, items: kept(lastTurns(shown, turnsMade - turnsSaved)), usage: chat.get().usage, unanswered },
       title: first.text,
       body: { items: kept(shown), history,
         usage: chat.get().usage ?? undefined,
@@ -764,8 +768,8 @@ function keep(merge = true): Promise<unknown> {
         stamps.set(key, updated);
         // A finished turn is in the file now: it is no longer this window's alone.
         if (here() && !own.unanswered) {
-          fresh = fresh.slice(own.fresh.length);
-          ownTurns -= own.turns;
+          fresh = fresh.filter((message) => !own.fresh.includes(message));
+          turnsSaved = Math.max(turnsSaved, own.made);
         }
         return;
       } catch (e) {
@@ -786,7 +790,7 @@ function keep(merge = true): Promise<unknown> {
           continue;
         }
         const now = chat.get();
-        const merged = mergedWith(file.body, { fresh, items: lastTurns(now.items, ownTurns), usage: now.usage });
+        const merged = mergedWith(file.body, { fresh, items: lastTurns(now.items, turnsMade - turnsSaved), usage: now.usage });
         ({ history, earlier, compactions } = merged);
         seen = null;
         merges += 1;
@@ -887,7 +891,7 @@ export async function openChat(id: string): Promise<void> {
   compactions = kept.body.compactions ?? 0;
   stamps.set(stampKey(root, id), kept.updated ?? 0);
   fresh = resumed;
-  ownTurns = 0;
+  turnsSaved = turnsMade;
   earlier = kept.body.earlier ?? [];
   chat.set({ items, busy: false, history: false, draft: draftFor(id),
     usage: kept.body.usage ?? null,
@@ -1071,7 +1075,7 @@ export function newChat(): boolean {
   seen = null;
   compactions = 0;
   fresh = [];
-  ownTurns = 0;
+  turnsSaved = turnsMade;
   earlier = [];
   chat.set({ items: [], busy: false, history: false, draft: draftFor(chatId),
     usage: null,

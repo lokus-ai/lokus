@@ -77,6 +77,8 @@ export interface AiOutcome {
   tools: string[];
   /** What the first request was made of, in characters, by part. */
   context: { instructions: number; briefing: number; conversation: number; tools: Record<string, { count: number; chars: number }> };
+  /** Every message this request added, whether or not a summary was made on the way. */
+  turn: unknown[];
   /** Set when the conversation was compacted on the way: carry on from this, then `messages`. */
   replaced: unknown[] | null;
   /** How many messages from the front of what was sent the summary stands in for. */
