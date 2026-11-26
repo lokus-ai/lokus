@@ -972,10 +972,14 @@ export function showGraph(): void {
   leaveNote();
 }
 
-/** Close the graph's tab; the note that was open underneath shows again. */
+/**
+ * Close the graph's tab. In front, the note that was open underneath shows again; closed from
+ * behind another tab (its menu), whatever is in front stays in front.
+ */
 export function closeGraph(): void {
-  app.set((s) => ({ view: "note", tabs: s.tabs.filter((t) => t !== GRAPH_TAB) }));
-  enterNote();
+  const front = app.get().view === "graph";
+  app.set((s) => ({ view: front ? "note" : s.view, tabs: s.tabs.filter((t) => t !== GRAPH_TAB) }));
+  if (front) enterNote();
 }
 
 function uniquePath(folder: string, base: string): string {
