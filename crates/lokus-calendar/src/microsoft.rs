@@ -91,7 +91,7 @@ const DAYS: [(&str, &str); 7] = [
 ];
 
 /// `RRULE:FREQ=WEEKLY;BYDAY=MO,WE;COUNT=5` as Graph's pattern and range.
-fn to_recurrence(rule: &str, start: &str) -> Option<Value> {
+fn to_recurrence(rule: &str, start: &str, zone: &str) -> Option<Value> {
     let rule = rule.trim_start_matches("RRULE:");
     let part = |name: &str| {
         rule.split(';')
@@ -104,7 +104,11 @@ fn to_recurrence(rule: &str, start: &str) -> Option<Value> {
         "YEARLY" => "absoluteYearly",
         _ => return None,
     };
-    let at = time(start).ok()?;
+    // The day is the one in the event's own zone, which is how the event itself is sent.
+    let at = time(start)
+        .ok()?
+        .with_timezone(&zone.parse::<chrono_tz::Tz>().unwrap_or(chrono_tz::UTC))
+        .naive_local();
     let mut pattern = json!({ "type": kind, "interval": part("INTERVAL").and_then(|i| i.parse::<u32>().ok()).unwrap_or(1) });
     match kind {
         "weekly" => {
@@ -130,7 +134,7 @@ fn to_recurrence(rule: &str, start: &str) -> Option<Value> {
         }
         _ => {}
     }
-    let mut range = json!({ "type": "noEnd", "startDate": &start[..10] });
+    let mut range = json!({ "type": "noEnd", "startDate": at.date().to_string() });
     if let Some(count) = part("COUNT").and_then(|c| c.parse::<u32>().ok()) {
         range["type"] = json!("numbered");
         range["numberOfOccurrences"] = json!(count);
@@ -340,7 +344,7 @@ fn write(e: &Event, changed: Option<&[String]>) -> Value {
         out["recurrence"] = e
             .repeat
             .as_deref()
-            .and_then(|rule| to_recurrence(rule, &e.start))
+            .and_then(|rule| to_recurrence(rule, &e.start, &e.zone))
             .unwrap_or(Value::Null);
     }
     if has("meeting") {
