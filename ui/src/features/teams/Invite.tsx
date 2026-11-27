@@ -361,12 +361,16 @@ function Invitation({ w, onLater }: { w: Waiting; onLater?(): void }) {
   const vault = useStore(app, (s) => s.vault);
   const joining = useStore(invited, (s) => s.joining);
   // Looked at when shown: the folder open now, and whether joining in it would give anything away.
-  // A folder whose team this account is not in is still that team's: another is not joined in it.
-  const taken = sharedAlready() || app.get().sync.status === "outsider";
+  // A folder whose team this account is not in is still that team's: another is not joined in it,
+  // and an invitation to that very team is joined right here, with nothing asked.
+  const sync = app.get().sync;
+  const outside = sync.status === "outsider";
+  const home = outside && sync.workspace === w.workspace;
+  const taken = sharedAlready() || (outside && !home);
   const own = vault ? ownNotes() : 0;
-  const ask = Boolean(vault) && !taken && own > 0;
+  const ask = Boolean(vault) && !taken && !home && own > 0;
   const [where, setWhere] = useState<"here" | "new">(
-    taken || own > 0 ? "new" : "here",
+    home ? "here" : taken || own > 0 ? "new" : "here",
   );
   const [problem, setProblem] = useState("");
 
