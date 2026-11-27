@@ -164,7 +164,15 @@ pub async fn run(dir: &Path) -> Result<Value> {
     let (mut sent, mut refused, mut read, mut offline) = (0, 0, 0, false);
     let mut problems: Vec<Value> = Vec::new();
     let mut stuck: Vec<String> = Vec::new();
-    for q in Store::open(dir)?.waiting()? {
+    // One at a time, read afresh each time: sending a new event gives it the provider's id, and
+    // the changes waiting behind it are renamed to follow.
+    let mut seen: Vec<i64> = Vec::new();
+    while let Some(q) = Store::open(dir)?
+        .waiting()?
+        .into_iter()
+        .find(|q| !seen.contains(&q.n))
+    {
+        seen.push(q.n);
         // A change the provider refused stays, with why; later changes to that event wait behind it.
         if q.error.is_some() || stuck.contains(&q.key) {
             stuck.push(q.key.clone());
