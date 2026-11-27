@@ -34,6 +34,11 @@ export interface VaultInfo {
 let windowRoot: string | undefined;
 
 /** The shell names the folder this window shows; a core call that names none is held to it. */
+/** The folder this window shows, for the other bridges that write into it. */
+export function getWindowRoot(): string | undefined {
+  return windowRoot;
+}
+
 export function setWindowRoot(root: string | undefined): void {
   windowRoot = root;
 }

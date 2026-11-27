@@ -38,12 +38,21 @@ pub async fn calendar_run(
     app: AppHandle,
     name: String,
     args: Option<Value>,
+    root: Option<String>,
 ) -> Result<Value, Value> {
+    // The window names the folder it shows, as for a core command: a meeting note or busy times
+    // never go into a folder another window opened since.
+    let folder = self::root(&app);
+    if root.is_some_and(|root| folder.as_deref() != Some(std::path::Path::new(&root))) {
+        return Err(
+            json!({ "code": "vault_changed", "message": "The workspace changed. Try again in the original workspace." }),
+        );
+    }
     let dir =
         dir(&app).ok_or_else(|| json!({ "code": "config", "message": "no settings folder" }))?;
     let done = lokus_calendar::run(
         &dir,
-        root(&app).as_deref(),
+        folder.as_deref(),
         &name,
         &args.unwrap_or(Value::Null),
         &open,

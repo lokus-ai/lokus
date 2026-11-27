@@ -1,7 +1,7 @@
 /** @part-of ui.bridge */
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { toCoreError } from "./core";
+import { getWindowRoot, toCoreError } from "./core";
 
 export interface CalAccount {
   id: string;
@@ -95,7 +95,7 @@ export interface CalSlot {
 /** Run a calendar command (`calendar.events`, `calendar.event.update`, …): JSON in, JSON out. */
 export async function runCalendar<T = unknown>(name: string, args?: Record<string, unknown>): Promise<T> {
   try {
-    return await invoke<T>("calendar_run", { name, args: args ?? null });
+    return await invoke<T>("calendar_run", { name, args: args ?? null, root: getWindowRoot() });
   } catch (raw) {
     throw toCoreError(raw);
   }
