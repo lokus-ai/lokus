@@ -613,6 +613,11 @@ impl Store {
             .optional()?)
     }
 
+    pub fn forget_note(&self, key: &str) -> Result<()> {
+        self.db.execute("DELETE FROM notes WHERE key = ?1", [key])?;
+        Ok(())
+    }
+
     pub fn keep_note(&self, key: &str, folder: &str, path: &str) -> Result<()> {
         self.db.execute(
             "INSERT INTO notes (key, folder, path) VALUES (?1, ?2, ?3)

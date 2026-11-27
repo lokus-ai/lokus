@@ -39,21 +39,22 @@ fn who(e: &Event) -> Vec<String> {
 fn linked(store: &Store, root: &Path, event: &Event) -> Result<Option<String>> {
     let key = event.key.as_str();
     let folder = root.to_string_lossy();
+    if let Some(path) = store.note(key, &folder)? {
+        if root.join(&path).is_file() {
+            return Ok(Some(path));
+        }
+    }
     // A note written for a repeating event before it was sent follows the event to the series'
-    // id, which is no occurrence: it belongs to the first one.
+    // id, which is no occurrence: it is handed, once, to the first one.
     if let Some(series) = &event.series {
         let whole = crate::model::key(&event.account, &event.calendar, series);
         if let Some(path) = store.note(&whole, &folder)? {
             let first = store.first_of(&event.account, &event.calendar, series)?;
             if first.as_deref() == Some(key) && root.join(&path).is_file() {
                 store.keep_note(key, &folder, &path)?;
+                store.forget_note(&whole)?;
                 return Ok(Some(path));
             }
-        }
-    }
-    if let Some(path) = store.note(key, &folder)? {
-        if root.join(&path).is_file() {
-            return Ok(Some(path));
         }
     }
     let line = format!("event: {key}");
