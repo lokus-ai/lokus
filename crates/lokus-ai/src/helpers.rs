@@ -478,14 +478,14 @@ pub async fn delegate(
         .filter_map(|(n, task)| {
             // A findings note is a new note of the helper's own: never one that is already
             // there (the plan, the report, the person's notes), nor another helper's.
-            let taken = task["findings"].as_str().is_some_and(|path| {
-                launch.core.vault.root().join(path).exists()
-                    || tasks[..n].iter().any(|t| t["findings"] == task["findings"])
-            });
+            let taken = || {
+                let path = task["findings"].as_str()?;
+                let free = launch.core.vault.resolve(path).is_ok_and(|at| !at.exists())
+                    && !tasks[..n].iter().any(|t| t["findings"] == task["findings"]);
+                (!free).then(|| "'findings' must name a new note of this helper's own".to_string())
+            };
             refuse(task, research)
-                .or(taken.then(|| {
-                    "'findings' names a note that already exists; give this helper a new one".into()
-                }))
+                .or_else(taken)
                 .map(|why| format!("task {}: {why}", n + 1))
         })
         .collect();
@@ -584,7 +584,7 @@ pub async fn send(launch: &Launch, input: &Value) -> Result<String, String> {
                 .into_iter()
                 .flatten()
                 .filter(|b| b["type"] == "tool_use")
-                .map(|b| json!({ "type": "tool_result", "tool_use_id": b["id"], "content": "This step was stopped before it finished.", "is_error": true }))
+                .map(|b| json!({ "type": "tool_result", "tool_use_id": b["id"], "content": "The helper was stopped before this step's result was kept; it may or may not have run.", "is_error": true }))
                 .collect();
             blocks.push(json!({ "type": "text", "text": message }));
             messages.push(json!({ "role": "user", "content": blocks }));
