@@ -170,7 +170,7 @@ function Sidebar() {
   );
 }
 
-const SYNC_LABEL = { off: "Sync is off", online: "Synced", connecting: "Connecting…", offline: "Offline", refused: "Sync stopped", signin: "Sign in again" } as const;
+const SYNC_LABEL = { off: "Sync is off", online: "Synced", connecting: "Connecting…", offline: "Offline", refused: "Sync stopped", signin: "Sign in again", outsider: "Not a member" } as const;
 
 /** The foot of the sidebar: who is signed in and how sync is doing, with the account's actions in a menu. */
 function AccountBar({ act }: { act(id: string): void }) {

@@ -2,14 +2,16 @@
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 
 import { accessToken } from "../../bridge/auth";
+import { listVaults } from "../../bridge/core";
 import { relay } from "../../bridge/sync";
 import { useStore } from "../../shell/store";
-import { allNotes, app, connectSync, leaveWorkspace, resumeSync } from "../../shell/workspace";
+import { allNotes, app, connectSync, leaveWorkspace, notify, resumeSync, setVault } from "../../shell/workspace";
 import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
 import { type Invite, InviteDialog, InvitedList, PendingRows } from "./Invite";
-import { HOME, lookForInvites, type Role, whileMaking } from "./invites";
+import { bringTeams, HOME, lookForInvites, type Role, whileMaking } from "./invites";
+import { howMany, lookAtTeams, same, teams } from "./teams";
 
 interface Workspace {
   id: string;
@@ -54,6 +56,9 @@ export function TeamSettings() {
   const [message, setMessage] = useState<string | null>(null);
   const [tab, setTab] = useState<"members" | "invited">("members");
   const [inviting, setInviting] = useState(false);
+  /** The team of this name the account is already in, found when it asked to make another. */
+  const [already, setAlready] = useState<Workspace | null>(null);
+  const known = useStore(teams, (s) => s.known);
 
   useEffect(() => {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
@@ -97,6 +102,8 @@ export function TeamSettings() {
     if (!token || !connected || !current.workspace) return;
     const found = await attempt(() => relay<Member[]>(server, token, "GET", `${base}/members`));
     if (found) setMembers(found);
+    // The sidebar says how many are in the team: it hears of a change made here at once.
+    void lookAtTeams();
     if (!owner) return setInvites([]);
     const open = await attempt(() => relay<Invite[]>(server, token, "GET", `${base}/invites`));
     if (open) setInvites(open);
@@ -128,6 +135,14 @@ export function TeamSettings() {
   const create = async (e: FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    // An account already in a team of this name is shown that team, not given a second one:
+    // two teams called the same cannot be told apart, and work goes to the wrong one.
+    const mine = await attempt(() => relay<Workspace[]>(server, token, "GET", "/v1/workspaces"));
+    if (!mine) return;
+    setWorkspaces(mine);
+    const twin = mine.find((w) => same(w.name, name));
+    setAlready(twin ?? null);
+    if (twin) return void lookAtTeams();
     await whileMaking(async () => {
       const made = await attempt(() => relay<Workspace>(server, token, "POST", "/v1/workspaces", { name }));
       if (!made) return;
@@ -143,6 +158,19 @@ export function TeamSettings() {
       setCode("");
       connect(joined.workspace);
     }
+  };
+  /** Open the folder of a team this account is already in; one with no folder on this computer is given one first. */
+  const openTeam = async (w: Workspace) => {
+    const folder = async () => (await listVaults()).find((v) => v.workspace === w.id);
+    let at = await folder();
+    if (!at) {
+      await bringTeams();
+      at = await folder();
+    }
+    if (!at) return setMessage(`${w.name} has no folder on this computer yet. It is added to your workspaces by itself; look in the list at the top of the sidebar.`);
+    if (at.root === vault?.root) return setMessage(`This folder is ${w.name} already.`);
+    app.set({ settings: null });
+    await setVault(at.root).catch((e) => notify(e instanceof Error ? e.message : String(e)));
   };
   /** One change to the team, then show the team as it now is. */
   const change = async (method: "POST" | "PATCH" | "DELETE", path: string, body?: unknown) => {
@@ -163,17 +191,48 @@ export function TeamSettings() {
     setConfirming(null);
   };
   const owners = members.filter((m) => m.role === "owner").length;
-  const teamName = here?.name ?? vault?.name ?? "Workspace";
+  const outsider = current.status === "outsider";
+  const teamName = here?.name ?? linked?.name ?? vault?.name ?? "Workspace";
+  const size = here ? (members.length || known[here.id]?.members) : null;
+  const who = account?.email ?? null;
+  const signedIn = who && <p className="settings-hint team-who">Signed in as <b>{who}</b></p>;
   // Only what is in this folder is shared. Notes in a person's other workspaces are not.
   const tree = useStore(app, (st) => st.tree);
   const shared = tree ? allNotes().length : 0;
+
+  // The account signed in is not in this folder's team. Said in those words, with the one thing
+  // that helps; the folder is never shared anew from here, which would make a second team.
+  if (connected && outsider) {
+    return (
+      <Section title="Team">
+        <div className="team-head">
+          <div className="team-head-main">
+            <strong>{teamName}</strong>
+            <small>
+              <span className="sync-dot outsider" /> <b>{who ?? "This account"}</b> is not a member of this team.
+            </small>
+          </div>
+          <button className="primary team-invite-button" onClick={() => app.set({ settings: null, accountDialog: true })}>
+            Use another account
+          </button>
+        </div>
+        <p className="team-empty-note">
+          This folder belongs to the team <b>{teamName}</b>. Sign in with the account that is in it, or ask one of its owners to invite {who ?? "this account"}. Until then nothing typed here is sent to anyone; it stays on this computer.
+        </p>
+        <InvitedList />
+      </Section>
+    );
+  }
 
   if (connected) {
     return (
       <Section title="Team">
         <div className="team-head">
           <div className="team-head-main">
-            <strong>{teamName}</strong>
+            <strong>
+              {teamName}
+              {size ? <span className="settings-version"> · {howMany(size)}</span> : null}
+            </strong>
             <small>
               <span className={`sync-dot ${current.status}`} /> {STATUS[current.status] ?? STATUS.connecting} {shared === 0 ? "Nothing is in this workspace yet." : `${shared} ${shared === 1 ? "note" : "notes"} in this workspace.`}
             </small>
@@ -191,6 +250,7 @@ export function TeamSettings() {
             )
           )}
         </div>
+        {signedIn}
         {inviting && owner && token && (
           <InviteDialog
             server={server}
@@ -207,7 +267,7 @@ export function TeamSettings() {
 
         {shared === 0 && (
           <p className="team-empty-note">
-            Only notes made in this workspace are shared with the team. Notes in your other workspaces stay private. While you work, the top of the sidebar should say <b>{vault?.name}</b> and <b>Team</b>.
+            Only notes made in this workspace are shared with the team. Notes in your other workspaces stay private. While you work, the top of the sidebar should say <b>{teamName}</b> and how many people are in it.
           </p>
         )}
         <div className="team-tabs" role="tablist">
@@ -308,6 +368,7 @@ export function TeamSettings() {
 
   return (
     <Section title="Team" hint={`Share ${vault ? `“${vault.name}”` : "this vault"} with other people. Everyone keeps a full copy and can work offline.`}>
+      {signedIn}
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
       {kept && (
         <Row label={here?.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
@@ -347,12 +408,22 @@ export function TeamSettings() {
           )}
           <form onSubmit={create}>
             <Row label="Share this workspace with a team">
-              <input value={name} placeholder="Workspace name" onChange={(e) => setName(e.target.value)} />
+              <input value={name} placeholder="Workspace name" onChange={(e) => (setName(e.target.value), setAlready(null))} />
               <button className="primary" disabled={!token || !name.trim()}>
                 Share
               </button>
             </Row>
           </form>
+          {already && (
+            <Row
+              label={`You are already in a team called ${already.name}`}
+              hint={`${howMany(known[already.id]?.members) === "Team" ? "It" : `${howMany(known[already.id]?.members)}: it`} is yours as ${already.role === "owner" ? "an owner" : already.role === "editor" ? "an editor" : "a viewer"}. A second team of the same name was not made. Open that one, or give this one another name.`}
+            >
+              <button className="primary" onClick={() => void openTeam(already)}>
+                Open {already.name}
+              </button>
+            </Row>
+          )}
           <form onSubmit={join}>
             <Row label="Join with a code" hint="For an invite that came as a link. One sent to your email shows up here by itself.">
               <input value={code} placeholder="Invite code" spellCheck={false} onChange={(e) => setCode(e.target.value)} />
