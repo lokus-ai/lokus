@@ -33,7 +33,14 @@ const STATUS: Record<string, string> = {
   signin: "Sign in again to keep syncing. Your edits are kept and sent once you have.",
 };
 /** Settings, Team: sync this vault with other people, and say who they are and what they may do. */
+/** The Team page of the open folder. Another folder, or the folder's relay becoming known, starts the page
+ *  afresh: an address, a typed token or a list of teams from the last folder is never used on this one. */
 export function TeamSettings() {
+  const of = useStore(app, (s) => `${s.vault?.root ?? ""}\n${s.team && s.team.root === s.vault?.root ? s.team.server : ""}`);
+  return <TeamPage key={of} />;
+}
+
+function TeamPage() {
   const current = useStore(app, (s) => s.sync);
   const account = useStore(app, (s) => s.account);
   const vault = useStore(app, (s) => s.vault);
@@ -66,7 +73,9 @@ export function TeamSettings() {
 
   const refused = current.status === "refused";
   // A relay of one's own knows the token typed for it, not the Lokus account that happens to be signed in.
-  const token = (refused ? null : linked?.token) ?? accountToken ?? (typedToken.trim() || null);
+  // The folder's token goes only to the folder's own relay, never to another address typed on this page.
+  const own = (linked?.server ?? "").trim().replace(/\/+$/, "") === server.trim().replace(/\/+$/, "");
+  const token = (refused || !own ? null : linked?.token) ?? accountToken ?? (typedToken.trim() || null);
   // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
   const connected = !refused && (current.status !== "off" || linked !== null);
   // Only a relay of one's own that turned its typed token away waits for the person: they type another.
@@ -382,7 +391,7 @@ export function TeamSettings() {
       {signedIn}
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
       {kept && (
-        <Row label={here?.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
+        <Row label={here?.name ?? kept.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
           <button className="primary" onClick={reconnect}>
             Reconnect
           </button>
