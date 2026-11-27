@@ -67,7 +67,7 @@ export function TeamSettings() {
   const refused = current.status === "refused";
   // A relay of one's own knows the token typed for it, not the Lokus account that happens to be signed in.
   // The folder's token goes only to the folder's own relay, never to another address typed on this page.
-  const own = (linked?.server ?? "").replace(/\/+$/, "") === server.trim().replace(/\/+$/, "");
+  const own = (linked?.server ?? "").trim().replace(/\/+$/, "") === server.trim().replace(/\/+$/, "");
   const token = (refused || !own ? null : linked?.token) ?? accountToken ?? (typedToken.trim() || null);
   // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
   const connected = !refused && (current.status !== "off" || linked !== null);
