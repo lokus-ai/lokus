@@ -39,6 +39,11 @@ async fn send(dir: &Path, q: &Queued) -> Result<()> {
             let made = provider::create(&account, calendar, &event, q.notify).await?;
             let store = Store::open(dir)?;
             store.rename(&q.key, &made.key)?;
+            // A repeating event comes back as the series itself; its occurrences are read next,
+            // and keeping both would show the first one twice, one of them standing for all.
+            if made.repeat.is_some() && made.series.is_none() {
+                return Ok(());
+            }
             store.put(&made)
         }
         "update" => {
