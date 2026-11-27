@@ -163,11 +163,17 @@ export function TeamSettings() {
   const openTeam = async (w: Workspace) => {
     const folder = async () => (await listVaults()).find((v) => v.workspace === w.id);
     let at = await folder();
-    if (!at) {
+    // Only teams on Lokus's own relay are given a folder by themselves.
+    if (!at && server === HOME) {
       await bringTeams();
       at = await folder();
     }
-    if (!at) return setMessage(`${w.name} has no folder on this computer yet. It is added to your workspaces by itself; look in the list at the top of the sidebar.`);
+    if (!at)
+      return setMessage(
+        server === HOME
+          ? `${w.name} has no folder on this computer yet. It is added to your workspaces by itself; look in the list at the top of the sidebar.`
+          : `${w.name} has no folder on this computer. Open the folder that holds it, if it is on another disk, or connect an empty folder to it.`,
+      );
     if (at.root === vault?.root) return setMessage(`This folder is ${w.name} already.`);
     app.set({ settings: null });
     await setVault(at.root).catch((e) => notify(e instanceof Error ? e.message : String(e)));

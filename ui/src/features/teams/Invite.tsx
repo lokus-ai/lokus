@@ -361,7 +361,8 @@ function Invitation({ w, onLater }: { w: Waiting; onLater?(): void }) {
   const vault = useStore(app, (s) => s.vault);
   const joining = useStore(invited, (s) => s.joining);
   // Looked at when shown: the folder open now, and whether joining in it would give anything away.
-  const taken = sharedAlready();
+  // A folder whose team this account is not in is still that team's: another is not joined in it.
+  const taken = sharedAlready() || app.get().sync.status === "outsider";
   const own = vault ? ownNotes() : 0;
   const ask = Boolean(vault) && !taken && own > 0;
   const [where, setWhere] = useState<"here" | "new">(
