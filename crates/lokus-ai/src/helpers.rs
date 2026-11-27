@@ -475,7 +475,19 @@ pub async fn delegate(
     let wrong: Vec<String> = tasks
         .iter()
         .enumerate()
-        .filter_map(|(n, task)| refuse(task, research).map(|why| format!("task {}: {why}", n + 1)))
+        .filter_map(|(n, task)| {
+            // A findings note is a new note of the helper's own: never one that is already
+            // there (the plan, the report, the person's notes), nor another helper's.
+            let taken = task["findings"].as_str().is_some_and(|path| {
+                launch.core.vault.root().join(path).exists()
+                    || tasks[..n].iter().any(|t| t["findings"] == task["findings"])
+            });
+            refuse(task, research)
+                .or(taken.then(|| {
+                    "'findings' names a note that already exists; give this helper a new one".into()
+                }))
+                .map(|why| format!("task {}: {why}", n + 1))
+        })
         .collect();
     if !wrong.is_empty() {
         return Err(format!(
@@ -564,7 +576,19 @@ pub async fn send(launch: &Launch, input: &Value) -> Result<String, String> {
             blocks.push(json!({ "type": "text", "text": message }));
             last["content"] = json!(blocks);
         }
-        None => messages.push(json!({ "role": "user", "content": message })),
+        None => {
+            // Stopped in the middle of a step: every step it asked for gets an answer first.
+            let mut blocks: Vec<Value> = messages
+                .last()
+                .and_then(|m| m["content"].as_array())
+                .into_iter()
+                .flatten()
+                .filter(|b| b["type"] == "tool_use")
+                .map(|b| json!({ "type": "tool_result", "tool_use_id": b["id"], "content": "This step was stopped before it finished.", "is_error": true }))
+                .collect();
+            blocks.push(json!({ "type": "text", "text": message }));
+            messages.push(json!({ "role": "user", "content": blocks }));
+        }
     }
     change(&file(&dir, &id)?, |w| {
         w["messages"] = json!(messages);
