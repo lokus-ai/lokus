@@ -293,12 +293,19 @@ async function appState(mentions: string[]): Promise<{ text: string; attached: t
 /** Questions the assistant has asked that the person has not answered yet, by the question's id. */
 const asked = new Map<string, (answer: string) => void>();
 
+/** What the person wrote while the current reply was being made. */
+let spoken: string[] = [];
+
 /** Keep the question and visible progress when a reply stops before its provider history arrives. */
 function interrupted(message: { role: string; content: unknown }, why: string): void {
   const items = chat.get().items;
-  const since = items.slice(items.map((i) => i.kind).lastIndexOf("user") + 1);
+  // The request is the user line before the ones written while it ran.
+  const users = items.flatMap((i, at) => (i.kind === "user" ? [at] : []));
+  const since = items.slice((users[users.length - 1 - spoken.length] ?? users[users.length - 1] ?? -1) + 1);
   const said = since.filter((i) => i.kind === "assistant").map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
-  const turn = [message, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(${why} The request above still stands unless they say otherwise.)` }] }];
+  const also = spoken.length ? ` While it was working they also wrote: ${spoken.join(" / ")}` : "";
+  spoken = [];
+  const turn = [message, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(${why} The request above still stands unless they say otherwise.${also})` }] }];
   history = [...history, ...turn];
   fresh = [...fresh, ...turn];
 }
@@ -480,7 +487,9 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
   const question = text.trim() || (files.length ? (files.length === 1 ? "Take a look at this file." : "Take a look at these files.") : "");
   // Written while the assistant is working: it joins the conversation and is read at the next step.
   if (question && chat.get().busy && requestId && !files.length && !chat.get().compacting) {
-    chat.set((s) => ({ items: [...settle(s.items), { kind: "user", text: text.trim() }] }));
+    // Steps under way, and anything waiting for a yes, stay as they are.
+    chat.set((s) => ({ items: [...s.items.map((i) => (i.kind === "assistant" && i.live ? { ...i, live: false } : i)), { kind: "user", text: text.trim() }] }));
+    spoken.push(question);
     taken?.();
     void aiSay(chatId, question);
     return true;
@@ -505,6 +514,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
   // The workspace the question is asked in: its notes and its connections answer it, or nothing does.
   const from = vaultRoot;
   requestId = sending;
+  spoken = [];
   let pending: { role: string; content: unknown } | null = null;
   let began = 0;
   summarised = false;
@@ -528,6 +538,7 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     briefing = context;
     began = Date.now();
     const token = HOME ? await accessToken().catch(() => null) : null;
+    if (sending !== requestId) return false;
     const outcome = await aiSend(sending, [...history, message], briefing, from, chat.get().usage?.used ?? 0, false, chatId, token ? { server: HOME, token } : undefined);
     if (sending !== requestId) return false;
     traced(sending, began, question, outcome, "");
