@@ -20,7 +20,7 @@ pub mod tools;
 pub mod web;
 
 pub use chat::{
-    compact as compact_chat, send, AppRunner, Approver, Emitter, Event, Outcome, Request,
+    compact as compact_chat, send, AppRunner, Approver, Emitter, Event, Local, Outcome, Request,
 };
 pub use config::{Config, McpServer, Provider};
 pub use error::{AiError, Result};

@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 lokus-ai = { path = "../lokus-ai" }
+lokus-calendar = { path = "../lokus-calendar" }
 lokus-core = { path = "../lokus-core" }
 lokus-sync = { path = "../lokus-sync" }
 tokio.workspace = true

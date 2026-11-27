@@ -17,6 +17,7 @@
 | Sync engine: keeps a vault's files and their CRDT documents in step and talks to the relay. | `crates/lokus-sync/` | `sync` |
 | The relay: accounts' workspaces, roles, invites, the update log and live fan-out. | `crates/lokus-server/` | `server` |
 | The assistant: provider calls with the user's own key, vault tools, MCP tool servers. Keys live in the OS keychain. | `crates/lokus-ai/` | `ai` |
+| Calendar: a client of Google Calendar and Microsoft 365. Sign-in, the local copy of events, the queue of offline changes, team availability, meeting notes; every feature a command. | `crates/lokus-calendar/` | `calendar` |
 | The `lokus` binary: run any core command against a real vault. | `crates/lokus-cli/` | `cli` |
 | Tauri shell. Thin: forwards commands to the core, owns windows and the dev channel. | `apps/desktop/` | `desktop` |
 | App frame: layout, tabs, command palette, quick switcher, design tokens, UI command registry. | `ui/src/shell/`, `ui/src/main` | `ui.shell` |
@@ -39,6 +40,7 @@
 | Files that are not notes: the viewer for pictures, PDFs and CSVs. | `ui/src/features/files/` | `ui.files` |
 | Profile: the name and picture each person on the team goes by. | `ui/src/features/profile/` | `ui.profile` |
 | Tasks: the team's board and list of work, and a task's own page. | `ui/src/features/tasks/` | `ui.tasks` |
+| Calendar: the week, the event panel, accounts and people. Loaded only when opened. | `ui/src/features/calendar/` | `ui.calendar` |
 | Customers: the list of who needs attention and each customer's page, built from note properties. | `ui/src/features/customers/` | `ui.customers` |
 | Login screen and session state. | `ui/src/features/auth/` | `ui.auth` |
 | Product analytics events and the opt-out. Never sends note content. | `ui/src/features/analytics/` | `ui.analytics` |

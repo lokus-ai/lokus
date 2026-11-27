@@ -256,6 +256,26 @@ pub struct Request {
     pub chat: Option<String>,
     /// Set when this run is a helper's, not the assistant's own.
     pub helper: Option<helpers::Role>,
+    /// Tools that run on this computer and are not the vault's: the calendar's. They are
+    /// handed in because they reach the network, which this crate's own tools do not.
+    pub local: Option<Local>,
+}
+
+/// Runs one handed-in tool (tool name, input).
+pub type LocalRunner = Arc<
+    dyn Fn(
+            String,
+            Value,
+        ) -> futures_util::future::BoxFuture<'static, std::result::Result<String, String>>
+        + Send
+        + Sync,
+>;
+
+/// Tools given by whoever starts the run, and how one is run.
+#[derive(Clone)]
+pub struct Local {
+    pub tools: Vec<Tool>,
+    pub run: LocalRunner,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -346,6 +366,8 @@ pub type AppRunner = Arc<
 enum Source {
     Vault,
     App,
+    /// A tool handed in with the request (the calendar).
+    Local,
     Server(usize, String),
     /// The tool that brings a connected service's tools off the shelf.
     Loader,
@@ -415,6 +437,7 @@ struct Reading<'a> {
     launch: Option<&'a helpers::Launch>,
     role: Option<&'a helpers::Role>,
     research: bool,
+    local: Option<&'a Local>,
 }
 
 impl Reading<'_> {
@@ -424,6 +447,7 @@ impl Reading<'_> {
         let reads = matches!(
             self.sources[at],
             Source::Vault
+                | Source::Local
                 | Source::Server(..)
                 | Source::Api(false)
                 | Source::Messages
@@ -451,6 +475,10 @@ impl Reading<'_> {
                     .call(tool, &without_blanks(input, &self.offered[at].schema))
                     .await
             }
+            Source::Local => match self.local {
+                Some(local) => (local.run)(name.to_string(), input.clone()).await,
+                None => Err(format!("{name} cannot run here")),
+            },
             Source::Api(write) => crate::own_api::call(self.config, *write, input).await,
             Source::Messages => crate::imessage::call(input),
             Source::Web => crate::web::call(self.web, name, input).await,
@@ -736,6 +764,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
         web,
         chat,
         helper,
+        local,
     } = request;
     let mut system = if briefing.trim().is_empty() {
         SYSTEM.to_string()
@@ -782,6 +811,12 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
     if app.is_some() {
         for tool in tools::app_tools() {
             sources.push(Source::App);
+            offered.push(tool);
+        }
+    }
+    if let Some(local) = &local {
+        for tool in local.tools.iter().cloned() {
+            sources.push(Source::Local);
             offered.push(tool);
         }
     }
@@ -907,6 +942,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
             let from = match source {
                 Source::Vault => "vault".to_string(),
                 Source::App => "app".to_string(),
+                Source::Local => "calendar".to_string(),
                 Source::Server(index, _) => connections[*index].server.clone(),
                 Source::Loader => "loader".to_string(),
                 Source::Api(_) => "own_api".to_string(),
@@ -1051,6 +1087,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                     launch: launch.as_ref(),
                     role: helper.as_ref(),
                     research,
+                    local: local.as_ref(),
                 };
                 let together: Vec<(usize, &Value)> = calls[next..]
                     .iter()
@@ -1146,6 +1183,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                                     launch: launch.as_ref(),
                                     role: helper.as_ref(),
                                     research,
+                                    local: local.as_ref(),
                                 };
                                 reading.run(position.unwrap_or_default(), &id, &name, &input).await
                             }

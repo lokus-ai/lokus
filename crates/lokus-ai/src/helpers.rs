@@ -357,6 +357,7 @@ async fn work(launch: Launch, dir: PathBuf, id: String, mut stop: watch::Receive
             web: launch.web.clone(),
             chat: None,
             helper: Some(role),
+            local: None,
         };
         // Nobody is asked on a helper's behalf: it has nothing that needs a yes.
         let no: crate::chat::Approver = Arc::new(|_| {

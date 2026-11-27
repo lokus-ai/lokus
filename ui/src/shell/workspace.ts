@@ -57,7 +57,7 @@ export interface AppState {
   palette: "commands" | "notes" | "search" | "headings" | "templates" | "trash" | "history" | null;
   /** What the main area shows. */
   /** Which tab is showing: a note, or the graph (which sits in `tabs` as `GRAPH_TAB`). */
-  view: "note" | "graph" | "file";
+  view: "note" | "graph" | "calendar" | "file";
   /** The file showing when `view` is "file": a picture, a PDF, a CSV. It sits in `tabs` by its path. */
   file: string | null;
   /** The settings dialog, and which of its pages is showing; null when it is closed. */
@@ -85,6 +85,8 @@ export interface AppState {
 
 /** The graph's place in the tab strip, beside the notes. It is not a file. */
 export const GRAPH_TAB = "lokus:graph";
+/** The calendar's place in the tab strip. It is not a file either. */
+export const CALENDAR_TAB = "lokus:calendar";
 
 export const app = createStore<AppState>({
   ready: false,
@@ -1040,10 +1042,24 @@ export async function closeTab(path: string): Promise<void> {
 export function stepTab(by: 1 | -1): void {
   const { tabs, active, view } = app.get();
   if (tabs.length < 2) return;
-  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : view === "file" ? (app.get().file ?? "") : (active ?? ""));
+  const at = tabs.indexOf(view === "graph" ? GRAPH_TAB : view === "calendar" ? CALENDAR_TAB : view === "file" ? (app.get().file ?? "") : (active ?? ""));
   const next = tabs[(at + by + tabs.length) % tabs.length];
   if (next === GRAPH_TAB) showGraph();
+  else if (next === CALENDAR_TAB) showCalendar();
   else void openNote(next);
+}
+
+/** Open the calendar as a tab, or bring its tab forward. */
+export function showCalendar(): void {
+  app.set((s) => ({ view: "calendar", tabs: s.tabs.includes(CALENDAR_TAB) ? s.tabs : [...s.tabs, CALENDAR_TAB] }));
+  leaveNote();
+}
+
+/** Close the calendar's tab, as the graph's is closed. */
+export function closeCalendar(): void {
+  const front = app.get().view === "calendar";
+  app.set((s) => ({ view: front ? "note" : s.view, tabs: s.tabs.filter((t) => t !== CALENDAR_TAB) }));
+  if (front) enterNote();
 }
 
 /** Open the graph as a tab, or bring its tab forward. */

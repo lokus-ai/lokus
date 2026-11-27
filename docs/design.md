@@ -35,6 +35,7 @@ none of its code is carried over.
 crates/
   lokus-core/     vault, commands, watcher; later index, search, links   (building)
   lokus-cli/      the `lokus` binary: run core commands on a real vault  (building)
+  lokus-calendar/ calendar: Google and Microsoft 365 client, local copy   (built, stand-in only)
   lokus-sync/     CRDT documents, local update store, sync client         (planned)
   lokus-server/   websocket relay, roles, persistence                     (planned)
 apps/
@@ -406,6 +407,90 @@ sprints, estimates, a roadmap or timeline view, comments on a task, and reading 
   different folder, all follow, because the core holds one open folder.
 - **Layout** (Settings, Appearance): Spacing (roomy, regular, compact), Detail (essentials,
   balanced, everything) and what is on screen when Lokus opens. `styles/density.css`.
+
+## 5f. Calendar (built; tried in the real app against a local stand-in of both providers, not yet the real services)
+
+Lokus owns no calendar. It is a client of **Google Calendar** and **Microsoft 365** (Graph): the
+provider keeps the events and sends the invitation emails, so a guest gets the same email they
+would from Google or Outlook. The code is `crates/lokus-calendar` (it cannot be in `lokus-core`,
+which has no networking); the screen is `ui/src/features/calendar`, loaded when first opened.
+
+**Signing in.** Per person, in their browser, as a desktop app: PKCE and a one-time address on this
+computer (`http://localhost:<port>/callback`), the same way connections sign in. The sign-in is kept
+in the OS keychain (`calendar:<provider>:<email>`), is renewed when it runs out, and never goes
+through the Lokus server. A person can connect several accounts; each event is read and written
+with the sign-in of the account it belongs to. Lokus's Google client id is in the code (it is public). Google also
+gives a desktop app a client secret and refuses the sign-in without it, so that is given when the
+app is built (`LOKUS_GOOGLE_CLIENT_SECRET`), as is the Microsoft client id
+(`LOKUS_MICROSOFT_CLIENT_ID`); neither is in the repository, and a build without one shows that
+provider as not available. For development, `LOKUS_CALENDAR_GOOGLE` and
+`LOKUS_CALENDAR_MICROSOFT` point at a stand-in (`checks/flows/mock-calendar.py`).
+
+**The local copy.** `calendar.sqlite` in the app's own folder (not in a vault: a calendar belongs
+to the person, not to a folder) holds accounts, calendars, events, changes waiting to be sent and
+which note belongs to which event. It is derived: delete it and the events are read again. The
+calendar draws from it, so it opens at once and works offline. While the app is open it asks each
+provider what changed about once a minute (Google's sync tokens, Graph's delta links; when a
+provider says the position is too old the calendar is read afresh). Nothing runs, and the file is
+not made, until an account is connected.
+
+**Changes.** Every change is written to the local copy first and put in a queue; the queue is sent
+before anything is read, and a change the network refused stays queued and is sent by a later
+minute. A change the provider itself refuses stays, with the reason shown on the event, and later
+changes to that event wait behind it.
+
+**Guests and the one send.** An event with guests is never updated a keystroke at a time. The
+first change holds the event as "Pending changes" (the panel lists what changed); any number of
+further changes join it; then one "Send update" sends one request to the provider, which emails the
+guests, or "Update without email" sends the same request telling the provider not to, or "Discard"
+puts the event back. A new event with guests is the same with "Send invite". An event without
+guests is sent as it is changed.
+
+**The screen.** Accounts, calendars (colour, hide, default), team and colleagues on the left; a grid
+of 1 to 9 days in the middle (keys 1 to 9; T today, J and K to move, C new, F find a time); the
+event on the right, edited in place. Drag on the grid to make an event, drag an event to move it,
+its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
+meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
+any zone. A repeating event is changed, answered or deleted as "This event" or "All events".
+
+**Other people.** A colleague's busy times come from the provider (Google `freeBusy`, Graph
+`getSchedule`): times only, and only for people whose calendars the account may see. Across
+companies, where no provider can see everyone, each member's app writes their own busy times for
+the next 14 days into the team folder, `Team/Availability/<email>.md`: frontmatter (member, name,
+emails, updated) and a list of `start/end` lines. **No titles, guests or places are written.** The
+existing team sync carries the file; the calendar lists each member with how long ago theirs was
+written. An unchanged file is rewritten at most every ten minutes. Drag a member onto the grid to
+start an event with them as a guest; "Find a time" lists the first times everyone picked is free
+(weekdays, 09:00 to 18:00 in the shown zone), from team files and provider answers together;
+"Block this time on…" puts a plain "Busy" event on another connected account.
+
+**Notes and the assistant.** "Meeting note" makes `Meetings/<date> <title>.md` in the open folder
+with the event's time, guests, place and link filled in, and remembers which event it belongs to.
+The briefing is the day's events in order. Every calendar command is offered to the assistant as a
+tool when an account is connected; those that write (`writes: true`) go through the same approval
+as any other change, so an invitation or an event change is asked about first unless approvals are
+turned off in the assistant's settings.
+
+| Command | Does |
+|---|---|
+| `calendar.status` | accounts, calendars, what is waiting |
+| `calendar.account.add`, `calendar.account.remove` | connect (browser sign-in), disconnect |
+| `calendar.calendars.set` | hide or show, colour, default |
+| `calendar.events`, `calendar.event.get` | read the local copy |
+| `calendar.event.create`, `.update`, `.delete`, `.reply` | change an event |
+| `calendar.event.send`, `.discard` | send or drop an event's held changes |
+| `calendar.sync` | send the queue, read what changed |
+| `calendar.busy` | people's busy times from the provider |
+| `calendar.team.publish`, `calendar.team` | write own busy times to the team folder; read everyone's |
+| `calendar.find_time`, `calendar.block` | common free times; a "Busy" block on another account |
+| `calendar.note`, `calendar.briefing` | the meeting note; the day's briefing |
+
+**Before the real services.** Google: registered by the owner (a desktop app, in testing, with named test
+users); Microsoft: not registered yet. On Google, calendar scopes are "sensitive", so until the app is verified people see an
+"unverified app" screen, at most 100 people can use it, and a test user's sign-in ends after seven
+days; verification is free and takes days to weeks. Microsoft: registration is free; work accounts
+may need an administrator's consent unless the publisher is verified. Not built: booking links,
+recording and transcription, iCloud, phone.
 
 ## 6. Sync and the server (built, M3)
 
@@ -1271,6 +1356,6 @@ is needed.
 
 ## 13. Cut from the rewrite
 
-Calendar, Gmail, MathGraph, the terminal panel, the old templates engine, the old plugin system,
+Gmail, MathGraph, the terminal panel, the old templates engine, the old plugin system,
 end-to-end encrypted team sync, and the manifest-based personal sync. Existing users of the old
 sync get a sunset notice; their notes are plain files and are unaffected.

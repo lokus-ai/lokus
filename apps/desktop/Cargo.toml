@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 base64.workspace = true
 lokus-ai = { path = "../../crates/lokus-ai" }
+lokus-calendar = { path = "../../crates/lokus-calendar" }
 lokus-core = { path = "../../crates/lokus-core" }
 lokus-sync = { path = "../../crates/lokus-sync" }
 open = "5"

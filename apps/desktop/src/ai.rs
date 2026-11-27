@@ -328,6 +328,7 @@ pub async fn ai_send(
         web,
         chat: conversation,
         helper: None,
+        local: crate::calendar::tools(&app),
     };
     let waiting = app.state::<Ai>().waiting.clone();
     let approve: Approver = Arc::new(move |id: &str| {

@@ -32,7 +32,11 @@ import {
   createRow,
   deleteEntry,
   getEditor,
+  CALENDAR_TAB,
+  closeCalendar,
   GRAPH_TAB,
+  notify,
+  showCalendar,
   isNotePath, openNote,
   reloadFromDisk,
   renameEntry,
@@ -45,6 +49,8 @@ import {
 } from "./workspace";
 
 // The graph is only loaded when someone opens it.
+// So is the calendar: until then none of it is loaded or run.
+const CalendarView = lazy(() => import("../features/calendar/CalendarView"));
 const GraphView = lazy(() => import("../features/graph/GraphView"));
 const SettingsView = lazy(() => import("../features/settings/SettingsView"));
 const DatabaseView = lazy(() => import("../features/database/DatabaseView"));
@@ -126,6 +132,11 @@ function Sidebar() {
           <Icon name="board" />
           <span>Tasks</span>
           <kbd>{formatKeys("Mod-Shift-t")}</kbd>
+        </button>
+        <button onClick={() => act("calendar.open")}>
+          <Icon name="calendar" />
+          <span>Calendar</span>
+          <kbd>{formatKeys("Mod-Shift-l")}</kbd>
         </button>
         <button onClick={() => act("ai.open")}>
           <Icon name="assistant" />
@@ -251,6 +262,14 @@ function Tabs() {
             <Icon name="graph" size={14} />
             <span className="tree-name">Graph</span>
             <button className="tab-close" title="Close" onMouseDown={(e) => e.stopPropagation()} onClick={closeGraph}>
+              <Icon name="close" size={12} />
+            </button>
+          </div>
+        ) : path === CALENDAR_TAB ? (
+          <div key={path} className={`tab${view === "calendar" ? " active" : ""}`} tabIndex={0} onMouseDown={(e) => e.button === 0 && showCalendar()} onContextMenu={(e) => fileMenu(e, path, "tab")} onKeyDown={(e) => fileMenu(e, path, "tab")}>
+            <Icon name="calendar" size={14} />
+            <span className="tree-name">Calendar</span>
+            <button className="tab-close" title="Close" onMouseDown={(e) => e.stopPropagation()} onClick={closeCalendar}>
               <Icon name="close" size={12} />
             </button>
           </div>
@@ -597,6 +616,13 @@ function Workspace() {
           <Boundary name="The graph">
             <Suspense fallback={null}>
               <GraphView active={active} version={version} onOpen={open} />
+            </Suspense>
+          </Boundary>
+        )}
+        {view === "calendar" && (
+          <Boundary name="The calendar">
+            <Suspense fallback={null}>
+              <CalendarView onOpen={open} onNotice={notify} />
             </Suspense>
           </Boundary>
         )}

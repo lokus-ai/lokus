@@ -20,7 +20,10 @@ import {
   deleteEntry,
   disconnectSync,
   getEditor,
+  CALENDAR_TAB,
+  closeCalendar,
   GRAPH_TAB,
+  showCalendar,
   notify,
   openCustomers,
   openDailyNote,
@@ -83,6 +86,7 @@ export function registerAllCommands(): void {
       keys: "Mod-g",
       run: () => (app.get().view === "graph" ? closeGraph() : showGraph()),
     },
+    { id: "calendar.open", title: "Calendar: open", keys: "Mod-Shift-l", run: () => showCalendar() },
     { id: "tab.next", title: "Next tab", keys: isMac ? "Ctrl-Tab" : "Mod-Tab", run: () => stepTab(1) },
     { id: "tab.previous", title: "Previous tab", keys: isMac ? "Ctrl-Shift-Tab" : "Mod-Shift-Tab", run: () => stepTab(-1) },
     {
@@ -162,8 +166,9 @@ export function registerAllCommands(): void {
       keys: "Mod-w",
       run: (a) => {
         const { active, view, file, tabs } = app.get();
-        if (typeof a.path === "string") return !here(a) || !tabs.includes(a.path) ? undefined : a.path === GRAPH_TAB ? closeGraph() : closeTab(a.path);
+        if (typeof a.path === "string") return !here(a) || !tabs.includes(a.path) ? undefined : a.path === GRAPH_TAB ? closeGraph() : a.path === CALENDAR_TAB ? closeCalendar() : closeTab(a.path);
         if (view === "graph") return closeGraph();
+        if (view === "calendar") return closeCalendar();
         if (view === "file" && file) return closeTab(file);
         if (active) return closeTab(active);
         if (!isMainWindow()) closeWindow();

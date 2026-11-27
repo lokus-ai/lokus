@@ -1,0 +1,23 @@
+[package]
+name = "lokus-calendar"
+description = "The calendar: a client of Google Calendar and Microsoft 365, with a local copy that works offline."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+futures-util.workspace = true
+lokus-ai = { path = "../lokus-ai" }
+lokus-core = { path = "../lokus-core" }
+base64.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+chrono-tz = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form"] }
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tokio = { workspace = true, features = ["io-util"] }
+url = "2"
+uuid.workspace = true
