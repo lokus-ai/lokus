@@ -391,7 +391,7 @@ function TeamPage() {
       {signedIn}
       {current.status === "refused" && current.reason && <p className="settings-hint error">Sync stopped: {current.reason}.</p>}
       {kept && (
-        <Row label={here?.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
+        <Row label={here?.name ?? kept.name ?? vault?.name ?? "Workspace"} hint="This folder belongs to this team. Your notes are kept here and sent once it is connected again.">
           <button className="primary" onClick={reconnect}>
             Reconnect
           </button>
