@@ -198,7 +198,7 @@ export async function bringTeams(): Promise<void> {
         // Its setting was lost: put back with nobody asked.
         if (open && !sharedAlready()) await connectSync(HOME, team, null, v.root);
         else if (!open) await keepTeam(v.root, { server: HOME, workspace: team, token: null, user: me }).catch(() => {});
-      } else if (kept && !open && kept.server === HOME && kept.token === null && (!kept.user || kept.user === me)) {
+      } else if (kept && !open && kept.server === HOME && kept.token === null && kept.user === me) {
         // The open folder is told by its own connection being refused; the others are told here.
         // Only the list of the account the folder was connected with says so: another account's says nothing.
         await teamGone(v.root, `${v.name} was deleted, or you were removed from it. Its notes stay on this computer.`);
@@ -222,7 +222,7 @@ export async function bringTeams(): Promise<void> {
         } else if (app.get().vault) {
           // Someone is working in a folder: the team's is made beside it and waits in the list.
           await makeVault(at.root);
-          await keepTeam(at.root, { server: HOME, workspace: w.id, token: null, user: me });
+          await keepTeam(at.root, { server: HOME, workspace: w.id, token: null, user: me, name: w.name });
           notify(`${w.name} is in your workspaces now`);
         } else {
           let root = at.root;

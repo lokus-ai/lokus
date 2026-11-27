@@ -31,7 +31,8 @@ import { createStore } from "./store";
 import { preferences } from "./preferences";
 
 export interface SyncState {
-  status: "off" | "connecting" | "online" | "offline" | "refused" | "signin";
+  /** `outsider`: the folder is a team's, and the account signed in is not in that team. */
+  status: "off" | "connecting" | "online" | "offline" | "refused" | "signin" | "outsider";
   server?: string;
   workspace?: string;
   role?: "owner" | "editor" | "viewer";
@@ -434,7 +435,15 @@ async function unshareAll(): Promise<void> {
 async function remember(root: string, team: Team | null): Promise<void> {
   if (team) await keepTeam(root, team);
   else await forgetTeam(root);
-  if (app.get().vault?.root === root) app.set({ team: team ? { ...team, root } : null });
+  if (app.get().vault?.root === root) app.set({ team: team ? { ...team, known: true, root } : null });
+}
+
+/** What the relay calls the open folder's team, kept in the folder for when it cannot be asked. */
+export async function nameTeam(workspace: string, name: string): Promise<void> {
+  const saved = savedSync();
+  const root = app.get().vault?.root;
+  if (!root || !saved || saved.workspace !== workspace || saved.name === name) return;
+  await remember(root, { server: saved.server, workspace, token: saved.token, user: saved.user ?? null, name }).catch(() => {});
 }
 
 /** Start syncing this vault with a team workspace. */
@@ -531,12 +540,14 @@ export async function connectSync(server: string, workspace: string, token: stri
   if (unsaved() && !reconnecting) return notify("Changes could not be saved. Retry before changing the sync connection.");
   // An account token is fetched fresh each time; only a token typed by hand is remembered.
   try {
-    await remember(root, { server, workspace, token, user: previous?.user ?? null });
+    await remember(root, { server, workspace, token, user: previous?.user ?? null, name: previous?.workspace === workspace ? (previous.name ?? null) : null });
   } catch (e) {
     return notify(String((e as Error)?.message ?? e));
   }
   idle = wanting = null;
-  app.set({ sync: { status: "connecting", server, workspace } });
+  // Asked again every few seconds while the wrong account is signed in: it goes on saying whose folder this is.
+  const outside = connected.status === "outsider" && connected.workspace === workspace;
+  app.set({ sync: { status: outside ? "outsider" : "connecting", server, workspace } });
   syncSignIn = useToken;
   stopSignIns?.();
   stopSignIns = null;
@@ -556,7 +567,7 @@ export async function connectSync(server: string, workspace: string, token: stri
   const asking = `${server}|${workspace}|${Date.now()}`;
   lastAsk = asking;
   window.setTimeout(() => {
-    if (lastAsk !== asking || app.get().sync.status !== "connecting") return;
+    if (lastAsk !== asking || !["connecting", "outsider"].includes(app.get().sync.status)) return;
     reportError(new Error("sync stayed at connecting for 30 seconds"), "sync");
     void connectSync(server, workspace, token, root);
   }, 30_000);
@@ -679,7 +690,7 @@ function watchSync(): void {
       app.set({ sync: { ...sync, status: "online", role: event.role, user: event.user, reason: undefined } });
       // Who it is connected as is kept with the folder: only that account's list of teams can say it has left.
       const saved = savedSync();
-      if (saved && saved.user !== event.user) void remember(event.root, { server: saved.server, workspace: saved.workspace, token: saved.token, user: event.user }).catch(report);
+      if (saved && saved.user !== event.user) void remember(event.root, { server: saved.server, workspace: saved.workspace, token: saved.token, user: event.user, name: saved.name ?? null }).catch(report);
     } else if (event.event === "role") {
       notify(event.role === "viewer" ? "An owner made you a viewer here. Changes you make now stay on this device." : `You are now ${event.role === "owner" ? "an owner" : "an editor"} of this workspace.`);
       app.set({ sync: { ...sync, role: event.role } });
@@ -706,11 +717,16 @@ function watchSync(): void {
         const who = saved.token === null ? ((await currentAccount().catch(() => null))?.id ?? null) : null;
         const mine = token ? await relay<{ id: string }[]>(saved.server, token, "GET", "/v1/workspaces").catch(() => null) : null;
         if (app.get().vault?.root !== root) return;
-        const same = saved.token !== null || !saved.user || saved.user === who;
-        if (mine && same && !mine.some((w) => w.id === saved.workspace)) {
+        // A folder that never recorded who connected it is not taken for this account's: made private
+        // here, it would offer Share, and sharing it makes a second team of the same name.
+        const same = saved.token !== null || (Boolean(saved.user) && saved.user === who);
+        const listed = mine?.some((w) => w.id === saved.workspace);
+        if (mine && same && !listed) {
           return teamGone(root, `${app.get().vault?.name ?? "This workspace"} was deleted, or you were removed from it. Its notes stay on this computer.`);
         }
-        app.set({ sync: { ...app.get().sync, status: mine && !same ? "signin" : "offline", reason: event.reason } });
+        // Another account than the one this folder was connected with, and it is not in the team:
+        // said in those words. Signing in again would change nothing.
+        app.set({ sync: { ...app.get().sync, status: mine && !listed ? "outsider" : "offline", reason: event.reason } });
         later(root);
       })();
     } else if (event.event === "pulled") {
@@ -747,7 +763,8 @@ export async function resumeSync(byHand = false): Promise<void> {
   // A folder from someone else can name any relay. The account's sign-in goes by itself only to
   // the relay built in, or to one this computer connected the folder to; another waits for a press.
   if (!byHand && !team.known && team.server.replace(/\/+$/, "") !== HOME) {
-    return app.set({ sync: { status: "refused", server: team.server, workspace: team.workspace, reason: "this folder names a relay this computer has not used; reconnect to use it" } });
+    // Its address is left out of what the rest of the app reads, so nothing asks it anything meanwhile.
+    return app.set({ sync: { status: "refused", reason: "this folder names a relay this computer has not used; reconnect to use it" } });
   }
   await connectSync(team.server, team.workspace, team.token);
 }
@@ -832,7 +849,7 @@ export async function setVault(path: string, create?: () => Promise<VaultInfo>):
     if (current?.server !== connection.server || current.workspace !== connection.workspace) {
       throw new Error("The sync connection changed. Open the original team before retrying.");
     }
-    await connectSync(connection.server, connection.workspace, connection.token, previous.root);
+    await resumeSync();
   };
   if (previous?.root === path) {
     switching = true;

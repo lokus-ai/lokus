@@ -65,8 +65,16 @@ pub fn vault_list(app: AppHandle) -> Vec<Value> {
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| root.clone());
-            let team = lokus_sync::team::kept(Path::new(root)).is_some();
-            json!({ "name": name, "root": root, "team": team })
+            // Which team, and what it is called, so two folders of two same-named teams can be told apart.
+            let team = lokus_sync::team::kept(Path::new(root));
+            json!({
+                "name": name,
+                "root": root,
+                "team": team.is_some(),
+                "workspace": team.as_ref().map(|t| &t.workspace),
+                "server": team.as_ref().map(|t| t.server.trim_end_matches('/')),
+                "teamName": team.as_ref().and_then(|t| t.name.as_ref()),
+            })
         })
         .collect()
 }

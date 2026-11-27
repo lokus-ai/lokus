@@ -5,7 +5,7 @@ one app, with an assistant that reads the tools the team already uses and keeps 
 step. Everything is a plain markdown file in a folder you choose, so nothing is locked in.
 
 **Status: alpha.** Lokus 2 is a ground-up rewrite. It runs from source with the commands below.
-Mac builds are signed, notarized and update themselves. Windows (an installer) and Linux (an AppImage)
+Mac builds are signed and update themselves. Windows (an installer) and Linux (an AppImage)
 builds update themselves too; they carry no certificate, so Windows asks before running the installer. The
 previous app (Lokus 1) is kept at the tag `v1-legacy`.
 

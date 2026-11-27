@@ -510,18 +510,34 @@ drops that state and publishes the vault afresh, so nothing from the old workspa
 new one. Only one sync engine runs on a vault at a time: a second one (another window, the
 command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
 
+**Which team, which account.** A folder can be called anything and two teams can share a name,
+so a team folder is shown by its team's own name and size wherever it is named: the top of the
+sidebar ("Clean", "4 members"), each entry of the workspace list (with "folder Clean 2" beside
+it when the folder is called something else) and the Team page ("Clean · 4 members"), which
+also says "Signed in as <email>". A team with nobody else in it reads "Only you". The names and
+sizes are asked of the relay (`/v1/workspaces` and each team's members;
+`ui/src/features/teams/teams.ts`) when someone signs in, a folder connects, the list is opened
+or the members change. Share is refused when the account is already in a team of that name,
+whatever the case of the letters: the page says so and offers "Open <team>", which opens that
+team's folder. The check is the app's, on the signed-in account's own list; the relay still
+lets another account make a team of the same name, and that account's folders then show their
+own team and size.
+
 **Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
 change a role, remove someone, invite by email and cancel invitations, leave or delete.
 There is no separate team window, and no way to stop syncing: a member's folder syncs.
 
 **A folder stays in its team.** The team a folder belongs to is kept in the folder itself,
-`.lokus/team.json` (the relay, the workspace and the account last connected;
+`.lokus/team.json` (the relay, the workspace, the account last connected and the team's name
+as last heard, kept only for showing;
 `crates/lokus-sync/src/team.rs`, the only code that writes it). A folder can be handed to
 anyone, so it holds no token: a token typed for a relay of one's own, and the fact that this
 computer connected the folder to that relay, are in the app's own `relays.json` (readable by
 the person only; `apps/desktop/src/sync.rs`). A folder naming a relay that is neither the one
 built in nor one in that file is not connected by itself, so the account's sign-in is never
-sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. It
+sent to a relay a received folder chose; it reads "Sync stopped" with Reconnect. The file is
+read only as a plain file in a plain `.lokus`, and written as a new draft moved into place, so
+a link left in a received folder is never read or written through. It
 goes where the folder goes, so a moved or renamed folder is still its team's, and it is there
 when the window's own storage is not. What earlier versions kept in the window's storage
 (`lokus.sync:<folder>`) is moved into the folder at the next start and removed from the
@@ -534,7 +550,14 @@ in a team is never given to another (`sync_keep` refuses), and its Team page nev
 Share, Join or Reconnect: it shows the team, and what the connection is doing. The one thing a
 person can be asked for is a sign-in that is truly gone: the sidebar and the Team page then
 read "Sign in again", one button, and after signing in the same folder connects to the same
-team. A sign-in that merely could not be renewed just now (no network, the account service
+team. An account that is signed in but is not in the folder's team is told so in those words,
+with its address: "<email> is not a member of this team" on the Team page and in the workspace
+list, "Not a member" at the foot of the sidebar, and one button, "Use another account". The
+folder stays its team's (so it is never offered Share or Join, which is how a second team of
+the same name was once made), and nothing typed in it is sent until an account in the team is
+signed in. Only the account the folder was last connected with can make it private by being
+left out of the relay's list; a folder with no account recorded is never made private that way.
+A sign-in that merely could not be renewed just now (no network, the account service
 down) is still shown as signed in and reads "Offline". A relay of one's own that turns its
 typed token away is the only case left that reads "Sync stopped", with a place to type another.
 
@@ -653,7 +676,7 @@ A workspace is a folder. A person can have several (one for a team, one for scho
 nothing is shared between them. The shell keeps the list of every folder opened in Lokus
 (`vaults.json` beside `last-vault`; a folder that is gone drops out). The workspace's name at
 the top of the sidebar opens the switcher, after Notion's: the open workspace with Settings
-and Invite people, the others with "Team" on the shared ones, invitations waiting with a Join
+and Invite people, the others with their team's name and size on the shared ones, invitations waiting with a Join
 button, and "Add workspace", which makes a folder of that name in Documents. A new workspace
 is private; sharing it is one step under Settings, Team. Every window still shows the same
 workspace: switching in one switches them all.
@@ -857,7 +880,8 @@ confirms that everything it must not be able to do is refused.
   never between a tool call and its result, and never after a request still being worked
   on). `/compact` asks for it by hand, and whatever
   follows it (`/compact keep the pricing decisions, drop the debugging`) is given to the model
-  as what to keep and what to drop, overriding the usual rules. It also happens by itself: when
+  as what to keep and what to drop, overriding the usual rules. The summariser reads each attached
+  file's text as the model was sent it, not only its name, so a note can keep what is only in a file. It also happens by itself: when
   the provider's last count is at 80% of the model's limit the next message is preceded by a
   compaction, and a request the provider refuses as too long is compacted and sent once more;
   either way the pending message is sent, and one quiet line says earlier messages were

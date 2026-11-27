@@ -4,7 +4,7 @@ name: Release
 #
 # To release: in the pull request, change the one line in the file VERSION (and, if you like,
 # add news/<version with dashes>.md). When it is merged, this builds Lokus for both kinds of
-# Mac (signed and notarized), for Windows and for Linux, and puts it out: the files on a
+# Mac (signed, and notarized when Apple accepts the credentials), for Windows and for Linux, and puts it out: the files on a
 # GitHub pre-release, the news post, and the word to every installed copy that there is a new
 # version. A merge that leaves VERSION alone releases nothing.
 #
@@ -111,7 +111,6 @@ jobs:
           APPLE_API_KEY_PATH: ${{ runner.temp }}/notary.p8
           APPLE_API_KEY_ID: ${{ secrets.LOKUS_APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.LOKUS_APPLE_API_ISSUER }}
-          LOKUS_MUST_NOTARIZE: "1"
           LOKUS_RUST: stable
           VITE_SUPABASE_URL: ${{ vars.LOKUS_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.LOKUS_SUPABASE_KEY }}
@@ -123,7 +122,11 @@ jobs:
           set -e
           cd "dist-release/${{ needs.decide.outputs.version }}"
           ls -la
-          spctl -a -t open --context context:primary-signature -vv "Lokus_${{ needs.decide.outputs.version }}_${{ matrix.arch }}.dmg"
+          DMG="Lokus_${{ needs.decide.outputs.version }}_${{ matrix.arch }}.dmg"
+          # The signature has to hold. What macOS would say of a downloaded copy is only shown:
+          # "Unnotarized Developer ID" when Apple refused the credentials, which still goes out.
+          codesign --verify --strict -vv "$DMG"
+          spctl -a -t open --context context:primary-signature -vv "$DMG" || true
       - uses: actions/upload-artifact@v4
         with:
           name: lokus-${{ needs.decide.outputs.version }}-${{ matrix.arch }}
