@@ -36,8 +36,21 @@ fn who(e: &Event) -> Vec<String> {
 }
 
 /// The note an event already has in this folder, if it is still there.
-fn linked(store: &Store, root: &Path, key: &str) -> Result<Option<String>> {
+fn linked(store: &Store, root: &Path, event: &Event) -> Result<Option<String>> {
+    let key = event.key.as_str();
     let folder = root.to_string_lossy();
+    // A note written for a repeating event before it was sent follows the event to the series'
+    // id, which is no occurrence: it belongs to the first one.
+    if let Some(series) = &event.series {
+        let whole = crate::model::key(&event.account, &event.calendar, series);
+        if let Some(path) = store.note(&whole, &folder)? {
+            let first = store.first_of(&event.account, &event.calendar, series)?;
+            if first.as_deref() == Some(key) && root.join(&path).is_file() {
+                store.keep_note(key, &folder, &path)?;
+                return Ok(Some(path));
+            }
+        }
+    }
     if let Some(path) = store.note(key, &folder)? {
         if root.join(&path).is_file() {
             return Ok(Some(path));
@@ -64,7 +77,7 @@ fn linked(store: &Store, root: &Path, key: &str) -> Result<Option<String>> {
 pub fn meeting_note(dir: &Path, root: &Path, key: &str, zone_name: &str) -> Result<Value> {
     let store = Store::open(dir)?;
     let event = store.event(key)?.ok_or_else(|| bad("no such event"))?;
-    if let Some(path) = linked(&store, root, key)? {
+    if let Some(path) = linked(&store, root, &event)? {
         return Ok(json!({ "path": path, "created": false }));
     }
     let tz = zone(if zone_name.is_empty() {
