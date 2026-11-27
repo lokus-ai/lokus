@@ -1,6 +1,8 @@
 /** @part-of ui.ai */
 import { aiActDone,
-  aiCompact, type AiOutcome, aiApprove, type AiEvent, aiSend, aiSettings, aiStop, onAiAct, onAiEvent } from "../../bridge/ai";
+  aiCompact, type AiOutcome, aiApprove, type AiEvent, aiHelpers, aiHelperStop, aiSay, aiSend, aiSettings, aiStop, type Helper, onAiAct, onAiEvent, type Stage } from "../../bridge/ai";
+import { accessToken } from "../../bridge/auth";
+import { HOME } from "../../bridge/sync";
 import { type Entry, type Note, runCore } from "../../bridge/core";
 import { traceChat, track } from "../../bridge/analytics";
 import { createStore, type Store } from "../../shell/store";
@@ -14,6 +16,10 @@ export type Item =
   | { kind: "question"; id: string; question: string; options: string[]; multiple: boolean; answer?: string }
   /** `passing` marks a line about this window only (a compaction that did not happen): shown, never kept in the file. */
   | { kind: "notice"; text: string; error?: boolean; code?: string; passing?: boolean }
+  /** Where the helpers started by one `delegate` call are shown; the rows themselves come from Rust. */
+  | { kind: "helpers"; call: string }
+  /** A research run: its title, the stage it is at, and the note each stage produced. */
+  | { kind: "research"; topic: string; stage: Stage; notes: Partial<Record<Stage, string>> }
   /** Everything above this was summarised to make room. It stays in the conversation, folded away. */
   | { kind: "summary"; text: string; note?: string; auto?: boolean };
 
@@ -330,6 +336,21 @@ async function act(name: string, input: Record<string, unknown>): Promise<string
   throw new Error(`the app cannot do ${name}`);
 }
 
+/** A helper's row: what Rust keeps about it, plus the step it is on right now. */
+export type HelperRow = Helper & { tool?: string | null; input?: Record<string, unknown> | null };
+/** The open conversation's helpers by id. Filled from their files and kept current by events. */
+export const helpers = createStore<{ rows: Record<string, HelperRow> }>({ rows: {} });
+
+async function loadHelpers(): Promise<void> {
+  const id = chatId;
+  const found = await aiHelpers(id).catch(() => [] as Helper[]);
+  if (id !== chatId) return;
+  helpers.set((s) => ({ rows: Object.fromEntries(found.map((h) => [h.id, { ...s.rows[h.id], ...h }])) }));
+}
+
+export const stopHelper = (id?: string) => void aiHelperStop(chatId, id).then(loadHelpers, loadHelpers);
+export const helperWork = (id: string) => aiHelpers(chatId, id).then((found) => found[0] ?? null);
+
 const update = (change: (items: Item[]) => Item[]) => chat.set((s) => ({ items: change(s.items) }));
 
 function onEvent(event: AiEvent): void {
@@ -339,7 +360,29 @@ function onEvent(event: AiEvent): void {
       case "text":
         if (last?.kind === "assistant" && last.live) return [...items.slice(0, -1), { ...last, text: last.text + event.delta }];
         return [...items, { kind: "assistant", text: event.delta, live: true }];
+      case "helper": {
+        const before = helpers.get().rows[event.id];
+        const began = before && before.asked === event.asked && before.began ? before.began : Date.now();
+        const ended = event.state === "running" || event.state === "waiting" ? null : Date.now();
+        helpers.set((s) => ({
+          rows: {
+            ...s.rows,
+            [event.id]: { ...before, ...event, findings: before?.findings ?? null, began, ended, steps: (before?.steps ?? 0) + (event.tool ? 1 : 0) },
+          },
+        }));
+        if (ended) void loadHelpers();
+        return items;
+      }
+      case "research": {
+        const at = items.findLastIndex((i) => i.kind === "research" || i.kind === "user");
+        const card = items[at];
+        const notes = event.note ? { [event.stage]: event.note } : {};
+        if (card?.kind === "research") return items.map((i, n) => (n === at ? { ...card, topic: event.topic || card.topic, stage: event.stage, notes: { ...card.notes, ...notes } } : i));
+        return [...settle(items), { kind: "research", topic: event.topic, stage: event.stage, notes }];
+      }
       case "tool":
+        if (event.name === "research_stage") return items;
+        if (event.name === "delegate") return [...settle(items), { kind: "helpers", call: event.id }];
         if (event.name === "ask_user") {
           const options = Array.isArray(event.input.options) ? event.input.options.map(String).slice(0, 8) : [];
           return [...settle(items), { kind: "question", id: event.id, question: String(event.input.question ?? ""), options, multiple: event.input.multiple === true }];
@@ -435,6 +478,13 @@ function traced(id: string, began: number, question: string, outcome: AiOutcome 
 export async function ask(text: string, mentions: string[] = [], files: string[] = [], taken?: () => void): Promise<boolean> {
   // A file sent with no words is still a question: what is this?
   const question = text.trim() || (files.length ? (files.length === 1 ? "Take a look at this file." : "Take a look at these files.") : "");
+  // Written while the assistant is working: it joins the conversation and is read at the next step.
+  if (question && chat.get().busy && requestId && !files.length && !chat.get().compacting) {
+    chat.set((s) => ({ items: [...settle(s.items), { kind: "user", text: text.trim() }] }));
+    taken?.();
+    void aiSay(chatId, question);
+    return true;
+  }
   if (!question || chat.get().busy || !vaultRoot || isSwitchingVault() || deleting.has(JSON.stringify([vaultRoot, chatId]))) return false;
   if (!listening) {
     listening = true;
@@ -477,7 +527,8 @@ export async function ask(text: string, mentions: string[] = [], files: string[]
     if (sending !== requestId) return false;
     briefing = context;
     began = Date.now();
-    const outcome = await aiSend(sending, [...history, message], briefing, from, chat.get().usage?.used ?? 0);
+    const token = HOME ? await accessToken().catch(() => null) : null;
+    const outcome = await aiSend(sending, [...history, message], briefing, from, chat.get().usage?.used ?? 0, false, chatId, token ? { server: HOME, token } : undefined);
     if (sending !== requestId) return false;
     traced(sending, began, question, outcome, "");
     // Compacted on the way: carry on from the summary, which already holds this question.
@@ -870,6 +921,8 @@ export async function openChat(id: string): Promise<void> {
   leaveChat();
   asked.clear();
   chatId = id;
+  helpers.set({ rows: {} });
+  void loadHelpers();
   allowed.clear();
   history = kept.body.history ?? [];
   let items = kept.body.items ?? [];
@@ -1006,6 +1059,8 @@ function stopReply(preserve: boolean): Promise<unknown> {
   if (!requestId) return saving;
   track("action", { feature: "assistant", action: "stopped" });
   void aiStop(requestId);
+  // Its helpers end with it; their rows then say so, from what each kept.
+  window.setTimeout(() => void loadHelpers(), 400);
   requestId = null;
   window.clearTimeout(keeping);
   if (chat.get().compacting) {
@@ -1074,6 +1129,7 @@ export function newChat(): boolean {
   vaultRoot = app.get().vault?.root;
   asked.clear();
   chatId = freshId();
+  helpers.set({ rows: {} });
   allowed.clear();
   history = [];
   briefing = null;

@@ -1,6 +1,7 @@
 /** @part-of ui.ai */
 import { fileMenu, type MenuEvent, openMenu } from "../../shell/contextMenu";
 import { ConnectModel, useModel } from "./Connect";
+import { HelperBlock, ResearchCard } from "./Helpers";
 import lokusMark from "./lokus.svg";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -20,6 +21,12 @@ import { answer, answerAll, attachFile, chat,
 import { ModelPicker } from "./ModelPicker";
 
 const TOOLS: Record<string, (input: Record<string, unknown>) => string> = {
+  web_search: (i) => `Searching the web for “${String(i.query ?? "")}”`,
+  web_read: (i) => `Reading ${String(i.url ?? "a page").replace(/^https?:\/\/(www\.)?/, "").slice(0, 60)}`,
+  helper_send: (i) => `Asking ${String(i.id ?? "a helper")} again`,
+  helper_read: (i) => `Reading what ${String(i.id ?? "a helper")} did`,
+  helper_stop: (i) => `Stopping ${String(i.id ?? "a helper")}`,
+  write_findings: () => "Writing its findings",
   search_notes: (i) => `Searching notes for “${String(i.query ?? "")}”`,
   read_note: (i) => `Reading ${String(i.path ?? "a note")}`,
   list_folder: (i) => `Looking in ${String(i.path || "the vault")}`,
@@ -58,7 +65,7 @@ function service(name: string): { id: string; tool: string } | null {
 
 const titled = (word: string) => word.replace(/[-_]+/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-function describe(name: string, input: Record<string, unknown>): string {
+export function describe(name: string, input: Record<string, unknown>): string {
   if (TOOLS[name]) return TOOLS[name](input);
   const from = service(name);
   return from ? `${titled(from.id)}: ${from.tool.replace(/^[a-z]+-/, "").replace(/[-_]+/g, " ")}` : name;
@@ -151,6 +158,8 @@ function Steps({ steps, live }: { steps: Step[]; live: boolean }) {
   const failed = steps.filter((s) => s.status === "failed").length;
   const summary = running
     ? describe(current.name, current.input)
+    : steps.every((s) => s.name.startsWith("helper_"))
+      ? "Went back to its helpers"
     : `Looked in ${places.length > 1 ? `${places.slice(0, -1).join(", ")} and ${places[places.length - 1]}` : places[0]}`;
   return (
     <div className={`ai-steps${open ? " open" : ""}`}>
@@ -346,11 +355,26 @@ function made(steps: Step[]): string[] {
 }
 
 /** Items as they are drawn: a run of finished or running steps becomes one block. */
-type Block = { kind: "steps"; steps: Step[]; live: boolean } | { kind: "item"; item: Item };
+type Block = { kind: "steps"; steps: Step[]; live: boolean } | { kind: "item"; item: Item } | { kind: "research"; card: Extract<Item, { kind: "research" }>; calls: string[]; changes: Step[]; live: boolean };
+
+const CHANGES = new Set(["create_note", "edit_note", "move_note", "set_property", "record_task", "record_customer", "create_file", "create_pdf"]);
 
 function blocks(items: Item[], busy: boolean): Block[] {
   const out: Block[] = [];
+  // A research run is one card: its helpers sit inside it, and so does what it changed.
+  let research: Extract<Block, { kind: "research" }> | null = null;
   items.forEach((item, i) => {
+    if (item.kind === "user") research = null;
+    if (item.kind === "research") {
+      research = { kind: "research", card: item, calls: [], changes: [], live: busy && !items.slice(i + 1).some((x) => x.kind === "user") };
+      out.push(research);
+      return;
+    }
+    if (research && item.kind === "helpers") {
+      research.calls.push(item.call);
+      return;
+    }
+    if (research && research.card.stage === "changes" && item.kind === "tool" && item.status === "ok" && CHANGES.has(item.name) && String(item.input.path ?? "").startsWith("research/") === false) research.changes.push(item);
     if (item.kind === "tool" && item.status !== "asking") {
       const last = out[out.length - 1];
       if (last?.kind === "steps") last.steps.push(item);
@@ -592,7 +616,8 @@ export function AiPanel() {
     for (const file of Array.from(list ?? [])) void attachFile(file);
   };
   const send = () => {
-    if ((!draft.trim() && !files.length) || busy || importing) return;
+    // While the assistant works, words alone can still be sent: it reads them at its next step.
+    if ((!draft.trim() && !files.length) || importing || (busy && (files.length > 0 || !!slashOf(draft)))) return;
     // A command typed in the box is run, not sent. A slash that names no command is a message.
     const slash = files.length ? null : slashOf(draft);
     if (slash) {
@@ -903,7 +928,10 @@ export function AiPanel() {
               </div>
             );
           }
+          if (block.kind === "research") return <ResearchCard key={i} card={block.card} calls={block.calls} live={block.live} changes={block.changes.map((s) => ({ text: describe(s.name, s.input), path: typeof s.input.path === "string" ? s.input.path : s.result?.match(/ is at (.+\.md)/)?.[1] }))} />;
           const item = block.item;
+          if (item.kind === "research") return null;
+          if (item.kind === "helpers") return <HelperBlock key={i} calls={[item.call]} live={live} />;
           return item.kind === "user" ? (
             <div key={i} className="ai-user-turn">
               {item.files && item.files.length > 0 && (

@@ -10,6 +10,7 @@ mod invites;
 pub mod mail;
 mod releases;
 pub mod store;
+pub mod web;
 mod ws;
 
 use std::collections::HashMap;
@@ -86,6 +87,8 @@ pub struct App {
     pub(crate) publish_key: Option<String>,
     /// What sends invitations by email. `None`: invites are handed over as links.
     pub(crate) mailer: Option<mail::Mailer>,
+    /// What searches the web for the assistant. `None`: this relay has no search key.
+    pub(crate) web: Option<web::Web>,
     pub(crate) changes: broadcast::Sender<Changed>,
     rooms: Mutex<HashMap<String, broadcast::Sender<Fanout>>>,
     next_conn: std::sync::atomic::AtomicU64,
@@ -120,6 +123,7 @@ impl App {
             limits,
             publish_key: publish_key.filter(|k| k.len() >= 24),
             mailer,
+            web: web::Web::from_env(),
             changes: broadcast::channel(256).0,
             rooms: Mutex::new(HashMap::new()),
             next_conn: 1.into(),
@@ -235,6 +239,8 @@ pub fn router(app: Arc<App>) -> Router {
                 .delete(releases::unpost)
                 .layer(DefaultBodyLimit::max(releases::MAX_BODY)),
         )
+        .route("/v1/web/search", post(web::search))
+        .route("/v1/web/read", post(web::read))
         .route("/v1/ws", get(ws::upgrade))
         .with_state(app)
 }

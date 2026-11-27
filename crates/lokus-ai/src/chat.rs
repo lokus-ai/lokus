@@ -12,6 +12,7 @@ use tokio::sync::oneshot;
 use crate::chatgpt;
 use crate::config::{api_key, Config, McpServer, Provider};
 use crate::error::{AiError, Result};
+use crate::helpers;
 use crate::mcp::{self, Connection};
 use crate::provider;
 use crate::tools::{self, Tool};
@@ -148,6 +149,46 @@ tell them it is done, not to apologise. When a note is missing or contradicts wh
 propose the wording with suggest_note_change; never rewrite a note for that reason without being \
 asked.
 
+The web. web_search finds pages and web_read opens one. Use them when the answer is not in the \
+workspace or a connected service, and give the link an answer came from. If the web is not \
+available, say so in a line and carry on with what the workspace holds.
+
+Helpers. delegate starts helpers: separate assistants, each with a fresh context, that read what \
+you point them at and hand back a short answer, all at the same time. What they read never enters \
+this conversation, so a big sweep stays fast and exact.
+- Delegate when the job means reading many notes or several sources that do not depend on each other \
+(every customer, a whole folder, several services).
+- Do not delegate one note, a small question, or a chain where each step needs the one before. A \
+helper costs a full round trip before it reads anything; for a small ask you are faster yourself.
+- Size it: no helper for a simple question, 2 to 4 for a broad sweep, several waves of 4 in research.
+- Split by boundary, not by topic (customers A to F, G to M; one folder each), so no two helpers \
+read the same thing and nothing falls between them.
+- A helper knows nothing of this conversation. Its task says the goal, the context it needs, where \
+to look, and the exact shape to return. A vague task is refused.
+- Follow up, do not restart: when an answer is thin or missed a part, helper_send to the same helper; \
+it still has everything it read. helper_read shows its full work; helper_stop ends one.
+- Treat what comes back as leads. Before stating something that matters as fact, open the source \
+the helper cited.
+- Helpers only read. Every change (notes, tasks, customers, anything sent outside) you make \
+yourself, with the same approvals as always.
+
+Research. When a message starts with /research, or the user asks for a deep look, an audit or a \
+thorough investigation, work in these stages and call research_stage as you enter each one, so the \
+user sees where it is. Use a short lowercase folder name for the topic.
+1. plan: write research/<topic>/plan.md with create_note: the question, the parts, what done means.
+2. gather: delegate the parts, four helpers at a time, in as many waves as the plan needs. Give \
+each helper its own findings note (findings: research/<topic>/<part>.md); it writes what it found \
+there with the source of every claim. Read the findings; where one is thin, helper_send or start \
+another wave.
+3. check: write the report as a draft in research/<topic>/report.md, then delegate one helper that \
+is given only the draft and the findings notes and told to list every claim the sources do not \
+support. Correct or remove what it finds.
+4. report: finish research/<topic>/report.md: the answer, the evidence with the source of each \
+claim (a note path or a link), and what is uncertain.
+5. changes: make the changes the report calls for yourself: edit notes, create tasks, update \
+customers. Then tell the user what was found and what you changed.
+There is no limit on steps in research; take as many as the job needs.
+
 Answer in Markdown.";
 
 /// How answers are laid out. Kept apart from the rest and placed at the very end of the
@@ -208,6 +249,13 @@ pub struct Request {
     /// Nobody asked: the assistant is looking by itself (Noticed). What is private to the
     /// person and was not asked about, their Messages, is then not on offer.
     pub unattended: bool,
+    /// Where web searches are asked: the Lokus server and the account's sign-in. `None` when
+    /// nobody is signed in; the web tools then say so.
+    pub web: Option<crate::web::Web>,
+    /// The conversation this is, which is what its helpers' work is kept under. `None`: no helpers.
+    pub chat: Option<String>,
+    /// Set when this run is a helper's, not the assistant's own.
+    pub helper: Option<helpers::Role>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -231,7 +279,28 @@ pub enum Event {
     Notice { message: String },
     /// The conversation got too long and its earlier part was summarised to make room.
     Compacted { summary: String, kept_turns: usize },
+    /// A helper started, took a step or ended. `call` is the tool call that started it;
+    /// `tool` and `input` are the step it is on; `asked` counts follow-ups sent to it.
+    Helper {
+        id: String,
+        name: String,
+        call: String,
+        state: String,
+        tool: Option<String>,
+        input: Option<Value>,
+        asked: u64,
+        error: Option<String>,
+    },
+    /// Research moved to a stage; `note` is the note that stage is about, when it has one.
+    Research {
+        topic: String,
+        stage: String,
+        note: Option<String>,
+    },
 }
+
+/// Tells whoever is watching what is happening.
+pub type Emitter = Arc<dyn Fn(Event) + Send + Sync>;
 
 #[derive(Debug, Serialize)]
 pub struct Outcome {
@@ -284,6 +353,113 @@ enum Source {
     Api(bool),
     /// Messages on this Mac.
     Messages,
+    /// The web, through the Lokus server.
+    Web,
+    /// The four helper tools.
+    Helper,
+    /// The marker for a stage of research.
+    Stage,
+    /// A helper's own findings note.
+    Findings,
+}
+
+const STAGE: &str = "research_stage";
+const STAGES: [&str; 5] = ["plan", "gather", "check", "report", "changes"];
+
+fn stage_tool() -> Tool {
+    Tool {
+        name: STAGE.into(),
+        description: "Say which stage of research you are entering, so the user sees it. Calling it starts research mode for this reply: no limit on steps, and helpers may write findings notes.".into(),
+        schema: json!({
+            "type": "object",
+            "properties": {
+                "topic": { "type": "string", "description": "The research's title, a few words." },
+                "stage": { "type": "string", "enum": STAGES },
+                "note": { "type": "string", "description": "The note this stage is about, e.g. research/topic/plan.md" },
+            },
+            "required": ["topic", "stage"],
+            "additionalProperties": false,
+        }),
+        writes: false,
+    }
+}
+
+/// Whether the person started research themselves, with /research.
+fn asked_for_research(messages: &[Value]) -> bool {
+    let Some(last) = messages.iter().rev().find(|m| m["role"] == "user") else {
+        return false;
+    };
+    let starts = |text: &str| text.lines().any(|line| line.trim_start().starts_with("/research"));
+    match &last["content"] {
+        Value::String(text) => starts(text),
+        blocks => blocks
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|b| b["text"].as_str())
+            .any(starts),
+    }
+}
+
+/// What a tool that only reads is run against. Several of these run at the same time.
+struct Reading<'a> {
+    offered: &'a [Tool],
+    sources: &'a [Source],
+    connections: &'a [Connection],
+    core: Option<&'a Core>,
+    config: &'a Config,
+    web: Option<&'a crate::web::Web>,
+    launch: Option<&'a helpers::Launch>,
+    role: Option<&'a helpers::Role>,
+    research: bool,
+}
+
+impl Reading<'_> {
+    /// Whether this call can run alongside others: it is on offer and changes nothing.
+    fn takes(&self, name: &str) -> Option<usize> {
+        let at = self.offered.iter().position(|t| t.name == name)?;
+        let reads = matches!(
+            self.sources[at],
+            Source::Vault | Source::Server(..) | Source::Api(false) | Source::Messages | Source::Web | Source::Helper | Source::Findings
+        );
+        (reads && !self.offered[at].writes).then_some(at)
+    }
+
+    async fn run(&self, at: usize, id: &str, name: &str, input: &Value) -> std::result::Result<String, String> {
+        match &self.sources[at] {
+            Source::Vault => match self.core {
+                Some(core) => tools::run(core, name, input),
+                None => Err("no vault is open".into()),
+            },
+            Source::Server(index, tool) => {
+                self.connections[*index]
+                    .call(tool, &without_blanks(input, &self.offered[at].schema))
+                    .await
+            }
+            Source::Api(write) => crate::own_api::call(self.config, *write, input).await,
+            Source::Messages => crate::imessage::call(input),
+            Source::Web => crate::web::call(self.web, name, input).await,
+            Source::Findings => match (self.core, self.role) {
+                (Some(core), Some(role)) => helpers::write_findings(core, role, input),
+                _ => Err("there is no findings note to write".into()),
+            },
+            Source::Helper => {
+                let Some(launch) = self.launch else {
+                    return Err("helpers are not available here".into());
+                };
+                match name {
+                    "delegate" => helpers::delegate(launch, id, input, self.research).await,
+                    "helper_send" => helpers::send(launch, input).await,
+                    "helper_read" => helpers::read(launch, input).await,
+                    _ => {
+                        let dir = helpers::dir(&launch.core, &launch.chat);
+                        helpers::stop(&dir, input["id"].as_str().unwrap_or_default()).await
+                    }
+                }
+            }
+            Source::App | Source::Loader | Source::Stage => Err(format!("{name} cannot run here")),
+        }
+    }
 }
 
 /// Connected services describe their tools at length: four of them came to 437,000 characters,
@@ -523,11 +699,16 @@ pub async fn compact(
     }))
 }
 
-pub async fn send(
+/// `send` behind a pointer, for a helper: the loop starting itself again.
+pub(crate) fn send_boxed(
     request: Request,
-    emit: impl Fn(Event) + Send + Sync,
+    emit: Emitter,
     approve: Approver,
-) -> Result<Outcome> {
+) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Outcome>> + Send>> {
+    Box::pin(send(request, emit, approve))
+}
+
+pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<Outcome> {
     let Request {
         mut config,
         mut messages,
@@ -537,6 +718,9 @@ pub async fn send(
         app,
         used,
         unattended,
+        web,
+        chat,
+        helper,
     } = request;
     let mut system = if briefing.trim().is_empty() {
         SYSTEM.to_string()
@@ -610,6 +794,39 @@ pub async fn send(
         }
     }
 
+    for tool in crate::web::tools() {
+        sources.push(Source::Web);
+        offered.push(tool);
+    }
+    // Helpers belong to a conversation in a workspace, and a helper has none of its own.
+    let launch = match (&core, &chat, &helper) {
+        (Some(core), Some(chat), None) => Some(helpers::Launch {
+            config: config.clone(),
+            core: core.clone(),
+            extra_servers: extra_servers.clone(),
+            briefing: briefing.clone(),
+            web: web.clone(),
+            emit: emit.clone(),
+            chat: chat.clone(),
+        }),
+        _ => None,
+    };
+    let room = launch.as_ref().map(|l| helpers::dir(&l.core, &l.chat));
+    // Whatever ends this run, its helpers end with it.
+    let _ending = room.clone().map(helpers::Ending);
+    if launch.is_some() {
+        for tool in helpers::tools() {
+            sources.push(Source::Helper);
+            offered.push(tool);
+        }
+        sources.push(Source::Stage);
+        offered.push(stage_tool());
+    }
+    if helper.as_ref().is_some_and(|role| role.findings.is_some()) {
+        sources.push(Source::Findings);
+        offered.push(helpers::findings_tool());
+    }
+
     let mut shelf: Vec<(Tool, Source)> = Vec::new();
     for (index, connection) in connections.iter().enumerate() {
         for tool in &connection.tools {
@@ -648,6 +865,23 @@ pub async fn send(
         }
     }
 
+    // A helper reads. Whatever changes something, shows something or asks the person is the
+    // assistant's alone, so it is not offered at all.
+    if helper.is_some() {
+        let reads = |tool: &Tool, source: &Source| {
+            !tool.writes
+                && !matches!(source, Source::App | Source::Api(true))
+                && !helpers::LEAVES_A_MARK.contains(&tool.name.as_str())
+        };
+        let kept: Vec<(Tool, Source)> = offered
+            .drain(..)
+            .zip(sources.drain(..))
+            .filter(|(tool, source)| reads(tool, source))
+            .collect();
+        (offered, sources) = kept.into_iter().unzip();
+        shelf.retain(|(tool, source)| reads(tool, source));
+    }
+
     system.push_str("\n\n");
     system.push_str(FORMAT);
 
@@ -662,6 +896,8 @@ pub async fn send(
                 Source::Loader => "loader".to_string(),
                 Source::Api(_) => "own_api".to_string(),
                 Source::Messages => crate::imessage::ID.to_string(),
+                Source::Web => "web".to_string(),
+                Source::Helper | Source::Stage | Source::Findings => "helpers".to_string(),
             };
             let entry = by_source.entry(from).or_default();
             entry.0 += 1;
@@ -686,7 +922,12 @@ pub async fn send(
     let made = std::sync::Mutex::new(None::<Event>);
     let (mut rounds, mut read, mut written, mut called) = (0u32, 0u64, 0u64, Vec::<String>::new());
     let result = async {
-        for _ in 0..MAX_ROUNDS {
+        // Research takes as many steps as it needs; a helper has its own limit.
+        let most = helper.as_ref().map_or(MAX_ROUNDS, |role| role.rounds);
+        let mut research = helper.is_none() && asked_for_research(&messages);
+        let mut round = 0;
+        while research || round < most {
+            round += 1;
             lighten(&mut messages);
             // Nearly full: summarise the earlier part first, so this request does not fail.
             // If that does not work the conversation goes as it is, and may still fit.
@@ -746,12 +987,79 @@ pub async fn send(
             added.push(reply);
             let calls: Vec<&Value> = turn.content.iter().filter(|b| b["type"] == "tool_use").collect();
             called.extend(calls.iter().filter_map(|c| c["name"].as_str().map(str::to_string)));
+            if let Some(role) = &helper {
+                helpers::keep(role, &messages);
+            }
+            // What the person wrote meanwhile is handed over with the results, or by itself
+            // when the answer was otherwise finished.
+            let said = || -> Vec<Value> {
+                room.as_deref()
+                    .map(helpers::said)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|text| json!({ "type": "text", "text": format!("The user wrote this while you were working:\n{text}") }))
+                    .collect()
+            };
             if calls.is_empty() {
-                break;
+                let more = said();
+                if more.is_empty() || turn.stop == "refusal" {
+                    break;
+                }
+                let reply = json!({ "role": "user", "content": more });
+                messages.push(reply.clone());
+                whole.push(reply.clone());
+                added.push(reply);
+                continue;
             }
 
+            let done = |id: &str, outcome: std::result::Result<String, String>| -> Value {
+                let (ok, text) = match outcome {
+                    Ok(text) => (true, fit(text)),
+                    Err(text) => (false, fit(text)),
+                };
+                emit(Event::ToolDone { id: id.to_string(), ok, result: preview(&text) });
+                json!({ "type": "tool_result", "tool_use_id": id, "content": text, "is_error": !ok })
+            };
+            let whole_call = |call: &Value| turn.stop == "tool_use" && !turn.invalid.iter().any(|bad| bad == call["id"].as_str().unwrap_or_default());
             let mut results = Vec::new();
-            for call in calls {
+            let mut next = 0;
+            while next < calls.len() {
+                // Calls that only read, asked for together, run together: the wait is the
+                // slowest one's, not the sum. Anything that changes something keeps its turn.
+                let reading = Reading {
+                    offered: &offered,
+                    sources: &sources,
+                    connections: &connections,
+                    core: core.as_deref(),
+                    config: &config,
+                    web: web.as_ref(),
+                    launch: launch.as_ref(),
+                    role: helper.as_ref(),
+                    research,
+                };
+                let together: Vec<(usize, &Value)> = calls[next..]
+                    .iter()
+                    .map_while(|call| {
+                        let at = reading.takes(call["name"].as_str().unwrap_or_default())?;
+                        whole_call(call).then_some((at, *call))
+                    })
+                    .collect();
+                if !together.is_empty() {
+                    next += together.len();
+                    let (reading, done, emit) = (&reading, &done, &emit);
+                    results.extend(
+                        futures_util::future::join_all(together.into_iter().map(|(at, call)| async move {
+                            let id = call["id"].as_str().unwrap_or_default();
+                            let name = call["name"].as_str().unwrap_or_default();
+                            emit(Event::Tool { id: id.to_string(), name: name.to_string(), input: call["input"].clone(), asks: false });
+                            done(id, reading.run(at, id, name, &call["input"]).await)
+                        }))
+                        .await,
+                    );
+                    continue;
+                }
+                let call = calls[next];
+                next += 1;
                 let id = call["id"].as_str().unwrap_or_default().to_string();
                 let name = call["name"].as_str().unwrap_or_default().to_string();
                 let input = call["input"].clone();
@@ -791,37 +1099,56 @@ pub async fn send(
                                     Ok(format!("Ready to use: {}. Not found (check the name): {}.", loaded.join(", "), missing.join(", ")))
                                 }
                             }
-                            Some(Source::Api(write)) => crate::own_api::call(&config, *write, &input).await,
-                            Some(Source::Messages) => crate::imessage::call(&input),
-                            Some(Source::Vault) => match &core {
-                                Some(core) => tools::run(core, &name, &input),
-                                None => Err("no vault is open".into()),
-                            },
+                            Some(Source::Stage) => {
+                                let stage = input["stage"].as_str().unwrap_or_default();
+                                if STAGES.contains(&stage) {
+                                    research = true;
+                                    emit(Event::Research {
+                                        topic: input["topic"].as_str().unwrap_or_default().to_string(),
+                                        stage: stage.to_string(),
+                                        note: input["note"].as_str().map(str::to_string),
+                                    });
+                                    Ok(format!("Research is at: {stage}."))
+                                } else {
+                                    Err(format!("'stage' must be one of: {}", STAGES.join(", ")))
+                                }
+                            }
                             Some(Source::App) => match &app {
                                 Some(run) => run(&id, &name, &input)
                                     .await
                                     .unwrap_or_else(|_| Err("the app did not answer".into())),
                                 None => Err("there is no app window to do this in".into()),
                             },
-                            Some(Source::Server(index, tool)) => {
-                                let asked = position.map(|p| &offered[p].schema).unwrap_or(&Value::Null);
-                                connections[*index].call(tool, &without_blanks(&input, asked)).await
+                            // Something that changes the workspace or goes outside, one at a time.
+                            Some(_) => {
+                                let reading = Reading {
+                                    offered: &offered,
+                                    sources: &sources,
+                                    connections: &connections,
+                                    core: core.as_deref(),
+                                    config: &config,
+                                    web: web.as_ref(),
+                                    launch: launch.as_ref(),
+                                    role: helper.as_ref(),
+                                    research,
+                                };
+                                reading.run(position.unwrap_or_default(), &id, &name, &input).await
                             }
+                            None if helper.is_some() => Err(format!("A helper only reads: it cannot use {name}. Say in your answer what should change and the assistant will do it.")),
                             None => Err(format!("there is no tool called {name}")),
                         }
                     }
                 };
-                let (ok, text) = match outcome {
-                    Ok(text) => (true, fit(text)),
-                    Err(text) => (false, fit(text)),
-                };
-                emit(Event::ToolDone { id: id.clone(), ok, result: preview(&text) });
-                results.push(json!({ "type": "tool_result", "tool_use_id": id, "content": text, "is_error": !ok }));
+                results.push(done(&id, outcome));
             }
+            results.extend(said());
             let reply = json!({ "role": "user", "content": results });
             messages.push(reply.clone());
             whole.push(reply.clone());
             added.push(reply);
+            if let Some(role) = &helper {
+                helpers::keep(role, &messages);
+            }
             if turn.stop != "tool_use" {
                 break;
             }

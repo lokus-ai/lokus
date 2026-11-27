@@ -124,7 +124,10 @@ pub fn load(vault: &Vault, id: &str) -> Result<Value> {
 }
 
 pub fn delete(vault: &Vault, id: &str) -> Result<()> {
-    match fs::remove_file(file(vault, id)?) {
+    let path = file(vault, id)?;
+    // What the conversation's helpers did is kept beside it and goes with it.
+    let _ = fs::remove_dir_all(path.with_extension("helpers"));
+    match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e.into()),

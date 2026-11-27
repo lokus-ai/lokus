@@ -26,7 +26,9 @@ const FALLBACK_MODELS: &[&str] = &[
     "claude-sonnet-5-5",
 ];
 const MAX_TOKENS: u32 = 32_000;
-const ATTEMPTS: u32 = 3;
+/// A busy provider ("too many requests") is waited out: up to about a minute in all, since
+/// several helpers asking at once is when it happens.
+const ATTEMPTS: u32 = 7;
 /// How long a reply may go without sending anything before it is given up on.
 const QUIET: Duration = Duration::from_secs(120);
 
@@ -72,7 +74,7 @@ async fn send(config: &Config, build: impl Fn() -> RequestBuilder) -> Result<Res
     for attempt in 0..ATTEMPTS {
         if attempt > 0 {
             tokio::time::sleep(Duration::from_millis(
-                600 * u64::from(attempt) * u64::from(attempt),
+                (600 * u64::from(attempt) * u64::from(attempt)).min(15_000),
             ))
             .await;
         }

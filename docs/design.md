@@ -823,7 +823,7 @@ the API.
 Checked by `checks/flows/plugins.sh`, which installs a hostile fixture plugin in the real app and
 confirms that everything it must not be able to do is refused.
 
-## 8. AI and MCP (built; MCP discovery and workflow reads tried with GitHub)
+## 8. AI and MCP (built; MCP discovery and workflow reads tried with GitHub; helpers, web search and research tried with a stand-in model)
 
 `lokus-ai` holds all of it; the UI is a chat panel and a settings section.
 
@@ -1112,6 +1112,74 @@ the server entry until OAuth and bearer-token deletion succeed; an uncleared tok
 reused server name to a different address.
 
 A server that is not listed can be added by its address. A plugin can still bring its own.
+
+### Helpers, the web and research (built; tried with a stand-in model, not yet a real one)
+
+**Reads run together.** When one reply of the model asks for several tools that only read (notes,
+search, a connected service's read tools, the web, helpers), they run at the same time and the
+results go back in the order they were asked for. Anything that changes something, shows
+something in the window or asks the person keeps its own turn, in order. A "too many requests"
+or "busy" answer from the provider is waited out and tried again, up to seven times.
+
+**The web.** `web_search` (a query; titles, links, short extracts) and `web_read` (a link; the
+page as text) are offered to the assistant and to helpers. The app asks the Lokus server
+(`POST /v1/web/search`, `POST /v1/web/read`, with the account's sign-in); the server asks the
+search service (Context.dev: `POST /web/search` and `POST /web/scrape`) with its own key and
+hands back the result. The key is the server's `CONTEXT_DEV_API_KEY` and never reaches the app.
+The server counts searches and page reads per account per day (`web_use`) and refuses past
+`LOKUS_WEB_DAILY` (300 when unset). With no key the server says web search is not set up. Not
+signed in, over the ceiling, the server or the service down: the tool answers with one line
+saying which, and the assistant carries on with the workspace.
+
+**Helpers.** Four tools, offered in a conversation that has a workspace:
+
+- `delegate` starts one or more helpers. Each task must say `goal`, `context`, `look_in` and
+  `return` (and a `name` the person sees); a task missing one, or saying one word, is refused
+  before anything runs. All tasks of a call run together, four at a time; the call returns when
+  all have ended, with each helper's id and answer (cut at about 6,000 characters).
+- `helper_send` sends a helper a further message. It carries on from its saved conversation,
+  so nothing is read again.
+- `helper_read` returns a helper's full work, every step and result, 12,000 characters a part.
+- `helper_stop` stops a working helper and returns what it has so far.
+
+A helper is the same loop (`chat::send`) started from its brief and the workspace briefing
+instead of the conversation. It is offered only tools that read: no editing, moving, creating,
+recording, remembering, nothing shown in the window, no question to the person, no iMessage,
+and no helper tools, so a helper cannot start helpers. A change it tries is refused in words it
+can pass on. It may ask the model 40 times in a normal chat and 300 in research. Ids are `h1`,
+`h2`, … in the order started, never reused within a conversation. Each helper's whole
+conversation, brief, state and answer are one file, `.lokus/chats/<chat>.helpers/<id>.json`,
+written after every step, so the four tools and the rows in the chat work after a restart, and
+deleting the conversation deletes them. A helper that fails or is stopped comes back as one
+line saying so; the others' answers are kept. Nothing is run again by itself.
+
+The standing instructions say when to delegate (many notes or several independent sources),
+when not to (one note, a small question, dependent steps), how many (none, 2 to 4, waves of 4
+in research), to split by boundary, to follow up with `helper_send` instead of starting again,
+to treat answers as leads and open the cited source, and that every change is the assistant's.
+
+**Research.** A message starting `/research`, or the assistant calling `research_stage`, makes
+the reply a research run: no limit on steps for the assistant, 300 per helper, and helpers may
+be given a findings note. The stages are plan (`research/<topic>/plan.md`), gather (helpers,
+four at a time, each writing only its own `research/<topic>/<part>.md` with `write_findings`,
+the source of every claim beside it), check (a helper given only the draft report and the
+findings lists what the sources do not support), report (`research/<topic>/report.md`) and
+changes (the assistant alone edits notes and records tasks, with the usual approvals). The
+order is the assistant's instructions, not a second engine; `research_stage` only tells the
+window where it is.
+
+**Stop.** The chat's Stop ends the assistant and, with it, every helper it started, whatever
+ended the run. A helper stops between two steps or in the middle of waiting for the model, and
+keeps what it had. Findings notes already written stay.
+
+**What the person sees.** The helpers of one `delegate` are one block: a row each with the
+name, the state in words (Waiting, Working, Done, Stopped, Failed with the reason), what it is
+doing now, the time, and a stop button while it works; "Stop all" on the block. A row is a
+button that opens the brief, the steps, the findings note and the answer, read from the
+helper's file. A helper asked again is the same row, working, marked "asked again". Once all
+have ended the block folds to one line. A research run is one card with the five stages, each
+finished one linking its note, the helper rows inside Gather and the changes listed under
+Changes. Words typed while the assistant works are handed to it with its next step.
 
 **Not built:** connectors filling customer pages on their own (today the assistant can read a
 connected service when asked, and only a team's own backend pushes facts); an identity for
