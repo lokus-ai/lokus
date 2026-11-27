@@ -410,8 +410,15 @@ fn delete(dir: &Path, args: &Value) -> Result<Value> {
     let k = need(args, "key")?;
     let (account, calendar, id) = split(k)?;
     let event = store.event(k)?.ok_or_else(|| bad("no such event"))?;
-    store.release(k)?;
     let never_sent = id.starts_with("local-");
+    if never_sent && store.taking(k)? {
+        // It is on its way to the provider this moment; dropping it here would leave it there.
+        return Err(CalError::new(
+            "sending",
+            "This event is being sent. Delete it in a moment.",
+        ));
+    }
+    store.release(k)?;
     if never_sent {
         // It never reached the provider: there is nothing to delete there.
         for q in store.waiting()?.into_iter().filter(|q| q.key == k) {

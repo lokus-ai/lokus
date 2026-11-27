@@ -492,6 +492,16 @@ impl Store {
         Ok(taken == 1)
     }
 
+    /// Something is sending a change to this event right now.
+    pub fn taking(&self, key: &str) -> Result<bool> {
+        let n: i64 = self.db.query_row(
+            "SELECT COUNT(*) FROM sending s JOIN outbox o ON o.n = s.n WHERE o.key = ?1",
+            [key],
+            |r| r.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
     /// Put a taken change back: it could not be sent now.
     pub fn untake(&self, n: i64) -> Result<()> {
         self.db.execute("DELETE FROM sending WHERE n = ?1", [n])?;
