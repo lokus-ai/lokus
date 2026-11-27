@@ -444,7 +444,36 @@ impl Store {
                 self.drop_event(&key)?;
             }
         }
+        // Changes held on its occurrences go with it, or they would still show.
+        let mut q = self.db.prepare("SELECT key, json FROM held")?;
+        let held: Vec<(String, String)> = q
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        for (key, json) in held {
+            let same = serde_json::from_str::<Held>(&json).is_ok_and(|h| {
+                (h.event.account.as_str(), h.event.calendar.as_str()) == (account, calendar)
+                    && (h.event.series.as_deref() == Some(series) || h.event.id == series)
+            });
+            if same {
+                self.release(&key)?;
+            }
+        }
         Ok(())
+    }
+
+    /// The first occurrence of a series, of those read so far.
+    pub fn first_of(&self, account: &str, calendar: &str, series: &str) -> Result<Option<String>> {
+        let mut q = self.db.prepare(
+            "SELECT json FROM events WHERE account = ?1 AND calendar = ?2 ORDER BY start",
+        )?;
+        for json in q.query_map(params![account, calendar], |r| r.get::<_, String>(0))? {
+            if let Ok(e) = serde_json::from_str::<Event>(&json?) {
+                if e.series.as_deref() == Some(series) {
+                    return Ok(Some(e.key));
+                }
+            }
+        }
+        Ok(None)
     }
 
     // ---- held changes ----
