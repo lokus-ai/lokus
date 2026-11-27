@@ -66,7 +66,9 @@ export function TeamSettings() {
 
   const refused = current.status === "refused";
   // A relay of one's own knows the token typed for it, not the Lokus account that happens to be signed in.
-  const token = (refused ? null : linked?.token) ?? accountToken ?? (typedToken.trim() || null);
+  // It is that relay's alone: never sent to another address showing on this page.
+  const own = !refused && linked?.server.replace(/\/+$/, "") === server.trim().replace(/\/+$/, "") ? linked.token : null;
+  const token = own ?? accountToken ?? (typedToken.trim() || null);
   // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
   const connected = !refused && (current.status !== "off" || linked !== null);
   // Only a relay of one's own that turned its typed token away waits for the person: they type another.
@@ -205,7 +207,7 @@ export function TeamSettings() {
   const theirs = linked?.name ?? null;
   const size = here ? (members.length || known[here.id]?.members) : null;
   // On a relay of one's own, the person is whoever its token is, as that relay names them.
-  const who = linked?.token ? (members.find((m) => m.user === current.user)?.email ?? null) : (account?.email ?? null);
+  const who = own ? (members.find((m) => m.user === current.user)?.email ?? null) : (account?.email ?? null);
   const signedIn = who && <p className="settings-hint">Signed in as <b>{who}</b></p>;
   // Only what is in this folder is shared. Notes in a person's other workspaces are not.
   const tree = useStore(app, (st) => st.tree);
