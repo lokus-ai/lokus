@@ -111,16 +111,22 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   };
 
   /** Do something to the calendar, show what it left, and send it on if it is not being held. */
-  const act = async (name: string, args: Record<string, unknown>, send = true): Promise<CalEvent | null> => {
-    try {
-      const done = await runCalendar<{ event?: CalEvent | null }>(name, args);
-      await refresh();
-      if (send && !done.event?.pending && !done.event?.unsent) syncCalendar();
-      return done.event ?? null;
-    } catch (e) {
-      fail(e);
-      return null;
-    }
+  const last = useRef<Promise<unknown>>(Promise.resolve());
+  const act = (name: string, args: Record<string, unknown>, send = true): Promise<CalEvent | null> => {
+    // One after another, so a send never overtakes the edit made just before it.
+    const run = last.current.then(async () => {
+      try {
+        const done = await runCalendar<{ event?: CalEvent | null }>(name, args);
+        await refresh();
+        if (send && !done.event?.pending && !done.event?.unsent) syncCalendar();
+        return done.event ?? null;
+      } catch (e) {
+        fail(e);
+        return null;
+      }
+    });
+    last.current = run;
+    return run;
   };
 
   const change = (fields: Record<string, unknown>) => {
@@ -181,14 +187,23 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     keep("people", JSON.stringify(next));
   };
 
+  /** Mod-Enter: the field being typed in is taken first, then the draft or the pending change is sent. */
+  const submit = useRef<() => void>(() => undefined);
+  submit.current = async () => {
+    if (selected === DRAFT) return void create();
+    if (!current) return;
+    await last.current;
+    const { event } = await runCalendar<{ event: CalEvent | null }>("calendar.event.get", { key: current.key });
+    if (event?.pending || event?.unsent) void act("calendar.event.send", { key: event.key, notify: true });
+  };
+
   // Keys act on the calendar only while nothing is being typed.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e) => {
     const typing = e.target instanceof HTMLElement && (e.target.closest("input, textarea, select, [contenteditable]") || !e.target.closest(".calendar, body"));
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       (document.activeElement as HTMLElement | null)?.blur();
-      if (selected === DRAFT) void create();
-      else if (current?.pending || current?.unsent) void act("calendar.event.send", { key: current.key, notify: true });
+      setTimeout(() => submit.current(), 0);
       return e.preventDefault();
     }
     if (e.key === "Escape" && typing) return (document.activeElement as HTMLElement | null)?.blur();
