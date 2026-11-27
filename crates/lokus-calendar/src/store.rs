@@ -519,6 +519,15 @@ impl Store {
         Ok(taken == 1)
     }
 
+    /// The account signed in again: what was refused while it could not is tried again.
+    pub fn retry(&self, account: &str) -> Result<()> {
+        self.db.execute(
+            "UPDATE outbox SET error = NULL WHERE account = ?1",
+            [account],
+        )?;
+        Ok(())
+    }
+
     /// Something is sending a change to this event right now.
     pub fn taking(&self, key: &str) -> Result<bool> {
         let n: i64 = self.db.query_row(

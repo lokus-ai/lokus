@@ -242,7 +242,10 @@ async fn add_account(
         name,
     };
     auth::keep(&account.id, &tokens);
-    Store::open(dir)?.add_account(&account)?;
+    let store = Store::open(dir)?;
+    store.add_account(&account)?;
+    store.retry(&account.id)?;
+    drop(store);
     let synced = sync::run(dir).await?;
     Ok(json!({ "account": account, "sync": synced }))
 }
