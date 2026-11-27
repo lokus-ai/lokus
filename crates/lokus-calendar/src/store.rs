@@ -405,14 +405,18 @@ impl Store {
                 out.push(self.dress(event)?);
             }
         }
-        // Never-sent invitations exist only as held changes.
+        // Never-sent invitations exist only as held changes, and a held move puts an event at a
+        // time the provider's copy is not: both are found here, by the time the person sees.
         let mut q = self.db.prepare("SELECT json FROM held")?;
         for json in q.query_map([], |r| r.get::<_, String>(0))? {
             let Ok(held) = serde_json::from_str::<Held>(&json?) else {
                 continue;
             };
-            if held.event.unsent && !out.iter().any(|e| e.key == held.event.key) {
-                out.push(self.dress(held.event)?);
+            if out.iter().any(|e| e.key == held.event.key) {
+                continue;
+            }
+            if let Some(event) = self.event(&held.event.key)? {
+                out.push(event);
             }
         }
         out.retain(|e| {
