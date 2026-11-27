@@ -332,8 +332,31 @@ impl Store {
             let base = event;
             event = held.event;
             // What the provider said since is kept for everything the person did not change.
-            if !held.changed.iter().any(|c| c == "guests") && !base.guests.is_empty() {
-                event.guests = base.guests;
+            // (A never-sent invitation has nothing at the provider to keep.)
+            if !event.unsent && base.key == event.key {
+                let was = |name: &str| !held.changed.iter().any(|c| c == name);
+                if was("title") {
+                    event.title = base.title;
+                }
+                if was("time") {
+                    (event.start, event.end) = (base.start, base.end);
+                    (event.all_day, event.zone) = (base.all_day, base.zone);
+                }
+                if was("location") {
+                    event.location = base.location;
+                }
+                if was("description") {
+                    event.description = base.description;
+                }
+                if was("guests") {
+                    event.guests = base.guests;
+                }
+                if was("meeting") {
+                    event.meeting = base.meeting;
+                }
+                if was("repeat") {
+                    event.repeat = base.repeat;
+                }
             }
             event.pending = true;
             event.changes = held.changed;
