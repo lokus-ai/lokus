@@ -33,7 +33,14 @@ const STATUS: Record<string, string> = {
   signin: "Sign in again to keep syncing. Your edits are kept and sent once you have.",
 };
 /** Settings, Team: sync this vault with other people, and say who they are and what they may do. */
+/** The Team page of the open folder. Another folder, or the folder's relay becoming known, starts the page
+ *  afresh: an address, a typed token or a list of teams from the last folder is never used on this one. */
 export function TeamSettings() {
+  const of = useStore(app, (s) => `${s.vault?.root ?? ""}\n${s.team && s.team.root === s.vault?.root ? s.team.server : ""}`);
+  return <TeamPage key={of} />;
+}
+
+function TeamPage() {
   const current = useStore(app, (s) => s.sync);
   const account = useStore(app, (s) => s.account);
   const vault = useStore(app, (s) => s.vault);
@@ -63,12 +70,6 @@ export function TeamSettings() {
   useEffect(() => {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
   }, [account]);
-
-  // Another folder opened under this page takes its own relay's address: the page never keeps the last folder's.
-  useEffect(() => {
-    setServer(at);
-    setOwnServer(!HOME || at !== HOME);
-  }, [vault?.root, linked?.server]);
 
   const refused = current.status === "refused";
   // A relay of one's own knows the token typed for it, not the Lokus account that happens to be signed in.
