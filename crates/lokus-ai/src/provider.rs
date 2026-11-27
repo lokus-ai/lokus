@@ -72,6 +72,7 @@ async fn refusal(response: Response) -> AiError {
 /// or unreachable. Nothing has streamed yet at this point, so a retry is safe.
 async fn send(config: &Config, build: impl Fn() -> RequestBuilder) -> Result<Response> {
     let mut last = AiError::Busy;
+    let mut failed = 0;
     for attempt in 0..CROWDED_ATTEMPTS {
         if attempt > 0 {
             tokio::time::sleep(Duration::from_millis(
@@ -94,7 +95,9 @@ async fn send(config: &Config, build: impl Fn() -> RequestBuilder) -> Result<Res
                 false
             }
         };
-        if !crowded && attempt + 1 >= ATTEMPTS {
+        // Counted apart from the crowded answers, so a failure after those still has its tries.
+        failed += u32::from(!crowded);
+        if failed >= ATTEMPTS {
             break;
         }
     }
