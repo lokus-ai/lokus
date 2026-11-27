@@ -64,6 +64,12 @@ export function TeamSettings() {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
   }, [account]);
 
+  // Another folder opened under this page takes its own relay's address: the page never keeps the last folder's.
+  useEffect(() => {
+    setServer(at);
+    setOwnServer(!HOME || at !== HOME);
+  }, [vault?.root, linked?.server]);
+
   const refused = current.status === "refused";
   // A relay of one's own knows the token typed for it, not the Lokus account that happens to be signed in.
   // The folder's token goes only to the folder's own relay, never to another address typed on this page.
