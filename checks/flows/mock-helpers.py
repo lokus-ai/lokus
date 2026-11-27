@@ -12,6 +12,7 @@ side works; it says nothing about how a real model chooses.
   POST /web/search, /scrape  the search service, in Context.dev's shapes
   POST /mcp                  a tool server with one slow read tool, open_ask
   POST /pace {"helper": 3}   slow the helpers down, to look at them working
+  POST /pace {"crowded": 4}  answer the next four model requests "too many requests"
   GET  /seen                 every model request: who asked, how big, which tools it called
 """
 import json
@@ -336,6 +337,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_header("content-length", "0")
                 return self.end_headers()
             return self.json(200, {"jsonrpc": "2.0", "id": body["id"], "result": mcp(body)})
+        if PACE.get("crowded", 0) > 0:
+            PACE["crowded"] -= 1
+            SEEN.append({"who": "crowded", "at": time.time()})
+            return self.json(429, {"type": "error", "error": {"type": "rate_limit_error", "message": "too many requests"}})
         talk = Talk(body)
         who, came = "helper" if talk.helper else "assistant", time.time()
         time.sleep(PACE[who if who == "helper" else "model"])

@@ -26,9 +26,10 @@ const FALLBACK_MODELS: &[&str] = &[
     "claude-sonnet-5-5",
 ];
 const MAX_TOKENS: u32 = 32_000;
-/// A busy provider ("too many requests") is waited out: up to about a minute in all, since
-/// several helpers asking at once is when it happens.
-const ATTEMPTS: u32 = 7;
+const ATTEMPTS: u32 = 3;
+/// "Too many requests" is waited out for about a minute in all, since several helpers asking
+/// at once is when it happens. Anything else that fails gives up after `ATTEMPTS`.
+const CROWDED_ATTEMPTS: u32 = 7;
 /// How long a reply may go without sending anything before it is given up on.
 const QUIET: Duration = Duration::from_secs(120);
 
@@ -71,20 +72,30 @@ async fn refusal(response: Response) -> AiError {
 /// or unreachable. Nothing has streamed yet at this point, so a retry is safe.
 async fn send(config: &Config, build: impl Fn() -> RequestBuilder) -> Result<Response> {
     let mut last = AiError::Busy;
-    for attempt in 0..ATTEMPTS {
+    for attempt in 0..CROWDED_ATTEMPTS {
         if attempt > 0 {
             tokio::time::sleep(Duration::from_millis(
                 (600 * u64::from(attempt) * u64::from(attempt)).min(15_000),
             ))
             .await;
         }
-        match build().send().await {
+        let crowded = match build().send().await {
             Ok(response) if response.status().is_success() => return Ok(response),
-            Ok(response) => match refusal(response).await {
-                AiError::Busy => last = AiError::Busy,
-                other => return Err(other),
-            },
-            Err(e) => last = network(config)(e),
+            Ok(response) => {
+                let crowded = response.status() == StatusCode::TOO_MANY_REQUESTS;
+                match refusal(response).await {
+                    AiError::Busy => last = AiError::Busy,
+                    other => return Err(other),
+                }
+                crowded
+            }
+            Err(e) => {
+                last = network(config)(e);
+                false
+            }
+        };
+        if !crowded && attempt + 1 >= ATTEMPTS {
+            break;
         }
     }
     Err(last)

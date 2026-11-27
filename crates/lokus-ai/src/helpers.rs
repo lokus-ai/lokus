@@ -685,6 +685,16 @@ pub fn stop_all(dir: &Path) {
     });
 }
 
+/// The assistant's run is over: stop its helpers and wait until each has put down its work
+/// and said so, so the window hears their last word before the reply ends.
+pub async fn end(dir: &Path) {
+    stop_all(dir);
+    let waiting: Vec<_> = room(dir, |r| r.live.values().map(|l| l.done.clone()).collect());
+    for mut done in waiting {
+        let _ = done.wait_for(|d| *d).await.is_ok();
+    }
+}
+
 /// The person wrote while the assistant was working: hand it over at its next step.
 pub fn say(dir: &Path, text: &str) {
     room(dir, |r| {

@@ -1119,7 +1119,8 @@ A server that is not listed can be added by its address. A plugin can still brin
 search, a connected service's read tools, the web, helpers), they run at the same time and the
 results go back in the order they were asked for. Anything that changes something, shows
 something in the window or asks the person keeps its own turn, in order. A "too many requests"
-or "busy" answer from the provider is waited out and tried again, up to seven times.
+answer from the provider is waited out and tried again, up to seven times; a provider that
+cannot be reached or fails is given up on after three, as before.
 
 **The web.** `web_search` (a query; titles, links, short extracts) and `web_read` (a link; the
 page as text) are offered to the assistant and to helpers. The app asks the Lokus server

@@ -1171,6 +1171,9 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
         Ok(())
     }
     .await;
+    if let Some(dir) = &room {
+        helpers::end(dir).await;
+    }
     // The loop ran out while the model still wanted to go on: say so, so the person can.
     if result.is_ok() && stop == "tool_use" {
         stop = "step_limit".into();
