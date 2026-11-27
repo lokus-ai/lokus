@@ -279,6 +279,7 @@ pub fn ai_mcp_token_save(
 
 /// Run one request. Progress arrives as `ai:event` messages tagged with the
 /// chat; the reply to this call is the messages to add to the conversation.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn ai_send(
     app: AppHandle,
@@ -430,13 +431,20 @@ pub fn ai_helpers(app: AppHandle, conversation: String, id: Option<String>) -> V
 /// Stop one helper, or every helper of the conversation when `id` is left out. The assistant
 /// carries on and is told what each had so far.
 #[tauri::command]
-pub async fn ai_helper_stop(app: AppHandle, conversation: String, id: Option<String>) -> Result<(), Value> {
+pub async fn ai_helper_stop(
+    app: AppHandle,
+    conversation: String,
+    id: Option<String>,
+) -> Result<(), Value> {
     let Some(core) = app.state::<Shell>().core() else {
         return Ok(());
     };
     let dir = lokus_ai::helpers::dir(&core, &conversation);
     match id {
-        Some(id) => lokus_ai::helpers::stop(&dir, &id).await.map(|_| ()).map_err(|e| fail("ai", e)),
+        Some(id) => lokus_ai::helpers::stop(&dir, &id)
+            .await
+            .map(|_| ())
+            .map_err(|e| fail("ai", e)),
         None => {
             lokus_ai::helpers::stop_all(&dir);
             Ok(())

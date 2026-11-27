@@ -389,7 +389,10 @@ fn asked_for_research(messages: &[Value]) -> bool {
     let Some(last) = messages.iter().rev().find(|m| m["role"] == "user") else {
         return false;
     };
-    let starts = |text: &str| text.lines().any(|line| line.trim_start().starts_with("/research"));
+    let starts = |text: &str| {
+        text.lines()
+            .any(|line| line.trim_start().starts_with("/research"))
+    };
     match &last["content"] {
         Value::String(text) => starts(text),
         blocks => blocks
@@ -420,12 +423,24 @@ impl Reading<'_> {
         let at = self.offered.iter().position(|t| t.name == name)?;
         let reads = matches!(
             self.sources[at],
-            Source::Vault | Source::Server(..) | Source::Api(false) | Source::Messages | Source::Web | Source::Helper | Source::Findings
+            Source::Vault
+                | Source::Server(..)
+                | Source::Api(false)
+                | Source::Messages
+                | Source::Web
+                | Source::Helper
+                | Source::Findings
         );
         (reads && !self.offered[at].writes).then_some(at)
     }
 
-    async fn run(&self, at: usize, id: &str, name: &str, input: &Value) -> std::result::Result<String, String> {
+    async fn run(
+        &self,
+        at: usize,
+        id: &str,
+        name: &str,
+        input: &Value,
+    ) -> std::result::Result<String, String> {
         match &self.sources[at] {
             Source::Vault => match self.core {
                 Some(core) => tools::run(core, name, input),

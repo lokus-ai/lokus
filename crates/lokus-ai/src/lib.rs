@@ -19,6 +19,8 @@ pub mod provider;
 pub mod tools;
 pub mod web;
 
-pub use chat::{compact as compact_chat, send, AppRunner, Approver, Emitter, Event, Outcome, Request};
+pub use chat::{
+    compact as compact_chat, send, AppRunner, Approver, Emitter, Event, Outcome, Request,
+};
 pub use config::{Config, McpServer, Provider};
 pub use error::{AiError, Result};

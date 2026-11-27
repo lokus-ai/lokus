@@ -249,8 +249,14 @@ fn refuse(task: &Value, research: bool) -> Option<String> {
         }
     }
     match task["findings"].as_str() {
-        Some(_) if !research => Some("'findings' is only for research mode; call research_stage first".into()),
-        Some(path) if !(path.starts_with("research/") && path.ends_with(".md") && !path.contains("..")) => {
+        Some(_) if !research => {
+            Some("'findings' is only for research mode; call research_stage first".into())
+        }
+        Some(path)
+            if !(path.starts_with("research/")
+                && path.ends_with(".md")
+                && !path.contains("..")) =>
+        {
             Some("'findings' must be a note under research/, e.g. research/topic/part.md".into())
         }
         _ => None,
@@ -322,7 +328,11 @@ async fn work(launch: Launch, dir: PathBuf, id: String, mut stop: watch::Receive
     };
     let role = Role {
         file: path.clone(),
-        rounds: if start["research"] == true { RESEARCH_ROUNDS } else { ROUNDS },
+        rounds: if start["research"] == true {
+            RESEARCH_ROUNDS
+        } else {
+            ROUNDS
+        },
         findings: start["findings"].as_str().map(str::to_string),
     };
     let run = async {
@@ -386,7 +396,12 @@ async fn work(launch: Launch, dir: PathBuf, id: String, mut stop: watch::Receive
 fn report(work: &Value) -> String {
     let id = work["id"].as_str().unwrap_or_default();
     let name = work["name"].as_str().unwrap_or_default();
-    let count = steps(work["messages"].as_array().map(Vec::as_slice).unwrap_or_default());
+    let count = steps(
+        work["messages"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default(),
+    );
     let count = format!("{count} {}", if count == 1 { "step" } else { "steps" });
     let answer = capped(id, work["answer"].as_str().unwrap_or_default());
     match work["state"].as_str().unwrap_or_default() {
@@ -407,7 +422,15 @@ fn report(work: &Value) -> String {
 fn begin(launch: &Launch, dir: &Path, id: &str) -> watch::Receiver<bool> {
     let (stop, stopping) = watch::channel(false);
     let (finished, done) = watch::channel(false);
-    room(dir, |r| r.live.insert(id.to_string(), Live { stop, done: done.clone() }));
+    room(dir, |r| {
+        r.live.insert(
+            id.to_string(),
+            Live {
+                stop,
+                done: done.clone(),
+            },
+        )
+    });
     let (launch, dir, id) = (launch.clone(), dir.to_path_buf(), id.to_string());
     tokio::spawn(async move {
         work(launch, dir.clone(), id.clone(), stopping).await;
@@ -421,9 +444,10 @@ fn begin(launch: &Launch, dir: &Path, id: &str) -> watch::Receiver<bool> {
 /// writes something: the assistant should read that before the helpers go further.
 async fn wait(dir: &Path, ids: &[String], mut done: Vec<watch::Receiver<bool>>) -> String {
     let spoke = room(dir, |r| r.spoke.clone());
-    let all = futures_util::future::join_all(done.iter_mut().map(|d| async move {
-        d.wait_for(|d| *d).await.is_ok()
-    }));
+    let all = futures_util::future::join_all(
+        done.iter_mut()
+            .map(|d| async move { d.wait_for(|d| *d).await.is_ok() }),
+    );
     let interrupted = tokio::select! {
         _ = all => false,
         () = spoke.notified() => true,
@@ -438,8 +462,16 @@ async fn wait(dir: &Path, ids: &[String], mut done: Vec<watch::Receiver<bool>>) 
     out.join("\n\n")
 }
 
-pub async fn delegate(launch: &Launch, call: &str, input: &Value, research: bool) -> Result<String, String> {
-    let tasks = input["tasks"].as_array().filter(|t| !t.is_empty()).ok_or("'tasks' must list at least one task")?;
+pub async fn delegate(
+    launch: &Launch,
+    call: &str,
+    input: &Value,
+    research: bool,
+) -> Result<String, String> {
+    let tasks = input["tasks"]
+        .as_array()
+        .filter(|t| !t.is_empty())
+        .ok_or("'tasks' must list at least one task")?;
     let wrong: Vec<String> = tasks
         .iter()
         .enumerate()
@@ -460,7 +492,15 @@ pub async fn delegate(launch: &Launch, call: &str, input: &Value, research: bool
         let highest = std::fs::read_dir(&dir)
             .into_iter()
             .flatten()
-            .filter_map(|e| e.ok()?.file_name().to_str()?.strip_prefix('h')?.strip_suffix(".json")?.parse::<u32>().ok())
+            .filter_map(|e| {
+                e.ok()?
+                    .file_name()
+                    .to_str()?
+                    .strip_prefix('h')?
+                    .strip_suffix(".json")?
+                    .parse::<u32>()
+                    .ok()
+            })
             .max()
             .unwrap_or(0);
         tasks
@@ -469,19 +509,28 @@ pub async fn delegate(launch: &Launch, call: &str, input: &Value, research: bool
             .map(|(n, task)| {
                 let id = format!("h{}", highest + 1 + n as u32);
                 let findings = task["findings"].as_str();
-                let name: String = task["name"].as_str().unwrap_or_default().trim().chars().take(40).collect();
-                save(&dir.join(format!("{id}.json")), &json!({
-                    "id": id,
-                    "name": if name.is_empty() { format!("Helper {id}") } else { name },
-                    "call": call,
-                    "task": task,
-                    "research": research,
-                    "findings": findings,
-                    "state": "waiting",
-                    "asked": 0,
-                    "started": now(),
-                    "messages": [{ "role": "user", "content": brief(task, findings) }],
-                }));
+                let name: String = task["name"]
+                    .as_str()
+                    .unwrap_or_default()
+                    .trim()
+                    .chars()
+                    .take(40)
+                    .collect();
+                save(
+                    &dir.join(format!("{id}.json")),
+                    &json!({
+                        "id": id,
+                        "name": if name.is_empty() { format!("Helper {id}") } else { name },
+                        "call": call,
+                        "task": task,
+                        "research": research,
+                        "findings": findings,
+                        "state": "waiting",
+                        "asked": 0,
+                        "started": now(),
+                        "messages": [{ "role": "user", "content": brief(task, findings) }],
+                    }),
+                );
                 id
             })
             .collect()
@@ -499,7 +548,9 @@ pub async fn send(launch: &Launch, input: &Value) -> Result<String, String> {
         return Err("'message' must say what the helper should do next".into());
     }
     if room(&dir, |r| r.live.contains_key(&id)) {
-        return Err(format!("{id} is still working. helper_read with wait=true waits for it; helper_stop ends it."));
+        return Err(format!(
+            "{id} is still working. helper_read with wait=true waits for it; helper_stop ends it."
+        ));
     }
     let mut messages = work["messages"].as_array().cloned().unwrap_or_default();
     // A conversation that ended on a request (it was stopped, or failed) is carried on in the
@@ -531,15 +582,29 @@ pub async fn send(launch: &Launch, input: &Value) -> Result<String, String> {
 fn transcript(work: &Value) -> String {
     let mut out = String::new();
     for message in work["messages"].as_array().into_iter().flatten() {
-        let who = if message["role"] == "assistant" { "Helper" } else { "Asked" };
+        let who = if message["role"] == "assistant" {
+            "Helper"
+        } else {
+            "Asked"
+        };
         match &message["content"] {
             Value::String(text) => out.push_str(&format!("{who}: {text}\n\n")),
             blocks => {
                 for block in blocks.as_array().into_iter().flatten() {
                     match block["type"].as_str() {
-                        Some("text") => out.push_str(&format!("{who}: {}\n\n", block["text"].as_str().unwrap_or_default())),
-                        Some("tool_use") => out.push_str(&format!("Step: {} {}\n", block["name"].as_str().unwrap_or_default(), block["input"])),
-                        Some("tool_result") => out.push_str(&format!("Result: {}\n\n", block["content"].as_str().unwrap_or_default())),
+                        Some("text") => out.push_str(&format!(
+                            "{who}: {}\n\n",
+                            block["text"].as_str().unwrap_or_default()
+                        )),
+                        Some("tool_use") => out.push_str(&format!(
+                            "Step: {} {}\n",
+                            block["name"].as_str().unwrap_or_default(),
+                            block["input"]
+                        )),
+                        Some("tool_result") => out.push_str(&format!(
+                            "Result: {}\n\n",
+                            block["content"].as_str().unwrap_or_default()
+                        )),
                         _ => {}
                     }
                 }
@@ -562,7 +627,11 @@ pub async fn read(launch: &Launch, input: &Value) -> Result<String, String> {
     let text: Vec<char> = transcript(&work).chars().collect();
     let parts = text.len().div_ceil(PART_CHARS).max(1);
     let part = (input["part"].as_u64().unwrap_or(1).max(1) as usize).min(parts);
-    let slice: String = text.iter().skip((part - 1) * PART_CHARS).take(PART_CHARS).collect();
+    let slice: String = text
+        .iter()
+        .skip((part - 1) * PART_CHARS)
+        .take(PART_CHARS)
+        .collect();
     Ok(format!(
         "{id} ({}): {}. Part {part} of {parts}.\n\n{slice}",
         work["name"].as_str().unwrap_or_default(),
@@ -573,7 +642,9 @@ pub async fn read(launch: &Launch, input: &Value) -> Result<String, String> {
 /// Stop one helper and wait for it to put down what it has.
 pub async fn stop(dir: &Path, id: &str) -> Result<String, String> {
     load(dir, id)?;
-    let live = room(dir, |r| r.live.get(id).map(|l| (l.stop.clone(), l.done.clone())));
+    let live = room(dir, |r| {
+        r.live.get(id).map(|l| (l.stop.clone(), l.done.clone()))
+    });
     if let Some((stop, mut done)) = live {
         let _ = stop.send(true);
         let _ = done.wait_for(|d| *d).await.is_ok();

@@ -51,9 +51,14 @@ pub async fn call(web: Option<&Web>, name: &str, input: &Value) -> Result<String
         "web_search" => ("search", json!({ "query": input["query"] })),
         _ => ("read", json!({ "url": input["url"] })),
     };
-    let down = || format!("The web is not available right now: the Lokus server did not answer. {CARRY_ON}");
+    let down = || {
+        format!("The web is not available right now: the Lokus server did not answer. {CARRY_ON}")
+    };
     let response = reqwest::Client::new()
-        .post(format!("{}/v1/web/{path}", web.server.trim_end_matches('/')))
+        .post(format!(
+            "{}/v1/web/{path}",
+            web.server.trim_end_matches('/')
+        ))
         .bearer_auth(&web.token)
         .timeout(Duration::from_secs(60))
         .json(&body)
@@ -68,8 +73,15 @@ pub async fn call(web: Option<&Web>, name: &str, input: &Value) -> Result<String
     }
     if name == "web_read" {
         let text = answer["text"].as_str().unwrap_or_default();
-        let cut = if answer["cut"] == true { "\n[The page is longer; this is its start.]" } else { "" };
-        return Ok(format!("{}\n\n{text}{cut}", answer["url"].as_str().unwrap_or_default()));
+        let cut = if answer["cut"] == true {
+            "\n[The page is longer; this is its start.]"
+        } else {
+            ""
+        };
+        return Ok(format!(
+            "{}\n\n{text}{cut}",
+            answer["url"].as_str().unwrap_or_default()
+        ));
     }
     let found: Vec<String> = answer["results"]
         .as_array()
