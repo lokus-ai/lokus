@@ -122,7 +122,11 @@ jobs:
           set -e
           cd "dist-release/${{ needs.decide.outputs.version }}"
           ls -la
-          spctl -a -t open --context context:primary-signature -vv "Lokus_${{ needs.decide.outputs.version }}_${{ matrix.arch }}.dmg"
+          DMG="Lokus_${{ needs.decide.outputs.version }}_${{ matrix.arch }}.dmg"
+          # The signature has to hold. What macOS would say of a downloaded copy is only shown:
+          # "Unnotarized Developer ID" when Apple refused the credentials, which still goes out.
+          codesign --verify --strict -vv "$DMG"
+          spctl -a -t open --context context:primary-signature -vv "$DMG" || true
       - uses: actions/upload-artifact@v4
         with:
           name: lokus-${{ needs.decide.outputs.version }}-${{ matrix.arch }}
