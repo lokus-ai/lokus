@@ -250,6 +250,41 @@ img.cust-logo { object-fit: cover; background: var(--bg-hover); }
 .ai-own.failed { background: var(--danger); }
 .ai-step:hover .ai-own:not(.running):not(.failed), .ai-steps-head:hover .ai-own:not(.running):not(.failed) { background: var(--fg-2); }
 .ai-steps { font-size: var(--text-small); color: var(--fg-2); }
+.ai-helpers, .ai-research { font-size: var(--text-small); color: var(--fg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; }
+.ai-helpers.folded { border: 0; padding: 0; }
+.ai-helpers-top, .ai-research header { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.ai-research header strong { color: var(--fg); font-weight: 600; }
+.ai-research header .tree-name { flex: 1; }
+.ai-helpers-head { display: flex; align-items: center; gap: 8px; flex: 1; height: 26px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-sm); text-align: left; color: inherit; }
+.ai-helpers-head:not(:disabled):hover { background: var(--bg-hover); color: var(--fg); }
+.ai-helpers-head > .icon { color: var(--fg-3); }
+.ai-helpers-stop { flex: none; height: 22px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--fg-2); font-size: var(--text-caption); }
+.ai-helpers-stop:hover, .ai-helper-stop:hover { background: var(--bg-hover); color: var(--fg); }
+.ai-helper-rows, .ai-stages, .ai-changes { list-style: none; margin: 0; padding: 0; }
+.ai-helper-line, .ai-stage-line { display: flex; align-items: center; gap: 4px; min-height: 26px; }
+.ai-stage-line { gap: 8px; padding: 0 6px; margin-left: -6px; }
+.ai-stage .ai-helper-rows, .ai-changes { margin-left: 18px; }
+.ai-changes li { min-height: 22px; }
+.ai-helper-head { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; height: 26px; padding: 0 6px; margin-left: -6px; border-radius: var(--radius-sm); text-align: left; color: inherit; }
+.ai-helper-head:hover { background: var(--bg-hover); color: var(--fg); }
+.ai-helper-head:focus-visible, .ai-helper-stop:focus-visible, .ai-helpers-stop:focus-visible, .ai-helpers-head:focus-visible, .ai-helper-note:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ai-helper-mark { flex: none; width: 12px; text-align: center; color: var(--fg-3); font-size: 10px; }
+.running > * > .ai-helper-mark, .running > * > * > .ai-helper-mark { color: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.failed > * > * > .ai-helper-mark { color: var(--danger); }
+.ai-helper-name, .ai-stage-name { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+.ai-helper-state { flex: none; color: var(--fg-3); font-size: var(--text-caption); }
+.ai-helper-doing { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-helper-head small { flex: none; color: var(--fg-3); font-size: var(--text-caption); font-variant-numeric: tabular-nums; }
+.ai-helper-stop { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--radius-sm); color: var(--fg-3); }
+.ai-helper-work { margin: 2px 0 8px 18px; padding-left: 8px; border-left: 1px solid var(--border); }
+.ai-helper-work small { color: var(--fg-3); font-size: var(--text-caption); }
+.ai-helper-work dl { margin: 4px 0; }
+.ai-helper-work dl > div { display: flex; gap: 8px; }
+.ai-helper-work dt { flex: none; width: 56px; color: var(--fg-3); }
+.ai-helper-work dd { margin: 0; }
+.ai-helper-work ol { margin: 4px 0; padding-left: 18px; }
+.ai-helper-note { color: var(--accent); text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ai-helper-note:hover { text-decoration: underline; }
 .ai-steps-head { display: flex; align-items: center; gap: 8px; max-width: 100%; height: 28px; margin-left: -6px; padding: 0 8px 0 6px; border-radius: var(--radius-sm); text-align: left; }
 .ai-steps-head:hover { background: var(--bg-hover); color: var(--fg); }
 .ai-steps-head > .icon { flex: none; color: var(--fg-3); transition: transform var(--fast); }

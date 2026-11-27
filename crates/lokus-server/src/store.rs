@@ -277,6 +277,8 @@ impl Store {
              CREATE TABLE IF NOT EXISTS app_news (id TEXT PRIMARY KEY, body TEXT NOT NULL, at INTEGER NOT NULL);
              CREATE TABLE IF NOT EXISTS looks (workspace TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
                  at INTEGER NOT NULL, user TEXT NOT NULL);
+             CREATE TABLE IF NOT EXISTS web_use (user TEXT NOT NULL, day INTEGER NOT NULL,
+                 count INTEGER NOT NULL, PRIMARY KEY (user, day));
              PRAGMA user_version = {SCHEMA};"
         ))?;
         // Columns added after the first relay went live. A database made before them gains
@@ -642,6 +644,33 @@ impl Store {
         )?;
         tx.commit()?;
         Ok((true, at))
+    }
+
+    /// Count one web search or page read against `user`'s day (UTC). `false`, and nothing
+    /// counted, when the day's `ceiling` is already reached. Earlier days are cleared.
+    pub fn count_web(&self, user: &str, ceiling: i64) -> Result<bool> {
+        let mut db = self.db()?;
+        let tx = db.transaction()?;
+        let day = now() / 86_400;
+        tx.execute("DELETE FROM web_use WHERE day < ?1", [day])?;
+        let used: i64 = tx
+            .query_row(
+                "SELECT count FROM web_use WHERE user = ?1 AND day = ?2",
+                params![user, day],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(0);
+        if used >= ceiling {
+            return Ok(false);
+        }
+        tx.execute(
+            "INSERT INTO web_use (user, day, count) VALUES (?1, ?2, 1)
+             ON CONFLICT (user, day) DO UPDATE SET count = count + 1",
+            params![user, day],
+        )?;
+        tx.commit()?;
+        Ok(true)
     }
 
     /// The most recent changes to who may do what, newest first.
