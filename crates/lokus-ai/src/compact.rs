@@ -8,6 +8,8 @@ use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::config::{Config, Provider};
+use lokus_core::Core;
+
 use crate::error::{AiError, Result};
 use crate::provider;
 
@@ -276,6 +278,25 @@ fn summary_in(reply: &str) -> Option<String> {
     (!inside.is_empty()).then(|| inside.to_string())
 }
 
+/// The messages with each attached file's text in its place. A picture stays as its path: the
+/// summariser cannot look at it, and its name is all a note could ask to keep.
+fn read(core: Option<&Core>, messages: &[Value]) -> Vec<Value> {
+    let mut read = crate::files::expand(core, messages, &mut Default::default());
+    for (message, was) in read.iter_mut().zip(messages) {
+        let (Some(blocks), Some(were)) =
+            (message["content"].as_array_mut(), was["content"].as_array())
+        else {
+            continue;
+        };
+        for (block, was) in blocks.iter_mut().zip(were) {
+            if block["type"] == "image" && was["type"] == "attachment" {
+                *block = was.clone();
+            }
+        }
+    }
+    read
+}
+
 /// What a compaction made.
 #[derive(Debug, Clone, Serialize)]
 pub struct Compacted {
@@ -300,6 +321,7 @@ pub async fn compact(
     key: &mut String,
     messages: &[Value],
     note: &str,
+    core: Option<&Core>,
 ) -> Result<Compacted> {
     let at = split(messages, limit(config));
     if at == 0 {
@@ -307,9 +329,11 @@ pub async fn compact(
     }
     // Leave the summariser room to answer: about half the model's room, at four characters a token.
     let most = limit(config).map_or(TRANSCRIPT, |tokens| (tokens as usize) * 2);
+    // An attached file is read as the model was sent it, so a note can keep what is only in the file.
+    let read = read(core, &messages[..at]);
     let mut asked = format!(
         "<conversation>\n{}\n</conversation>",
-        transcript(&messages[..at], most)
+        transcript(&read, most)
     );
     if !note.trim().is_empty() {
         asked.push_str(&format!(
@@ -344,9 +368,7 @@ pub async fn compact(
         Some("The model declined to summarise this conversation")
     } else if summary.is_empty() {
         Some("The model wrote no summary")
-    } else if summary.len() >= weight(&messages[..at])
-        || near(limit(config), (summary.len() / 4) as u64)
-    {
+    } else if summary.len() >= weight(&read) || near(limit(config), (summary.len() / 4) as u64) {
         Some("The model's summary was no shorter than what it would replace")
     } else {
         None

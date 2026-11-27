@@ -447,6 +447,8 @@ function ContextDetail({
   busy: boolean;
   onClose: () => void;
 }) {
+  // A conversation kept before counts were recorded has none, and can still be compacted.
+  const said = useStore(chat, (s) => s.items.length > 0);
   const parts = usage?.parts ?? {};
   const total = PARTS.reduce((n, [key]) => n + (parts[key] ?? 0), 0);
   const full = usage?.used && usage.limit ? usage.used / usage.limit : 0;
@@ -503,7 +505,7 @@ function ContextDetail({
       )}
       <div className="ai-context-actions">
         <button
-          disabled={busy || !usage}
+          disabled={busy || !said}
           onClick={() => {
             onClose();
             void compactChat();
@@ -542,7 +544,8 @@ export function AiPanel() {
   const [slashAt, setSlashAt] = useState<number | null>(0);
   const slashWord = /^\/([a-z]*)$/i.exec(draft)?.[1]?.toLowerCase();
   const slashes =
-    slashWord === undefined || slashAt === null
+    // With a file attached the text is a message (see `send`), so Enter sends it as the button does.
+    slashWord === undefined || slashAt === null || files.length
       ? []
       : slashCommands().filter((c) => c.slash!.startsWith(slashWord));
   const scroll = useRef<HTMLDivElement>(null);

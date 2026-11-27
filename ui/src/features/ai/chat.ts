@@ -620,12 +620,24 @@ const stampKey = (root: string | undefined, id: string) => JSON.stringify([root,
  * turns out to have moved on, these go after what the file holds; nothing is found by position.
  */
 let fresh: unknown[] = [];
+/** What opening a conversation whose reply was cut off added for the model: the question again and how far the reply got. */
+let resumed: unknown[] = [];
 /** The person's turns in this window, counted, and how many of them a finished save has taken: a save that is counted twice changes nothing. */
 let turnsMade = 0;
 let turnsSaved = 0;
 /** Counts the times the file was found changed and taken in, so a save captured before that is not written over it. */
 let merges = 0;
 const SUMMARISED = "Earlier messages were summarised to make room.";
+
+/** How many messages the file held, summarised ones included, when the cut-off question was taken up. */
+let resumedAt = 0;
+
+/** What a message says, as blocks, without the summary a compaction put at its front. */
+function unsummarised(message: unknown): unknown[] {
+  const content = (message as { content?: unknown } | undefined)?.content;
+  const blocks: { type?: string; text?: unknown }[] = Array.isArray(content) ? content : [{ type: "text", text: content }];
+  return blocks.filter((b) => !(b.type === "text" && typeof b.text === "string" && b.text.startsWith("<conversation_summary>")));
+}
 
 /** The shown items from the person's `turns`-th turn from the end onward. */
 function lastTurns(items: Item[], turns: number): Item[] {
@@ -641,10 +653,20 @@ function lastTurns(items: Item[], turns: number): Item[] {
  */
 function mergedWith(kept: KeptBody, own: { fresh: unknown[]; items: Item[]; usage?: Usage | null; unanswered?: unknown }) {
   const theirs = kept.items ?? [];
+  // The cut-off question this window took up on opening is in the file whole once its own window finished it.
+  // It is looked for after what the file held on opening, summarised since or not, so the same words asked
+  // before do not pass for it. A file another window wrote over without it has no such message: it is kept.
+  // The file's writer orders a block's keys by name, so the two are compared with theirs ordered alike.
+  const said = (message: unknown) =>
+    JSON.stringify(unsummarised(message), (_, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v));
+  const asked = said(resumed[0]);
+  const since = [...(kept.earlier ?? []), ...(kept.history ?? [])].slice(resumedAt);
+  const whole = !kept.unanswered && since.some((message) => said(message) === asked);
+  const mine = whole ? own.fresh.filter((message) => !resumed.includes(message)) : own.fresh;
   const settled = kept.unanswered ? theirs.slice(0, Math.max(0, theirs.map((i) => i.kind).lastIndexOf("user"))) : theirs;
   return {
     items: [...settled, ...own.items.filter((i) => !(i.kind === "notice" && i.text === SUMMARISED))],
-    history: [...(kept.history ?? []), ...own.fresh],
+    history: [...(kept.history ?? []), ...mine],
     earlier: kept.earlier ?? [],
     compactions: kept.compactions ?? 0,
     // The file's count is of the conversation being carried on; this window's was of its older copy.
@@ -669,6 +691,15 @@ type KeptBody = {
  * the conversation, folded away. Rust does the work; a failure or a stop changes nothing here.
  */
 export async function compactChat(note = ""): Promise<boolean> {
+  const box = chat.get().draft;
+  const done = await summarise(note);
+  // Not compacted: the note goes back in the box like a message that was not sent, unless something newer is there.
+  const now = box.get();
+  if (!done && note.trim() && !now.text && !now.files.length && !now.importing) box.set({ text: `/compact ${note.trim()}` });
+  return done;
+}
+
+async function summarise(note: string): Promise<boolean> {
   const root = vaultRoot;
   if (chat.get().busy || !root || isSwitchingVault() || !history.length) {
     if (!chat.get().busy && !history.length)
@@ -720,9 +751,6 @@ export async function compactChat(note = ""): Promise<boolean> {
         ],
         usage: kept.body.usage ?? null,
       });
-      // The note that was typed goes back in the box, to be sent again or changed.
-      if (note.trim())
-        chat.get().draft.set({ text: `/compact ${note.trim()}` });
     };
     const kept = await load();
     if (sending !== requestId) return false;
@@ -938,7 +966,7 @@ export async function openChat(id: string): Promise<void> {
   history = kept.body.history ?? [];
   let items = kept.body.items ?? [];
   const cut = kept.body.unanswered;
-  let resumed: unknown[] = [];
+  resumed = [];
   if (cut) {
     // The reply was interrupted. Tell the model what had been asked and how
     // far it got, and tell the person, so "keep going" picks up where it left off.
@@ -946,6 +974,7 @@ export async function openChat(id: string): Promise<void> {
     const steps = since.flatMap((i) => (i.kind === "tool" && i.status === "ok" ? [i.name] : []));
     const said = since.map((i) => (i.kind === "assistant" ? i.text : "")).join("\n").trim();
     resumed = [cut, { role: "assistant", content: [{ type: "text", text: `${said ? `${said}\n\n` : ""}(This reply was interrupted before it finished. Steps that had completed: ${steps.length ? steps.join(", ") : "none"}. Check what is already done before doing it again. The request above still stands.)` }] }];
+    resumedAt = history.length + (kept.body.earlier?.length ?? 0);
     history = [...history, ...resumed];
     items = [...items.map((i) => (i.kind === "tool" && (i.status === "running" || i.status === "asking") ? { ...i, status: "failed" as const, result: "The reply was interrupted before this finished" } : i)), { kind: "notice", text: "This reply was cut off before it finished. Say “keep going” and it carries on from here." }];
   }

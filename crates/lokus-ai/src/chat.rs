@@ -700,7 +700,7 @@ pub async fn compact(
         config.model = listed.into_iter().next().unwrap_or_default();
     }
     config.model()?;
-    let done = crate::compact::compact(&http, &config, &mut key, messages, note).await?;
+    let done = crate::compact::compact(&http, &config, &mut key, messages, note, core).await?;
     let wire = crate::files::expand(core, &done.messages, &mut Default::default());
     Ok(json!({
         "messages": done.messages,
@@ -948,7 +948,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
             // If that does not work the conversation goes as it is, and may still fit.
             if crate::compact::near(limit, filled) && !tried {
                 tried = true;
-                match crate::compact::compact(&http, &config, &mut key, &messages, "").await {
+                match crate::compact::compact(&http, &config, &mut key, &messages, "", core.as_deref()).await {
                     Ok(done) => {
                         *made.lock().unwrap() = Some(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
                         dropped = done.replaced;
@@ -979,7 +979,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
             // The provider says it no longer fits: compact once and ask again.
             if turn.as_ref().err().is_some_and(crate::compact::overflowed) && !tried {
                 tried = true;
-                if let Ok(done) = crate::compact::compact(&http, &config, &mut key, &messages, "").await {
+                if let Ok(done) = crate::compact::compact(&http, &config, &mut key, &messages, "", core.as_deref()).await {
                     *made.lock().unwrap() = Some(Event::Compacted { summary: done.summary, kept_turns: done.kept_turns });
                     dropped = done.replaced;
                     messages = done.messages;
