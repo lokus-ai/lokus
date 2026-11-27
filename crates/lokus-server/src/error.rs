@@ -16,6 +16,12 @@ pub enum Error {
     NotFound(&'static str),
     #[error("{0}")]
     BadRequest(String),
+    /// The day's allowance is used up.
+    #[error("{0}")]
+    Limit(String),
+    /// Something this relay leans on is not set up or not answering.
+    #[error("{0}")]
+    Unavailable(String),
     #[error("storage: {0}")]
     Store(#[from] rusqlite::Error),
     #[error("internal: {0}")]
@@ -29,6 +35,8 @@ impl Error {
             Self::Forbidden => "forbidden",
             Self::NotFound(_) => "not_found",
             Self::BadRequest(_) => "bad_request",
+            Self::Limit(_) => "limit",
+            Self::Unavailable(_) => "unavailable",
             Self::Store(_) | Self::Internal(_) => "internal",
         }
     }
@@ -41,6 +49,8 @@ impl IntoResponse for Error {
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::Limit(_) => StatusCode::TOO_MANY_REQUESTS,
+            Self::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             Self::Store(_) | Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         // Internal detail goes to the log, never to the client.

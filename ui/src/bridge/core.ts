@@ -25,6 +25,10 @@ export interface VaultInfo {
   root: string;
   /** Whether the folder belongs to a team (told by the workspace list). */
   team?: boolean;
+  /** Which team workspace on the relay, and what that team was last heard to be called. */
+  workspace?: string | null;
+  server?: string | null;
+  teamName?: string | null;
 }
 
 let windowRoot: string | undefined;

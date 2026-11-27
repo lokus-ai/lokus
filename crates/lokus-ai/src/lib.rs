@@ -10,13 +10,17 @@ pub mod compact;
 pub mod config;
 pub mod error;
 pub mod files;
+pub mod helpers;
 pub mod imessage;
 pub mod mcp;
 pub mod mcp_login;
 pub mod own_api;
 pub mod provider;
 pub mod tools;
+pub mod web;
 
-pub use chat::{compact as compact_chat, send, AppRunner, Approver, Event, Outcome, Request};
+pub use chat::{
+    compact as compact_chat, send, AppRunner, Approver, Emitter, Event, Outcome, Request,
+};
 pub use config::{Config, McpServer, Provider};
 pub use error::{AiError, Result};

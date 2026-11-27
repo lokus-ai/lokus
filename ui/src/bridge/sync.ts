@@ -78,6 +78,8 @@ export interface Team {
   workspace: string;
   token: string | null;
   user?: string | null;
+  /** What the team is called on the relay, as last heard. */
+  name?: string | null;
   /** This computer connected the folder to this relay itself. A folder can come from anyone and name any relay. */
   known?: boolean;
 }

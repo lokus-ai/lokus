@@ -19,8 +19,10 @@ const USAGE: &str = "usage:
   lokus sync --vault DIR server=URL workspace=ID token=TOKEN
                                           (keep a folder in sync with a relay; prints what it does)
   lokus ai --vault DIR q=QUESTION [provider=anthropic|openai|chatgpt] [model=ID] [base_url=URL]
-           [approve=true] [mcp=URL] [login=true]       (ask the assistant; the key comes from the keychain,
-                                          or ANTHROPIC_API_KEY / OPENAI_API_KEY)
+           [approve=true] [mcp=URL] [login=true] [web=SERVER token=TOKEN] [chat=ID]
+                                          (ask the assistant; the key comes from the keychain, or
+                                          ANTHROPIC_API_KEY / OPENAI_API_KEY; `web` is the Lokus server
+                                          web searches go through, `chat` the conversation helpers file under)
   lokus imessage [chat=WHO] [search=TEXT] [limit=N]
                                           (what the assistant reads from Messages on this Mac)
 
@@ -329,6 +331,12 @@ fn ai(p: &Parsed) -> ExitCode {
         app: None,
         used: 0,
         unattended: false,
+        web: arg("web").map(|server| lokus_ai::web::Web {
+            server,
+            token: arg("token").unwrap_or_default(),
+        }),
+        chat: arg("chat"),
+        helper: None,
     };
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,
@@ -355,9 +363,9 @@ fn ai(p: &Parsed) -> ExitCode {
         let _ = answer.send(false);
         wait
     });
-    let print = |event: lokus_ai::Event| {
+    let print: lokus_ai::Emitter = std::sync::Arc::new(|event: lokus_ai::Event| {
         println!("{}", serde_json::to_string(&event).unwrap_or_default());
-    };
+    });
     match runtime.block_on(lokus_ai::send(request, print, refuse)) {
         Ok(outcome) => {
             println!("{}", serde_json::to_string(&outcome).unwrap_or_default());

@@ -510,12 +510,29 @@ drops that state and publishes the vault afresh, so nothing from the old workspa
 new one. Only one sync engine runs on a vault at a time: a second one (another window, the
 command line) is told the vault is already syncing. A burst of local edits is sent as one batch.
 
+**Which team, which account.** A folder can be called anything and two teams can share a name,
+so a team folder is shown by its team's own name and size wherever it is named: the top of the
+sidebar ("Clean", "4 members"), each entry of the workspace list (with "folder Clean 2" beside
+it when the folder is called something else) and the Team page ("Clean · 4 members"), which
+also says "Signed in as <email>" (on a relay of one's own with a typed token: the person that
+relay knows the token as, and the team is asked for with that token). A folder is never shown
+as a team: a team this account is not in, whose name the folder did not keep, reads "A team's
+folder". A team with nobody else in it reads "Only you". The names and
+sizes are asked of the relay (`/v1/workspaces` and each team's members;
+`ui/src/features/teams/teams.ts`) when someone signs in, a folder connects, the list is opened
+or the members change. Share is refused when the account is already in a team of that name,
+whatever the case of the letters: the page says so and offers "Open <team>", which opens that
+team's folder. The check is the app's, on the signed-in account's own list; the relay still
+lets another account make a team of the same name, and that account's folders then show their
+own team and size.
+
 **Where people manage it.** Settings, Team page: create or join a workspace, see who is in it,
 change a role, remove someone, invite by email and cancel invitations, leave or delete.
 There is no separate team window, and no way to stop syncing: a member's folder syncs.
 
 **A folder stays in its team.** The team a folder belongs to is kept in the folder itself,
-`.lokus/team.json` (the relay, the workspace and the account last connected;
+`.lokus/team.json` (the relay, the workspace, the account last connected and the team's name
+as last heard, kept only for showing;
 `crates/lokus-sync/src/team.rs`, the only code that writes it). A folder can be handed to
 anyone, so it holds no token: a token typed for a relay of one's own, and the fact that this
 computer connected the folder to that relay, are in the app's own `relays.json` (readable by
@@ -536,7 +553,14 @@ in a team is never given to another (`sync_keep` refuses), and its Team page nev
 Share, Join or Reconnect: it shows the team, and what the connection is doing. The one thing a
 person can be asked for is a sign-in that is truly gone: the sidebar and the Team page then
 read "Sign in again", one button, and after signing in the same folder connects to the same
-team. A sign-in that merely could not be renewed just now (no network, the account service
+team. An account that is signed in but is not in the folder's team is told so in those words,
+with its address: "<email> is not a member of this team" on the Team page and in the workspace
+list, "Not a member" at the foot of the sidebar, and one button, "Use another account". The
+folder stays its team's (so it is never offered Share or Join, which is how a second team of
+the same name was once made), and nothing typed in it is sent until an account in the team is
+signed in. Only the account the folder was last connected with can make it private by being
+left out of the relay's list; a folder with no account recorded is never made private that way.
+A sign-in that merely could not be renewed just now (no network, the account service
 down) is still shown as signed in and reads "Offline". A relay of one's own that turns its
 typed token away is the only case left that reads "Sync stopped", with a place to type another.
 
@@ -655,7 +679,7 @@ A workspace is a folder. A person can have several (one for a team, one for scho
 nothing is shared between them. The shell keeps the list of every folder opened in Lokus
 (`vaults.json` beside `last-vault`; a folder that is gone drops out). The workspace's name at
 the top of the sidebar opens the switcher, after Notion's: the open workspace with Settings
-and Invite people, the others with "Team" on the shared ones, invitations waiting with a Join
+and Invite people, the others with their team's name and size on the shared ones, invitations waiting with a Join
 button, and "Add workspace", which makes a folder of that name in Documents. A new workspace
 is private; sharing it is one step under Settings, Team. Every window still shows the same
 workspace: switching in one switches them all.
@@ -733,8 +757,15 @@ code, and someone who pressed Join on the page is not asked again inside Lokus.
   setup it is the step after signing in, and joining skips the questions about pages (those
   are the team's). Afterwards it is a card, and stays under Settings, Team if put away.
 - **Where the workspace lands.** A folder that holds the person's own notes is never merged
-  into a team silently: the card offers a new folder in Documents named after the workspace
-  (the default) or the open folder, saying how many notes would become the team's.
+  into a team silently: the card offers a new folder in Documents (the default) or the open
+  folder, saying how many notes would become the team's. The open folder is used only when
+  the person pressed it while that folder was open; opening another folder puts the choice
+  back to the new one. The new folder is the one `bringTeams` would give the team: named
+  after the workspace, or "name 2", "name 3" when a folder of that name holds files or is
+  another team's, so a private folder that happens to share the team's name is never the one
+  joined. A code typed under Settings, Team in a folder holding the person's own notes
+  joins the team and gives it such a folder too. The one folder joined with nothing asked is
+  a folder already this very team's, open with an account that was not in it.
 - **Limits.** One live invitation per address per workspace (a new one replaces the old); not
   to someone already inside; 60 emails a day per account; the same one again after a minute.
   A person's name is not printed if it looks like a link or an address, and everything typed
@@ -825,7 +856,7 @@ the API.
 Checked by `checks/flows/plugins.sh`, which installs a hostile fixture plugin in the real app and
 confirms that everything it must not be able to do is refused.
 
-## 8. AI and MCP (built; MCP discovery and workflow reads tried with GitHub)
+## 8. AI and MCP (built; MCP discovery and workflow reads tried with GitHub; helpers, web search and research tried with a stand-in model)
 
 `lokus-ai` holds all of it; the UI is a chat panel and a settings section.
 
@@ -1115,6 +1146,75 @@ the server entry until OAuth and bearer-token deletion succeed; an uncleared tok
 reused server name to a different address.
 
 A server that is not listed can be added by its address. A plugin can still bring its own.
+
+### Helpers, the web and research (built; tried with a stand-in model, not yet a real one)
+
+**Reads run together.** When one reply of the model asks for several tools that only read (notes,
+search, a connected service's read tools, the web, helpers), they run at the same time and the
+results go back in the order they were asked for. Anything that changes something, shows
+something in the window or asks the person keeps its own turn, in order. A "too many requests"
+answer from the provider is waited out and tried again, up to seven times; a provider that
+cannot be reached or fails is given up on after three, as before.
+
+**The web.** `web_search` (a query; titles, links, short extracts) and `web_read` (a link; the
+page as text) are offered to the assistant and to helpers. The app asks the Lokus server
+(`POST /v1/web/search`, `POST /v1/web/read`, with the account's sign-in); the server asks the
+search service (Context.dev: `POST /web/search` and `POST /web/scrape`) with its own key and
+hands back the result. The key is the server's `CONTEXT_DEV_API_KEY` and never reaches the app.
+The server counts searches and page reads per account per day (`web_use`) and refuses past
+`LOKUS_WEB_DAILY` (300 when unset). With no key the server says web search is not set up. Not
+signed in, over the ceiling, the server or the service down: the tool answers with one line
+saying which, and the assistant carries on with the workspace.
+
+**Helpers.** Four tools, offered in a conversation that has a workspace:
+
+- `delegate` starts one or more helpers. Each task must say `goal`, `context`, `look_in` and
+  `return` (and a `name` the person sees); a task missing one, or saying one word, is refused
+  before anything runs. All tasks of a call run together, four at a time; the call returns when
+  all have ended, with each helper's id and answer (cut at about 6,000 characters).
+- `helper_send` sends a helper a further message. It carries on from its saved conversation,
+  so nothing is read again.
+- `helper_read` returns a helper's full work, every step and result, 12,000 characters a part.
+- `helper_stop` stops a working helper and returns what it has so far.
+
+A helper is the same loop (`chat::send`) started from its brief and the workspace briefing
+instead of the conversation. It is offered only tools that read: no editing, moving, creating,
+recording, remembering, nothing shown in the window, no question to the person, no iMessage,
+and no helper tools, so a helper cannot start helpers. A change it tries is refused in words it
+can pass on. It may ask the model 40 times in a normal chat and 300 in research. Ids are `h1`,
+`h2`, … in the order started, never reused within a conversation. Each helper's whole
+conversation, brief, state and answer are one file, `.lokus/chats/<chat>.helpers/<id>.json`,
+written after every step, so the four tools and the rows in the chat work after a restart, and
+deleting the conversation deletes them. A helper that fails or is stopped comes back as one
+line saying so; the others' answers are kept. Nothing is run again by itself.
+
+The standing instructions say when to delegate (many notes or several independent sources),
+when not to (one note, a small question, dependent steps), how many (none, 2 to 4, waves of 4
+in research), to split by boundary, to follow up with `helper_send` instead of starting again,
+to treat answers as leads and open the cited source, and that every change is the assistant's.
+
+**Research.** A message starting `/research`, or the assistant calling `research_stage`, makes
+the reply a research run: no limit on steps for the assistant, 300 per helper, and helpers may
+be given a findings note. The stages are plan (`research/<topic>/plan.md`), gather (helpers,
+four at a time, each writing only its own `research/<topic>/<part>.md` with `write_findings`,
+the source of every claim beside it), check (a helper given only the draft report and the
+findings lists what the sources do not support), report (`research/<topic>/report.md`) and
+changes (the assistant alone edits notes and records tasks, with the usual approvals). The
+order is the assistant's instructions, not a second engine; `research_stage` only tells the
+window where it is.
+
+**Stop.** The chat's Stop ends the assistant and, with it, every helper it started, whatever
+ended the run. A helper stops between two steps or in the middle of waiting for the model, and
+keeps what it had. Findings notes already written stay.
+
+**What the person sees.** The helpers of one `delegate` are one block: a row each with the
+name, the state in words (Waiting, Working, Done, Stopped, Failed with the reason), what it is
+doing now, the time, and a stop button while it works; "Stop all" on the block. A row is a
+button that opens the brief, the steps, the findings note and the answer, read from the
+helper's file. A helper asked again is the same row, working, marked "asked again". Once all
+have ended the block folds to one line. A research run is one card with the five stages, each
+finished one linking its note, the helper rows inside Gather and the changes listed under
+Changes. Words typed while the assistant works are handed to it with its next step.
 
 **Not built:** connectors filling customer pages on their own (today the assistant can read a
 connected service when asked, and only a team's own backend pushes facts); an identity for

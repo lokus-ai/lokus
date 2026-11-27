@@ -17,6 +17,10 @@ pub struct Team {
     /// The account that was last connected, so another account's list of teams decides nothing.
     #[serde(default)]
     pub user: Option<String>,
+    /// What the team is called on the relay, as last heard. Only for showing: a folder can have
+    /// any name, and an account that is not in the team cannot ask the relay what it is called.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 /// Where it is kept, or nothing when `.lokus` is not a plain directory of this folder. A folder can
@@ -74,6 +78,7 @@ mod tests {
             server: "s".into(),
             workspace: workspace.into(),
             user: None,
+            name: None,
         };
         keep(dir.path(), &team("one")).unwrap();
         assert!(keep(dir.path(), &team("two")).is_err());
@@ -94,6 +99,7 @@ mod tests {
             server: "s".into(),
             workspace: "one".into(),
             user: None,
+            name: None,
         };
         let meta = dir.path().join(META_DIR);
         std::fs::create_dir(&meta).unwrap();

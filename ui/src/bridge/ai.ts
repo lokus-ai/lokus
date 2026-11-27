@@ -63,7 +63,11 @@ export type AiEvent =
   | { type: "tool"; id: string; name: string; input: Record<string, unknown>; asks: boolean }
   | { type: "tool_done"; id: string; ok: boolean; result: string }
   | { type: "notice"; message: string }
-  | { type: "compacted"; summary: string; kept_turns: number };
+  | { type: "compacted"; summary: string; kept_turns: number }
+  | { type: "helper"; id: string; name: string; call: string; state: Helper["state"]; tool: string | null; input: Record<string, unknown> | null; asked: number; error: string | null }
+  | { type: "research"; topic: string; stage: Stage; note: string | null };
+
+export type Stage = "plan" | "gather" | "check" | "report" | "changes";
 
 export interface AiOutcome {
   /** Messages to add to the conversation. Opaque here; they are sent back as they are. */
@@ -116,7 +120,35 @@ export const mcpLogout = (root: string, name: string) => call<void>("ai_mcp_logo
 export const chatgptLogin = () => call<void>("ai_chatgpt_login");
 export const chatgptLogout = () => call<void>("ai_chatgpt_logout");
 /** `briefing` is the conversation's standing context; send the same text for every message of a chat. `root` is the workspace it was asked in: if another is open by now, the request is refused. */
-export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string, used = 0, unattended = false) => call<AiOutcome>("ai_send", { chat, messages, briefing, root, used, unattended });
+/**
+ * `conversation` is the kept chat this request belongs to (its helpers' work is filed under it);
+ * `web` is where web searches are asked: the Lokus server and the account's sign-in.
+ */
+export const aiSend = (chat: string, messages: unknown[], briefing: string, root?: string, used = 0, unattended = false, conversation?: string, web?: { server: string; token: string }) =>
+  call<AiOutcome>("ai_send", { chat, messages, briefing, root, used, unattended, conversation, web });
+
+/** One helper as the window shows it. `calls`, `task` and `answer` come only when one helper is asked for. */
+export interface Helper {
+  id: string;
+  name: string;
+  /** The tool call that started it: which block of the chat its row belongs in. */
+  call: string;
+  state: "waiting" | "running" | "done" | "stopped" | "failed";
+  asked: number;
+  error: string | null;
+  steps: number;
+  began: number;
+  ended: number | null;
+  findings: string | null;
+  task?: Record<string, string>;
+  calls?: { name: string; input: Record<string, unknown> }[];
+  answer?: string;
+}
+export const aiHelpers = (conversation: string, id?: string) => call<Helper[]>("ai_helpers", { conversation, id });
+/** Stop one helper, or all of the conversation's when `id` is left out. */
+export const aiHelperStop = (conversation: string, id?: string) => call<void>("ai_helper_stop", { conversation, id });
+/** Something written while the assistant is working: it reads it at its next step. */
+export const aiSay = (conversation: string, text: string) => call<void>("ai_say", { conversation, text });
 
 /** A conversation after its earlier part was summarised: what to carry on from, and the summary. */
 export interface AiCompacted {

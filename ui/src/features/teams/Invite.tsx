@@ -360,13 +360,19 @@ export function PendingRows({
 function Invitation({ w, onLater }: { w: Waiting; onLater?(): void }) {
   const vault = useStore(app, (s) => s.vault);
   const joining = useStore(invited, (s) => s.joining);
-  // Looked at when shown: the folder open now, and whether joining in it would give anything away.
-  const taken = sharedAlready();
+  // The folder open now, and whether joining in it would give anything away.
+  // A folder whose team this account is not in is still that team's: another is not joined in it,
+  // and an invitation to that very team is joined right here, with nothing asked.
+  const sync = useStore(app, (s) => s.sync);
+  useStore(app, (s) => s.tree);
+  const outside = sync.status === "outsider";
+  const home = outside && sync.workspace === w.workspace;
+  const taken = sharedAlready() || (outside && !home);
   const own = vault ? ownNotes() : 0;
-  const ask = Boolean(vault) && !taken && own > 0;
-  const [where, setWhere] = useState<"here" | "new">(
-    taken || own > 0 ? "new" : "here",
-  );
+  const ask = Boolean(vault) && !taken && !home && own > 0;
+  // Notes of the person's own are shared only by their pressing "In this folder" while that folder is open.
+  const [picked, setPicked] = useState<string | null>(null);
+  const where = home || (ask ? picked === vault?.root : !taken) ? "here" : "new";
   const [problem, setProblem] = useState("");
 
   const go = () => {
@@ -400,18 +406,18 @@ function Invitation({ w, onLater }: { w: Waiting; onLater?(): void }) {
             role="radio"
             aria-checked={where === "new"}
             className={where === "new" ? "on" : ""}
-            onClick={() => setWhere("new")}
+            onClick={() => setPicked(null)}
           >
             <b>In its own folder</b>
             <small>
-              Documents / {w.name}. Your notes in “{vault?.name}” stay yours.
+              A new folder in Documents. Your notes in “{vault?.name}” stay yours.
             </small>
           </button>
           <button
             role="radio"
             aria-checked={where === "here"}
             className={where === "here" ? "on" : ""}
-            onClick={() => setWhere("here")}
+            onClick={() => setPicked(vault?.root ?? null)}
           >
             <b>In “{vault?.name}”</b>
             <small>

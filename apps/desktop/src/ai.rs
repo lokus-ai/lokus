@@ -279,6 +279,7 @@ pub fn ai_mcp_token_save(
 
 /// Run one request. Progress arrives as `ai:event` messages tagged with the
 /// chat; the reply to this call is the messages to add to the conversation.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn ai_send(
     app: AppHandle,
@@ -288,6 +289,8 @@ pub async fn ai_send(
     root: Option<String>,
     used: Option<u64>,
     unattended: Option<bool>,
+    conversation: Option<String>,
+    web: Option<lokus_ai::web::Web>,
 ) -> Result<Value, Value> {
     // App tools run in the window: it is told what to do and answers through `ai_act_done`.
     let (acting, window, tag) = (app.state::<Ai>().acting.clone(), app.clone(), chat.clone());
@@ -322,6 +325,9 @@ pub async fn ai_send(
         app: Some(act),
         used: used.unwrap_or(0),
         unattended: unattended.unwrap_or(false),
+        web,
+        chat: conversation,
+        helper: None,
     };
     let waiting = app.state::<Ai>().waiting.clone();
     let approve: Approver = Arc::new(move |id: &str| {
@@ -332,9 +338,9 @@ pub async fn ai_send(
         wait
     });
     let (emitter, tag) = (app.clone(), chat.clone());
-    let emit = move |event: lokus_ai::Event| {
+    let emit: lokus_ai::Emitter = Arc::new(move |event: lokus_ai::Event| {
         let _ = emitter.emit("ai:event", json!({ "chat": tag, "event": event }));
-    };
+    });
     let (done, outcome) = oneshot::channel::<Result<lokus_ai::Outcome, AiError>>();
     let task = tauri::async_runtime::spawn(async move {
         let _ = done.send(lokus_ai::send(request, emit, approve).await);
@@ -409,6 +415,48 @@ pub async fn ai_compact(
         Ok(Ok(value)) => Ok(value),
         Ok(Err(e)) => Err(e.body()),
         Err(_) => Err(fail("stopped", "stopped")),
+    }
+}
+
+/// A conversation's helpers: each one's name, state and numbers. With `id`, that helper's
+/// brief, steps and answer too. Read from the files beside the chat, so it works after a restart.
+#[tauri::command(async)]
+pub fn ai_helpers(app: AppHandle, conversation: String, id: Option<String>) -> Value {
+    match app.state::<Shell>().core() {
+        Some(core) => lokus_ai::helpers::list(&core, &conversation, id.as_deref()),
+        None => json!([]),
+    }
+}
+
+/// Stop one helper, or every helper of the conversation when `id` is left out. The assistant
+/// carries on and is told what each had so far.
+#[tauri::command]
+pub async fn ai_helper_stop(
+    app: AppHandle,
+    conversation: String,
+    id: Option<String>,
+) -> Result<(), Value> {
+    let Some(core) = app.state::<Shell>().core() else {
+        return Ok(());
+    };
+    let dir = lokus_ai::helpers::dir(&core, &conversation);
+    match id {
+        Some(id) => lokus_ai::helpers::stop(&dir, &id)
+            .await
+            .map(|_| ())
+            .map_err(|e| fail("ai", e)),
+        None => {
+            lokus_ai::helpers::stop_all(&dir);
+            Ok(())
+        }
+    }
+}
+
+/// The person wrote while the assistant was working: it reads this at its next step.
+#[tauri::command(async)]
+pub fn ai_say(app: AppHandle, conversation: String, text: String) {
+    if let Some(core) = app.state::<Shell>().core() {
+        lokus_ai::helpers::say(&lokus_ai::helpers::dir(&core, &conversation), &text);
     }
 }
 

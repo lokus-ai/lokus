@@ -54,6 +54,13 @@ async fn main() {
         Some(m) => eprintln!("invitations are emailed; their links point at {}", m.site),
         None => eprintln!("no LOKUS_MAIL_KEY: invitations are handed over as links, not emailed"),
     }
+    match lokus_server::web::Web::from_env() {
+        Some(web) => eprintln!(
+            "web search is on: {} searches and page reads per account per day",
+            web.daily()
+        ),
+        None => eprintln!("no CONTEXT_DEV_API_KEY: the assistant's web search is off"),
+    }
     let app = App::build(store, auth, Limits::from_env(), publish_key, mailer);
     let serve = axum::serve(listener, router(app));
     if let Err(e) = serve

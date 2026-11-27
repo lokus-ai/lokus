@@ -117,9 +117,26 @@ export function sharedAlready(): boolean {
   return ["connecting", "online", "offline"].includes(app.get().sync.status);
 }
 
+/** The team a folder belongs to: the one it keeps, else the one its sync state was made for. */
+const teamAt = async (root: string) => (await teamOf(root))?.workspace ?? (await syncBound(root));
+
 /**
- * Accept an invitation and start syncing: in the folder that is open, or in a new folder in
- * Documents named after the workspace.
+ * The folder in Documents a team is given: the one it had here before, when this computer still
+ * knows it; otherwise the first of "name", "name 2", ... that holds nothing and is no other
+ * team's. Never a folder of the person's own notes that happens to have the team's name.
+ */
+async function folderFor(team: string, called: string): Promise<{ root: string; name: string }> {
+  let name = called;
+  let at = await defaultVault(false, name);
+  for (let n = 2; (await teamAt(at.root)) !== team && ((await teamAt(at.root)) || !at.free); n++) {
+    at = await defaultVault(false, (name = `${called} ${n}`));
+  }
+  return { root: at.root, name };
+}
+
+/**
+ * Accept an invitation and start syncing: in the folder that is open, or in a folder of the
+ * workspace's own in Documents.
  */
 export async function join(w: Waiting, where: "here" | "new"): Promise<void> {
   // The folder open when it was pressed, not one opened while the relay answered.
@@ -131,10 +148,10 @@ export async function join(w: Waiting, where: "here" | "new"): Promise<void> {
     await relay<{ workspace: string }>(HOME, token, "POST", `/v1/invites/${w.code}/accept`);
     if (!root) {
       // Found first; made and opened only after this window has saved and the assistant has kept its reply.
-      const at = await defaultVault(false, w.name);
+      const at = await folderFor(w.workspace, w.name);
       root = at.root;
       await setVault(at.root, async () => {
-        const made = await defaultVault(true, w.name);
+        const made = await defaultVault(true, at.name);
         root = made.root;
         return made;
       });
@@ -185,8 +202,6 @@ export async function bringTeams(): Promise<void> {
     const mine = await relay<{ id: string; name: string }[]>(HOME, token, "GET", "/v1/workspaces");
     if (app.get().account?.id !== me) return;
     const member = (id: string | null) => id !== null && mine.some((w) => w.id === id);
-    /** The team a folder belongs to: the one it keeps, else the one its sync state was made for. */
-    const teamAt = async (root: string) => (await teamOf(root))?.workspace ?? (await syncBound(root));
     const here = new Set<string>();
     for (const v of await listVaults()) {
       const open = v.root === app.get().vault?.root;
@@ -198,7 +213,7 @@ export async function bringTeams(): Promise<void> {
         // Its setting was lost: put back with nobody asked.
         if (open && !sharedAlready()) await connectSync(HOME, team, null, v.root);
         else if (!open) await keepTeam(v.root, { server: HOME, workspace: team, token: null, user: me }).catch(() => {});
-      } else if (kept && !open && kept.server === HOME && kept.token === null && (!kept.user || kept.user === me)) {
+      } else if (kept && !open && kept.server === HOME && kept.token === null && kept.user === me) {
         // The open folder is told by its own connection being refused; the others are told here.
         // Only the list of the account the folder was connected with says so: another account's says nothing.
         await teamGone(v.root, `${v.name} was deleted, or you were removed from it. Its notes stay on this computer.`);
@@ -209,25 +224,19 @@ export async function bringTeams(): Promise<void> {
     // Last to first, so the first team is the one a person with nothing open is shown.
     for (const w of mine.filter((w) => !here.has(w.id)).reverse()) {
       try {
-        // The folder it had here before, when this computer still knows it; otherwise the first
-        // of "name", "name 2", ... that holds nothing and is no other team's.
-        let name = w.name;
-        let at = await defaultVault(false, name);
-        for (let n = 2; (await teamAt(at.root)) !== w.id && ((await teamAt(at.root)) || !at.free); n++) {
-          at = await defaultVault(false, (name = `${w.name} ${n}`));
-        }
+        const at = await folderFor(w.id, w.name);
         if (app.get().vault?.root === at.root) {
           // The open folder is the one: it is empty and has the team's name.
           await connectSync(HOME, w.id, null, at.root);
         } else if (app.get().vault) {
           // Someone is working in a folder: the team's is made beside it and waits in the list.
           await makeVault(at.root);
-          await keepTeam(at.root, { server: HOME, workspace: w.id, token: null, user: me });
+          await keepTeam(at.root, { server: HOME, workspace: w.id, token: null, user: me, name: w.name });
           notify(`${w.name} is in your workspaces now`);
         } else {
           let root = at.root;
           await setVault(at.root, async () => {
-            const made = await defaultVault(true, name);
+            const made = await defaultVault(true, at.name);
             root = made.root;
             return made;
           });
