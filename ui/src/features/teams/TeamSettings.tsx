@@ -10,7 +10,7 @@ import { Avatar } from "../profile/Profile";
 import { fromEmail, useProfiles } from "../profile/profiles";
 import { Row, Section } from "../settings/parts";
 import { type Invite, InviteDialog, InvitedList, PendingRows } from "./Invite";
-import { bringTeams, HOME, lookForInvites, type Role, whileMaking } from "./invites";
+import { bringTeams, HOME, lookForInvites, ownNotes, type Role, whileMaking } from "./invites";
 import { howMany, lookAtTeams, same, teams } from "./teams";
 
 interface Workspace {
@@ -64,9 +64,10 @@ export function TeamSettings() {
     void accessToken().then(setAccountToken, () => setAccountToken(null));
   }, [account]);
 
-  const token = accountToken ?? (typedToken.trim() || null);
-  // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
   const refused = current.status === "refused";
+  // A relay of one's own knows the token typed for it, not the Lokus account that happens to be signed in.
+  const token = (refused ? null : linked?.token) ?? accountToken ?? (typedToken.trim() || null);
+  // A folder that belongs to a team is shown as that team's whatever its connection is doing: it is never shared or joined anew.
   const connected = !refused && (current.status !== "off" || linked !== null);
   // Only a relay of one's own that turned its typed token away waits for the person: they type another.
   const kept = refused ? linked : null;
@@ -154,10 +155,11 @@ export function TeamSettings() {
     e.preventDefault();
     if (!token) return;
     const joined = await attempt(() => relay<{ workspace: string }>(server, token, "POST", `/v1/invites/${code.trim()}/accept`));
-    if (joined) {
-      setCode("");
-      connect(joined.workspace);
-    }
+    if (!joined) return;
+    setCode("");
+    // Notes of the person's own are not given to the team for typing a code: it gets its own folder, as a team joined anywhere does.
+    if (server === HOME && accountToken && ownNotes() > 0) return void bringTeams();
+    connect(joined.workspace);
   };
   /** Open the folder of a team this account is already in; one with no folder on this computer is given one first. */
   const openTeam = async (w: Workspace) => {
@@ -199,9 +201,12 @@ export function TeamSettings() {
   const owners = members.filter((m) => m.role === "owner").length;
   const outsider = current.status === "outsider";
   const teamName = here?.name ?? linked?.name ?? vault?.name ?? "Workspace";
+  // A team this account is not in is named only as the folder last heard it: a folder's own name is not a team's.
+  const theirs = linked?.name ?? null;
   const size = here ? (members.length || known[here.id]?.members) : null;
-  const who = account?.email ?? null;
-  const signedIn = who && <p className="settings-hint team-who">Signed in as <b>{who}</b></p>;
+  // On a relay of one's own, the person is whoever its token is, as that relay names them.
+  const who = linked?.token ? (members.find((m) => m.user === current.user)?.email ?? null) : (account?.email ?? null);
+  const signedIn = who && <p className="settings-hint">Signed in as <b>{who}</b></p>;
   // Only what is in this folder is shared. Notes in a person's other workspaces are not.
   const tree = useStore(app, (st) => st.tree);
   const shared = tree ? allNotes().length : 0;
@@ -213,7 +218,7 @@ export function TeamSettings() {
       <Section title="Team">
         <div className="team-head">
           <div className="team-head-main">
-            <strong>{teamName}</strong>
+            <strong>{theirs ?? "A team’s folder"}</strong>
             <small>
               <span className="sync-dot outsider" /> <b>{who ?? "This account"}</b> is not a member of this team.
             </small>
@@ -223,7 +228,7 @@ export function TeamSettings() {
           </button>
         </div>
         <p className="team-empty-note">
-          This folder belongs to the team <b>{teamName}</b>. Sign in with the account that is in it, or ask one of its owners to invite {who ?? "this account"}. Until then nothing typed here is sent to anyone; it stays on this computer.
+          This folder belongs to {theirs ? <>the team <b>{theirs}</b></> : "a team"}. Sign in with the account that is in it, or ask one of its owners to invite {who ?? "this account"}. Until then nothing typed here is sent to anyone; it stays on this computer.
         </p>
         <InvitedList />
       </Section>

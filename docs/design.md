@@ -514,7 +514,10 @@ command line) is told the vault is already syncing. A burst of local edits is se
 so a team folder is shown by its team's own name and size wherever it is named: the top of the
 sidebar ("Clean", "4 members"), each entry of the workspace list (with "folder Clean 2" beside
 it when the folder is called something else) and the Team page ("Clean · 4 members"), which
-also says "Signed in as <email>". A team with nobody else in it reads "Only you". The names and
+also says "Signed in as <email>" (on a relay of one's own with a typed token: the person that
+relay knows the token as, and the team is asked for with that token). A folder is never shown
+as a team: a team this account is not in, whose name the folder did not keep, reads "A team's
+folder". A team with nobody else in it reads "Only you". The names and
 sizes are asked of the relay (`/v1/workspaces` and each team's members;
 `ui/src/features/teams/teams.ts`) when someone signs in, a folder connects, the list is opened
 or the members change. Share is refused when the account is already in a team of that name,
@@ -754,8 +757,15 @@ code, and someone who pressed Join on the page is not asked again inside Lokus.
   setup it is the step after signing in, and joining skips the questions about pages (those
   are the team's). Afterwards it is a card, and stays under Settings, Team if put away.
 - **Where the workspace lands.** A folder that holds the person's own notes is never merged
-  into a team silently: the card offers a new folder in Documents named after the workspace
-  (the default) or the open folder, saying how many notes would become the team's.
+  into a team silently: the card offers a new folder in Documents (the default) or the open
+  folder, saying how many notes would become the team's. The open folder is used only when
+  the person pressed it while that folder was open; opening another folder puts the choice
+  back to the new one. The new folder is the one `bringTeams` would give the team: named
+  after the workspace, or "name 2", "name 3" when a folder of that name holds files or is
+  another team's, so a private folder that happens to share the team's name is never the one
+  joined. A code typed under Settings, Team in a folder holding the person's own notes
+  joins the team and gives it such a folder too. The one folder joined with nothing asked is
+  a folder already this very team's, open with an account that was not in it.
 - **Limits.** One live invitation per address per workspace (a new one replaces the old); not
   to someone already inside; 60 emails a day per account; the same one again after a minute.
   A person's name is not printed if it looks like a link or an address, and everything typed
