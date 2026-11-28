@@ -393,6 +393,16 @@ fn send(dir: &Path, args: &Value) -> Result<Value> {
             notify,
         )?;
     } else {
+        // A guest may have answered since the change was made here: their answer is the provider's.
+        for g in &mut event.guests {
+            let now = base
+                .iter()
+                .flat_map(|b| &b.guests)
+                .find(|b| b.email == g.email);
+            if let Some(b) = now {
+                g.reply.clone_from(&b.reply);
+            }
+        }
         let was = base
             .map(|b| json!({ "start": b.start, "repeat": b.repeat }))
             .unwrap_or(Value::Null);

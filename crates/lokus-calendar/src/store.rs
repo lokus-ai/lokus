@@ -362,6 +362,13 @@ impl Store {
                 }
                 if was("guests") {
                     event.guests = base.guests;
+                } else {
+                    // The person's list, with each guest's answer as the provider has it now.
+                    for g in &mut event.guests {
+                        if let Some(b) = base.guests.iter().find(|b| b.email == g.email) {
+                            g.reply.clone_from(&b.reply);
+                        }
+                    }
                 }
                 if was("meeting") {
                     event.meeting = base.meeting;
