@@ -170,7 +170,7 @@ pub fn unreachable(e: reqwest::Error) -> CalError {
     } else if e.is_timeout() {
         CalError::new("slow", "The calendar provider did not answer in time.")
     } else {
-        CalError::new("later", "The connection to the calendar provider was lost.")
+        CalError::new("lost", "The connection to the calendar provider was lost.")
     }
 }
 
@@ -450,7 +450,9 @@ pub async fn call(
             request = request.json(body);
         }
         let answer = match request.send().await.map_err(unreachable) {
-            Err(e) if e.code == "later" => match again.next() {
+            // Only a read is asked again here. A change may have been acted on before the
+            // connection was lost: `sync` looks at the provider first, then sends it again.
+            Err(e) if e.code == "lost" && method == reqwest::Method::GET => match again.next() {
                 Some(wait) => {
                     tokio::time::sleep(Duration::from_secs(wait)).await;
                     continue;

@@ -64,6 +64,7 @@ impl Store {
              CREATE INDEX IF NOT EXISTS events_by_time ON events (start, end);
              CREATE TABLE IF NOT EXISTS held (key TEXT PRIMARY KEY, json TEXT);
              CREATE TABLE IF NOT EXISTS sending (n INTEGER PRIMARY KEY, at TEXT);
+             CREATE TABLE IF NOT EXISTS tried (n INTEGER PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS outbox (n INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT, key TEXT, op TEXT, body TEXT,
                notify INTEGER, error TEXT, made TEXT);
              CREATE TABLE IF NOT EXISTS made (id TEXT PRIMARY KEY, key TEXT, at TEXT);
@@ -553,9 +554,36 @@ impl Store {
         body: &Value,
         notify: bool,
     ) -> Result<()> {
+        // One delete of an event, and one reply with the same answer, wait at a time: asked for
+        // three times at once it is still one request and one email.
         self.db.execute(
-            "INSERT INTO outbox (account, key, op, body, notify, made) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO outbox (account, key, op, body, notify, made) SELECT ?1, ?2, ?3, ?4, ?5, ?6
+             WHERE ?3 NOT IN ('delete', 'reply') OR NOT EXISTS (SELECT 1 FROM outbox WHERE key = ?2 AND op = ?3
+               AND error IS NULL AND (op = 'delete' OR json_extract(body, '$.answer') = json_extract(?4, '$.answer')))",
             params![account, key, op, body.to_string(), notify as i64, now()],
+        )?;
+        Ok(())
+    }
+
+    /// A change that was handed to the provider before, whose answer never came: it may have
+    /// been acted on.
+    pub fn tried(&self, n: i64) -> Result<bool> {
+        let tried: i64 =
+            self.db
+                .query_row("SELECT COUNT(*) FROM tried WHERE n = ?1", [n], |r| r.get(0))?;
+        Ok(tried > 0)
+    }
+
+    pub fn set_tried(&self, n: i64) -> Result<()> {
+        self.db
+            .execute("INSERT OR IGNORE INTO tried (n) VALUES (?1)", [n])?;
+        Ok(())
+    }
+
+    pub fn set_body(&self, n: i64, body: &Value) -> Result<()> {
+        self.db.execute(
+            "UPDATE outbox SET body = ?2 WHERE n = ?1",
+            params![n, body.to_string()],
         )?;
         Ok(())
     }
@@ -619,6 +647,7 @@ impl Store {
 
     pub fn sent(&self, n: i64) -> Result<()> {
         self.db.execute("DELETE FROM outbox WHERE n = ?1", [n])?;
+        self.db.execute("DELETE FROM tried WHERE n = ?1", [n])?;
         self.untake(n)
     }
 

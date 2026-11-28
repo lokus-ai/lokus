@@ -296,6 +296,13 @@ pub async fn get(account: &str, calendar: &str, id: &str) -> Result<Event> {
         enc(id)
     );
     let (_, body) = call(P, account, Method::GET, &url, None).await?;
+    if body["status"] == "cancelled" {
+        // Google keeps a deleted event readable for a while, marked so.
+        return Err(crate::CalError::new(
+            "missing",
+            "The provider no longer has this event.",
+        ));
+    }
     back(account, calendar, &body)
 }
 

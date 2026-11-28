@@ -437,6 +437,8 @@ class H(BaseHTTPRequestHandler):
             e = find(p[3]) if len(p) == 4 else None
             if not e or not (e["owner"] == me or any(a["email"] == me for a in e["attendees"])): return self.out(404, {"error": {"code": 404, "message": "Not Found"}})
             if method == "GET": return self.out(200, g_out(e, me))
+            # A deleted event is gone to every change, as on Google; it can still be read, marked cancelled.
+            if e["cancelled"]: return self.out(410, {"error": {"code": 410, "message": "Resource has been deleted"}})
             if method == "DELETE":
                 e["cancelled"] = True; bump(e); self.entry["mail"] = mailed(e, me) if notify else []
                 return self.out(204, "")
@@ -486,6 +488,8 @@ class H(BaseHTTPRequestHandler):
         if len(p) >= 3 and p[:2] == ["me", "events"]:
             e = find(p[2])
             if not e or not (e["owner"] == me or any(a["email"] == me for a in e["attendees"])): return self.out(404, {"error": {"code": "ErrorItemNotFound", "message": "The specified object was not found in the store."}})
+            # Graph no longer knows a deleted event.
+            if e["cancelled"]: return self.out(404, {"error": {"code": "ErrorItemNotFound", "message": "The specified object was not found in the store."}})
             if len(p) == 4 and method == "POST" and p[3] in ("accept", "decline", "tentativelyAccept"):
                 next(a for a in e["attendees"] if a["email"] == me)["response"] = {"accept": "accepted", "decline": "declined", "tentativelyAccept": "tentative"}[p[3]]
                 bump(e); self.entry["mail"] = [e["owner"]] if body.get("sendResponse", True) else []

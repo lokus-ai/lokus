@@ -209,6 +209,18 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     return run;
   };
 
+  // One reply at a time: a second key press or click while it is on its way does nothing.
+  const replying = useRef(false);
+  const [answering, setAnswering] = useState(false);
+  const reply = async (answer: "yes" | "no" | "maybe") => {
+    if (!current || replying.current) return;
+    replying.current = true;
+    setAnswering(true);
+    await act("calendar.event.reply", { key: current.key, scope, reply: answer });
+    replying.current = false;
+    setAnswering(false);
+  };
+
   const change = (fields: Record<string, unknown>) => {
     if (selected === DRAFT && draft) {
       const { meeting, repeat, ...rest } = fields;
@@ -315,7 +327,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     } else if (e.key === "f") void findTime(30);
     else if (current && selected !== DRAFT && e.key === "o") void note();
     else if (current && selected !== DRAFT && current.mine && e.key === "Backspace") deleting || void remove();
-    else if (current && !current.mine && "ynm".includes(e.key)) void act("calendar.event.reply", { key: current.key, scope, reply: { y: "yes", n: "no", m: "maybe" }[e.key] });
+    else if (current && !current.mine && "ynm".includes(e.key)) void reply(({ y: "yes", n: "no", m: "maybe" } as const)[e.key as "y" | "n" | "m"]);
     else return;
     e.preventDefault();
   };
@@ -606,7 +618,8 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           deleting={deleting}
           onKeep={() => setDeleting(false)}
           noteAsk={noteAsk}
-          onReply={(reply) => void act("calendar.event.reply", { key: current.key, scope, reply })}
+          onReply={(answer) => void reply(answer)}
+          replying={answering}
           onNote={(shared) => void note(shared)}
           onBlock={(account) => void act("calendar.block", { key: current.key, account }).then((made) => made && onNotice("Blocked as Busy on the other calendar."))}
           onClose={() => select(null)}

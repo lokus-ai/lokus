@@ -8,7 +8,7 @@ use std::path::Path;
 use chrono::{Duration, Utc};
 use serde_json::{json, Value};
 
-use crate::model::{key, now, split, stamp, time, Event, Result};
+use crate::model::{differ, key, now, split, stamp, time, Event, Result};
 use crate::provider::{self, Change};
 use crate::store::{Queued, Store};
 
@@ -37,6 +37,55 @@ fn restore(dir: &Path, q: &Queued) -> bool {
     Store::open(dir).is_ok_and(|store| store.set_position(account, calendar, None, "").is_ok())
 }
 
+/// Whether the provider already has this change. Asked before a change is sent a second time:
+/// its first answer was lost, so it may have been acted on, and sending it again would email
+/// the guests again.
+async fn applied(dir: &Path, q: &Queued) -> Result<bool> {
+    let (_, calendar, id) = split(&q.key)?;
+    if q.op == "create" {
+        // A new event carries an id of ours: the provider cannot make it twice.
+        return Ok(false);
+    }
+    let account = Store::open(dir)?.account(&q.account)?;
+    let mut ours: Option<Event> = serde_json::from_value(q.body["event"].clone()).ok();
+    let series = ours
+        .as_ref()
+        .and_then(|e| e.series.clone())
+        .filter(|_| q.body["scope"] == "all");
+    let theirs = match provider::get(&account, calendar, series.as_deref().unwrap_or(id)).await {
+        Err(e) if matches!(e.code, "missing" | "gone") => return Ok(q.op == "delete"),
+        other => other?,
+    };
+    let changed: Vec<String> =
+        serde_json::from_value(q.body["changed"].clone()).unwrap_or_default();
+    Ok(match (q.op.as_str(), ours.as_mut()) {
+        ("reply", _) => theirs.reply == q.body["answer"].as_str().unwrap_or("accepted"),
+        ("update", Some(ours)) if !changed.is_empty() => {
+            if series.is_some() && changed.iter().any(|c| c == "time") {
+                // The series itself is compared with where it was to be moved to.
+                let (Some(start), Some(end)) =
+                    (q.body["to"]["start"].as_str(), q.body["to"]["end"].as_str())
+                else {
+                    return Ok(false);
+                };
+                ours.start = start.to_string();
+                ours.end = end.to_string();
+            }
+            // The same moment written in another zone is the same time.
+            if time(&ours.start).ok() == time(&theirs.start).ok()
+                && time(&ours.end).ok() == time(&theirs.end).ok()
+            {
+                ours.start.clone_from(&theirs.start);
+                ours.end.clone_from(&theirs.end);
+                ours.zone.clone_from(&theirs.zone);
+            }
+            let still = differ(&theirs, ours);
+            !changed.iter().any(|c| still.contains(c))
+        }
+        _ => false,
+    })
+}
+
 async fn send(dir: &Path, q: &Queued) -> Result<()> {
     let account = Store::open(dir)?.account(&q.account)?;
     let (_, calendar, id) = split(&q.key)?;
@@ -63,13 +112,24 @@ async fn send(dir: &Path, q: &Queued) -> Result<()> {
             let target = series.clone().unwrap_or_else(|| id.to_string());
             if series.is_some() && changed.iter().any(|c| c == "time") {
                 // "All events": the whole series moves by as much as this occurrence did.
-                let whole = provider::get(&account, calendar, &target).await?;
-                let was = time(q.body["was"]["start"].as_str().unwrap_or(&event.start))?;
-                let moved = time(&event.start)? - was;
-                let length = time(&event.end)? - time(&event.start)?;
-                let start = time(&whole.start)? + moved;
-                event.start = stamp(start);
-                event.end = stamp(start + length);
+                // Worked out once and kept with the change: sent again, it is not moved twice.
+                if let (Some(start), Some(end)) =
+                    (q.body["to"]["start"].as_str(), q.body["to"]["end"].as_str())
+                {
+                    event.start = start.to_string();
+                    event.end = end.to_string();
+                } else {
+                    let whole = provider::get(&account, calendar, &target).await?;
+                    let was = time(q.body["was"]["start"].as_str().unwrap_or(&event.start))?;
+                    let moved = time(&event.start)? - was;
+                    let length = time(&event.end)? - time(&event.start)?;
+                    let start = time(&whole.start)? + moved;
+                    event.start = stamp(start);
+                    event.end = stamp(start + length);
+                    let mut body = q.body.clone();
+                    body["to"] = json!({ "start": event.start, "end": event.end });
+                    Store::open(dir)?.set_body(q.n, &body)?;
+                }
             }
             if series.is_some() {
                 event.repeat = event
@@ -211,7 +271,35 @@ pub async fn run(dir: &Path) -> Result<Value> {
             stuck.push(q.key.clone());
             continue;
         }
-        match send(dir, &q).await {
+        // Handed over before with no answer (too slow, cut off, or the app was closed): the
+        // provider is asked what it has before the change goes a second time.
+        let mut again = Store::open(dir)?.tried(q.n)?;
+        Store::open(dir)?.set_tried(q.n)?;
+        let mut q = q;
+        let done = loop {
+            if again {
+                match applied(dir, &q).await {
+                    Ok(true) => break Ok(()),
+                    Ok(false) => {}
+                    Err(e) => break Err(e),
+                }
+            }
+            match send(dir, &q).await {
+                // Tried once more straight away, having looked first.
+                Err(e) if matches!(e.code, "slow" | "lost") && !again => {
+                    again = true;
+                    if let Some(now) = Store::open(dir)?
+                        .waiting()?
+                        .into_iter()
+                        .find(|w| w.n == q.n)
+                    {
+                        q = now;
+                    }
+                }
+                other => break other,
+            }
+        };
+        match done {
             Ok(()) => {
                 Store::open(dir)?.sent(q.n)?;
                 sent += 1;

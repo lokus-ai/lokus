@@ -30,7 +30,7 @@ impl CalError {
     }
     /// Not refused: the change stays waiting and is tried again.
     pub fn waits(&self) -> bool {
-        matches!(self.code, "offline" | "slow" | "later")
+        matches!(self.code, "offline" | "slow" | "later" | "lost")
     }
 }
 

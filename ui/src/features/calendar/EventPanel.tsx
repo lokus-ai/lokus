@@ -36,6 +36,8 @@ interface Props {
   /** What to say before a meeting note is written into a folder that syncs to a team. */
   noteAsk: string | null;
   onReply: (answer: "yes" | "no" | "maybe") => void;
+  /** A reply is on its way: the buttons wait for it. */
+  replying: boolean;
   onNote: (shared?: boolean) => void;
   onBlock: (account: string) => void;
   onClose: () => void;
@@ -233,7 +235,7 @@ export function EventPanel(p: Props) {
             {(["yes", "no", "maybe"] as const).map((answer) => {
               const on = e.reply === { yes: "accepted", no: "declined", maybe: "tentative" }[answer];
               return (
-                <button key={answer} className={on ? "active" : ""} aria-pressed={on} onClick={() => p.onReply(answer)}>
+                <button key={answer} className={on ? "active" : ""} aria-pressed={on} disabled={p.replying} onClick={() => p.onReply(answer)}>
                   {answer[0].toUpperCase() + answer.slice(1)} <kbd>{answer[0].toUpperCase()}</kbd>
                 </button>
               );
