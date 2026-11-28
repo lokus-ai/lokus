@@ -469,3 +469,12 @@ the original decision dates, not the date of this backfill. The rows above remai
 - **Decided by:** Pratham, 2026-11-27, relayed by the parent session: "Don't you think that should auto-close when the calendar is open or something, or should auto-adjust? Why is everything in the main calendar fucking squished", "There are so many texts which are overflowing in random places. It's not properly managed. It's not responsive.", and "Premiumness comes from very minute details, very, very minute details, but you have to at least get the fucking basics right." The fixes to the review's findings and the layout rules (136-pixel days, what the bar gives up first) were decided by Devin, on evidence, under the parent's instruction to fix all findings in the same PR.
 - **PR:** #634, into `next`.
 - **Reversal:** Revert the commits after `20d1ed7` on the PR's branch.
+
+### Calendar: refused changes, ended sign-ins and assistant retries
+
+- **Date:** 2026-11-28
+- **Change:** Before: discarding a refused change dropped it before the provider's copy was read, so with the provider out of reach the edit stayed on the calendar with nothing waiting; a delete the provider refused left a waiting change with no event to open; an account whose sign-in the provider had ended still showed as signed in; a `Retry-After` on the last try, or given as a date, was ignored; the assistant could retry a refused invitation under "allow all"; a change made by the assistant did not refresh other windows. Now: discard reads the provider's copy first and drops nothing if it cannot; a refused delete puts the event back; an ended sign-in shows "Sign in again"; the account is left alone until the time the provider named; a retry is asked about each time; every window is told.
+- **Why:** Devin Review of PR #634 at `9deaf20` (seven findings). Run against the provider stand-in: refused delete, discard out of reach, ended sign-in.
+- **Decided by:** Devin, on evidence, under the parent's instruction of 2026-11-27: "Fix all of these in the same PR, prove each in the real app with pictures and stand-in request logs, then report once."
+- **PR:** #634, into `next`.
+- **Reversal:** Revert the commits after `9deaf20` on the PR's branch.

@@ -442,7 +442,11 @@ seconds, or after the `Retry-After` it names; past that the change waits for a l
 the account is left alone until a long `Retry-After` has passed). Only another 4xx is a refusal:
 the change stays, the event shows one plain sentence (never the provider's own text) with "Retry"
 and "Discard" (`calendar.event.retry`, `calendar.event.discard`), and later changes to that event
-wait behind it. An answer that does not come within 30 seconds, or is cut off, may still have been
+wait behind it. Discard first reads the event back from the provider and drops nothing when it
+cannot be asked. A refused delete has no event left to show the choice on, so the event comes back
+as the provider has it and nothing is left waiting. A sign-in the provider has ended
+(`invalid_grant` on renewal) is forgotten, so the account shows "Sign in again". The assistant asks
+each time before a retry, as for anything that emails people. An answer that does not come within 30 seconds, or is cut off, may still have been
 acted on, so the change is sent again, and a new event cannot be made twice by that: Google is
 sent an event `id` of ours and Microsoft a `transactionId` (both the event's local id, which is in
 the queue with the change), and a second send is answered with the event already made. That id is
