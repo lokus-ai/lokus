@@ -418,7 +418,9 @@ fn write(e: &Event, changed: Option<&[String]>) -> Value {
             // A rule Lokus cannot put in Graph's words is not sent at all: sending nothing
             // would turn the series into one event.
             Some(rule) => {
-                if let Some(pattern) = to_recurrence(rule, &e.start, &e.zone) {
+                if let Some(pattern) =
+                    to_recurrence(rule, &e.start, if e.all_day { "UTC" } else { &e.zone })
+                {
                     out["recurrence"] = pattern;
                 }
             }
