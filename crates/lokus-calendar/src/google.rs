@@ -101,6 +101,7 @@ fn read(account: &str, calendar: &str, e: &Value) -> Option<Event> {
         location: e["location"].as_str().unwrap_or_default().to_string(),
         description: e["description"].as_str().unwrap_or_default().to_string(),
         guests,
+        uid: e["iCalUID"].as_str().unwrap_or_default().to_string(),
         organizer: e["organizer"]["email"]
             .as_str()
             .unwrap_or_default()

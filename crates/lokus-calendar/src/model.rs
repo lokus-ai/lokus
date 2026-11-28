@@ -141,6 +141,9 @@ pub struct Event {
     pub calendar: String,
     /// The provider's id; `local-…` until the provider has it.
     pub id: String,
+    /// The invitation's own id (iCalUID): the same on every account the event reaches.
+    #[serde(default)]
+    pub uid: String,
     pub title: String,
     pub start: String,
     pub end: String,

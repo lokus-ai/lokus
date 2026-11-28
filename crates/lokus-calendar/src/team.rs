@@ -31,10 +31,10 @@ pub fn merged(mut times: Vec<(String, String)>) -> Vec<(String, String)> {
     out
 }
 
-/// When this person is busy over the next two weeks, from every connected account.
+/// When this person is busy over the next two weeks, from every calendar they have not hidden.
 fn own_busy(store: &Store) -> Result<Vec<(String, String)>> {
     let (from, to) = (Utc::now(), Utc::now() + Duration::days(DAYS));
-    let events = store.events(&stamp(from), &stamp(to), true)?;
+    let events = store.events(&stamp(from), &stamp(to), false)?;
     Ok(merged(
         events
             .into_iter()
@@ -56,7 +56,6 @@ pub fn publish(dir: &Path, root: &Path) -> Result<Value> {
     let Some(first) = accounts.first() else {
         return Ok(json!({ "written": false, "reason": "no calendar account" }));
     };
-    let emails: Vec<&str> = accounts.iter().map(|a| a.email.as_str()).collect();
     let lines: String = own_busy(&store)?
         .iter()
         .map(|(s, e)| format!("- {s}/{e}\n"))
@@ -80,7 +79,7 @@ pub fn publish(dir: &Path, root: &Path) -> Result<Value> {
         "---\ntype: availability\nmember: {}\nname: {}\nemails: [{}]\nupdated: {}\n---\n{body}",
         first.email,
         first.name,
-        emails.join(", "),
+        first.email,
         now()
     );
     vault.write_file(&rel, text.as_bytes())?;

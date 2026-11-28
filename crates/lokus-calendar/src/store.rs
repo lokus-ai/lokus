@@ -69,6 +69,11 @@ impl Store {
              CREATE TABLE IF NOT EXISTS notes (key TEXT PRIMARY KEY, folder TEXT, path TEXT);
              CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT);",
         )?;
+        // Events read before each carried its invitation id are read once more, in full.
+        db.execute_batch(
+            "UPDATE calendars SET position = NULL WHERE NOT EXISTS (SELECT 1 FROM settings WHERE name = 'uids');
+             INSERT OR IGNORE INTO settings (name, value) VALUES ('uids', '1');",
+        )?;
         Ok(Self { db })
     }
 
@@ -128,11 +133,18 @@ impl Store {
             self.db
                 .execute(&format!("DELETE FROM {table} WHERE account = ?1"), [id])?;
         }
-        let like = format!("{}|%", id.replace('%', ""));
-        self.db
-            .execute("DELETE FROM held WHERE key LIKE ?1", [&like])?;
-        self.db
-            .execute("DELETE FROM notes WHERE key LIKE ?1", [&like])?;
+        // By the start of the key, not LIKE: an address has `_` in it, which LIKE reads as any letter.
+        let start = format!("{id}|");
+        for table in ["held", "notes"] {
+            self.db.execute(
+                &format!("DELETE FROM {table} WHERE substr(key, 1, ?2) = ?1"),
+                params![start, start.chars().count() as i64],
+            )?;
+        }
+        self.db.execute(
+            "DELETE FROM sending WHERE n NOT IN (SELECT n FROM outbox)",
+            [],
+        )?;
         self.db
             .execute("DELETE FROM accounts WHERE id = ?1", [id])?;
         if self
@@ -427,6 +439,30 @@ impl Store {
                     .any(|(a, c)| *a == e.account && *c == e.calendar)
         });
         out.sort_by(|a, b| a.start.cmp(&b.start));
+        // One invitation reaching two connected accounts is one event: the organiser's copy is
+        // the one shown, or else the first account's.
+        let order: Vec<String> = self.accounts()?.into_iter().map(|a| a.id).collect();
+        let rank = |e: &Event| (!e.mine, order.iter().position(|a| *a == e.account));
+        let mut seen: Vec<usize> = Vec::new();
+        for i in 0..out.len() {
+            let twin = seen.iter().copied().find(|&j| {
+                !out[i].uid.is_empty() && out[j].uid == out[i].uid && out[j].start == out[i].start
+            });
+            match twin {
+                Some(j) if rank(&out[i]) < rank(&out[j]) => {
+                    seen.retain(|&k| k != j);
+                    seen.push(i);
+                }
+                Some(_) => {}
+                None => seen.push(i),
+            }
+        }
+        seen.sort_unstable();
+        let mut at = 0;
+        out.retain(|_| {
+            at += 1;
+            seen.binary_search(&(at - 1)).is_ok()
+        });
         Ok(out)
     }
 
@@ -611,6 +647,15 @@ impl Store {
                 |r| r.get(0),
             )
             .optional()?)
+    }
+
+    /// The events that have a note in this folder: a note in another folder is not this one's.
+    pub fn noted(&self, folder: &str) -> Result<Vec<String>> {
+        let mut q = self.db.prepare("SELECT key FROM notes WHERE folder = ?1")?;
+        let keys = q
+            .query_map([folder], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(keys)
     }
 
     pub fn forget_note(&self, key: &str) -> Result<()> {

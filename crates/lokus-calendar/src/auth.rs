@@ -376,9 +376,12 @@ pub async fn call(
         let mut request = http()
             .request(method.clone(), url)
             .bearer_auth(&tokens.access)
-            .header("prefer", "outlook.timezone=\"UTC\"")
-            // Graph: the whole description as text, not HTML with a short preview beside it.
-            .header("prefer", "outlook.body-content-type=\"text\"");
+            // Graph: times in UTC, and the whole description as text, not HTML with a short
+            // preview beside it.
+            .header(
+                "prefer",
+                "outlook.timezone=\"UTC\", outlook.body-content-type=\"text\"",
+            );
         if let Some(body) = body {
             request = request.json(body);
         }

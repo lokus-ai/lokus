@@ -161,6 +161,16 @@ fn to_recurrence(rule: &str, start: &str, zone: &str) -> Option<Value> {
         rule.split(';')
             .find_map(|p| p.strip_prefix(name)?.strip_prefix('='))
     };
+    // Only what is understood in full is turned into Graph's words: "the second Tuesday" and
+    // the like are left alone rather than sent as something simpler.
+    let known = |p: &str| {
+        let name = p.split('=').next().unwrap_or_default();
+        matches!(name, "FREQ" | "INTERVAL" | "COUNT" | "UNTIL" | "WKST")
+            || (name == "BYDAY" && rule.contains("FREQ=WEEKLY"))
+    };
+    if !rule.split(';').filter(|p| !p.is_empty()).all(known) {
+        return None;
+    }
     let kind = match part("FREQ")? {
         "DAILY" => "daily",
         "WEEKLY" => "weekly",
@@ -298,6 +308,7 @@ fn read(account: &str, calendar: &str, e: &Value) -> Option<Event> {
                 reply: reply_of(&a["status"]["response"]).to_string(),
             })
             .collect(),
+        uid: e["iCalUId"].as_str().unwrap_or_default().to_string(),
         organizer: e["organizer"]["emailAddress"]["address"]
             .as_str()
             .unwrap_or_default()
@@ -521,4 +532,20 @@ pub async fn busy(account: &str, emails: &[String], from: &str, to: &str) -> Res
             }
         })
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_rule_graph_cannot_say_is_not_sent_and_windows_zones_are_named() {
+        let at = "2026-12-08T15:00:00Z";
+        assert!(to_recurrence("RRULE:FREQ=WEEKLY;BYDAY=TU", at, "UTC").is_some());
+        assert!(to_recurrence("RRULE:FREQ=MONTHLY;BYDAY=2TU", at, "UTC").is_none());
+        assert!(to_recurrence("RRULE:FREQ=HOURLY", at, "UTC").is_none());
+        assert_eq!(zone_name("Pacific Standard Time"), "America/Los_Angeles");
+        assert_eq!(zone_name("Europe/Berlin"), "Europe/Berlin");
+        assert_eq!(zone_name("Somewhere Else Time"), "");
+    }
 }

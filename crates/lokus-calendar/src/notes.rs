@@ -75,11 +75,24 @@ fn linked(store: &Store, root: &Path, event: &Event) -> Result<Option<String>> {
 }
 
 /// The meeting note of an event: the one it has, or a new one with the time and guests filled in.
-pub fn meeting_note(dir: &Path, root: &Path, key: &str, zone_name: &str) -> Result<Value> {
+///
+/// In a team's folder the note syncs to the team, title and guests with it: the first ask is
+/// answered with that (`shared`), and the note is written when asked again with `shared` given.
+pub fn meeting_note(
+    dir: &Path,
+    root: &Path,
+    key: &str,
+    zone_name: &str,
+    shared: bool,
+) -> Result<Value> {
     let store = Store::open(dir)?;
     let event = store.event(key)?.ok_or_else(|| bad("no such event"))?;
     if let Some(path) = linked(&store, root, &event)? {
         return Ok(json!({ "path": path, "created": false }));
+    }
+    if !shared && root.join(".lokus/team.json").is_file() {
+        return Ok(json!({ "path": null, "created": false, "shared": true,
+            "message": "This folder syncs to your team: the note's title and guests will too." }));
     }
     let tz = zone(if zone_name.is_empty() {
         &event.zone

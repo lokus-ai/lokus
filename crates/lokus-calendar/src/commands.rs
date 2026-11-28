@@ -74,7 +74,7 @@ pub const COMMANDS: &[Spec] = &[
     Spec { name: "calendar.team", about: "The team's busy times as last synced into the open folder, each with its age.", args: &[], writes: false },
     Spec { name: "calendar.find_time", about: "Times when several people are all free.", args: &[("emails", "array", "Email addresses"), ("minutes", "number", "How long (default 30)"), ("from", "string", "Earliest (default now)"), ("to", "string", "Latest (default a week on)"), ("zone", "string", "Time zone for working hours"), ("first_hour", "number", "Working day starts (default 9)"), ("last_hour", "number", "Working day ends (default 18)")], writes: false },
     Spec { name: "calendar.block", about: "Block a time on another calendar: a plain 'Busy' event with no details.", args: &[("account", "string", "The account to block it on"), ("calendar", "string", "The calendar (default: that account's main one)"), ("key", "string", "The event whose time to block; or give start and end"), ("start", "string", "Start"), ("end", "string", "End"), ("title", "string", "What to call it (default Busy)")], writes: true },
-    Spec { name: "calendar.note", about: "The meeting note of an event: a Markdown note in the open folder with the time and guests filled in.", args: &[("key", "string", "The event's key"), ("zone", "string", "Time zone to write the time in")], writes: true },
+    Spec { name: "calendar.note", about: "The meeting note of an event: a Markdown note in the open folder with the time and guests filled in.", args: &[("key", "string", "The event's key"), ("zone", "string", "Time zone to write the time in"), ("shared", "boolean", "Write it even though this folder syncs to a team (asked for once)")], writes: true },
     Spec { name: "calendar.briefing", about: "The day's events in order, as a short briefing.", args: &[("zone", "string", "Time zone"), ("date", "string", "The day, like 2026-12-01 (default today)")], writes: false },
 ];
 
@@ -636,6 +636,33 @@ pub async fn run(
     args: &Value,
     show: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<Value> {
+    let mut out = run_one(dir, root, name, args, show).await?;
+    // An event's note is named only in the folder it was written in.
+    let noted = match root {
+        Some(root) if Store::exists(dir) => Store::open(dir)?.noted(&root.to_string_lossy())?,
+        _ => Vec::new(),
+    };
+    let here = |e: &mut Value| {
+        if !e["note"].is_null() && !noted.iter().any(|k| e["key"] == k.as_str()) {
+            e["note"] = Value::Null;
+        }
+    };
+    if let Some(event) = out.get_mut("event") {
+        here(event);
+    }
+    if let Some(events) = out.get_mut("events").and_then(Value::as_array_mut) {
+        events.iter_mut().for_each(here);
+    }
+    Ok(out)
+}
+
+async fn run_one(
+    dir: &Path,
+    root: Option<&Path>,
+    name: &str,
+    args: &Value,
+    show: &(dyn Fn(&str) + Send + Sync),
+) -> Result<Value> {
     match name {
         "calendar.status" => status(dir),
         "calendar.account.add" => add_account(dir, args, show).await,
@@ -704,6 +731,7 @@ pub async fn run(
             team::need_folder(root)?,
             need(args, "key")?,
             text(args, "zone").unwrap_or_default(),
+            args["shared"] == true,
         ),
         "calendar.briefing" => {
             notes::briefing(dir, text(args, "zone").unwrap_or("UTC"), text(args, "date"))

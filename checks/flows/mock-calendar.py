@@ -173,12 +173,14 @@ def busy(email, lo, hi):
 def mailed(e, me, only=None):
     return sorted(a["email"] for a in e["attendees"] if a["email"] != me and (only is None or a["email"] in only))
 
+def uid(e): return (e["master"] or e["id"]).split("_")[0] + "@stand-in.test"
+
 # ---- Google shapes ----------------------------------------------------------------------------
 def g_out(e, me):
     if e["cancelled"]: return {"id": e["id"], "status": "cancelled", **({"recurringEventId": e["master"]} if e["master"] else {})}
     when = (lambda t: {"date": t[:10]}) if e["allDay"] else (lambda t: {"dateTime": t, "timeZone": e["zone"]})
     o = {"kind": "calendar#event", "id": e["id"], "status": "confirmed", "summary": e["title"], "description": e["description"], "location": e["location"],
-         "start": when(e["start"]), "end": when(e["end"]), "organizer": {"email": e["owner"], "self": e["owner"] == me},
+         "iCalUID": uid(e), "start": when(e["start"]), "end": when(e["end"]), "organizer": {"email": e["owner"], "self": e["owner"] == me},
          "updated": iso(datetime.now(UTC)), "htmlLink": f"http://127.0.0.1:{PORT}/google/event?eid={e['id']}"}
     if e["attendees"]:
         o["attendees"] = [{"email": a["email"], "displayName": a["name"], "optional": a["optional"], "responseStatus": a["response"], **({"self": True} if a["email"] == me else {}), **({"organizer": True} if a["email"] == e["owner"] else {})} for a in e["attendees"]]
@@ -228,7 +230,7 @@ def m_out(e, me):
     o = {"id": e["id"], "subject": e["title"], "bodyPreview": e["description"][:255],
          "body": {"contentType": "text", "content": e["description"]} if AS_TEXT else {"contentType": "html", "content": "<html><body>" + e["description"].replace("\n", "<br>") + "</body></html>"},
          "location": {"displayName": e["location"]}, "start": m_time(e["start"]), "end": m_time(e["end"]), "originalStartTimeZone": e["zone"], "isAllDay": e["allDay"],
-         "organizer": {"emailAddress": {"address": e["owner"], "name": PEOPLE[e["owner"]][0]}}, "isOrganizer": e["owner"] == me,
+         "iCalUId": uid(e), "organizer": {"emailAddress": {"address": e["owner"], "name": PEOPLE[e["owner"]][0]}}, "isOrganizer": e["owner"] == me,
          "responseStatus": {"response": "organizer" if e["owner"] == me else M_REPLY[mine]},
          "attendees": [{"type": "optional" if a["optional"] else "required", "emailAddress": {"address": a["email"], "name": a["name"]}, "status": {"response": M_REPLY[a["response"]]}} for a in e["attendees"] if a["email"] != e["owner"]],
          "isOnlineMeeting": bool(e["meet"]), "onlineMeetingProvider": "teamsForBusiness" if e["meet"] else "unknown", "onlineMeeting": {"joinUrl": e["meet"]} if e["meet"] else None,
