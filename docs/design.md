@@ -461,10 +461,10 @@ reply or a delete is sent a second time, the event is read from the provider and
 (`sync::applied`; the queue row is marked in `tried` when it is first sent): what is already there
 is not sent again, and an event that is gone counts as deleted. An answer already given is not
 sent again, and a second identical reply or delete is not queued while one waits. A newer
-reply replaces a waiting one to the same event, or to the same series, that has not been handed
-to the provider yet: answered four times offline, the organiser hears once. A reply to one date
+reply replaces a waiting one to the same event, or to the same series, that is not being sent at
+that moment: answered four times offline, the organiser hears once. A reply to one date
 and a reply to the series are different things and both stay. Guests are compared by what the
-change meant: the ones it added are there and the ones it removed are not; a guest someone else
+change meant: the ones it added are there, required or optional as set, and the ones it removed are not; a guest someone else
 added meanwhile does not make it unsent. A change being sent is marked with the number of the
 program sending it (`sending.by`); when that program is no longer running the mark is dropped at
 the next sync, so a change cut off by a crash is read back and settled when the app next starts,
