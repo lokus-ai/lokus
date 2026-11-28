@@ -394,7 +394,9 @@ fn send(dir: &Path, args: &Value) -> Result<Value> {
         )?;
     } else {
         // A guest may have answered since the change was made here: their answer is the provider's.
-        for g in &mut event.guests {
+        // Not for a whole series: this event's answers are one date's, not the series'.
+        let one = held.scope != "all";
+        for g in event.guests.iter_mut().filter(|_| one) {
             let now = base
                 .iter()
                 .flat_map(|b| &b.guests)
