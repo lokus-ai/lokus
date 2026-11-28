@@ -127,7 +127,10 @@ async fn send(dir: &Path, q: &Queued) -> Result<()> {
                         // Made all-day: the series' first day as its own zone has it, since the
                         // clock there may stand differently than on the date that was opened.
                         let zone: chrono_tz::Tz = whole.zone.parse().unwrap_or(chrono_tz::UTC);
-                        let day = time(&whole.start)?.with_timezone(&zone).date_naive();
+                        // Moved to another day as well: by as many days as the opened date was.
+                        let days = time(&event.start)?.date_naive()
+                            - was.with_timezone(&zone).date_naive();
+                        let day = time(&whole.start)?.with_timezone(&zone).date_naive() + days;
                         start = Utc.from_utc_datetime(&day.and_time(chrono::NaiveTime::MIN));
                     }
                     event.start = stamp(start);
