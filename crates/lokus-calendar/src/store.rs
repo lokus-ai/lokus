@@ -522,9 +522,37 @@ impl Store {
             .map_or_else(|| like.reply.clone(), |(r, _)| r))
     }
 
+    /// Whether the series is known to hold this answer: every date read carries it, or it is
+    /// the answer last given to the series from here and most dates still carry it. Most dates
+    /// carrying it is not enough: they may each have been answered on their own.
+    pub fn series_has(&self, like: &Event, answer: &str) -> Result<bool> {
+        if self.series_dates(like)?.iter().all(|e| e.reply == answer) {
+            return Ok(true);
+        }
+        Ok(self.setting(&Self::said(like))?.as_deref() == Some(answer)
+            && self.series_reply(like)? == answer)
+    }
+
+    fn said(like: &Event) -> String {
+        format!(
+            "said|{}|{}|{}",
+            like.account,
+            like.calendar,
+            like.series.as_deref().unwrap_or_default()
+        )
+    }
+
+    /// The answer given to a series from here is given up (the provider refused it).
+    pub fn unsay_series(&self, like: &Event) -> Result<()> {
+        self.db
+            .execute("DELETE FROM settings WHERE name = ?1", [Self::said(like)])?;
+        Ok(())
+    }
+
     /// The series is answered: every date that carried the series' answer takes the new one.
     pub fn answer_series(&self, like: &Event, me: &str, answer: &str) -> Result<()> {
         let was = self.series_reply(like)?;
+        self.set_setting(&Self::said(like), answer)?;
         for mut e in self.series_dates(like)? {
             if e.reply == was {
                 e.reply = answer.to_string();

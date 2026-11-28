@@ -500,10 +500,12 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
     // "All events" answers the series; a date answered on its own keeps its own answer.
     let scope = text(args, "scope").unwrap_or("this");
     let all = scope == "all" && event.series.is_some();
-    let has = if all {
-        store.series_reply(&event)?
-    } else {
+    let has = if !all {
         event.reply.clone()
+    } else if store.series_has(&event, answer)? {
+        answer.to_string()
+    } else {
+        String::new()
     };
     let on_its_way = store.waiting()?.iter().any(|q| {
         q.op == "reply"
@@ -784,6 +786,17 @@ async fn run_one(
             let store = Store::open(dir)?;
             let k = need(args, "key")?;
             let (account, calendar, id) = split(k)?;
+            // A refused answer to a whole series was written on its other dates too: they are
+            // read again from the provider.
+            let series = store.waiting()?.into_iter().find(|q| {
+                q.key == k && q.op == "reply" && q.body["scope"] == "all" && q.error.is_some()
+            });
+            if let Some(event) =
+                series.and_then(|q| serde_json::from_value(q.body["event"].clone()).ok())
+            {
+                store.unsay_series(&event)?;
+                store.set_position(account, calendar, None, "")?;
+            }
             if store.is_refused(k)? && !id.starts_with("local-") {
                 // Back to what the provider has; if it cannot be asked now, nothing is dropped.
                 match crate::provider::get(&store.account(account)?, calendar, id).await {
