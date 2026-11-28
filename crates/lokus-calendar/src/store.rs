@@ -528,7 +528,11 @@ impl Store {
         for mut e in self.series_dates(like)? {
             if e.reply == was {
                 e.reply = answer.to_string();
-                for g in e.guests.iter_mut().filter(|g| g.email.eq_ignore_ascii_case(me)) {
+                for g in e
+                    .guests
+                    .iter_mut()
+                    .filter(|g| g.email.eq_ignore_ascii_case(me))
+                {
                     g.reply = answer.to_string();
                 }
                 self.put(&e)?;

@@ -37,7 +37,11 @@ const EVENT_ARGS: &[(&str, &str, &str)] = &[
         "array",
         "Guests: email addresses, or {email, optional}",
     ),
-    ("meeting", "boolean", "Add a meeting link (Google Meet; Teams on a Microsoft account)"),
+    (
+        "meeting",
+        "boolean",
+        "Add a meeting link (Google Meet; Teams on a Microsoft account)",
+    ),
     (
         "repeat",
         "string",
@@ -340,7 +344,9 @@ fn update(dir: &Path, args: &Value) -> Result<Value> {
     let scope = text(args, "scope").unwrap_or("this");
     let held = store.held(k)?;
     let base = store.stored(k)?;
-    let shown = store.event(k)?.ok_or_else(|| bad("That event is no longer there."))?;
+    let shown = store
+        .event(k)?
+        .ok_or_else(|| bad("That event is no longer there."))?;
     if !shown.mine {
         return Err(CalError::new(
             "not_yours",
@@ -442,7 +448,9 @@ fn delete(dir: &Path, args: &Value) -> Result<Value> {
     let store = Store::open(dir)?;
     let k = need(args, "key")?;
     let (account, calendar, id) = split(k)?;
-    let event = store.event(k)?.ok_or_else(|| bad("That event is no longer there."))?;
+    let event = store
+        .event(k)?
+        .ok_or_else(|| bad("That event is no longer there."))?;
     let never_sent = id.starts_with("local-");
     if never_sent && store.taking(k)? {
         // It is on its way to the provider this moment; dropping it here would leave it there.
@@ -485,7 +493,9 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
         "maybe" | "tentative" => "tentative",
         other => return Err(bad(format!("'reply' is yes, no or maybe, not '{other}'"))),
     };
-    let mut event = store.stored(k)?.ok_or_else(|| bad("That event is no longer there."))?;
+    let mut event = store
+        .stored(k)?
+        .ok_or_else(|| bad("That event is no longer there."))?;
     // Already answered so, and nothing else is on its way: the organiser is not emailed again.
     // "All events" answers the series; a date answered on its own keeps its own answer.
     let scope = text(args, "scope").unwrap_or("this");
@@ -527,7 +537,9 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
         &json!({ "event": event, "answer": answer, "scope": scope }),
         true,
     )?;
-    Ok(json!({ "event": store.event(k)?, "series_reply": if all { answer.to_string() } else { store.series_reply(&event)? } }))
+    Ok(
+        json!({ "event": store.event(k)?, "series_reply": if all { answer.to_string() } else { store.series_reply(&event)? } }),
+    )
 }
 
 /// Each person's busy times from whichever connected account can see their calendar.
@@ -662,7 +674,9 @@ fn block(dir: &Path, args: &Value) -> Result<Value> {
     let store = Store::open(dir)?;
     let (start, end) = match text(args, "key") {
         Some(k) => {
-            let e = store.event(k)?.ok_or_else(|| bad("That event is no longer there."))?;
+            let e = store
+                .event(k)?
+                .ok_or_else(|| bad("That event is no longer there."))?;
             (e.start, e.end)
         }
         None => (

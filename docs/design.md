@@ -426,7 +426,8 @@ app is built (`LOKUS_GOOGLE_CLIENT_SECRET`), as is the Microsoft client id
 offer that provider at all: with one provider left, connecting goes straight to it, and with none
 the screen says so in a sentence. This release is Google only: the Microsoft code is built and
 switched off by having no client id. For development, `LOKUS_CALENDAR_GOOGLE` and
-`LOKUS_CALENDAR_MICROSOFT` point at a stand-in (`checks/flows/mock-calendar.py`).
+`LOKUS_CALENDAR_MICROSOFT` point at a stand-in (`checks/flows/mock-calendar.py`); a released
+build ignores both.
 
 **The local copy.** `calendar.sqlite` in the app's own folder (not in a vault: a calendar belongs
 to the person, not to a folder) holds accounts, calendars, events, changes waiting to be sent and
@@ -439,8 +440,11 @@ not made, until an account is connected.
 **Changes.** Every change is written to the local copy first and put in a queue; the queue is sent
 before anything is read, and a change the network refused stays queued and is sent by a later
 minute. Only a connection that could not be made counts as offline. A provider that is busy or
-broken (any 5xx, a 429, a connection that drops mid-answer) is tried again after 1 and then 3
-seconds, or after the `Retry-After` it names; past that the change waits for a later minute (and
+broken (a 429, a connection that drops mid-answer, a 5xx on a read) is tried again after 1 and
+then 3 seconds, or after the `Retry-After` it names. A change answered with a 5xx may have been
+made all the same, so it is not sent again at once: like any change whose answer was lost, the
+event is first read back from the provider and sent again only if the change is not there. A
+reply is read back before its first send too, so one already given is not emailed twice; past that the change waits for a later minute (and
 the account is left alone until a long `Retry-After` has passed). Only another 4xx is a refusal:
 the change stays, the event shows one plain sentence (never the provider's own text) with "Retry"
 and "Discard" (`calendar.event.retry`, `calendar.event.discard`), and later changes to that event
@@ -520,6 +524,10 @@ cancellation). Drag on the grid to make an event, drag an event to move it,
 its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
 meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
 any zone. A repeating event is changed, answered or deleted as "This event" or "All events".
+"All events" answers the series: a date answered on its own keeps its own answer, every other
+date takes the series' answer, and the panel shows the series' answer while "All events" is
+chosen. An answer the series already has is not sent again. After "Send update" the block that
+held it stays where it was, with nothing left to press, until the pointer leaves it.
 
 **Other people.** A colleague's busy times come from the provider (Google `freeBusy`, Graph
 `getSchedule`): times only, and only for people whose calendars the account may see. Across

@@ -126,6 +126,8 @@ export function EventPanel(p: Props) {
   const justSent = !pend && before.current.until > 0 && (over || Date.now() < before.current.until);
   if (pend || !justSent) before.current.until = 0;
   useEffect(() => setOver(false), [e.key]);
+  // The block gone, the pointer is no longer on it: no leave is told for what is not there.
+  useEffect(() => void (!pend && !justSent && setOver(false)), [pend, justSent]);
   useEffect(() => {
     if (!justSent) return;
     const done = window.setTimeout(() => again((n) => n + 1), before.current.until - Date.now() + 20);
