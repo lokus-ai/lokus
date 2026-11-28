@@ -728,9 +728,18 @@ async fn run_one(
             let (account, calendar, id) = split(k)?;
             if store.is_refused(k)? && !id.starts_with("local-") {
                 // Back to what the provider has; if it cannot be asked now, nothing is dropped.
-                let theirs = crate::provider::get(&store.account(account)?, calendar, id).await?;
-                store.drop_refused(k)?;
-                store.put(&theirs)?;
+                match crate::provider::get(&store.account(account)?, calendar, id).await {
+                    Ok(theirs) => {
+                        store.drop_refused(k)?;
+                        store.put(&theirs)?;
+                    }
+                    // The provider no longer has it: nothing to go back to.
+                    Err(e) if matches!(e.code, "missing" | "gone") => {
+                        store.drop_refused(k)?;
+                        store.drop_event(k)?;
+                    }
+                    Err(e) => return Err(e),
+                }
             } else if store.drop_refused(k)? {
                 store.drop_event(k)?;
             }
