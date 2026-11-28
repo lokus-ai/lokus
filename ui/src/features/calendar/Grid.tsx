@@ -38,9 +38,17 @@ interface Drag {
   moved: boolean;
 }
 
-/** The week: one column a day, an hour every 48 pixels, events where they fall. */
-/** A person's initials, from a name or the start of an email. */
+let pen: CanvasRenderingContext2D | null = null;
+/** How wide a word of an event's title is drawn, in pixels. */
+function widthOf(word: string): number {
+  if (!pen) {
+    pen = document.createElement("canvas").getContext("2d");
+    if (pen) pen.font = `550 12px ${getComputedStyle(document.body).fontFamily}`;
+  }
+  return pen ? pen.measureText(word).width : word.length * 6.6;
+}
 const nextDate = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
+/** A person's initials, from a name or the start of an email. */
 const initials = (label: string) =>
   label
     .split("@")[0]
@@ -294,19 +302,25 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                 {laid[i].placed.map((p) => {
                   const e = p.event;
                   const tall = p.height * PX - 2;
-                  // A line of the title is 15 pixels: under two lines it is the title alone on one, then the time when there is room.
-                  // Only the part no later event lies over is written on; a narrow one keeps its title to one line.
-                  const wide = (p.right - p.left) * (dayWidth - 8) - 2;
-                  const face = Math.max(14, Math.min(tall, p.clear * PX - 1));
-                  const room = Math.floor((face - 5) / 15);
-                  const short = face < 34;
-                  const lines = short ? 1 : Math.max(1, wide < 96 ? Math.min(2, room) : room);
+                  // Only the part no later event lies over is written on; the open event is drawn over the rest and out to the day's edge, so all of it is.
+                  // One of three hours or more has the room for its title already, and drawn over the rest would hide the day.
+                  const picked = e.key === selected && p.height < 180;
+                  const right = picked ? 1 : p.right;
+                  const wide = (right - p.left) * (dayWidth - 8) - 2;
+                  const face = Math.max(14, picked ? tall : Math.min(tall, p.clear * PX - 1));
+                  // A line is 15 pixels; a part cut short by a later event closes its lines up to 13, so half an hour still holds two.
+                  const tight = face < 34 && face >= 29;
+                  const line = tight ? 13 : 15;
+                  const room = Math.floor((face - (tight ? 3 : 5)) / line);
+                  const short = room < 2;
                   const dragged = drag?.event?.key === e.key && drag.moved;
-                  // A narrow one gives its title every line it has, so two that start alike can be told apart; the time takes a line the title left.
-                  const wraps = !short && wide < 96 && room >= 2;
+                  // The title takes the lines it needs, broken between words only, and the time the line it left: the title beats the time.
+                  // A wide, tall one keeps a line for the time. A word wider than the card would be cut mid-word, so that title stays on one line.
+                  const wraps = !short && !(e.title || "").split(/\s+/).some((w) => widthOf(w) * (wide < 72 ? 10.5 / 12 : wide < 96 ? 11 / 12 : 1) - (wide < 72 ? 0.21 * w.length : 0) > wide - (wide < 72 ? 6 : wide < 96 ? 9.5 : 16));
+                  const lines = short ? 1 : wide >= 96 && room >= 3 ? room - 1 : room;
                   const words = (
                     <>
-                      <b lang={wraps ? "en" : undefined} className={wraps || (lines >= 3 && wide >= 96) ? "" : "one"} style={wraps ? { WebkitLineClamp: room } : lines >= 3 && wide >= 96 ? { WebkitLineClamp: lines - 1 } : undefined}>{e.title || "(No title)"}</b>
+                      <b className={wraps ? "" : "one"} style={wraps ? { WebkitLineClamp: lines } : undefined}>{e.title || "(No title)"}</b>
                       <span>
                         <i>{clock(e.start, zone)}</i>
                         <i>{e.pending || e.unsent ? " · not sent" : e.queued ? " · waiting" : ` – ${clock(e.end, zone)}`}</i>
@@ -316,8 +330,8 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   return (
                     <div
                       key={e.key}
-                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 64 ? " slim" : ""}${wraps ? " wraps" : ""}${dragged ? " dragged" : ""}`}
-                      style={{ top: p.top * PX, height: tall, left: `calc((100% - 8px) * ${p.left} + 1px)`, width: `calc((100% - 8px) * ${p.right - p.left} - 2px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
+                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : ""}${tight ? " tight" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 72 ? " slim" : ""}${wraps ? " wraps" : ""}${dragged ? " dragged" : ""}`}
+                      style={{ top: p.top * PX, height: tall, left: `calc((100% - 8px) * ${p.left} + 1px)`, width: `calc((100% - 8px) * ${right - p.left} - 2px)`, zIndex: picked ? 16 : p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
                       title={`${e.title || "(No title)"}\n${clock(e.start, zone)} – ${clock(e.end, zone)}`}
                       role="button"
                       tabIndex={0}
@@ -328,7 +342,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                       onPointerMove={move}
                       onPointerUp={finish}
                     >
-                      {short ? <div className="cal-line">{words}</div> : wraps ? <div className="cal-words" style={{ maxHeight: room * 15 }}>{words}</div> : words}
+                      {short ? <div className="cal-line">{words}</div> : <div className="cal-words" style={{ maxHeight: room * line }}>{words}</div>}
                       {e.mine && <u className="cal-resize" onPointerDown={(ev) => begin("resize", ev, e)} onPointerMove={move} onPointerUp={finish} />}
                     </div>
                   );

@@ -60,6 +60,8 @@ export function ZonePick({ value, label, title, at, outlined, onChange }: Props)
             placeholder="Search a city or GMT+1"
             aria-label="Search time zones"
             onChange={(e) => (setText(e.target.value), setOn(0))}
+            // After typing, the system keeps the first Escape press for its own text suggestions: its release closes the list all the same.
+            onKeyUp={(e) => e.key === "Escape" && setOpen(false)}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === "Escape") setOpen(false);

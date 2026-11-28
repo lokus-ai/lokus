@@ -483,15 +483,22 @@ day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one; another cou
 most that fit, and the menu names what is shown: "8 days", not "Week"; a week starts on the
 locale's first weekday); an open event takes its own column while one such day still fits beside
 it (the open event's day is always among those shown), and only below that lies over the week, as
-the list on the left does when it has no room; the bar gives up key hints,
+the list on the left does when it has no room, and then the assistant folds away while the event
+is open and comes back when it closes; the bar gives up key hints,
 then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
 or the sync status. Overlapping events share the width as columns while each has room for a word (50 pixels), and one
 widens into the columns to its right that are free while it lasts. An event that starts half an
 hour or more after everything still going is laid over them, set in by one step and outlined in
 the surface colour; when a group has no room for one more column, the event is laid over a single
-column whose event began half an hour before it. Only what still has no room is behind a "+N" that
-opens the list for that time. A narrow card gives its title every line it has (the time takes a
-line the title left), so "Same minute A" and "Same minute B" can be told apart. An all-day event is one bar across the days it covers; a click in
+column whose event began half an hour before it, as it is once one more column would leave each
+under 72 pixels; one laid over a column widens into the columns to its right that hold nothing
+while it lasts. Only what still has no room is behind a "+N" that
+opens the list for that time. A title takes the lines its card has before the time does, breaks
+between words only and ends in an ellipsis, never in a hyphen; a title with a word wider than
+its card stays on one line. The open event is drawn over the later ones and out to the day's
+edge, so its whole title shows (one of three hours or more stays where it is). The event panel
+comes and goes over 140 milliseconds and a change in how many days are shown fades in over the
+same; neither moves when the system asks for reduced motion. An all-day event is one bar across the days it covers; a click in
 the all-day row, or a drag across days, starts one, and the panel has an "All day" switch. The
 time zone is picked from a list to type in, with the chosen zone, this computer's and the last
 four used on top. A colleague's or teammate's busy time is a hatched block across the day behind

@@ -118,6 +118,8 @@ export interface Placed {
 const MIN_HEIGHT = 15;
 /** The least width an event is drawn beside another, in pixels: room for a word. */
 const FACE = 50;
+/** The width at which an event beside others still shows a few words, in pixels: narrower, a later one is laid over instead when it can be. */
+const ROOMY = 72;
 /** The width a "+N" takes beside the events that did fit, in pixels. */
 const CHIP = 18;
 /** How far an event is set in from the ones it is laid over, in pixels: the one step every stack uses. */
@@ -140,8 +142,8 @@ interface Cluster {
   /** How far in from the left it starts, when it is laid over the whole width. */
   from: number;
   depth: number;
-  /** The one column of another group it is laid over, when that group had no room for it beside. */
-  over?: { cluster: Cluster; column: number };
+  /** The one column of another group it is laid over, when that group had no room for it beside; `to` is the column it ends before. */
+  over?: { cluster: Cluster; column: number; to?: number };
 }
 
 /**
@@ -169,7 +171,7 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
     if (c.over) {
       const under = lie(c.over.cluster);
       lo = under.lo + under.share * c.over.column + step;
-      hi = under.lo + under.share * (c.over.column + 1);
+      hi = under.lo + under.share * (c.over.to ?? c.over.column + 1);
     }
     const room = width * (hi - lo) - 8;
     const fits = c.columns.length <= Math.max(1, Math.floor(room / FACE));
@@ -191,12 +193,13 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       cluster = beside;
       const free = beside.columns.find((c) => ends(c[c.length - 1]) <= item.top);
       const { lo, hi } = lie(beside);
-      const full = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE));
       // No room for one more column: over a column whose event began long enough ago, if nothing lies on it yet.
       const taken = (k: number) => going.some((p) => home.get(p)!.over?.cluster === beside && home.get(p)!.over?.column === k);
       // A column too narrow for a card set in by one step takes none: the event goes behind the "+N" instead.
       const holds = lie(beside).share * width - STEP >= FACE - STEP;
-      const column = full && holds ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
+      // Over rather than beside as soon as one more column would leave each less than a few words wide.
+      const snug = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / ROOMY));
+      const column = snug && holds ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
       if (free) free.push(item);
       else if (column >= 0) {
         cluster = { columns: [[item]], depth: above, from: 0, over: { cluster: beside, column } };
@@ -208,6 +211,23 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
     }
     home.set(item, cluster);
     seen.push(item);
+  }
+  // One laid over a column widens into the columns to its right that hold nothing, beneath or laid over, while it lasts.
+  for (const c of clusters) {
+    if (!c.over) continue;
+    const mine = c.columns.flat();
+    const [from, till] = [Math.min(...mine.map((p) => p.top)), Math.max(...mine.map(ends))];
+    const meets = (p: Placed) => p.top < till && ends(p) > from;
+    const under = c.over.cluster;
+    const boxes = lie(under).boxes;
+    let to = c.over.column + 1;
+    while (
+      to < boxes &&
+      !under.columns[to].some(meets) &&
+      !clusters.some((o) => o !== c && o.over?.cluster === under && o.over.column <= to && (o.over.to ?? o.over.column + 1) > to && o.columns.flat().some(meets))
+    )
+      to++;
+    c.over.to = to;
   }
   const placed: Placed[] = [];
   const more: More[] = [];
@@ -239,7 +259,10 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
 /** How long, in words: 45m, 1h, 1h 30m. */
 export function span(start: string | number, end: string | number): string {
   const minutes = Math.round((new Date(end).getTime() - new Date(start).getTime()) / MINUTE);
-  if (minutes >= 24 * 60) return `${Math.round(minutes / 1440)}d`;
+  if (minutes >= 24 * 60) {
+    const hours = Math.round((minutes % 1440) / 60);
+    return hours ? `${Math.floor(minutes / 1440)}d ${hours}h` : `${Math.floor(minutes / 1440)}d`;
+  }
   const [h, m] = [Math.floor(minutes / 60), minutes % 60];
   return h && m ? `${h}h ${m}m` : h ? `${h}h` : `${m}m`;
 }

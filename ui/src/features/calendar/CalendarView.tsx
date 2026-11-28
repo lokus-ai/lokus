@@ -42,10 +42,12 @@ const keep = (name: string, value: string) => localStorage.setItem(`lokus.calend
 interface Props {
   onOpen: (path: string) => void;
   onNotice: (message: string) => void;
+  /** An event opened with no room beside the week (true), or closed again (false): the shell folds its right panel meanwhile. */
+  onRoom: (make: boolean) => void;
 }
 
 /** The calendar: accounts and people on the left, the week in the middle, the event on the right. */
-export default function CalendarView({ onOpen, onNotice }: Props) {
+export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   const [status, setStatus] = useState<CalStatus | null>(null);
   const [events, setEvents] = useState<CalEvent[]>([]);
   const [members, setMembers] = useState<CalMember[]>([]);
@@ -175,6 +177,30 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       : [Date.parse(current.start), Date.parse(current.end)];
     if (start >= to || Math.max(end, start + 1) <= from) setAnchor(dayStart(start, zone) + 12 * 3_600_000);
   }, [fit, current?.key]);
+  // No room for the event beside the week: the assistant folds away while it is open, and comes back after.
+  const open = !!current;
+  useEffect(() => {
+    if (open && !beside) onRoom(true);
+    if (!open) onRoom(false);
+  }, [open, beside]);
+  useEffect(() => () => onRoom(false), []);
+  // The event panel leaves over a moment: the event it showed is kept that long.
+  const [left, setLeft] = useState<CalEvent | null>(null);
+  const before = useRef<CalEvent | null>(null);
+  useEffect(() => {
+    const was = before.current;
+    before.current = current;
+    if (current || !was || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setLeft(null);
+    setLeft(was);
+    const done = window.setTimeout(() => setLeft(null), 140);
+    return () => window.clearTimeout(done);
+  }, [current?.key]);
+  const panel = current ?? left;
+  // A change in how many days are shown is eased in.
+  useEffect(() => {
+    if (!mainEl || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    mainEl.querySelector(".cal-grid")?.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 140, easing: "ease-out" });
+  }, [fit]);
   useEffect(() => {
     if (!current || beside) return setPin(null);
     setPin(current.all_day ? instant(Date.parse(current.start), zone) : Date.parse(current.start));
@@ -615,11 +641,12 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
         <Grid days={days} zone={zone} zoneLabel={offsetName(zone, days[0])} events={shown} selected={selected} overlays={overlays} colorOf={colorOf} onSelect={select} onNew={startDraft} onMove={(e, start, end) => void act("calendar.event.update", { key: e.key, scope: "this", start, end })} />
       </section>
 
-      {current ? (
+      {panel ? (
         <EventPanel
-          key={current.key}
-          event={current}
-          draft={selected === DRAFT}
+          key={panel.key}
+          event={panel}
+          leaving={!current}
+          draft={panel.key === DRAFT || selected === DRAFT}
           accounts={status.accounts}
           calendars={status.calendars}
           zone={zone}
@@ -628,9 +655,9 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           onChange={change}
           onCreate={() => void create()}
           sending={sending}
-          onRetry={() => void act("calendar.event.retry", { key: current.key })}
-          onSend={(notify) => void act("calendar.event.send", { key: current.key, notify })}
-          onDiscard={() => void act("calendar.event.discard", { key: current.key }, false)}
+          onRetry={() => void act("calendar.event.retry", { key: panel.key })}
+          onSend={(notify) => void act("calendar.event.send", { key: panel.key, notify })}
+          onDiscard={() => void act("calendar.event.discard", { key: panel.key }, false)}
           onDelete={(notify) => void remove(notify)}
           deleting={deleting}
           onKeep={() => setDeleting(false)}
@@ -638,7 +665,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           onReply={(answer) => void reply(answer)}
           replying={answering}
           onNote={(shared) => void note(shared)}
-          onBlock={(account) => void act("calendar.block", { key: current.key, account }).then((made) => made && onNotice("Blocked as Busy on the other calendar."))}
+          onBlock={(account) => void act("calendar.block", { key: panel.key, account }).then((made) => made && onNotice("Blocked as Busy on the other calendar."))}
           onClose={() => select(null)}
           over={!beside}
         />

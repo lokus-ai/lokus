@@ -406,6 +406,20 @@ function makeRoomForCalendar(): void {
   });
 }
 
+let folded: AppState["panel"] = null;
+/**
+ * An event opened in the calendar with no room for it beside the panel on the right: the panel
+ * folds away while the event is open (`make`), and comes back when it closes.
+ */
+export function makeRoomForEvent(make: boolean): void {
+  const { panel } = app.get();
+  if (make && panel) (folded = panel), app.set({ panel: null });
+  else if (!make && folded) {
+    if (app.get().view === "calendar" && !panel) app.set({ panel: folded });
+    folded = null;
+  }
+}
+
 /** On a narrow window the sidebar closes and opens as an overlay instead. */
 function watchWidth(): void {
   const query = window.matchMedia(NARROW);

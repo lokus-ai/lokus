@@ -46,6 +46,7 @@ import {
   setPanelWidth,
   setSidebarWidth,
   showGraph,
+  makeRoomForEvent,
 } from "./workspace";
 
 // The graph is only loaded when someone opens it.
@@ -622,7 +623,7 @@ function Workspace() {
         {view === "calendar" && (
           <Boundary name="The calendar">
             <Suspense fallback={null}>
-              <CalendarView onOpen={open} onNotice={notify} />
+              <CalendarView onOpen={open} onNotice={notify} onRoom={makeRoomForEvent} />
             </Suspense>
           </Boundary>
         )}

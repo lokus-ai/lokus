@@ -44,6 +44,8 @@ interface Props {
   onClose: () => void;
   /** No room beside the week: the panel lies over it instead of squeezing it. */
   over: boolean;
+  /** It was closed and is on its way out. */
+  leaving?: boolean;
 }
 
 /** A text field that keeps what is typed until it is left, then hands it on once. `grow` wraps and is as tall as its text. */
@@ -142,7 +144,8 @@ export function EventPanel(p: Props) {
   };
   const dayName = (at: number) => new Date(at).toLocaleDateString([], { timeZone: e.all_day ? "UTC" : p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(at).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
   // A whole-day event over several days names its first and last day.
-  const dateName = e.all_day && end - start > DAY ? `${dayName(start)} → ${dayName(end - DAY)}` : dayName(start);
+  const dateName =
+    e.all_day && end - start > DAY ? `${dayName(start)} → ${dayName(end - DAY)}` : !e.all_day && dateOf(start, p.zone) !== dateOf(end - 1, p.zone) ? `${dayName(start)} → ${dayName(end - 1)}` : dayName(start);
   // An event with no zone of its own (or plain UTC, as providers hand them over) is in the zone the week is shown in.
   const own = e.zone && e.zone !== "UTC" && offsetName(e.zone, Date.parse(e.start)) !== offsetName(p.zone, Date.parse(e.start));
   const zoneOf = own ? e.zone : p.zone;
@@ -150,7 +153,7 @@ export function EventPanel(p: Props) {
   const repeatName = e.series && !e.repeat ? "Part of a repeating event" : (repeatChoices(e.repeat).find(([rule]) => rule === (e.repeat ?? ""))?.[1] ?? "");
 
   return (
-    <aside className={`cal-panel${p.over ? " over" : ""}`} aria-label={p.draft ? "New event" : "Event"}>
+    <aside className={`cal-panel${p.over ? " over" : ""}${p.leaving ? " leaving" : ""}`} inert={p.leaving || undefined} aria-label={p.draft ? "New event" : "Event"}>
       <header className="cal-panel-bar">
         <b>{p.draft ? "New event" : "Event"}</b>
         <button className="cal-icon" title={`Close (${formatKeys("Escape")})`} onClick={p.onClose}>
