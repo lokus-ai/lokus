@@ -500,6 +500,11 @@ pub async fn call(
                 "the sync position is no longer valid",
             ));
         }
+        // Still refused with a sign-in just renewed: the provider has ended it, and the account
+        // shows "Sign in again" (a newer sign-in made meanwhile is kept).
+        if status == 401 && kept(account).is_some_and(|now| now.refresh == tokens.refresh) {
+            forget(account);
+        }
         if status >= 400 {
             return Err(CalError::new(
                 match status {
