@@ -7,7 +7,7 @@ import { Icon, type IconName } from "../../shell/Icon";
 import { pickMenu } from "./menu";
 import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
-import { addDays, addMinutes, clock, DAY, dateOf, dayStart, minuteOfDay, offsetName, repeatChoices, span, stamp, typedClock, ZONES } from "./time";
+import { addDays, addMinutes, clock, DAY, dateOf, dayStart, instant, minuteOfDay, offsetName, repeatChoices, span, stamp, typedClock, ZONES } from "./time";
 
 export type Scope = "this" | "all";
 
@@ -120,7 +120,7 @@ export function EventPanel(p: Props) {
   const date = (day: number) => {
     setDating(false);
     // A whole-day event is kept as midnight UTC of its date, whatever the zone.
-    const at = e.all_day ? Date.parse(`${dateOf(day, p.zone)}T00:00:00Z`) : addMinutes(day, minuteOfDay(start, p.zone), p.zone);
+    const at = e.all_day ? Date.parse(`${dateOf(day + DAY / 2, p.zone)}T00:00:00Z`) : addMinutes(day, minuteOfDay(start, p.zone), p.zone);
     if (at !== start) p.onChange({ start: stamp(at), end: stamp(at + end - start) });
   };
   const dateName = new Date(start).toLocaleDateString([], { timeZone: e.all_day ? "UTC" : p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(start).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
@@ -184,7 +184,7 @@ export function EventPanel(p: Props) {
           </Row>
           {dating && (
             <div className="cal-date">
-              <MiniMonth zone={p.zone} shown={[]} picked={dayStart(e.all_day ? start + DAY / 2 : start, p.zone)} onPick={date} />
+              <MiniMonth zone={p.zone} shown={[]} picked={dayStart(e.all_day ? instant(start + DAY / 2, p.zone) : start, p.zone)} onPick={date} />
             </div>
           )}
           {can && !e.all_day && (
