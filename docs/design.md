@@ -422,8 +422,10 @@ through the Lokus server. A person can connect several accounts; each event is r
 with the sign-in of the account it belongs to. Lokus's Google client id is in the code (it is public). Google also
 gives a desktop app a client secret and refuses the sign-in without it, so that is given when the
 app is built (`LOKUS_GOOGLE_CLIENT_SECRET`), as is the Microsoft client id
-(`LOKUS_MICROSOFT_CLIENT_ID`); neither is in the repository, and a build without one shows that
-provider as not available. For development, `LOKUS_CALENDAR_GOOGLE` and
+(`LOKUS_MICROSOFT_CLIENT_ID`); neither is in the repository, and a build without one does not
+offer that provider at all: with one provider left, connecting goes straight to it, and with none
+the screen says so in a sentence. This release is Google only: the Microsoft code is built and
+switched off by having no client id. For development, `LOKUS_CALENDAR_GOOGLE` and
 `LOKUS_CALENDAR_MICROSOFT` point at a stand-in (`checks/flows/mock-calendar.py`).
 
 **The local copy.** `calendar.sqlite` in the app's own folder (not in a vault: a calendar belongs
@@ -555,7 +557,7 @@ turned off in the assistant's settings.
 | `calendar.note`, `calendar.briefing` | the meeting note; the day's briefing |
 
 **Before the real services.** Google: registered by the owner (a desktop app, in testing, with named test
-users); Microsoft: not registered yet. On Google, calendar scopes are "sensitive", so until the app is verified people see an
+users); Microsoft: not registered, and not for this release (the owner's call, 2026-11-28). On Google, calendar scopes are "sensitive", so until the app is verified people see an
 "unverified app" screen, at most 100 people can use it, and a test user's sign-in ends after seven
 days; verification is free and takes days to weeks. Microsoft: registration is free; work accounts
 may need an administrator's consent unless the publisher is verified. Not built: booking links,

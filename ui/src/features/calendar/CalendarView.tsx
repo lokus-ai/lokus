@@ -382,15 +382,16 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
 
   if (!status) return <div className="calendar" />;
   const available = status.available;
-  const connectors = (
-    <>
-      <button className="cal-button" disabled={!available.google || !!connecting} title={available.google ? "" : "Not available in this build yet"} onClick={() => void connect("google")}>
-        <Icon name="plus" size={14} /> {connecting === "google" ? "Finish in your browser…" : "Google Calendar"}
+  // Only the services this build can sign in to are offered; one that cannot is not shown at all.
+  const offered = ([["google", "Google Calendar"], ["microsoft", "Microsoft 365"]] as ["google" | "microsoft", string][]).filter(([id]) => available[id]);
+  const connectors = offered.length ? (
+    offered.map(([id, name]) => (
+      <button key={id} className="cal-button" disabled={!!connecting} onClick={() => void connect(id)}>
+        <Icon name="plus" size={14} /> {connecting === id ? "Finish in your browser…" : name}
       </button>
-      <button className="cal-button" disabled={!available.microsoft || !!connecting} title={available.microsoft ? "" : "Not available in this build yet"} onClick={() => void connect("microsoft")}>
-        <Icon name="plus" size={14} /> {connecting === "microsoft" ? "Finish in your browser…" : "Microsoft 365"}
-      </button>
-    </>
+    ))
+  ) : (
+    <small>This build of Lokus cannot connect a calendar yet.</small>
   );
   if (!status.accounts.length) {
     return (
@@ -508,16 +509,23 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
                 ))}
             </section>
           ))}
-          <Pick
-            actions
-            icon="plus"
-            value=""
-            disabled={!!connecting}
-            label={connecting ? "Finish in your browser…" : "Add calendar account"}
-            title="Add calendar account"
-            options={[...(available.google ? [["google", "Google Calendar"] as [string, string]] : []), ...(available.microsoft ? [["microsoft", "Microsoft 365"] as [string, string]] : [])]}
-            onChange={(provider) => void connect(provider as "google" | "microsoft")}
-          />
+          {offered.length === 1 ? (
+            <button className="cal-pick" disabled={!!connecting} title={`Add a ${offered[0][1]} account`} onClick={() => void connect(offered[0][0])}>
+              <Icon name="plus" size={14} />
+              <span>{connecting ? "Finish in your browser…" : "Add calendar account"}</span>
+            </button>
+          ) : offered.length ? (
+            <Pick
+              actions
+              icon="plus"
+              value=""
+              disabled={!!connecting}
+              label={connecting ? "Finish in your browser…" : "Add calendar account"}
+              title="Add calendar account"
+              options={offered}
+              onChange={(provider) => void connect(provider as "google" | "microsoft")}
+            />
+          ) : null}
 
           {members.length > 0 && (
             <section>
