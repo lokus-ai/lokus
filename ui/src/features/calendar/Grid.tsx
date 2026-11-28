@@ -302,9 +302,11 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   const short = face < 34;
                   const lines = short ? 1 : Math.max(1, wide < 96 ? Math.min(2, room) : room);
                   const dragged = drag?.event?.key === e.key && drag.moved;
+                  // A narrow one gives its title every line it has, so two that start alike can be told apart; the time takes a line the title left.
+                  const wraps = !short && wide < 96 && room >= 2;
                   const words = (
                     <>
-                      <b className={short || lines < 3 || wide < 96 ? "one" : ""} style={!short && lines >= 3 && wide >= 96 ? { WebkitLineClamp: lines - 1 } : undefined}>{e.title || "(No title)"}</b>
+                      <b lang={wraps ? "en" : undefined} className={wraps || (lines >= 3 && wide >= 96) ? "" : "one"} style={wraps ? { WebkitLineClamp: room } : lines >= 3 && wide >= 96 ? { WebkitLineClamp: lines - 1 } : undefined}>{e.title || "(No title)"}</b>
                       <span>
                         <i>{clock(e.start, zone)}</i>
                         <i>{e.pending || e.unsent ? " · not sent" : e.queued ? " · waiting" : ` – ${clock(e.end, zone)}`}</i>
@@ -314,7 +316,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   return (
                     <div
                       key={e.key}
-                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 64 ? " slim" : ""}${dragged ? " dragged" : ""}`}
+                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 64 ? " slim" : ""}${wraps ? " wraps" : ""}${dragged ? " dragged" : ""}`}
                       style={{ top: p.top * PX, height: tall, left: `calc((100% - 8px) * ${p.left} + 1px)`, width: `calc((100% - 8px) * ${p.right - p.left} - 2px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
                       title={`${e.title || "(No title)"}\n${clock(e.start, zone)} – ${clock(e.end, zone)}`}
                       role="button"
@@ -326,7 +328,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                       onPointerMove={move}
                       onPointerUp={finish}
                     >
-                      {short ? <div className="cal-line">{words}</div> : words}
+                      {short ? <div className="cal-line">{words}</div> : wraps ? <div className="cal-words" style={{ maxHeight: room * 15 }}>{words}</div> : words}
                       {e.mine && <u className="cal-resize" onPointerDown={(ev) => begin("resize", ev, e)} onPointerMove={move} onPointerUp={finish} />}
                     </div>
                   );

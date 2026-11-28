@@ -490,7 +490,8 @@ widens into the columns to its right that are free while it lasts. An event that
 hour or more after everything still going is laid over them, set in by one step and outlined in
 the surface colour; when a group has no room for one more column, the event is laid over a single
 column whose event began half an hour before it. Only what still has no room is behind a "+N" that
-opens the list for that time. An all-day event is one bar across the days it covers; a click in
+opens the list for that time. A narrow card gives its title every line it has (the time takes a
+line the title left), so "Same minute A" and "Same minute B" can be told apart. An all-day event is one bar across the days it covers; a click in
 the all-day row, or a drag across days, starts one, and the panel has an "All day" switch. The
 time zone is picked from a list to type in, with the chosen zone, this computer's and the last
 four used on top. A colleague's or teammate's busy time is a hatched block across the day behind

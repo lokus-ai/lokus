@@ -338,3 +338,7 @@ div.cal-person { color: var(--fg); }
 .cal-event.slim { padding-left: 7px; padding-right: 2px; font-size: 11px; letter-spacing: -0.01em; }
 .cal-event.slim > span { font-size: 10px; }
 .cal-more { padding: 0 2px; }
+.cal-words { display: flex; flex-direction: column; flex: none; min-width: 0; overflow: hidden; }
+.cal-event.wraps b { display: -webkit-box; max-height: none; flex: none; overflow-wrap: break-word; }
+.cal-event.wraps.slim b { -webkit-hyphens: auto; hyphens: auto; }
+.cal-event.wraps.one span { display: flex; }
