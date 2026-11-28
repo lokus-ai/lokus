@@ -231,7 +231,8 @@ pub async fn run(dir: &Path) -> Result<Value> {
                 refused += 1;
                 // A refused delete has no event left to show Retry on: the event comes back as
                 // the provider has it, and can be deleted again from there.
-                if q.op == "delete" && restore(dir, &q) {
+                // Signed out, the delete stays and is sent after signing in again.
+                if q.op == "delete" && e.code != "signed_out" && restore(dir, &q) {
                     Store::open(dir)?.sent(q.n)?;
                     problems.push(
                         json!({ "account": q.account, "code": e.code, "message": e.message }),
