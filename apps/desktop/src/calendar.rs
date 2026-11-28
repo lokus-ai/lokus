@@ -30,7 +30,28 @@ fn root(app: &AppHandle) -> Option<PathBuf> {
 /// The calendar's tools for the assistant; none until an account is connected.
 pub fn tools(app: &AppHandle) -> Option<lokus_ai::Local> {
     let dir = dir(app)?;
-    lokus_calendar::Store::exists(&dir).then(|| lokus_calendar::assistant(dir, root(app), open))
+    if !lokus_calendar::Store::exists(&dir) {
+        return None;
+    }
+    let mut local = lokus_calendar::assistant(dir, root(app), open);
+    // A change the assistant made is told to every window, as one made in a window is.
+    let (run, app) = (local.run.clone(), app.clone());
+    local.run = std::sync::Arc::new(move |tool: String, input: Value| {
+        let (run, app) = (run.clone(), app.clone());
+        Box::pin(async move {
+            let writes = lokus_calendar::command_of(&tool).is_some_and(|name| {
+                lokus_calendar::COMMANDS
+                    .iter()
+                    .any(|c| c.name == name && c.writes)
+            });
+            let done = run(tool, input).await;
+            if writes && done.is_ok() {
+                let _ = app.emit("calendar:synced", json!({ "changed": true }));
+            }
+            done
+        })
+    });
+    Some(local)
 }
 
 #[tauri::command]
