@@ -28,6 +28,22 @@ fn window() -> (String, String) {
     )
 }
 
+async fn restore(dir: &Path, q: &Queued) -> bool {
+    let Ok(store) = Store::open(dir) else {
+        return false;
+    };
+    let Ok((_, calendar, id)) = split(&q.key) else {
+        return false;
+    };
+    let Ok(account) = store.account(&q.account) else {
+        return false;
+    };
+    match provider::get(&account, calendar, id).await {
+        Ok(theirs) => store.put(&theirs).is_ok(),
+        Err(_) => false,
+    }
+}
+
 async fn send(dir: &Path, q: &Queued) -> Result<()> {
     let account = Store::open(dir)?.account(&q.account)?;
     let (_, calendar, id) = split(&q.key)?;
@@ -219,9 +235,18 @@ pub async fn run(dir: &Path) -> Result<Value> {
                 stuck.push(q.key.clone());
             }
             Err(e) => {
+                refused += 1;
+                // A refused delete has no event left to show Retry on: the event comes back as
+                // the provider has it, and can be deleted again from there.
+                if q.op == "delete" && restore(dir, &q).await {
+                    Store::open(dir)?.sent(q.n)?;
+                    problems.push(
+                        json!({ "account": q.account, "code": e.code, "message": e.message }),
+                    );
+                    continue;
+                }
                 Store::open(dir)?.refused(q.n, &e.message)?;
                 stuck.push(q.key.clone());
-                refused += 1;
             }
         }
     }
