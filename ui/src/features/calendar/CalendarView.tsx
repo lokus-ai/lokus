@@ -82,7 +82,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const room = Math.max(1, Math.floor((weekWidth - 56) / DAY_MIN));
   const fit = count <= room ? count : ([7, 5, 3, 2, 1].find((n) => n <= room && n <= count) ?? 1);
 
-  // A week that shows only its working days still turns a whole week at a time.
+  // A week that shows only its working days still turns a whole week at a time, from its first day.
   const turn = count === 7 && fit >= 5 ? 7 : fit;
 
   const days = useMemo(() => {
@@ -278,7 +278,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     if (e.key === "Escape" && (deleting || noteAsk)) return (setDeleting(false), setNoteAsk(null));
     if (e.key === "Escape" && selected) return select(null);
     if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector(".palette, [role=dialog]")) return;
-    const step = (by: number) => setAnchor(addDays(dayStart(anchor, zone), by * turn, zone));
+    const step = (by: number) => setAnchor(addDays(from, by * turn, zone));
     if (/^[1-9]$/.test(e.key)) (setCount(Number(e.key)), keep("days", e.key));
     else if (e.key === "t") setAnchor(Date.now());
     else if (e.key === "j" || e.key === "ArrowRight") step(1);
@@ -540,10 +540,10 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
             </button>
           )}
           <span className="cal-steps">
-            <button className="cal-icon" title="Earlier (K)" onClick={() => setAnchor(addDays(dayStart(anchor, zone), -turn, zone))}>
+            <button className="cal-icon" title="Earlier (K)" onClick={() => setAnchor(addDays(from, -turn, zone))}>
               <Icon name="back" size={16} />
             </button>
-            <button className="cal-icon" title="Later (J)" onClick={() => setAnchor(addDays(dayStart(anchor, zone), turn, zone))}>
+            <button className="cal-icon" title="Later (J)" onClick={() => setAnchor(addDays(from, turn, zone))}>
               <Icon name="chevron" size={16} />
             </button>
           </span>
