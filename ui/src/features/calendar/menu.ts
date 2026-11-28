@@ -35,6 +35,8 @@ export function pickMenu(under: HTMLElement, label: string, items: ([value: stri
       button.prepend(dot);
     }
   }
+  // Taller now than when it was placed: kept inside the window.
+  if (menu) menu.style.top = `${Math.max(4, Math.min(menu.offsetTop, innerHeight - menu.offsetHeight - 4))}px`;
   // The chosen one is brought into view in a long list (the time zones).
   document.querySelector<HTMLElement>(`.menu [data-command="${CSS.escape(chosen ?? "")}"]`)?.focus();
 }
