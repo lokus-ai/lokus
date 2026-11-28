@@ -634,30 +634,46 @@ impl Store {
         body: &Value,
         notify: bool,
     ) -> Result<()> {
-        // One delete of an event waits at a time, and a reply is not added when the last one waiting
-        // is the same: asked for three times at once it is still one request and one email, and
-        // yes, no, yes still ends in yes.
-        // A newer reply replaces one to the same event (or the same series) that is not being
-        // sent right now (the new one looks up what the provider has before it goes): answered four times offline, the organiser hears once.
-        if op == "reply" {
-            self.db.execute(
-                "DELETE FROM outbox WHERE op = 'reply' AND account = ?1 AND error IS NULL
-                   AND n NOT IN (SELECT n FROM sending)
-                   AND json_extract(body, '$.scope') = json_extract(?3, '$.scope')
-                   AND (key = ?2 OR (json_extract(?3, '$.scope') = 'all'
-                     AND json_extract(body, '$.event.series') = json_extract(?3, '$.event.series')))",
-                params![account, key, body.to_string()],
-            )?;
-        }
+        // One delete of an event waits at a time. A reply always goes in: `overtaken` then
+        // leaves only the latest one to the same event or series.
         self.db.execute(
             "INSERT INTO outbox (account, key, op, body, notify, made) SELECT ?1, ?2, ?3, ?4, ?5, ?6
-             WHERE ?3 NOT IN ('delete', 'reply') OR NOT EXISTS (SELECT 1 FROM outbox o WHERE key = ?2 AND op = ?3
-               AND error IS NULL AND (op = 'delete' OR (json_extract(body, '$.answer') = json_extract(?4, '$.answer')
-                 AND json_extract(body, '$.scope') = json_extract(?4, '$.scope')
-                 AND n = (SELECT MAX(n) FROM outbox WHERE key = o.key AND op = 'reply' AND error IS NULL))))",
+             WHERE ?3 != 'delete' OR NOT EXISTS (SELECT 1 FROM outbox WHERE key = ?2 AND op = ?3
+               AND error IS NULL)",
             params![account, key, op, body.to_string(), notify as i64, now()],
         )?;
+        self.overtaken()?;
         Ok(())
+    }
+
+    /// The one rule for replies: the latest answer to an event, or to a series, wins. Every
+    /// earlier reply of the same scope is dropped unless it is on its way to the provider right
+    /// now; that one is followed by the latest and by nothing else, and the latest looks up what
+    /// the provider has before it goes. Called when a reply is added and when one comes back
+    /// unsent.
+    pub fn overtaken(&self) -> Result<()> {
+        self.db.execute(
+            "DELETE FROM outbox WHERE op = 'reply' AND error IS NULL AND n NOT IN (SELECT n FROM sending)
+               AND EXISTS (SELECT 1 FROM outbox later WHERE later.op = 'reply' AND later.n > outbox.n
+                 AND later.account = outbox.account
+                 AND json_extract(later.body, '$.scope') = json_extract(outbox.body, '$.scope')
+                 AND (later.key = outbox.key OR (json_extract(later.body, '$.scope') = 'all'
+                   AND json_extract(later.body, '$.event.series') = json_extract(outbox.body, '$.event.series'))))",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// A reply given in the last three seconds: it waits, for the answer may still be changing
+    /// under the person's fingers, and only the one they end on is worth an email.
+    pub fn settling(&self, n: i64) -> Result<bool> {
+        let recent = stamp(chrono::Utc::now() - chrono::Duration::seconds(3));
+        let fresh: i64 = self.db.query_row(
+            "SELECT COUNT(*) FROM outbox WHERE n = ?1 AND op = 'reply' AND made >= ?2",
+            params![n, recent],
+            |r| r.get(0),
+        )?;
+        Ok(fresh > 0)
     }
 
     /// A change that was handed to the provider before, whose answer never came: it may have
@@ -751,7 +767,7 @@ impl Store {
     /// Put a taken change back: it could not be sent now.
     pub fn untake(&self, n: i64) -> Result<()> {
         self.db.execute("DELETE FROM sending WHERE n = ?1", [n])?;
-        Ok(())
+        self.overtaken()
     }
 
     pub fn sent(&self, n: i64) -> Result<()> {

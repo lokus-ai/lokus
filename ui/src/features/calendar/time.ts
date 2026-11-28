@@ -118,6 +118,10 @@ export interface Placed {
 const MIN_HEIGHT = 15;
 /** The least width an event is drawn beside another, in pixels: room for about two words. A day shows as many side by side as fit at that width; one more is laid over a column when it can be, and the rest are behind "+N". */
 const FACE = 72;
+/** The least width when that would leave one event showing and the others hidden: room for one word. Two side by side beat one and "+2". */
+const SLIM = 48;
+/** How many events a width shows side by side: as many as keep two words each, and two when both still keep a word. */
+const across = (room: number) => Math.max(1, Math.floor(room / FACE), Math.min(2, Math.floor(room / SLIM)));
 /** The least width of an event laid over a column, in pixels: its title's first word is whole. */
 const LAID = 64;
 /** The width a "+N" takes beside the events that did fit, in pixels. */
@@ -174,8 +178,8 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       hi = under.lo + under.share * (c.over.to ?? c.over.column + 1);
     }
     const room = width * (hi - lo) - 8;
-    const fits = c.columns.length <= Math.max(1, Math.floor(room / FACE));
-    const boxes = fits ? c.columns.length : Math.max(1, Math.floor((room - CHIP) / FACE));
+    const fits = c.columns.length <= across(room);
+    const boxes = fits ? c.columns.length : across(room - CHIP);
     const chip = fits ? 0 : Math.min((hi - lo) * 0.4, (CHIP + 8) / width);
     return { lo, hi, boxes, share: (hi - lo - chip) / boxes, chip };
   };
@@ -198,13 +202,13 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       // A column too narrow for a card set in by one step to show a word takes none: the event goes behind the "+N" instead.
       const holds = lie(beside).share * width - STEP >= LAID;
       // Over rather than beside as soon as one more column would leave each less than a few words wide.
-      const snug = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE));
+      const snug = beside.columns.length + 1 > across(width * (hi - lo) - 8);
       const column = snug && holds ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
       if (free) free.push(item);
       else if (column >= 0) {
         cluster = { columns: [[item]], depth: above, from: 0, over: { cluster: beside, column } };
         clusters.push(cluster);
-      } else if (beside.over && beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE))) {
+      } else if (beside.over && beside.columns.length + 1 > across(width * (hi - lo) - 8)) {
         // Laid over a column already, with no room there for one more beside: no sliver, it joins the "+N" of the group beneath.
         cluster = beside;
         while (cluster.over) cluster = cluster.over.cluster;

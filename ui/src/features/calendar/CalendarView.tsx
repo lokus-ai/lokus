@@ -170,7 +170,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
 
   // A delete that can still be undone: hidden here, not yet asked of the provider.
   const gone = useRef<{ args: Record<string, unknown>; timer: number } | null>(null);
-  const [hidden, setHidden] = useState<{ key?: string; series?: string } | null>(null);
+  const [hidden, setHidden] = useState<{ key?: string; series?: string; title: string } | null>(null);
   const kept_ = hidden ? events.filter((e) => (hidden.series ? e.series !== hidden.series : e.key !== hidden.key)) : events;
   const shown = draft ? [...kept_, draft] : kept_;
   const current = selected === DRAFT ? draft : (events.find((e) => e.key === selected) ?? null);
@@ -278,17 +278,8 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     return run;
   };
 
-  // One reply at a time: a second key press or click while it is on its way does nothing.
-  const replying = useRef(false);
-  const [answering, setAnswering] = useState(false);
-  const reply = async (answer: "yes" | "no" | "maybe") => {
-    if (!current || replying.current) return;
-    replying.current = true;
-    setAnswering(true);
-    await act("calendar.event.reply", { key: current.key, scope, reply: answer });
-    replying.current = false;
-    setAnswering(false);
-  };
+  // Every press is passed on: the latest answer is the one that is sent.
+  const reply = (answer: "yes" | "no" | "maybe") => current && act("calendar.event.reply", { key: current.key, scope, reply: answer });
 
   const change = (fields: Record<string, unknown>) => {
     if (selected === DRAFT && draft) {
@@ -327,9 +318,10 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     if (notify === undefined && !current.unsent && (current.guests.length > 0 || current.changes.includes("guests"))) return setDeleting(true);
     if (notify === undefined) {
       // No guest to tell: it goes from the screen now and to the provider a few seconds later, unless undone.
+      // One Undo, for the latest delete: the one before it is sent now, and the line names the one it brings back.
       settle();
       const args = { key: current.key, scope, notify: true };
-      const hide = scope === "all" && current.series ? { series: current.series } : { key: current.key };
+      const hide = { title: current.title || "(No title)", ...(scope === "all" && current.series ? { series: current.series } : { key: current.key }) };
       gone.current = { args, timer: window.setTimeout(settle, 5000) };
       setHidden(hide);
       return select(null);
@@ -713,7 +705,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
         </header>
         {hidden && (
           <div className="cal-undo" role="status">
-            Deleted
+            <span>Deleted “{hidden.title}”</span>
             <button className="link" onClick={() => settle(true)}>
               Undo <kbd>{formatKeys("Mod-Z")}</kbd>
             </button>
@@ -745,7 +737,6 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
           onKeep={() => setDeleting(false)}
           noteAsk={noteAsk}
           onReply={(answer) => void reply(answer)}
-          replying={answering}
           onNote={(shared) => void note(shared)}
           onBlock={(account) => void act("calendar.block", { key: panel.key, account }).then((made) => made && onNotice("Blocked as Busy on the other calendar."))}
           onClose={() => select(null)}

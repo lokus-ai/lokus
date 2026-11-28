@@ -39,7 +39,6 @@ interface Props {
   noteAsk: string | null;
   onReply: (answer: "yes" | "no" | "maybe") => void;
   /** A reply is on its way: the buttons wait for it. */
-  replying: boolean;
   /** My answer to the series as a whole; a date answered on its own keeps its own. */
   seriesReply: string | null;
   onNote: (shared?: boolean) => void;
@@ -266,7 +265,7 @@ export function EventPanel(p: Props) {
             {(["yes", "no", "maybe"] as const).map((answer) => {
               const on = (p.scope === "all" && p.seriesReply ? p.seriesReply : e.reply) === { yes: "accepted", no: "declined", maybe: "tentative" }[answer];
               return (
-                <button key={answer} className={on ? "active" : ""} aria-pressed={on} disabled={p.replying} onClick={() => p.onReply(answer)}>
+                <button key={answer} className={on ? "active" : ""} aria-pressed={on} onClick={() => p.onReply(answer)}>
                   {answer[0].toUpperCase() + answer.slice(1)} <kbd>{answer[0].toUpperCase()}</kbd>
                 </button>
               );

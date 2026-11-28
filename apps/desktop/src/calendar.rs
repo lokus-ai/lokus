@@ -107,16 +107,19 @@ async fn round(app: &AppHandle, dir: &std::path::Path) {
     let _ = app.emit("calendar:synced", json!({ "changed": moved, "sync": done }));
 }
 
-/// While the app is open, look once a minute. With no account connected a round is one look
+/// While the app is open, look at the start and then once a minute. With no account connected a round is one look
 /// for a file that is not there: nothing is opened and nothing is asked of anyone.
 pub fn start(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        // The first look comes right after the start, whichever screen is open: a change cut
+        // off when the app was last closed is settled then, not a minute later.
+        tokio::time::sleep(Duration::from_secs(2)).await;
         loop {
-            tokio::time::sleep(Duration::from_secs(60)).await;
             if let Some(dir) = dir(&app).filter(|dir| lokus_calendar::Store::exists(dir)) {
                 round(&app, &dir).await;
             }
+            tokio::time::sleep(Duration::from_secs(60)).await;
         }
     });
 }

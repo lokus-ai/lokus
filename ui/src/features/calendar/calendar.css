@@ -350,3 +350,4 @@ div.cal-person { color: var(--fg); }
 /* What a control is for, shown on hover in the app's look. */
 .cal-hint { position: fixed; z-index: 1000; max-width: min(280px, calc(100vw - 16px)); white-space: pre-line; opacity: 1; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-size: var(--text-caption); line-height: 16px; box-shadow: var(--shadow-pop); pointer-events: none; overflow-wrap: anywhere; }
 .cal-pending .cal-split { margin-top: auto; }
+.cal-undo span { max-width: 260px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }

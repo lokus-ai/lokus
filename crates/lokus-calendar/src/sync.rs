@@ -298,6 +298,11 @@ pub async fn run(dir: &Path) -> Result<Value> {
         .into_iter()
         .find(|q| !seen.contains(&q.n))
     {
+        // A reply just given waits a moment: pressed again meanwhile, only the last one goes.
+        if Store::open(dir)?.settling(q.n)? {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            continue;
+        }
         seen.push(q.n);
         // A change the provider refused stays, with why; later changes to that event wait behind it.
         if q.error.is_some() || stuck.contains(&q.key) {

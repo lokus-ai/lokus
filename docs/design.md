@@ -433,7 +433,7 @@ build ignores both.
 to the person, not to a folder) holds accounts, calendars, events, changes waiting to be sent and
 which note belongs to which event. It is derived: delete it and the events are read again. The
 calendar draws from it, so it opens at once and works offline. While the app is open it asks each
-provider what changed about once a minute (Google's sync tokens, Graph's delta links; when a
+provider what changed two seconds after the start, whichever screen is open, and then about once a minute (Google's sync tokens, Graph's delta links; when a
 provider says the position is too old the calendar is read afresh). Nothing runs, and the file is
 not made, until an account is connected.
 
@@ -460,9 +460,12 @@ not come within 30 seconds, or is cut off, may still have been acted on. Before 
 reply or a delete is sent a second time, the event is read from the provider and compared
 (`sync::applied`; the queue row is marked in `tried` when it is first sent): what is already there
 is not sent again, and an event that is gone counts as deleted. An answer already given is not
-sent again, and a second identical reply or delete is not queued while one waits. A newer
-reply replaces a waiting one to the same event, or to the same series, that is not being sent at
-that moment: answered four times offline, the organiser hears once. A reply to one date
+sent again, and a second delete is not queued while one waits. Replies follow one rule
+(`Store::overtaken`): the latest answer to an event, or to a series, wins. A reply waits three
+seconds before it is sent, and a newer one replaces every earlier one that is not on its way to
+the provider at that moment; that one is followed by the latest and by nothing else. Answered
+four times in a row, online or offline, the organiser hears once, the last answer; changed again
+while the first is on its way, twice at most. A reply to one date
 and a reply to the series are different things and both stay. Guests are compared by what the
 change meant: the ones it added or made optional or required are so, and the ones it removed are not; a guest someone else
 added meanwhile does not make it unsent. A change being sent is marked with the number of the
@@ -501,7 +504,7 @@ it (the open event's day is always among those shown), and only below that lies 
 the list on the left does when it has no room, and then the assistant folds away while the event
 is open and comes back when it closes; the bar gives up key hints,
 then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
-or the sync status. Overlapping events share the width as columns while each keeps 72 pixels, room for about two words; a day as wide as five such columns shows five, a narrower one fewer, and one
+or the sync status. Overlapping events share the width as columns while each keeps 72 pixels, room for about two words; a day as wide as five such columns shows five, a narrower one fewer; where that would leave one event showing and the rest hidden, two are shown at 48 pixels each (one word), so a day, never narrower than 136 pixels, always shows at least two, since two cards and "+1" hide less than one card and "+2"; and one
 widens into the columns to its right that are free while it lasts. An event that starts half an
 hour or more after everything still going is laid over them, set in by one step and outlined in
 the surface colour; when a group has no room for one more column, the event is laid over a single
@@ -536,11 +539,12 @@ between events, Enter opens one. One invitation that reaches two connected accou
 N guests?", with "Delete without email" (not offered on Microsoft 365, which always emails a
 cancellation). The question opens above the Delete button, which stays where it was, switched
 off. Every group of choices that sends or deletes (this question, the send block, the meeting
-note question, the assistant's approval card) ignores a click for half a second after it
-appears and for half a second after each click it ignored, so a double or triple click aimed at
+note question, the assistant's approval card) ignores a click for the first half second after it
+appears, and no longer however often it is clicked, so a double or triple click aimed at
 what stood there before does nothing (`ui/src/shell/Settle.tsx`). Deleting an event without
-guests hides it at once and shows "Deleted · Undo" for five seconds (also Cmd+Z); only then is
-the delete queued. Closing the app within those five seconds keeps the event. Drag on the grid to make an event, drag an event to move it,
+guests hides it at once and shows "Deleted “title” · Undo" for five seconds (also Cmd+Z); only then is
+the delete queued. One delete can be undone at a time: a second delete sends the first at once
+and the line then names the second. Leaving the calendar sends it at once too. Closing the app within those five seconds keeps the event. Drag on the grid to make an event, drag an event to move it,
 its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
 meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
 any zone. A repeating event is changed, answered or deleted as "This event" or "All events".

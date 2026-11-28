@@ -294,7 +294,8 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                       const bottom = Math.min(24 * 60, (Date.parse(e) - day) / MINUTE);
                       return (
                         <div key={`${o.label}${s}`} className="cal-busy" role="img" aria-label={`${o.label} is busy ${clock(s, zone)} to ${clock(e, zone)}`} style={{ top: top * PX, height: (bottom - top) * PX - 2, "--c": o.color } as CSSProperties}>
-                          <i>{initials(o.label)}</i>
+                          {/* The initials sit in the corner only when no event's words are there. */}
+                          {!laid[i].placed.some((p) => p.right > 0.8 && p.top < top + 20 / PX && p.top + p.height > top) && <i>{initials(o.label)}</i>}
                         </div>
                       );
                     }),
