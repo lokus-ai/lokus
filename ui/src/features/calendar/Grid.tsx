@@ -39,6 +39,16 @@ interface Drag {
 }
 
 /** The week: one column a day, an hour every 48 pixels, events where they fall. */
+/** A person's initials, from a name or the start of an email. */
+const initials = (label: string) =>
+  label
+    .split("@")[0]
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
 export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorOf, onSelect, onNew, onMove }: Props) {
   const scroll = useRef<HTMLDivElement>(null);
   const hours = useRef<HTMLDivElement>(null);
@@ -55,7 +65,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
   const [now, setNow] = useState(Date.now());
 
   useLayoutEffect(() => {
-    if (scroll.current) scroll.current.scrollTop = 7.25 * HOUR;
+    if (scroll.current) scroll.current.scrollTop = 8 * HOUR;
   }, []);
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Date.now()), MINUTE);
@@ -224,24 +234,38 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                     .map(([s, e]) => {
                       const top = Math.max(0, (Date.parse(s) - day) / MINUTE);
                       const bottom = Math.min(24 * 60, (Date.parse(e) - day) / MINUTE);
-                      return <div key={`${o.label}${s}`} className="cal-busy" title={`${o.label} is busy`} style={{ top: top * PX, height: (bottom - top) * PX, "--c": o.color } as CSSProperties} />;
+                      return (
+                        <div key={`${o.label}${s}`} className="cal-busy" style={{ top: top * PX, height: (bottom - top) * PX - 2, "--c": o.color } as CSSProperties}>
+                          <i title={`${o.label} is busy ${clock(s, zone)} – ${clock(e, zone)}`}>{initials(o.label)}</i>
+                        </div>
+                      );
                     }),
                 )}
                 {place(shown, day, next, dayWidth).map((p) => {
                   const e = p.event;
-                  const tall = p.height * PX - 1;
+                  const tall = p.height * PX - 2;
                   // A line of the title is 15 pixels: under two lines it is the title alone on one, then the time when there is room.
                   // Only the part no later event lies over is written on; a narrow one keeps its title to one line.
-                  const wide = (p.right - p.left) * dayWidth;
-                  const room = Math.floor((Math.min(tall, p.clear * PX) - 5) / 15);
-                  const lines = tall < 34 ? 1 : Math.max(1, wide < 96 ? Math.min(2, room) : room);
-                  const short = tall < 34;
+                  const wide = (p.right - p.left) * dayWidth - (p.right === 1 ? 8 : 2);
+                  const face = Math.max(14, Math.min(tall, p.clear * PX - 1));
+                  const room = Math.floor((face - 5) / 15);
+                  const short = face < 34;
+                  const lines = short ? 1 : Math.max(1, wide < 96 ? Math.min(2, room) : room);
                   const dragged = drag?.event?.key === e.key && drag.moved;
+                  const words = (
+                    <>
+                      <b style={!short && lines >= 2 ? { WebkitLineClamp: wide < 96 ? 1 : lines - 1 } : undefined}>{e.title || "(No title)"}</b>
+                      <span>
+                        <i>{clock(e.start, zone)}</i>
+                        <i>{e.pending || e.unsent ? " · not sent" : e.queued ? " · waiting" : ` – ${clock(e.end, zone)}`}</i>
+                      </span>
+                    </>
+                  );
                   return (
                     <div
                       key={e.key}
-                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${!short && room < 1 ? " tight" : ""}${tall < 18 ? " tiny" : ""}${!short && wide < 96 ? " lane" : ""}${dragged ? " dragged" : ""}`}
-                      style={{ top: p.top * PX, height: tall, left: `calc(${p.left * 100}% + ${p.left ? 0 : 1}px)`, width: `calc(${(p.right - p.left) * 100}% - ${p.right === 1 ? 8 : 2}px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${tall}px` } as CSSProperties}
+                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${dragged ? " dragged" : ""}`}
+                      style={{ top: p.top * PX, height: tall, left: `calc(${p.left * 100}% + 1px)`, width: `calc(${(p.right - p.left) * 100}% - ${p.right === 1 ? 9 : 2}px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px` } as CSSProperties}
                       title={`${e.title || "(No title)"}\n${clock(e.start, zone)} – ${clock(e.end, zone)}`}
                       role="button"
                       tabIndex={0}
@@ -252,11 +276,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                       onPointerMove={move}
                       onPointerUp={finish}
                     >
-                      <b style={!short && lines >= 2 ? { WebkitLineClamp: wide < 96 ? 1 : lines - 1 } : undefined}>{e.title || "(No title)"}</b>
-                      <span>
-                        <i>{clock(e.start, zone)}</i>
-                        <i>{e.pending || e.unsent ? " · not sent" : e.queued ? " · waiting" : ` – ${clock(e.end, zone)}`}</i>
-                      </span>
+                      {short ? <div className="cal-line">{words}</div> : words}
                       {e.mine && <u className="cal-resize" onPointerDown={(ev) => begin("resize", ev, e)} onPointerMove={move} onPointerUp={finish} />}
                     </div>
                   );

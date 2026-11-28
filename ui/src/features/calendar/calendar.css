@@ -70,11 +70,14 @@
 .cal-month-days button:hover span { background: var(--bg-hover); }
 .cal-month-days button.today span { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .cal-account-name { display: flex; align-items: center; height: var(--row-height); padding-left: 8px; color: var(--fg-3); font-size: var(--text-caption); }
-.cal-account-name span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-account-name span { flex: 1; min-width: 0; display: flex; }
+.cal-account-name span i { font-style: normal; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-account-name span i:first-child { flex: 0 1 auto; }
+.cal-account-name span i:last-child { flex: 0 2 auto; max-width: 55%; }
 .cal-calendar { display: flex; align-items: center; gap: 8px; height: var(--row-height); padding-left: 8px; border-radius: var(--radius-sm); min-width: 0; }
 .cal-calendar:hover { background: var(--bg-hover); }
-.cal-calendar > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cal-calendar small { flex: none; color: var(--fg-3); font-size: 11px; }
+.cal-calendar > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-calendar small { flex: 0 1000 auto; min-width: 0; margin-left: auto; overflow: hidden; white-space: nowrap; color: var(--fg-3); font-size: 11px; }
 .cal-calendar.off > span { color: var(--fg-3); }
 .cal-check { width: 14px; height: 14px; display: grid; place-items: center; border-radius: var(--radius-xs); background: var(--c); box-shadow: inset 0 0 0 1.5px var(--c); color: #fff; flex: none; }
 .cal-calendar.off .cal-check { background: none; }
@@ -119,6 +122,8 @@ div.cal-person { color: var(--fg); }
 .cal-grid { flex: 1; min-height: 0; display: flex; flex-direction: column; --gutter: 56px; }
 .cal-scroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; position: relative; }
 .cal-top { position: sticky; top: 0; z-index: 20; background: var(--bg); box-shadow: 0 1px 0 var(--border); }
+/* An hour's label rides on its line: the one on the line right under this row is not shown as half a label. */
+.cal-top::after { content: ""; position: absolute; left: 0; top: 100%; width: calc(var(--gutter) - 1px); height: 9px; border-top: 1px solid var(--border); background: var(--bg); pointer-events: none; }
 .cal-head, .cal-allday, .cal-hours { display: grid; grid-template-columns: var(--gutter) repeat(var(--days), minmax(0, 1fr)); }
 .cal-head { height: 36px; align-items: center; }
 .cal-gutter { position: relative; padding-right: 8px; text-align: right; color: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -138,39 +143,47 @@ div.cal-person { color: var(--fg); }
 .cal-column.weekend, .cal-allday-cell.weekend { background-color: color-mix(in srgb, var(--fg) 2.5%, transparent); }
 
 /* An event: one box, one radius, the calendar's colour as a straight strip the box clips. */
-.cal-event, .cal-chip { --fill: color-mix(in srgb, var(--c) 16%, var(--bg)); --ink: color-mix(in oklab, var(--c) 58%, var(--fg)); border-radius: var(--radius-xs); background: var(--fill); color: var(--ink); box-shadow: inset 3px 0 0 var(--c), 0 0 0 1px var(--bg); overflow: hidden; cursor: default; user-select: none; -webkit-user-select: none; transition: background var(--fast), filter var(--fast); }
+.cal-event, .cal-chip { --fill: color-mix(in srgb, var(--c) 16%, var(--bg)); --ink: color-mix(in oklab, var(--c) 58%, var(--fg)); border-radius: var(--radius-xs); background: var(--fill); color: var(--ink); box-shadow: 0 0 0 1px var(--bg); overflow: hidden; cursor: default; user-select: none; -webkit-user-select: none; transition: background var(--fast), filter var(--fast); }
 .cal-event { position: absolute; min-width: 0; padding: 3px 6px 0 9px; display: flex; flex-direction: column; font-size: var(--text-caption); line-height: 15px; }
 .cal-event:hover, .cal-chip:hover { --fill: color-mix(in srgb, var(--c) 24%, var(--bg)); }
 .cal-event b { font-weight: 550; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 /* The time: its start, then its end when there is room for it; never in the title's way. */
-.cal-event > span { display: flex; flex-wrap: wrap; height: 15px; overflow: hidden; font-size: 11px; opacity: 0.85; white-space: pre; font-variant-numeric: tabular-nums; flex: none; }
-.cal-event > span i { font-style: normal; flex: none; }
-.cal-event.short { flex-flow: row wrap; align-content: flex-start; column-gap: 6px; padding-top: 0; line-height: var(--h, 15px); }
-.cal-event.short b { display: block; white-space: nowrap; text-overflow: ellipsis; flex: 0 0 auto; max-width: 100%; height: 100%; }
-.cal-event.short > span { height: 100%; line-height: inherit; }
-.cal-event.short > span i:last-child { display: none; }
-.cal-event.one > span { display: none; }
-.cal-event.tight { padding-top: 0; font-size: 11px; line-height: 14px; }
+.cal-event span { display: flex; flex-wrap: wrap; height: 15px; overflow: hidden; font-size: 11px; opacity: 0.85; white-space: pre; font-variant-numeric: tabular-nums; flex: none; }
+.cal-event span i { font-style: normal; flex: none; }
+.cal-event.short { padding-top: 0; }
+/* A short event's one line: the title, then the time when there is room; what does not fit is not shown at all. */
+.cal-line { height: var(--h, 15px); flex: none; display: flex; flex-flow: row wrap; align-content: flex-start; column-gap: 6px; overflow: hidden; line-height: var(--h, 15px); }
+.cal-event.short b { display: block; white-space: nowrap; text-overflow: ellipsis; flex: 0 0 auto; max-width: 100%; height: var(--h); }
+.cal-event.short span { height: var(--h); line-height: inherit; }
+.cal-event.short span i:last-child { display: none; }
+.cal-event.one span { display: none; }
 .cal-event b { overflow-wrap: break-word; }
 /* A narrow one breaks its title between words and shows the whole first word, not part of it. */
 .cal-event.lane { padding: 3px 2px 0 7px; font-size: 11px; }
-.cal-event.lane.tight { padding-top: 0; }
 .cal-event.lane b { display: block; max-height: 15px; overflow-wrap: normal; }
+.cal-event.short.lane { padding-top: 0; }
+.cal-event.short.lane b { max-height: none; }
 .cal-event.tiny { font-size: 11px; }
 .cal-event.tiny > span { font-size: 10px; }
-.cal-event.selected, .cal-chip.selected { --fill: var(--c); --ink: #fff; box-shadow: inset 3px 0 0 color-mix(in srgb, var(--c) 78%, #000), 0 0 0 1px var(--bg), 0 2px 8px rgba(0, 0, 0, 0.18); }
+/* The accent is a straight strip cut by the box's own corners. */
+.cal-event::before, .cal-chip::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--bar, var(--c)); }
+.cal-chip { position: relative; }
+.cal-event.selected, .cal-chip.selected { --fill: var(--c); --ink: #fff; --bar: color-mix(in srgb, var(--c) 78%, #000); box-shadow: 0 0 0 1px var(--bg), 0 3px 10px rgba(0, 0, 0, 0.22); }
 .calendar .cal-event:focus-visible { outline-offset: -2px; }
 .cal-event.unanswered { --fill: var(--bg); box-shadow: inset 0 0 0 1px var(--c), 0 0 0 1px var(--bg); background-image: none; }
+.cal-event.unanswered::before { display: none; }
 .cal-event.unanswered.selected { --fill: color-mix(in srgb, var(--c) 24%, var(--bg)); --ink: color-mix(in oklab, var(--c) 58%, var(--fg)); }
 .cal-event.declined { opacity: 0.55; }
 .cal-event.declined b { text-decoration: line-through; }
 .cal-event.pending:not(.selected) { background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--c) 12%, transparent) 5px 10px); }
-.cal-event.dragged { z-index: 17 !important; box-shadow: inset 3px 0 0 var(--c), 0 0 0 1px var(--bg), var(--shadow-pop); transition: none; }
+.cal-event.dragged { z-index: 17 !important; box-shadow: 0 0 0 1px var(--bg), var(--shadow-pop); transition: none; }
 .cal-event.ghost { --c: var(--accent); z-index: 17; pointer-events: none; }
 .cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; cursor: ns-resize; }
 .cal-tip { position: absolute; left: 2px; z-index: 18; height: 20px; padding: 0 6px; border-radius: var(--radius-xs); background: var(--fg); color: var(--bg); font-size: 11px; line-height: 20px; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
 .cal-chip { height: 20px; padding: 0 6px 0 9px; text-align: left; font-size: var(--text-caption); font-weight: 550; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; min-width: 0; flex: none; }
-.cal-busy { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, transparent) 0 4px, transparent 4px 8px); border-radius: var(--radius-sm); pointer-events: none; }
+.cal-busy { position: absolute; left: 1px; right: 8px; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 30%, transparent) 0 4px, color-mix(in srgb, var(--c) 10%, transparent) 4px 8px); border-radius: var(--radius-xs); pointer-events: none; }
+.cal-busy i { position: absolute; z-index: 15; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 3px; display: grid; place-items: center; border-radius: 8px; background: color-mix(in srgb, var(--c) 30%, var(--bg)); color: color-mix(in oklab, var(--c) 55%, var(--fg)); box-shadow: 0 0 0 1px var(--bg); font-style: normal; font-size: 9px; font-weight: 600; line-height: 1; opacity: 0; pointer-events: auto; transition: opacity var(--dur-fast, 120ms); }
+.cal-column:hover .cal-busy i { opacity: 1; }
 .cal-now { position: absolute; left: -1px; right: 0; height: 1px; background: var(--danger); z-index: 19; pointer-events: none; }
 .cal-now::before { content: ""; position: absolute; left: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
 
@@ -211,10 +224,14 @@ div.cal-person { color: var(--fg); }
 .cal-guest { display: flex; align-items: center; min-height: 36px; min-width: 0; border-radius: var(--radius-sm); }
 .cal-guest:hover { background: var(--bg-hover); }
 .cal-avatar { position: relative; width: 20px; height: 20px; margin: 0 6px; flex: none; display: grid; place-items: center; border-radius: 50%; background: color-mix(in srgb, var(--c) 22%, var(--bg)); color: color-mix(in oklab, var(--c) 62%, var(--fg)); font-size: 10px; font-weight: 600; line-height: 1; }
-.cal-answer { position: absolute; right: -3px; bottom: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg); box-shadow: inset 0 0 0 1.5px var(--fg-3), 0 0 0 1.5px var(--bg); }
+.cal-answer { position: absolute; right: -5px; bottom: -4px; width: 12px; height: 12px; display: grid; place-items: center; border-radius: 50%; background: var(--bg); color: #fff; box-shadow: inset 0 0 0 1.5px var(--fg-3), 0 0 0 1.5px var(--bg); font-style: normal; font-size: 8px; font-weight: 700; line-height: 1; }
+.cal-guest:hover .cal-answer { box-shadow: inset 0 0 0 1.5px var(--fg-3), 0 0 0 1.5px var(--bg-hover); }
 .cal-answer.accepted { background: var(--ok); box-shadow: 0 0 0 1.5px var(--bg); }
 .cal-answer.declined { background: var(--danger); box-shadow: 0 0 0 1.5px var(--bg); }
 .cal-answer.tentative { background: var(--warn); box-shadow: 0 0 0 1.5px var(--bg); }
+.cal-guest:hover .cal-answer.accepted, .cal-guest:hover .cal-answer.declined, .cal-guest:hover .cal-answer.tentative { box-shadow: 0 0 0 1.5px var(--bg-hover); }
+.cal-guest-reply { flex: none; padding-right: 8px; color: var(--fg-3); font-size: 11px; white-space: nowrap; }
+.cal-guest:hover .cal-guest-reply, .cal-guest:focus-within .cal-guest-reply { display: none; }
 .cal-guest-name { flex: 1; min-width: 0; padding: 0 8px; display: flex; flex-direction: column; justify-content: center; line-height: 16px; }
 .cal-guest-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-guest-name small { color: var(--fg-3); font-size: 11px; line-height: 14px; }

@@ -108,7 +108,7 @@ export interface Placed {
   /** Where it starts and ends across the day's width, each a share of it. */
   left: number;
   right: number;
-  /** How many earlier events it is laid over: later ones are drawn on top. */
+  /** How many earlier groups it is laid over: later ones are drawn on top. */
   depth: number;
   /** Minutes from its top before a later event is laid over it: its words go there, the rest is colour. */
   clear: number;
@@ -117,21 +117,21 @@ export interface Placed {
 /** The least an event is drawn tall, in minutes: a quarter of an hour, which has room for its title. */
 const MIN_HEIGHT = 15;
 /** Minutes of an event's height its title needs to stay readable. */
-const TITLE = 20;
-/** How far an event is set in from the one it is laid over, as a share of the day's width. */
-const INSET = 0.14;
-/** The narrowest an event is drawn beside another, in pixels: room for a word. */
-const LANE = 48;
+const TITLE = 15;
+/** The least width an event is drawn beside another, in pixels: room for a word. */
+const FACE = 60;
+/** How far an event is set in from the ones it is laid over, in pixels: the one step every stack uses. */
+const STEP = 10;
 
 /**
  * A day's timed events laid out as Google and Notion do. Events that start together sit side by
  * side while each has room for a word (`width` is the day's width in pixels). One that starts
- * later while another is still going, or that has no room beside the others, is set in from the
- * left and laid over them: the earlier one keeps its title and left edge, the later a readable width.
+ * later while others are still going is set in from them by one step and laid over them up to the
+ * day's right edge: the earlier one keeps its title line, the later one the width.
  */
 export function place(events: CalEvent[], day: number, next: number, width = 160): Placed[] {
   const minutes = (next - day) / MINUTE;
-  const items = events
+  const items: Placed[] = events
     .filter((e) => !e.all_day && Date.parse(e.start) < next && Date.parse(e.end) > day)
     .map((event) => {
       const top = Math.max(0, (Date.parse(event.start) - day) / MINUTE);
@@ -139,32 +139,26 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       return { event, top, height: Math.max(MIN_HEIGHT, bottom - top), left: 0, right: 1, depth: 0, clear: 0 };
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
+  const step = STEP / width;
   const done: Placed[] = [];
   for (let i = 0; i < items.length; ) {
     const under = done.filter((p) => p.top + p.height > items[i].top);
     const depth = under.length ? Math.max(...under.map((p) => p.depth)) + 1 : 0;
-    const from = Math.min(0.56, depth * INSET);
-    const most = Math.max(1, Math.floor((width * (1 - from)) / (depth ? LANE + 12 : LANE)));
+    const from = Math.min(0.5, depth * step);
+    const most = Math.max(1, Math.floor((width * (1 - from) - 8) / FACE));
     // Those that start within a title's height of each other share the width, as many as fit.
     const together = [items[i]];
     while (together.length < most && i + together.length < items.length && items[i + together.length].top < items[i].top + TITLE) together.push(items[i + together.length]);
     i += together.length;
-    const lanes: number[] = [];
-    const lane = together.map((p) => {
-      let n = lanes.findIndex((end) => end <= p.top);
-      if (n < 0) n = lanes.length;
-      lanes[n] = p.top + p.height;
-      return n;
-    });
     together.forEach((p, k) => {
       p.depth = depth;
-      p.left = from + ((1 - from) * lane[k]) / lanes.length;
-      p.right = from + ((1 - from) * (lane[k] + 1)) / lanes.length;
+      p.left = from + ((1 - from) * k) / together.length;
+      p.right = from + ((1 - from) * (k + 1)) / together.length;
     });
     done.push(...together);
   }
   for (const p of items) {
-    const over = items.filter((q) => q.depth > p.depth && q.left < p.right && q.right > p.left && q.top < p.top + p.height && q.top + q.height > p.top);
+    const over = items.filter((q) => q.depth > p.depth && q.left < p.right && q.top < p.top + p.height && q.top + q.height > p.top);
     p.clear = Math.min(p.height, ...over.map((q) => Math.max(0, q.top - p.top)));
   }
   return items;

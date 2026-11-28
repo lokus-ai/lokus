@@ -228,12 +228,15 @@ export function EventPanel(p: Props) {
             <div key={g.email} className="cal-guest" tabIndex={can ? 0 : undefined} title={`${g.name ? `${g.name} · ` : ""}${g.email} · ${REPLY[g.reply] ?? g.reply}`}>
               <span className="cal-avatar" style={{ "--c": hue(g.email) } as React.CSSProperties}>
                 {initial(g)}
-                <i className={`cal-answer ${g.reply}`} />
+                <i className={`cal-answer ${g.reply}`} role="img" aria-label={REPLY[g.reply] ?? g.reply}>
+                  {g.reply === "accepted" ? <Icon name="check" size={8} /> : g.reply === "declined" ? <Icon name="close" size={8} /> : g.reply === "tentative" ? "?" : null}
+                </i>
               </span>
               <span className="cal-guest-name">
                 <span>{g.name || g.email}</span>
                 {g.optional && <small>Optional</small>}
               </span>
+              {g.reply !== "needsAction" && <small className="cal-guest-reply">{REPLY[g.reply] ?? g.reply}</small>}
               {can && (
                 <>
                   <button className="link" onClick={() => guests(e.guests.map((x) => (x.email === g.email ? { ...x, optional: !x.optional } : x)))}>

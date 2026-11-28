@@ -460,11 +460,16 @@ colleagues on the left; a grid of 1 to 9 days in the middle (keys 1 to 9; T toda
 C new, F find a time); the event on the right, edited in place, or today's events and the
 shortcuts when none is open. Opening the calendar folds the app's sidebar and the assistant away,
 and leaving it puts them back. The screen is laid out by the room it has: the week never draws a
-day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one); the list on the left and the
-panel on the right lie over the week when there is no room beside it; the bar gives up key hints,
+day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one); an open event takes its own
+column while three such days still fit beside it (the open event's day stays among them), and only
+below that lies over the week, as the list on the left does when it has no room; the bar gives up key hints,
 then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
-or the sync status. Overlapping events sit side by side while each has room for a word, otherwise
-the later is set in and laid over the earlier. An event is a button: Tab and the arrow keys move
+or the sync status. Overlapping events that start together sit side by side while each has room for a word; a later
+one is set in by one step and laid over the earlier, outlined in the surface colour, all ending on
+the same right edge. A colleague's or teammate's busy time is a hatched block across the day behind
+the events, with their initials while the pointer is on that day. The grid opens on the 08:00
+line. A guest's answer is a badge on their initials (going, not going, maybe, no answer) and is
+written beside the name. An event is a button: Tab and the arrow keys move
 between events, Enter opens one. One invitation that reaches two connected accounts is shown once
 (by its iCalUID; the organiser's copy). Deleting an event with guests asks once: "Delete and tell
 N guests?", with "Delete without email" (not offered on Microsoft 365, which always emails a

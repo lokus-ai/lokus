@@ -20,6 +20,8 @@ const DAY_MIN = 136;
 /** Calendar widths at which the list on the left, and the event on the right, fit beside the week. */
 const SIDE_FITS = 1230;
 const PANEL_FITS = 1530;
+const SIDE_WIDE = 220;
+const PANEL_WIDE = 300;
 const kept = (name: string, fallback: string) => localStorage.getItem(`lokus.calendar.${name}`) ?? fallback;
 const keep = (name: string, value: string) => localStorage.setItem(`lokus.calendar.${name}`, value);
 
@@ -74,6 +76,8 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const [sideOpen, setSideOpen] = useState(false);
   /** Today's summary, opened over the week when it has no room beside it. */
   const [dayOpen, setDayOpen] = useState(false);
+  /** An open event takes its own column while three readable days still fit beside it; narrower, it lies over the week. */
+  const beside = width - (sideFits && side ? SIDE_WIDE : 0) - PANEL_WIDE - 56 >= 3 * DAY_MIN;
   // As many days as fit readably: never thin columns. A week steps down to 5, 3, 2, then a day.
   const room = Math.max(1, Math.floor((weekWidth - 56) / DAY_MIN));
   const fit = count <= room ? count : ([7, 5, 3, 2, 1].find((n) => n <= room && n <= count) ?? 1);
@@ -135,6 +139,12 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
 
   const shown = draft ? [...events, draft] : events;
   const current = selected === DRAFT ? draft : (events.find((e) => e.key === selected) ?? null);
+
+  // When a panel takes room and fewer days fit, the open event's day stays among them.
+  const openDay = current ? dayStart(Date.parse(current.start), zone) : null;
+  useEffect(() => {
+    if (openDay !== null && (openDay < from || openDay >= to)) setAnchor(openDay + 12 * 3_600_000);
+  }, [fit, current?.key]);
 
   const select = (key: string | null) => {
     setSelected(key);
@@ -380,7 +390,10 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           {status.accounts.map((a) => (
             <section key={a.id} className="cal-account">
               <div className="cal-account-name">
-                <span title={a.signed_in ? `${a.name ? `${a.name} · ` : ""}${a.email}` : "Signed out: connect it again"}>{a.email}</span>
+                <span title={a.signed_in ? `${a.name ? `${a.name} · ` : ""}${a.email}` : "Signed out: connect it again"}>
+                  <i>{a.email.split("@")[0]}</i>
+                  <i>@{a.email.split("@")[1]}</i>
+                </span>
                 <button className="cal-icon" title="Disconnect this account" onClick={() => void act("calendar.account.remove", { account: a.id }, false)}>
                   <Icon name="close" size={12} />
                 </button>
@@ -393,7 +406,8 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
                     <button className="cal-check" role="checkbox" aria-checked={!c.hidden} aria-label={`Show ${c.name}`} style={{ "--c": c.color } as React.CSSProperties} title={c.hidden ? "Show" : "Hide"} onClick={() => void act("calendar.calendars.set", { account: a.id, calendar: c.id, hidden: !c.hidden }, false)}>
                       {!c.hidden && <Icon name="check" size={10} />}
                     </button>
-                    <span title={c.name}>{c.name}</span>
+                    {/* The account's own calendar is named after it; its name is already written above. */}
+                    <span title={c.name}>{c.name === a.email || c.name === a.name ? "My calendar" : c.name}</span>
                     {c.default && <small>Default</small>}
                     <button className="cal-icon" title="Default, colour, hide" aria-haspopup="menu" onClick={(ev) => calendarMenu(ev.currentTarget, c)}>
                       <Icon name="more" size={14} />
@@ -557,7 +571,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           onNote={(shared) => void note(shared)}
           onBlock={(account) => void act("calendar.block", { key: current.key, account }).then((made) => made && onNotice("Blocked as Busy on the other calendar."))}
           onClose={() => select(null)}
-          over={!wide}
+          over={!beside}
         />
       ) : (
         (wide || dayOpen) && idle
