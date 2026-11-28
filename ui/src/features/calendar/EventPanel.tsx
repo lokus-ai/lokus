@@ -416,7 +416,7 @@ export function EventPanel(p: Props) {
         </section>
         {(e.error || e.queued) && (
           // What is waiting or was refused sits at the foot, so nothing above it moves when it comes and goes.
-          <div className="cal-status">
+          <div className="cal-foot">
         {e.error && (
               <div className="cal-refused" role="alert">
                 <small>{/[.!?]$/.test(e.error) && e.error.length < 90 && !/[{}<>]/.test(e.error) ? e.error : "The provider did not accept this change."}</small>

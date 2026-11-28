@@ -155,7 +155,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     // Asked once the days in view have settled: turning the week is one question, not one per step.
     const ask = window.setTimeout(() => void runCalendar<{ busy: CalBusy[] }>("calendar.busy", { emails: people, from: stamp(from), to: stamp(to) }).then((b) => !stale && setBusy(b.busy), () => undefined), 150);
     return () => void ((stale = true), window.clearTimeout(ask));
-  }, [people, from, to, !!status?.accounts.length]);
+  }, [people, from, to, status?.accounts.length]);
 
   const mine = useMemo(() => new Set(status?.accounts.map((a) => a.email) ?? []), [status]);
   const overlays: Overlay[] = useMemo(
