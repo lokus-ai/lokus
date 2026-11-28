@@ -8,7 +8,7 @@ import { Grid, type Overlay } from "./Grid";
 import { pickMenu } from "./menu";
 import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
-import { addDays, age, clock, dayStart, localZone, offsetName, span, stamp, weekday, ZONES } from "./time";
+import { addDays, age, clock, dayStart, instant, localZone, offsetName, span, stamp, weekday, ZONES } from "./time";
 import "./calendar.css";
 
 const PEOPLE = ["#b266d9", "#e2674a", "#3aa675", "#d9a400", "#4f7cff"];
@@ -88,7 +88,9 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const days = useMemo(() => {
     const day = dayStart(anchor, zone);
     // A whole week starts on Monday, and so does the working week it shrinks to; fewer days start on the day in view.
-    const first = count === 7 && fit >= 5 ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) + 6) % 7), zone) : day;
+    const monday = count === 7 && fit >= 5 ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) + 6) % 7), zone) : day;
+    // A working week ends on the day in view when that day is at the weekend.
+    const first = day >= addDays(monday, fit, zone) ? addDays(day, 1 - fit, zone) : monday;
     return Array.from({ length: fit }, (_, i) => addDays(first, i, zone));
   }, [anchor, fit, zone]);
   const from = days[0];
@@ -141,9 +143,13 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const current = selected === DRAFT ? draft : (events.find((e) => e.key === selected) ?? null);
 
   // When a panel takes room and fewer days fit, the open event's day stays among them.
-  const openDay = current ? dayStart(Date.parse(current.start), zone) : null;
   useEffect(() => {
-    if (openDay !== null && (openDay < from || openDay >= to)) setAnchor(openDay + 12 * 3_600_000);
+    if (!current) return;
+    // An all-day event is held as dates, not instants.
+    const [start, end] = current.all_day
+      ? [instant(Date.parse(current.start), zone), instant(Date.parse(current.end), zone)]
+      : [Date.parse(current.start), Date.parse(current.end)];
+    if (start >= to || Math.max(end, start + 1) <= from) setAnchor(dayStart(start, zone) + 12 * 3_600_000);
   }, [fit, current?.key]);
 
   const select = (key: string | null) => {

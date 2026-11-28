@@ -235,8 +235,8 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                       const top = Math.max(0, (Date.parse(s) - day) / MINUTE);
                       const bottom = Math.min(24 * 60, (Date.parse(e) - day) / MINUTE);
                       return (
-                        <div key={`${o.label}${s}`} className="cal-busy" style={{ top: top * PX, height: (bottom - top) * PX - 2, "--c": o.color } as CSSProperties}>
-                          <i title={`${o.label} is busy ${clock(s, zone)} – ${clock(e, zone)}`}>{initials(o.label)}</i>
+                        <div key={`${o.label}${s}`} className="cal-busy" role="img" aria-label={`${o.label} is busy ${clock(s, zone)} to ${clock(e, zone)}`} style={{ top: top * PX, height: (bottom - top) * PX - 2, "--c": o.color } as CSSProperties}>
+                          <i>{initials(o.label)}</i>
                         </div>
                       );
                     }),

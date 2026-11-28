@@ -144,7 +144,9 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
   for (let i = 0; i < items.length; ) {
     const under = done.filter((p) => p.top + p.height > items[i].top);
     const depth = under.length ? Math.max(...under.map((p) => p.depth)) + 1 : 0;
-    const from = Math.min(0.5, depth * step);
+    // One that starts with those under it has no line of theirs to leave clear: it is set in from the last of them.
+    const beside = under.filter((p) => p.top + TITLE > items[i].top);
+    const from = beside.length ? Math.min(0.8, Math.max(...beside.map((p) => p.left)) + step) : Math.min(0.5, depth * step);
     const most = Math.max(1, Math.floor((width * (1 - from) - 8) / FACE));
     // Those that start within a title's height of each other share the width, as many as fit.
     const together = [items[i]];
