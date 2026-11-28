@@ -34,6 +34,8 @@ export interface CalEvent {
   account: string;
   calendar: string;
   id: string;
+  /** The invitation's own id: the same on every account it reaches. */
+  uid: string;
   title: string;
   /** Both ends as UTC, like 2026-12-01T15:00:00Z. */
   start: string;

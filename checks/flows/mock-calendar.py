@@ -26,6 +26,9 @@ AS_TEXT = False
 PEOPLE = {
     "ana@acme.test": ("Ana Ruiz", "google"), "ben@acme.test": ("Ben Okafor", "google"),
     "cara@birch.test": ("Cara Lind", "microsoft"), "dev@birch.test": ("Dev Patel", "microsoft"),
+    # Two people with long names and addresses, for checking that the calendar's screen cuts text cleanly.
+    "alexandria.montgomery-fitzgerald@international-consulting.test": ("Alexandria Montgomery-Fitzgerald", "google"),
+    "bartholomew.vandersteen@northern-lights-engineering.test": ("Bartholomew van der Steen-Achterberg", "microsoft"),
 }
 COLORS = ["#4f7cff", "#e2674a", "#3aa675", "#b266d9"]
 
@@ -44,8 +47,8 @@ def fresh():
     s = {"v": 1, "n": 0, "cals": {}, "events": {}, "tokens": {}, "refresh": {}, "codes": {}, "offline": False}
     for i, (email, (name, provider)) in enumerate(PEOPLE.items()):
         s["cals"][email] = [
-            {"id": email if provider == "google" else f"cal-{email.split('@')[0]}", "name": name if provider == "google" else "Calendar", "color": COLORS[i], "primary": True},
-            {"id": f"side-{email.split('@')[0]}", "name": "Side projects", "color": COLORS[(i + 2) % 4], "primary": False},
+            {"id": email if provider == "google" else f"cal-{email.split('@')[0]}", "name": name if provider == "google" or len(name) > 20 else "Calendar", "color": COLORS[i % 4], "primary": True},
+            {"id": f"side-{email.split('@')[0]}", "name": "Side projects" if len(name) < 20 else f"Side projects and community work of {name}", "color": COLORS[(i + 2) % 4], "primary": False},
         ]
     day = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     def seed(owner, title, d, h, mins, guests=(), rrule=None, cal=0):

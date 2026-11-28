@@ -105,38 +105,100 @@ export interface Placed {
   /** Minutes from this day's midnight, clipped to the day. */
   top: number;
   height: number;
-  /** Which of `columns` side-by-side lanes it sits in. */
-  column: number;
-  columns: number;
+  /** Where it starts and ends across the day's width, each a share of it. */
+  left: number;
+  right: number;
+  /** How many earlier events it is laid over: later ones are drawn on top. */
+  depth: number;
+  /** Minutes from its top before a later event is laid over it: its words go there, the rest is colour. */
+  clear: number;
 }
 
-/** A day's timed events laid out so that overlapping ones sit side by side. */
-export function place(events: CalEvent[], day: number, next: number): Placed[] {
+/** The least an event is drawn tall, in minutes: a quarter of an hour, which has room for its title. */
+const MIN_HEIGHT = 15;
+/** Minutes of an event's height its title needs to stay readable. */
+const TITLE = 20;
+/** How far an event is set in from the one it is laid over, as a share of the day's width. */
+const INSET = 0.14;
+/** The narrowest an event is drawn beside another, in pixels: room for a word. */
+const LANE = 48;
+
+/**
+ * A day's timed events laid out as Google and Notion do. Events that start together sit side by
+ * side while each has room for a word (`width` is the day's width in pixels). One that starts
+ * later while another is still going, or that has no room beside the others, is set in from the
+ * left and laid over them: the earlier one keeps its title and left edge, the later a readable width.
+ */
+export function place(events: CalEvent[], day: number, next: number, width = 160): Placed[] {
   const minutes = (next - day) / MINUTE;
   const items = events
     .filter((e) => !e.all_day && Date.parse(e.start) < next && Date.parse(e.end) > day)
     .map((event) => {
       const top = Math.max(0, (Date.parse(event.start) - day) / MINUTE);
       const bottom = Math.min(minutes, (Date.parse(event.end) - day) / MINUTE);
-      return { event, top, height: Math.max(15, bottom - top), column: 0, columns: 1 };
+      return { event, top, height: Math.max(MIN_HEIGHT, bottom - top), left: 0, right: 1, depth: 0, clear: 0 };
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
-  let group: Placed[] = [];
-  let groupEnd = -1;
-  const close = () => {
-    const columns = Math.max(0, ...group.map((p) => p.column)) + 1;
-    for (const p of group) p.columns = columns;
-    group = [];
-  };
-  for (const item of items) {
-    if (item.top >= groupEnd) close();
-    const taken = new Set(group.filter((p) => p.top + p.height > item.top).map((p) => p.column));
-    while (taken.has(item.column)) item.column += 1;
-    group.push(item);
-    groupEnd = Math.max(groupEnd, item.top + item.height);
+  const done: Placed[] = [];
+  for (let i = 0; i < items.length; ) {
+    const under = done.filter((p) => p.top + p.height > items[i].top);
+    const depth = under.length ? Math.max(...under.map((p) => p.depth)) + 1 : 0;
+    const from = Math.min(0.56, depth * INSET);
+    const most = Math.max(1, Math.floor((width * (1 - from)) / (depth ? LANE + 12 : LANE)));
+    // Those that start within a title's height of each other share the width, as many as fit.
+    const together = [items[i]];
+    while (together.length < most && i + together.length < items.length && items[i + together.length].top < items[i].top + TITLE) together.push(items[i + together.length]);
+    i += together.length;
+    const lanes: number[] = [];
+    const lane = together.map((p) => {
+      let n = lanes.findIndex((end) => end <= p.top);
+      if (n < 0) n = lanes.length;
+      lanes[n] = p.top + p.height;
+      return n;
+    });
+    together.forEach((p, k) => {
+      p.depth = depth;
+      p.left = from + ((1 - from) * lane[k]) / lanes.length;
+      p.right = from + ((1 - from) * (lane[k] + 1)) / lanes.length;
+    });
+    done.push(...together);
   }
-  close();
+  for (const p of items) {
+    const over = items.filter((q) => q.depth > p.depth && q.left < p.right && q.right > p.left && q.top < p.top + p.height && q.top + q.height > p.top);
+    p.clear = Math.min(p.height, ...over.map((q) => Math.max(0, q.top - p.top)));
+  }
   return items;
+}
+
+/** How long, in words: 45m, 1h, 1h 30m. */
+export function span(start: string | number, end: string | number): string {
+  const minutes = Math.round((new Date(end).getTime() - new Date(start).getTime()) / MINUTE);
+  if (minutes >= 24 * 60) return `${Math.round(minutes / 1440)}d`;
+  const [h, m] = [Math.floor(minutes / 60), minutes % 60];
+  return h && m ? `${h}h ${m}m` : h ? `${h}h` : `${m}m`;
+}
+
+/** A typed time ("9", "9:30", "2pm", "14.15") as minutes since midnight; null when it is none. */
+export function typedClock(text: string): number | null {
+  const m = text.trim().toLowerCase().match(/^(\d{1,2})(?:[:.]?(\d{2}))?\s*(a|am|p|pm)?$/);
+  if (!m) return null;
+  let h = Number(m[1]);
+  const min = Number(m[2] ?? 0);
+  if (m[3]?.startsWith("p") && h < 12) h += 12;
+  if (m[3]?.startsWith("a") && h === 12) h = 0;
+  return h > 23 || min > 59 ? null : h * 60 + min;
+}
+
+/** The six weeks a month is shown in, Monday first: each day's midnight in `zone`. */
+export function monthDays(month: number, zone: string): number[] {
+  const first = addDays(month, -((weekday(month + DAY / 2, zone) + 6) % 7), zone);
+  return Array.from({ length: 42 }, (_, i) => addDays(first, i, zone));
+}
+
+/** Midnight of the first day of the month an instant falls in, and of the months around it. */
+export function monthStart(at: number, zone: string, add = 0): number {
+  const [y, m] = dateOf(at, zone).split("-").map(Number);
+  return instant(Date.UTC(y, m - 1 + add, 1), zone);
 }
 
 const RULES: [string, string][] = [

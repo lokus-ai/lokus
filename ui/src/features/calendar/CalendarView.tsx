@@ -1,14 +1,25 @@
 /** @part-of ui.calendar */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { onCalendarSynced, runCalendar, syncCalendar, type CalBusy, type CalEvent, type CalMember, type CalSlot, type CalStatus } from "../../bridge/calendar";
+import { formatKeys } from "../../shell/commands";
 import { Icon } from "../../shell/Icon";
 import { EventPanel, type Scope } from "./EventPanel";
 import { Grid, type Overlay } from "./Grid";
-import { addDays, age, clock, dayStart, localZone, offsetName, stamp, weekday, ZONES } from "./time";
+import { pickMenu } from "./menu";
+import { MiniMonth } from "./MiniMonth";
+import { Pick } from "./Pick";
+import { addDays, age, clock, dayStart, localZone, offsetName, span, stamp, weekday, ZONES } from "./time";
 import "./calendar.css";
 
 const PEOPLE = ["#b266d9", "#e2674a", "#3aa675", "#d9a400", "#4f7cff"];
 const DRAFT = "draft";
+/** The colours a calendar can be given. */
+const COLORS: [string, string][] = [["#4f7cff", "Blue"], ["#b266d9", "Purple"], ["#e2674a", "Red"], ["#d9a400", "Yellow"], ["#3aa675", "Green"], ["#2a9d9d", "Teal"], ["#8d8c87", "Grey"]];
+/** The narrowest a day is drawn. */
+const DAY_MIN = 136;
+/** Calendar widths at which the list on the left, and the event on the right, fit beside the week. */
+const SIDE_FITS = 1230;
+const PANEL_FITS = 1530;
 const kept = (name: string, fallback: string) => localStorage.getItem(`lokus.calendar.${name}`) ?? fallback;
 const keep = (name: string, value: string) => localStorage.setItem(`lokus.calendar.${name}`, value);
 
@@ -31,18 +42,48 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const [people, setPeople] = useState<string[]>(() => JSON.parse(kept("people", "[]")) as string[]);
   const [shownMembers, setShownMembers] = useState<string[]>([]);
   const [busy, setBusy] = useState<CalBusy[]>([]);
-  const [briefing, setBriefing] = useState("");
+  const [briefing, setBriefing] = useState<{ text: string; events: CalEvent[] }>({ text: "", events: [] });
   const [offline, setOffline] = useState(false);
   const [connecting, setConnecting] = useState<string | null>(null);
   const [slots, setSlots] = useState<{ minutes: number; found: CalSlot[] | null; unknown: string[] } | null>(null);
   const [person, setPerson] = useState("");
+  /** Delete was asked for on an event with guests: the panel asks once whether to tell them. */
+  const [deleting, setDeleting] = useState(false);
+  /** What the open folder says before a meeting note is written into it (a team's folder syncs). */
+  const [noteAsk, setNoteAsk] = useState<string | null>(null);
+  // The screen is laid out by the room it has: how wide the calendar is, and the week inside it.
+  const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const [mainEl, setMainEl] = useState<HTMLElement | null>(null);
+  const [width, setWidth] = useState(1440);
+  const [weekWidth, setWeekWidth] = useState(900);
+  useEffect(() => {
+    if (!rootEl || !mainEl) return;
+    const watch = new ResizeObserver(() => (setWidth(rootEl.clientWidth), setWeekWidth(mainEl.clientWidth)));
+    watch.observe(rootEl);
+    watch.observe(mainEl);
+    return () => watch.disconnect();
+  }, [rootEl, mainEl]);
+  /** The calendar list sits beside the week; below this it is opened over it from the bar. */
+  const sideFits = width >= SIDE_FITS;
+  /** The event and today's summary sit beside the week; below this the event opens over it. */
+  const wide = width >= PANEL_FITS;
+  /** How much the bar has to give up: 0 nothing, 1 key hints and long names, 2 words for icons, 3 the rest. */
+  const tight = weekWidth < 590 ? 3 : weekWidth < 660 ? 2 : weekWidth < 740 ? 1 : 0;
+  /** The list on the left: kept open or folded as the person left it; over the week when it has no room beside it. */
+  const [side, setSide] = useState(() => kept("side", "1") === "1");
+  const [sideOpen, setSideOpen] = useState(false);
+  /** Today's summary, opened over the week when it has no room beside it. */
+  const [dayOpen, setDayOpen] = useState(false);
+  // As many days as fit readably: never thin columns. A week steps down to 5, 3, 2, then a day.
+  const room = Math.max(1, Math.floor((weekWidth - 56) / DAY_MIN));
+  const fit = count <= room ? count : ([7, 5, 3, 2, 1].find((n) => n <= room && n <= count) ?? 1);
 
   const days = useMemo(() => {
     const day = dayStart(anchor, zone);
-    // A whole week starts on Monday; fewer days start on the day in view.
-    const first = count === 7 ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) + 6) % 7), zone) : day;
-    return Array.from({ length: count }, (_, i) => addDays(first, i, zone));
-  }, [anchor, count, zone]);
+    // A whole week starts on Monday, and so does the working week it shrinks to; fewer days start on the day in view.
+    const first = count === 7 && fit >= 5 ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) + 6) % 7), zone) : day;
+    return Array.from({ length: fit }, (_, i) => addDays(first, i, zone));
+  }, [anchor, fit, zone]);
   const from = days[0];
   const to = addDays(days[days.length - 1], 1, zone);
 
@@ -56,7 +97,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       const [s, e] = await Promise.all([runCalendar<CalStatus>("calendar.status"), runCalendar<{ events: CalEvent[] }>("calendar.events", { from: stamp(from), to: stamp(to) })]);
       setStatus(s);
       setEvents(e.events);
-      setBriefing((await runCalendar<{ text: string }>("calendar.briefing", { zone })).text);
+      setBriefing(await runCalendar<{ text: string; events: CalEvent[] }>("calendar.briefing", { zone }));
       // The open folder may not be a team's, or there may be none: then nobody is listed.
       setMembers(await runCalendar<{ members: CalMember[] }>("calendar.team").then((t) => t.members, () => []));
     } catch (e) {
@@ -95,6 +136,8 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const select = (key: string | null) => {
     setSelected(key);
     setScope("this");
+    setDeleting(false);
+    setNoteAsk(null);
     if (key !== DRAFT) setDraft(null);
   };
 
@@ -103,7 +146,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     if (!home) return;
     const member = members.find((m) => m.member === guest);
     setDraft({
-      key: DRAFT, account: home.account, calendar: home.id, id: DRAFT, title: "", start, end, all_day: false, zone, location: "", description: "",
+      key: DRAFT, account: home.account, calendar: home.id, id: DRAFT, uid: "", title: "", start, end, all_day: false, zone, location: "", description: "",
       guests: guest ? [{ email: guest, name: member?.name ?? "", optional: false, reply: "needsAction" }] : [],
       organizer: "", mine: true, reply: "", meeting: null, want_meeting: false, repeat: null, series: null, link: "", pending: false, unsent: false, changes: [], queued: false, error: null, note: null,
     });
@@ -144,15 +187,19 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     });
     if (made) select(null);
   };
-  const remove = async () => {
+  /** Delete. With guests who were told of it, the panel asks first, once: `notify` is the answer. */
+  const remove = async (notify?: boolean) => {
     if (!current || selected === DRAFT) return select(null);
-    await act("calendar.event.delete", { key: current.key, scope });
+    if (notify === undefined && current.guests.length > 0 && !current.unsent) return setDeleting(true);
+    await act("calendar.event.delete", { key: current.key, scope, notify: notify ?? true });
     select(null);
   };
-  const note = async () => {
+  const note = async (shared = false) => {
     if (!current) return;
     try {
-      onOpen((await runCalendar<{ path: string }>("calendar.note", { key: current.key, zone })).path);
+      const done = await runCalendar<{ path: string | null; message?: string }>("calendar.note", { key: current.key, zone, shared });
+      setNoteAsk(done.path ? null : (done.message ?? null));
+      if (done.path) onOpen(done.path);
     } catch (e) {
       fail(e);
     }
@@ -207,9 +254,12 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       return e.preventDefault();
     }
     if (e.key === "Escape" && typing) return (document.activeElement as HTMLElement | null)?.blur();
+    if (e.key === "Escape" && sideOpen && !sideFits) return setSideOpen(false);
+    if (e.key === "Escape" && dayOpen && !selected) return setDayOpen(false);
+    if (e.key === "Escape" && (deleting || noteAsk)) return (setDeleting(false), setNoteAsk(null));
     if (e.key === "Escape" && selected) return select(null);
     if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector(".palette, [role=dialog]")) return;
-    const step = (by: number) => setAnchor(addDays(dayStart(anchor, zone), by * count, zone));
+    const step = (by: number) => setAnchor(addDays(dayStart(anchor, zone), by * fit, zone));
     if (/^[1-9]$/.test(e.key)) (setCount(Number(e.key)), keep("days", e.key));
     else if (e.key === "t") setAnchor(Date.now());
     else if (e.key === "j" || e.key === "ArrowRight") step(1);
@@ -219,7 +269,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       startDraft(stamp(start), stamp(start + 1_800_000));
     } else if (e.key === "f") void findTime(30);
     else if (current && selected !== DRAFT && e.key === "n") void note();
-    else if (current && selected !== DRAFT && current.mine && e.key === "Backspace") void remove();
+    else if (current && selected !== DRAFT && current.mine && e.key === "Backspace") deleting || void remove();
     else if (current && !current.mine && "ynm".includes(e.key)) void act("calendar.event.reply", { key: current.key, scope, reply: { y: "yes", n: "no", m: "maybe" }[e.key] });
     else return;
     e.preventDefault();
@@ -234,10 +284,10 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const available = status.available;
   const connectors = (
     <>
-      <button className="cal-action" disabled={!available.google || !!connecting} title={available.google ? "" : "Not available in this build yet"} onClick={() => void connect("google")}>
+      <button className="cal-button" disabled={!available.google || !!connecting} title={available.google ? "" : "Not available in this build yet"} onClick={() => void connect("google")}>
         <Icon name="plus" size={14} /> {connecting === "google" ? "Finish in your browser…" : "Google Calendar"}
       </button>
-      <button className="cal-action" disabled={!available.microsoft || !!connecting} title={available.microsoft ? "" : "Not available in this build yet"} onClick={() => void connect("microsoft")}>
+      <button className="cal-button" disabled={!available.microsoft || !!connecting} title={available.microsoft ? "" : "Not available in this build yet"} onClick={() => void connect("microsoft")}>
         <Icon name="plus" size={14} /> {connecting === "microsoft" ? "Finish in your browser…" : "Microsoft 365"}
       </button>
     </>
@@ -255,131 +305,231 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   }
 
   const waiting = status.waiting.length;
-  const title = new Date(days[Math.floor(days.length / 2)] + 12 * 3_600_000).toLocaleDateString([], { timeZone: zone, month: "long", year: "numeric" });
-  return (
-    <div className="calendar">
-      <aside className="cal-side">
-        <h3>Calendars</h3>
-        {status.accounts.map((a) => (
-          <div key={a.id} className="cal-account">
-            <div className="cal-account-name">
-              <span title={a.signed_in ? a.email : "Signed out: connect it again"}>{a.email}</span>
-              <button className="cal-icon" title="Disconnect this account" onClick={() => void act("calendar.account.remove", { account: a.id }, false)}>
-                <Icon name="close" size={12} />
-              </button>
-            </div>
-            {!a.signed_in && <small className="cal-error">Signed out. Connect it again.</small>}
-            {status.calendars
-              .filter((c) => c.account === a.id)
-              .map((c) => (
-                <div key={c.id} className={`cal-calendar${c.hidden ? " off" : ""}`}>
-                  <button className="cal-check" style={{ "--c": c.color } as React.CSSProperties} title={c.hidden ? "Show" : "Hide"} onClick={() => void act("calendar.calendars.set", { account: a.id, calendar: c.id, hidden: !c.hidden }, false)} />
-                  <span>{c.name}</span>
-                  {c.default ? <small>default</small> : <button className="link" onClick={() => void act("calendar.calendars.set", { account: a.id, calendar: c.id, default: true }, false)}>Make default</button>}
-                  <input type="color" title="Colour" value={c.color} onChange={(ev) => void act("calendar.calendars.set", { account: a.id, calendar: c.id, color: ev.target.value }, false)} />
-                </div>
-              ))}
-          </div>
-        ))}
-        {connectors}
+  const middle = days[Math.floor(days.length / 2)] + 12 * 3_600_000;
+  const month = new Date(middle).toLocaleDateString([], { timeZone: zone, month: tight ? "short" : "long" });
+  const year = new Date(middle).toLocaleDateString([], { timeZone: zone, year: "numeric" });
+  const syncNote = `${offline ? "Offline" : status.synced ? `Synced ${clock(status.synced, zone)}` : "Not synced yet"}${waiting > 0 ? ` · ${waiting} waiting to be sent` : ""}`;
+  const dayNames = (n: number) => (n === 7 ? "Week" : n === 1 ? "Day" : `${n} days`);
+  const goTo = (day: number) => setAnchor(day + 12 * 3_600_000);
+  const sideShown = sideFits ? side : sideOpen;
+  const toggleSide = () => (sideFits ? (setSide(!side), keep("side", side ? "0" : "1")) : setSideOpen(!sideOpen));
+  const today = dayStart(Date.now(), zone);
+  const calendarMenu = (el: HTMLElement, c: CalStatus["calendars"][number]) =>
+    pickMenu(el, c.name, [...(c.default ? [] : [["default", "Make default"] as [string, string], null]), [c.hidden ? "show" : "hide", c.hidden ? "Show" : "Hide"], null, ...COLORS.map(([hex, name]): [string, string] => [hex, name])], c.color, (id) =>
+      void act("calendar.calendars.set", { account: c.account, calendar: c.id, ...(id === "default" ? { default: true } : id === "hide" || id === "show" ? { hidden: id === "hide" } : { color: id }) }, false),
+    );
 
-        {members.length > 0 && (
-          <>
-            <h3>Team</h3>
-            {members.map((m) => (
-              <button
-                key={m.member}
-                className={`cal-person${shownMembers.includes(m.member) ? " on" : ""}`}
-                draggable={!m.emails.some((e) => mine.has(e))}
-                title="Click to show when they are busy. Drag onto the week to book time with them."
-                onDragStart={(ev) => ev.dataTransfer.setData("text/lokus-guest", m.member)}
-                onClick={() => setShownMembers((s) => (s.includes(m.member) ? s.filter((x) => x !== m.member) : [...s, m.member]))}
-              >
-                <span>{m.name || m.member}</span>
-                <small>{m.emails.some((e) => mine.has(e)) ? "you · " : ""}synced {age(m.age_minutes)}</small>
-              </button>
-            ))}
-          </>
+  const idle = (
+    <aside className={`cal-panel cal-idle${wide ? "" : " over"}`} aria-label="Today">
+      <header className="cal-panel-bar">
+        <b>Today</b>
+        <small>{new Date().toLocaleDateString([], { timeZone: zone, weekday: "long", day: "numeric", month: "long" })}</small>
+        {!wide && (
+          <button className="cal-icon" title={`Close (${formatKeys("Escape")})`} onClick={() => setDayOpen(false)}>
+            <Icon name="close" size={14} />
+          </button>
         )}
-
-        <h3>Colleagues</h3>
-        {people.map((email) => {
-          const found = busy.find((b) => b.email === email);
-          return (
-            <div key={email} className="cal-person on">
-              <span>{email}</span>
-              {found && !found.known && <small>calendar not visible to you</small>}
-              <button className="cal-icon" title="Stop showing" onClick={() => (setPeople(people.filter((p) => p !== email)), keep("people", JSON.stringify(people.filter((p) => p !== email))))}>
-                <Icon name="close" size={12} />
-              </button>
+      </header>
+      <div className="cal-panel-body">
+        <section className="cal-group">
+          {briefing.events.length === 0 && <p className="cal-none">Nothing on the calendar today.</p>}
+          {briefing.events.map((e) => (
+            <button key={e.key} className="cal-item" style={{ "--c": colorOf(e) } as React.CSSProperties} title={e.title} onClick={() => (goTo(today), select(e.key), setDayOpen(false))}>
+              <time>{e.all_day ? "All day" : clock(e.start, zone)}</time>
+              <i />
+              <span>
+                <b>{e.title || "(No title)"}</b>
+                <small>{[e.all_day ? "" : span(e.start, e.end), e.guests.length ? `${e.guests.length} ${e.guests.length === 1 ? "guest" : "guests"}` : "", e.meeting ? (e.meeting.kind === "teams" ? "Teams" : "Meet") : ""].filter(Boolean).join(" · ")}</small>
+              </span>
+            </button>
+          ))}
+          {briefing.events.length > 0 && <p className="cal-none">{briefing.text.split("\n")[0].replace(/^[^:]*: /, "").replace(/^./, (c) => c.toUpperCase())}</p>}
+        </section>
+        <section className="cal-group cal-keys">
+          <h3>Shortcuts</h3>
+          {(
+            [
+              ["New event", "C"],
+              ["Find a time", "F"],
+              ["Go to today", "T"],
+              ["Earlier, later", "K  J"],
+              ["Days shown", "1 – 9"],
+              ["Send invite or update", formatKeys("Mod-Enter")],
+              ["Meeting note", "N"],
+            ] as const
+          ).map(([name, key]) => (
+            <div key={name}>
+              <span>{name}</span>
+              <kbd>{key}</kbd>
             </div>
-          );
-        })}
-        <input className="cal-add" value={person} placeholder="Show a colleague's busy times" onChange={(e) => setPerson(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addPerson()} onBlur={addPerson} />
+          ))}
+        </section>
+      </div>
+    </aside>
+  );
 
-        <button className="cal-action" onClick={() => void findTime(slots?.minutes ?? 30)}>
-          <Icon name="search" size={14} /> Find a time <kbd>F</kbd>
-        </button>
-        {slots && (
-          <div className="cal-slots">
-            <div className="segmented">
-              {[30, 45, 60].map((m) => (
-                <button key={m} className={slots.minutes === m ? "active" : ""} onClick={() => void findTime(m)}>
-                  {m} min
+  return (
+    <div className="calendar" ref={setRootEl}>
+      {!sideFits && sideOpen && <div className="cal-scrim" onMouseDown={() => setSideOpen(false)} />}
+      <aside className={`cal-side${sideShown ? "" : " away"}${sideFits ? "" : " over"}`} aria-hidden={!sideShown} aria-label="Calendars">
+        <MiniMonth zone={zone} shown={days} onPick={goTo} />
+        <div className="cal-side-scroll">
+          {status.accounts.map((a) => (
+            <section key={a.id} className="cal-account">
+              <div className="cal-account-name">
+                <span title={a.signed_in ? `${a.name ? `${a.name} · ` : ""}${a.email}` : "Signed out: connect it again"}>{a.email}</span>
+                <button className="cal-icon" title="Disconnect this account" onClick={() => void act("calendar.account.remove", { account: a.id }, false)}>
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+              {!a.signed_in && <small className="cal-error">Signed out. Connect it again.</small>}
+              {status.calendars
+                .filter((c) => c.account === a.id)
+                .map((c) => (
+                  <div key={c.id} className={`cal-calendar${c.hidden ? " off" : ""}`}>
+                    <button className="cal-check" role="checkbox" aria-checked={!c.hidden} aria-label={`Show ${c.name}`} style={{ "--c": c.color } as React.CSSProperties} title={c.hidden ? "Show" : "Hide"} onClick={() => void act("calendar.calendars.set", { account: a.id, calendar: c.id, hidden: !c.hidden }, false)}>
+                      {!c.hidden && <Icon name="check" size={10} />}
+                    </button>
+                    <span title={c.name}>{c.name}</span>
+                    {c.default && <small>Default</small>}
+                    <button className="cal-icon" title="Default, colour, hide" aria-haspopup="menu" onClick={(ev) => calendarMenu(ev.currentTarget, c)}>
+                      <Icon name="more" size={14} />
+                    </button>
+                  </div>
+                ))}
+            </section>
+          ))}
+          <Pick
+            actions
+            icon="plus"
+            value=""
+            disabled={!!connecting}
+            label={connecting ? "Finish in your browser…" : "Add calendar account"}
+            title="Add calendar account"
+            options={[...(available.google ? [["google", "Google Calendar"] as [string, string]] : []), ...(available.microsoft ? [["microsoft", "Microsoft 365"] as [string, string]] : [])]}
+            onChange={(provider) => void connect(provider as "google" | "microsoft")}
+          />
+
+          {members.length > 0 && (
+            <section>
+              <h3>Team</h3>
+              {members.map((m) => (
+                <button
+                  key={m.member}
+                  className={`cal-person${shownMembers.includes(m.member) ? " on" : ""}`}
+                  draggable={!m.emails.some((e) => mine.has(e))}
+                  aria-pressed={shownMembers.includes(m.member)}
+                  title={`${m.member}\nClick to show when they are busy. Drag onto the week to book time with them.`}
+                  onDragStart={(ev) => ev.dataTransfer.setData("text/lokus-guest", m.member)}
+                  onClick={() => setShownMembers((s) => (s.includes(m.member) ? s.filter((x) => x !== m.member) : [...s, m.member]))}
+                >
+                  <span>{m.name || m.member}</span>
+                  <small>
+                    {m.emails.some((e) => mine.has(e)) ? "You · " : ""}
+                    {age(m.age_minutes)}
+                  </small>
                 </button>
               ))}
-              <button className="cal-icon" title="Close" onClick={() => setSlots(null)}>
-                <Icon name="close" size={12} />
-              </button>
+            </section>
+          )}
+
+          <section>
+            <h3>Colleagues</h3>
+            {people.map((email) => {
+              const found = busy.find((b) => b.email === email);
+              return (
+                <div key={email} className="cal-person on" title={found && !found.known ? `${email}\nTheir calendar is not visible to you.` : email}>
+                  <span className={found && !found.known ? "unknown" : ""}>{email}</span>
+                  <button className="cal-icon" title="Stop showing" onClick={() => (setPeople(people.filter((p) => p !== email)), keep("people", JSON.stringify(people.filter((p) => p !== email))))}>
+                    <Icon name="close" size={12} />
+                  </button>
+                </div>
+              );
+            })}
+            <input className="cal-add" value={person} placeholder="Add a colleague by email" title="Show a colleague's busy times" aria-label="Show a colleague's busy times" onChange={(e) => setPerson(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addPerson()} onBlur={addPerson} />
+          </section>
+
+          <button className="cal-pick" onClick={() => void findTime(slots?.minutes ?? 30)}>
+            <Icon name="search" size={14} />
+            <span>Find a time</span>
+            <kbd>F</kbd>
+          </button>
+          {slots && (
+            <div className="cal-slots">
+              <div className="segmented">
+                {[30, 45, 60].map((m) => (
+                  <button key={m} className={slots.minutes === m ? "active" : ""} onClick={() => void findTime(m)}>
+                    {m} min
+                  </button>
+                ))}
+                <button className="cal-icon" title="Close" onClick={() => setSlots(null)}>
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+              {slots.found === null && <small>Looking…</small>}
+              {slots.found?.length === 0 && <small>Nobody is free together this week.</small>}
+              {slots.found?.map((s) => (
+                <button key={s.start} title={s.local} onClick={() => (setAnchor(Date.parse(s.start)), startDraft(s.start, s.end), setDraft((d) => d && { ...d, guests: [...people, ...shownMembers].map((email) => ({ email, name: "", optional: false, reply: "needsAction" })) }))}>
+                  {s.local}
+                </button>
+              ))}
+              {slots.unknown.length > 0 && <small>Could not see: {slots.unknown.join(", ")}</small>}
             </div>
-            {slots.found === null && <small>Looking…</small>}
-            {slots.found?.length === 0 && <small>Nobody is free together this week.</small>}
-            {slots.found?.map((s) => (
-              <button key={s.start} onClick={() => (setAnchor(Date.parse(s.start)), startDraft(s.start, s.end), setDraft((d) => d && { ...d, guests: [...people, ...shownMembers].map((email) => ({ email, name: "", optional: false, reply: "needsAction" })) }))}>
-                {s.local}
-              </button>
-            ))}
-            {slots.unknown.length > 0 && <small>Could not see: {slots.unknown.join(", ")}</small>}
-          </div>
-        )}
+          )}
+          {available.stand_in && <small className="cal-standin">Development: a local stand-in answers, not the real services.</small>}
+        </div>
       </aside>
 
-      <section className="cal-main">
+      <section className="cal-main" ref={setMainEl}>
         <header className="cal-bar">
-          <h2>{title}</h2>
-          <button className="cal-action" onClick={() => setAnchor(Date.now())}>
-            Today <kbd>T</kbd>
+          <button className="cal-icon" title={sideShown ? "Hide the calendar list" : "Show the calendar list"} aria-expanded={sideShown} onClick={toggleSide}>
+            <Icon name="sidebar" size={16} />
           </button>
-          <button className="cal-icon" title="Earlier (K)" onClick={() => setAnchor(addDays(dayStart(anchor, zone), -count, zone))}>
-            <Icon name="left" size={14} />
-          </button>
-          <button className="cal-icon" title="Later (J)" onClick={() => setAnchor(addDays(dayStart(anchor, zone), count, zone))}>
-            <Icon name="right" size={14} />
-          </button>
+          <h2 title={`${month} ${year}`}>
+            {month}
+            {tight < 3 && <span> {year}</span>}
+          </h2>
           <span className="cal-spacer" />
-          <small className={offline || waiting ? "cal-waiting" : ""}>
-            {offline ? "Offline" : status.synced ? `Synced ${clock(status.synced, zone)}` : ""}
-            {waiting > 0 && ` · ${waiting} waiting to be sent`}
-          </small>
-          <select title="Days shown (press 1 to 9)" value={count} onChange={(e) => (setCount(Number(e.target.value)), keep("days", e.target.value))}>
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
-              <option key={n} value={n}>
-                {n === 7 ? "Week" : n === 1 ? "Day" : `${n} days`} ({n})
-              </option>
-            ))}
-          </select>
-          <select title="Time zone the week is shown in" value={zone} onChange={(e) => (setZone(e.target.value), keep("zone", e.target.value))}>
-            {ZONES.map((z) => (
-              <option key={z} value={z}>
-                {z.replace(/_/g, " ")} ({offsetName(z)})
-              </option>
-            ))}
-          </select>
-          <button className="primary" onClick={() => keys.current(new KeyboardEvent("keydown", { key: "c" }))}>
-            New <kbd>C</kbd>
+          {tight >= 2 ? (
+            <span className={`cal-sync${offline || waiting ? " waiting" : ""}`} role="status" tabIndex={0} title={syncNote} aria-label={syncNote} />
+          ) : (
+            <small className={`cal-status${offline || waiting ? " waiting" : ""}`} role="status" title={syncNote}>
+              {tight && waiting ? `${offline ? "Offline · " : ""}${waiting} waiting` : syncNote}
+            </small>
+          )}
+          {!wide && !current && (
+            <button className="cal-icon" title="Today's events and shortcuts" aria-expanded={dayOpen} onClick={() => setDayOpen(!dayOpen)}>
+              <Icon name="overview" size={16} />
+            </button>
+          )}
+          <Pick
+            outlined
+            value={String(count)}
+            label={dayNames(fit)}
+            title={fit < count ? `Days shown (press 1 to 9). ${dayNames(count)} is chosen; ${fit} fit in this window.` : "Days shown (press 1 to 9)"}
+            options={[...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n): [string, string] => [String(n), `${dayNames(n)}`]), ...(tight >= 3 ? [null, ["today", "Go to today"] as [string, string]] : [])]}
+            onChange={(v) => (v === "today" ? setAnchor(Date.now()) : (setCount(Number(v)), keep("days", v)))}
+          />
+          <Pick outlined value={zone} label={offsetName(zone)} title={`Time zone: ${zone.replace(/_/g, " ")}`} options={ZONES.map((z) => [z, `${z.replace(/_/g, " ")} (${offsetName(z)})`])} onChange={(v) => (setZone(v), keep("zone", v))} />
+          {tight < 3 && (
+            <button className="cal-button" title="Go to today (T)" onClick={() => setAnchor(Date.now())}>
+              Today
+            </button>
+          )}
+          <span className="cal-steps">
+            <button className="cal-icon" title="Earlier (K)" onClick={() => setAnchor(addDays(dayStart(anchor, zone), -fit, zone))}>
+              <Icon name="back" size={16} />
+            </button>
+            <button className="cal-icon" title="Later (J)" onClick={() => setAnchor(addDays(dayStart(anchor, zone), fit, zone))}>
+              <Icon name="chevron" size={16} />
+            </button>
+          </span>
+          <button className="primary" title="New event (C)" aria-label="New event" onClick={() => keys.current(new KeyboardEvent("keydown", { key: "c" }))}>
+            {tight >= 2 ? <Icon name="plus" size={16} /> : "New"}
+            {!tight && <kbd>C</kbd>}
           </button>
         </header>
-        <Grid days={days} zone={zone} events={shown} selected={selected} overlays={overlays} colorOf={colorOf} onSelect={select} onNew={startDraft} onMove={(e, start, end) => void act("calendar.event.update", { key: e.key, scope: "this", start, end })} />
+        <Grid days={days} zone={zone} zoneLabel={offsetName(zone, days[0])} events={shown} selected={selected} overlays={overlays} colorOf={colorOf} onSelect={select} onNew={startDraft} onMove={(e, start, end) => void act("calendar.event.update", { key: e.key, scope: "this", start, end })} />
       </section>
 
       {current ? (
@@ -396,18 +546,18 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           onCreate={() => void create()}
           onSend={(notify) => void act("calendar.event.send", { key: current.key, notify })}
           onDiscard={() => void act("calendar.event.discard", { key: current.key }, false)}
-          onDelete={() => void remove()}
+          onDelete={(notify) => void remove(notify)}
+          deleting={deleting}
+          onKeep={() => setDeleting(false)}
+          noteAsk={noteAsk}
           onReply={(reply) => void act("calendar.event.reply", { key: current.key, scope, reply })}
-          onNote={() => void note()}
+          onNote={(shared) => void note(shared)}
           onBlock={(account) => void act("calendar.block", { key: current.key, account }).then((made) => made && onNotice("Blocked as Busy on the other calendar."))}
           onClose={() => select(null)}
+          over={!wide}
         />
       ) : (
-        <aside className="cal-panel cal-briefing">
-          <h3>Today</h3>
-          {briefing.split("\n").map((line, i) => (i === 0 ? <p key={i}>{line}</p> : <p key={i} className="cal-line">{line.replace(/^- /, "")}</p>))}
-          <small>Drag on the week to make an event. Press 1 to 9 for that many days.</small>
-        </aside>
+        (wide || dayOpen) && idle
       )}
     </div>
   );

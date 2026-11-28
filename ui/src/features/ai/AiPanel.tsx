@@ -12,6 +12,8 @@ import { type Command, listCommands, runCommand } from "../../shell/commands";
 import { useStore } from "../../shell/store";
 import { allFiles, app, getEditor, notify, openNote, renderMarkdown } from "../../shell/workspace";
 import { aiSettings, saveAiConfig } from "../../bridge/ai";
+import { type CalEvent, runCalendar } from "../../bridge/calendar";
+import { CALENDAR, calendarDetail, emailsPeople } from "./calendarWords";
 import { Logo } from "../connections/logos";
 import { type Customer, loadCustomers, show as shown, threads, tone } from "../customers/data";
 import { fileName, fileTag, kindOf } from "../files/files";
@@ -67,6 +69,7 @@ const titled = (word: string) => word.replace(/[-_]+/g, " ").replace(/^./, (c) =
 
 export function describe(name: string, input: Record<string, unknown>): string {
   if (TOOLS[name]) return TOOLS[name](input);
+  if (CALENDAR[name]) return CALENDAR[name](input);
   const from = service(name);
   return from ? `${titled(from.id)}: ${from.tool.replace(/^[a-z]+-/, "").replace(/[-_]+/g, " ")}` : name;
 }
@@ -113,6 +116,14 @@ function Answer({ text, live }: { text: string; live: boolean }) {
 function Tool({ item }: { item: Extract<Item, { kind: "tool" }> }) {
   const [open, setOpen] = useState(false);
   const asking = item.status === "asking";
+  // A calendar change names its event by key: the event is read so the card can say what it is.
+  const calendar = item.name.startsWith("calendar_");
+  const [event, setEvent] = useState<CalEvent | null>(null);
+  const key = calendar && typeof item.input.key === "string" ? item.input.key : null;
+  useEffect(() => {
+    if (key && asking) void runCalendar<{ event: CalEvent | null }>("calendar.event.get", { key }).then((r) => setEvent(r.event), () => undefined);
+  }, [key, asking]);
+  const said = calendar ? calendarDetail(item.name, item.input, event) : detail(item.name, item.input);
   return (
     <div className={`ai-tool ${item.status}`}>
       <button className="ai-tool-head" onClick={() => setOpen((o) => !o)}>
@@ -120,15 +131,17 @@ function Tool({ item }: { item: Extract<Item, { kind: "tool" }> }) {
         <span className="tree-name">{asking ? `Allow this? ${describe(item.name, item.input)}` : describe(item.name, item.input)}</span>
         {item.status === "failed" && <span className="ai-tool-note">not done</span>}
       </button>
-      {(asking || open) && <pre className="ai-tool-detail">{asking || !item.result ? detail(item.name, item.input) : item.result}</pre>}
+      {(asking || open) && <pre className="ai-tool-detail">{asking || !item.result ? said : item.result}</pre>}
       {asking && (
         <div className="ai-ask">
           <button className="primary" onClick={() => answer(item.id, true)}>
             Allow
           </button>
-          <button title="Allow this and every further change of the same kind for the rest of this chat" onClick={() => answerAll(item.id)}>
-            Allow all like this
-          </button>
+          {!emailsPeople(item.name) && (
+            <button title="Allow this and every further change of the same kind for the rest of this chat" onClick={() => answerAll(item.id)}>
+              Allow all like this
+            </button>
+          )}
           <button onClick={() => answer(item.id, false)}>Decline</button>
         </div>
       )}

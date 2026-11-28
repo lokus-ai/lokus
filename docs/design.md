@@ -437,7 +437,16 @@ not made, until an account is connected.
 **Changes.** Every change is written to the local copy first and put in a queue; the queue is sent
 before anything is read, and a change the network refused stays queued and is sent by a later
 minute. A change the provider itself refuses stays, with the reason shown on the event, and later
-changes to that event wait behind it.
+changes to that event wait behind it. Only a connection that could not be made counts as offline.
+An answer that does not come within 30 seconds may still have been acted on, so the change waits
+and is sent again, and a new event cannot be made twice by that: Google is sent an event `id` of
+ours and Microsoft a `transactionId` (both the event's local id, which is in the queue with the
+change), and a second send is answered with the event already made.
+
+**What is sent back.** Google replaces an event's whole guest list, so every guest goes back with
+their answer, and a reply reads the event first and changes only this person's answer. A Microsoft
+description is read in full as text and written only when the person edited it. A repeat rule
+Graph has no words for is not sent at all. Graph's Windows zone names are kept as IANA names.
 
 **Guests and the one send.** An event with guests is never updated a keystroke at a time. The
 first change holds the event as "Pending changes" (the panel lists what changed); any number of
@@ -446,9 +455,19 @@ guests, or "Update without email" sends the same request telling the provider no
 puts the event back. A new event with guests is the same with "Send invite". An event without
 guests is sent as it is changed.
 
-**The screen.** Accounts, calendars (colour, hide, default), team and colleagues on the left; a grid
-of 1 to 9 days in the middle (keys 1 to 9; T today, J and K to move, C new, F find a time); the
-event on the right, edited in place. Drag on the grid to make an event, drag an event to move it,
+**The screen.** A small month, then accounts, calendars (colour, hide, default), team and
+colleagues on the left; a grid of 1 to 9 days in the middle (keys 1 to 9; T today, J and K to move,
+C new, F find a time); the event on the right, edited in place, or today's events and the
+shortcuts when none is open. Opening the calendar folds the app's sidebar and the assistant away,
+and leaving it puts them back. The screen is laid out by the room it has: the week never draws a
+day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one); the list on the left and the
+panel on the right lie over the week when there is no room beside it; the bar gives up key hints,
+then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
+or the sync status. Overlapping events sit side by side while each has room for a word, otherwise
+the later is set in and laid over the earlier. An event is a button: Tab and the arrow keys move
+between events, Enter opens one. One invitation that reaches two connected accounts is shown once
+(by its iCalUID; the organiser's copy). Deleting an event with guests asks once: "Delete and tell
+N guests?", with "Delete without email". Drag on the grid to make an event, drag an event to move it,
 its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
 meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
 any zone. A repeating event is changed, answered or deleted as "This event" or "All events".
@@ -457,7 +476,8 @@ any zone. A repeating event is changed, answered or deleted as "This event" or "
 `getSchedule`): times only, and only for people whose calendars the account may see. Across
 companies, where no provider can see everyone, each member's app writes their own busy times for
 the next 14 days into the team folder, `Team/Availability/<email>.md`: frontmatter (member, name,
-emails, updated) and a list of `start/end` lines. **No titles, guests or places are written.** The
+emails: the first connected account's address only, updated) and a list of `start/end` lines from
+the calendars that are not hidden. **No titles, guests or places are written.** The
 existing team sync carries the file; the calendar lists each member with how long ago theirs was
 written. An unchanged file is rewritten at most every ten minutes. Drag a member onto the grid to
 start an event with them as a guest; "Find a time" lists the first times everyone picked is free
@@ -465,7 +485,9 @@ start an event with them as a guest; "Find a time" lists the first times everyon
 "Block this time on…" puts a plain "Busy" event on another connected account.
 
 **Notes and the assistant.** "Meeting note" makes `Meetings/<date> <title>.md` in the open folder
-with the event's time, guests, place and link filled in, and remembers which event it belongs to.
+with the event's time, guests, place and link filled in, and remembers which event it belongs to,
+per folder. In a team's folder the note syncs to the team, so the first ask is answered with one
+line saying so and the note is written when the person confirms.
 The briefing is the day's events in order. Every calendar command is offered to the assistant as a
 tool when an account is connected; those that write (`writes: true`) go through the same approval
 as any other change, so an invitation or an event change is asked about first unless approvals are

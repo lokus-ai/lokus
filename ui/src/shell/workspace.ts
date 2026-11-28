@@ -383,6 +383,29 @@ export function setSidebarWidth(width: number): void {
   app.set({ sidebarWidth: clamped });
 }
 
+/**
+ * The calendar wants the whole window: opening it folds the sidebar and the panel on the right
+ * away, and leaving it puts them back as they were. Either can still be opened over it by hand.
+ */
+function makeRoomForCalendar(): void {
+  let before: Pick<AppState, "sidebar" | "panel"> | null = null;
+  let was = app.get().view;
+  app.subscribe(() => {
+    const { view, sidebar, panel, narrow } = app.get();
+    if (view === was) return;
+    const [entering, leaving] = [view === "calendar", was === "calendar"];
+    was = view;
+    if (entering) {
+      before = { sidebar, panel };
+      app.set({ sidebar: false, panel: null });
+    } else if (leaving && before) {
+      const back = before;
+      before = null;
+      app.set({ sidebar: narrow ? false : back.sidebar, panel: back.panel });
+    }
+  });
+}
+
 /** On a narrow window the sidebar closes and opens as an overlay instead. */
 function watchWidth(): void {
   const query = window.matchMedia(NARROW);
@@ -773,6 +796,7 @@ export async function resumeSync(byHand = false): Promise<void> {
 
 export async function boot(): Promise<void> {
   watchWidth();
+  makeRoomForCalendar();
   watchSync();
   onVaultChanged((paths) => void onDiskChange(paths));
   onIndexReady(() => app.set((s) => ({ version: s.version + 1 })));
