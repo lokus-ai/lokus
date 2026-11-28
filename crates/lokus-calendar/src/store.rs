@@ -637,12 +637,12 @@ impl Store {
         // One delete of an event waits at a time, and a reply is not added when the last one waiting
         // is the same: asked for three times at once it is still one request and one email, and
         // yes, no, yes still ends in yes.
-        // A newer reply replaces one to the same event (or the same series) that has not been
-        // handed to the provider yet: answered four times offline, the organiser hears once.
+        // A newer reply replaces one to the same event (or the same series) that is not being
+        // sent right now (the new one looks up what the provider has before it goes): answered four times offline, the organiser hears once.
         if op == "reply" {
             self.db.execute(
                 "DELETE FROM outbox WHERE op = 'reply' AND account = ?1 AND error IS NULL
-                   AND n NOT IN (SELECT n FROM sending) AND n NOT IN (SELECT n FROM tried)
+                   AND n NOT IN (SELECT n FROM sending)
                    AND json_extract(body, '$.scope') = json_extract(?3, '$.scope')
                    AND (key = ?2 OR (json_extract(?3, '$.scope') = 'all'
                      AND json_extract(body, '$.event.series') = json_extract(?3, '$.event.series')))",
