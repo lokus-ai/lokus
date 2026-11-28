@@ -79,27 +79,31 @@ async fn applied(dir: &Path, q: &Queued) -> Result<bool> {
                 ours.end.clone_from(&theirs.end);
             }
             let mut still = differ(&theirs, ours);
-            // Guests: the ones this change added are there and the ones it removed are not.
-            // Someone else adding a guest meanwhile does not make it unsent.
-            if let Ok(was) = serde_json::from_value::<Vec<String>>(q.body["was"]["guests"].clone())
+            // Guests: what this change did is there. The ones it added or made optional or
+            // required are so, and the ones it removed are gone. What someone else did to the
+            // other guests meanwhile does not make it unsent.
+            if let Ok(was) =
+                serde_json::from_value::<Vec<(String, bool)>>(q.body["was"]["guests"].clone())
             {
-                let has = |e: &Event, who: &str| {
-                    e.guests.iter().any(|g| g.email.eq_ignore_ascii_case(who))
-                };
-                // Each guest of ours is there as required or optional as we have them; one we
-                // did not add may have been taken off by someone else.
-                let ours_there = ours.guests.iter().all(|g| {
-                    match theirs
-                        .guests
+                let find = |e: &Event, who: &str| {
+                    e.guests
                         .iter()
-                        .find(|t| t.email.eq_ignore_ascii_case(&g.email))
-                    {
-                        Some(t) => t.optional == g.optional,
-                        None => was.iter().any(|w| g.email.eq_ignore_ascii_case(w)),
-                    }
+                        .find(|g| g.email.eq_ignore_ascii_case(who))
+                        .map(|g| g.optional)
+                };
+                let before = |who: &str| {
+                    was.iter()
+                        .find(|(w, _)| w.eq_ignore_ascii_case(who))
+                        .map(|(_, optional)| *optional)
+                };
+                let mine = ours.guests.iter().all(|g| {
+                    before(&g.email) == Some(g.optional)
+                        || find(&theirs, &g.email) == Some(g.optional)
                 });
-                let removed = was.iter().filter(|w| !has(ours, w));
-                if ours_there && !removed.clone().any(|w| has(&theirs, w)) {
+                let removed = was
+                    .iter()
+                    .any(|(w, _)| find(ours, w).is_none() && find(&theirs, w).is_some());
+                if mine && !removed {
                     still.retain(|c| c != "guests");
                 }
             }
