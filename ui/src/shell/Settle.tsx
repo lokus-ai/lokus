@@ -11,6 +11,8 @@ export function Settle(p: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       {...p}
+      // A key still held from before the choices appeared never chooses one.
+      onKeyDownCapture={(e) => e.repeat && e.preventDefault()}
       onClickCapture={(e) => {
         if (performance.now() >= quiet.current) return;
         e.stopPropagation();
