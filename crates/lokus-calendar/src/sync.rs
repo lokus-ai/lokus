@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use chrono::{Duration, Utc};
+use chrono::{Duration, TimeZone, Utc};
 use serde_json::{json, Value};
 
 use crate::model::{differ, key, now, split, stamp, time, Event, Result};
@@ -77,7 +77,6 @@ async fn applied(dir: &Path, q: &Queued) -> Result<bool> {
             {
                 ours.start.clone_from(&theirs.start);
                 ours.end.clone_from(&theirs.end);
-                ours.zone.clone_from(&theirs.zone);
             }
             let still = differ(&theirs, ours);
             !changed.iter().any(|c| still.contains(c))
@@ -123,7 +122,14 @@ async fn send(dir: &Path, q: &Queued) -> Result<()> {
                     let was = time(q.body["was"]["start"].as_str().unwrap_or(&event.start))?;
                     let moved = time(&event.start)? - was;
                     let length = time(&event.end)? - time(&event.start)?;
-                    let start = time(&whole.start)? + moved;
+                    let mut start = time(&whole.start)? + moved;
+                    if event.all_day && !whole.all_day {
+                        // Made all-day: the series' first day as its own zone has it, since the
+                        // clock there may stand differently than on the date that was opened.
+                        let zone: chrono_tz::Tz = whole.zone.parse().unwrap_or(chrono_tz::UTC);
+                        let day = time(&whole.start)?.with_timezone(&zone).date_naive();
+                        start = Utc.from_utc_datetime(&day.and_time(chrono::NaiveTime::MIN));
+                    }
                     event.start = stamp(start);
                     event.end = stamp(start + length);
                     let mut body = q.body.clone();
