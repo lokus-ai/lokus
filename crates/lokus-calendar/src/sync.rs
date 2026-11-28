@@ -67,6 +67,16 @@ async fn send(dir: &Path, q: &Queued) -> Result<()> {
                     .repeat
                     .or(q.body["was"]["repeat"].as_str().map(str::to_string));
             }
+            if changed.iter().any(|c| c == "guests") {
+                // The provider replaces the whole guest list, so each guest goes back with the
+                // answer the provider holds this moment (for "all events", the series' own).
+                let now = provider::get(&account, calendar, &target).await?;
+                for g in &mut event.guests {
+                    if let Some(n) = now.guests.iter().find(|n| n.email == g.email) {
+                        g.reply.clone_from(&n.reply);
+                    }
+                }
+            }
             let made =
                 provider::update(&account, calendar, &target, &event, &changed, q.notify).await?;
             let store = Store::open(dir)?;
