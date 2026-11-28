@@ -185,6 +185,15 @@ fn held_off(account: &str) -> bool {
 }
 
 /// A refusal in one plain sentence. What the provider wrote is for its own developers.
+/// `Retry-After` in seconds: the header is a number of seconds or a date.
+fn wait_asked(header: &str) -> Option<u64> {
+    let header = header.trim();
+    header.parse().ok().or_else(|| {
+        let at = chrono::DateTime::parse_from_rfc2822(header).ok()?;
+        Some((at.timestamp() - chrono::Utc::now().timestamp()).max(0) as u64)
+    })
+}
+
 fn refusal(status: u16) -> &'static str {
     match status {
         401 => "This account is signed out.",
@@ -221,7 +230,13 @@ async fn exchange(at: &Endpoints, form: &[(&str, &str)]) -> Result<Value> {
             .as_str()
             .or(body["error"].as_str())
             .unwrap_or("the provider refused the sign-in");
-        return Err(CalError::new("sign_in", format!("Sign-in failed: {why}")));
+        // `invalid_grant`: the sign-in itself is dead, as opposed to a request made wrongly.
+        let code = if body["error"] == "invalid_grant" {
+            "signed_out"
+        } else {
+            "sign_in"
+        };
+        return Err(CalError::new(code, format!("Sign-in failed: {why}")));
     }
     Ok(body)
 }
@@ -264,7 +279,16 @@ pub async fn fresh(provider: Provider, account: &str, force: bool) -> Result<Tok
         ],
     )
     .await
-    .map_err(|e| if e.waits() { e } else { signed_out() })?;
+    .map_err(|e| {
+        if e.waits() {
+            return e;
+        }
+        if e.code == "signed_out" {
+            // The provider ended this sign-in: the account now shows "Sign in again".
+            forget(account);
+        }
+        signed_out()
+    })?;
     let new = tokens(&body, Some(&had.refresh))?;
     keep(account, &new);
     Ok(new)
@@ -443,21 +467,23 @@ pub async fn call(
             let asked = answer
                 .headers()
                 .get("retry-after")
-                .and_then(|v| v.to_str().ok()?.trim().parse::<u64>().ok());
+                .and_then(|v| wait_asked(v.to_str().ok()?));
             match (asked, again.next()) {
-                (Some(asked), _) if asked > 20 => {
-                    // Too long to wait here: nothing goes to this account until then.
-                    HOLD.lock().unwrap_or_else(|e| e.into_inner()).push((
-                        account.to_string(),
-                        std::time::Instant::now() + Duration::from_secs(asked.min(3600)),
-                    ));
-                    return Err(later());
-                }
-                (asked, Some(wait)) => {
+                (asked, Some(wait)) if asked.is_none_or(|asked| asked <= 20) => {
                     tokio::time::sleep(Duration::from_secs(asked.unwrap_or(wait).max(1))).await;
                     continue;
                 }
-                (_, None) => return Err(later()),
+                (asked, _) => {
+                    // Too long to wait here, or no tries left: nothing goes to this account
+                    // until the time the provider named.
+                    if let Some(asked) = asked {
+                        HOLD.lock().unwrap_or_else(|e| e.into_inner()).push((
+                            account.to_string(),
+                            std::time::Instant::now() + Duration::from_secs(asked.min(3600)),
+                        ));
+                    }
+                    return Err(later());
+                }
             }
         }
         let Ok(text) = answer.text().await else {
