@@ -487,7 +487,9 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
     };
     let mut event = store.stored(k)?.ok_or_else(|| bad("no such event"))?;
     // Already answered so, and nothing else is on its way: the organiser is not emailed again.
+    let scope = text(args, "scope").unwrap_or("this");
     if event.reply == answer
+        && (scope != "all" || store.answered(&event, answer)?)
         && !store
             .waiting()?
             .iter()
@@ -505,7 +507,6 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
         g.reply = answer.to_string();
     }
     store.put(&event)?;
-    let scope = text(args, "scope").unwrap_or("this");
     store.queue(
         &event.account,
         k,

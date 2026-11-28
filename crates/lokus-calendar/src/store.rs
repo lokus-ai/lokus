@@ -506,6 +506,23 @@ impl Store {
         Ok(())
     }
 
+    /// Whether every occurrence of a series read so far carries this answer of mine.
+    pub fn answered(&self, like: &Event, answer: &str) -> Result<bool> {
+        let mut q = self
+            .db
+            .prepare("SELECT json FROM events WHERE account = ?1 AND calendar = ?2")?;
+        for json in q.query_map(params![like.account, like.calendar], |r| {
+            r.get::<_, String>(0)
+        })? {
+            if let Ok(e) = serde_json::from_str::<Event>(&json?) {
+                if e.series.is_some() && e.series == like.series && e.reply != answer {
+                    return Ok(false);
+                }
+            }
+        }
+        Ok(true)
+    }
+
     /// The first occurrence of a series, of those read so far.
     pub fn first_of(&self, account: &str, calendar: &str, series: &str) -> Result<Option<String>> {
         let mut q = self.db.prepare(
@@ -555,12 +572,15 @@ impl Store {
         body: &Value,
         notify: bool,
     ) -> Result<()> {
-        // One delete of an event, and one reply with the same answer, wait at a time: asked for
-        // three times at once it is still one request and one email.
+        // One delete of an event waits at a time, and a reply is not added when the last one waiting
+        // is the same: asked for three times at once it is still one request and one email, and
+        // yes, no, yes still ends in yes.
         self.db.execute(
             "INSERT INTO outbox (account, key, op, body, notify, made) SELECT ?1, ?2, ?3, ?4, ?5, ?6
-             WHERE ?3 NOT IN ('delete', 'reply') OR NOT EXISTS (SELECT 1 FROM outbox WHERE key = ?2 AND op = ?3
-               AND error IS NULL AND (op = 'delete' OR json_extract(body, '$.answer') = json_extract(?4, '$.answer')))",
+             WHERE ?3 NOT IN ('delete', 'reply') OR NOT EXISTS (SELECT 1 FROM outbox o WHERE key = ?2 AND op = ?3
+               AND error IS NULL AND (op = 'delete' OR (json_extract(body, '$.answer') = json_extract(?4, '$.answer')
+                 AND json_extract(body, '$.scope') = json_extract(?4, '$.scope')
+                 AND n = (SELECT MAX(n) FROM outbox WHERE key = o.key AND op = 'reply' AND error IS NULL))))",
             params![account, key, op, body.to_string(), notify as i64, now()],
         )?;
         Ok(())
