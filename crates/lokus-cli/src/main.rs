@@ -16,6 +16,8 @@ const USAGE: &str = "usage:
   lokus <command> [--vault DIR] [key=value ...] [--json '{...}']
   lokus app <command> [key=value ...]     (talks to the running dev app)
   lokus commands.list                     (every core command)
+  lokus calendar.commands                 (every calendar command; they reach Google Calendar)
+  lokus calendar.<command> [--vault DIR] [key=value ...]
   lokus sync --vault DIR server=URL workspace=ID token=TOKEN
                                           (keep a folder in sync with a relay; prints what it does)
   lokus ai --vault DIR q=QUESTION [provider=anthropic|openai|chatgpt] [model=ID] [base_url=URL]
@@ -65,6 +67,9 @@ fn main() -> ExitCode {
     if !in_app && parsed.command == "ai" {
         return ai(&parsed);
     }
+    if !in_app && parsed.command.starts_with("calendar.") {
+        return calendar(&parsed);
+    }
     // What the assistant's Messages tool returns, with no model in between.
     if !in_app && parsed.command == "imessage" {
         return match lokus_ai::imessage::call(&parsed.args) {
@@ -97,6 +102,70 @@ fn main() -> ExitCode {
             }
         }
         Err(body) => fail(body),
+    }
+}
+
+/// Where the calendar's local copy is kept: beside the app's own settings, or where
+/// `LOKUS_CALENDAR_DIR` says (the scripted flow gives every made-up person their own).
+fn calendar_dir() -> std::path::PathBuf {
+    if let Some(dir) = std::env::var_os("LOKUS_CALENDAR_DIR").filter(|d| !d.is_empty()) {
+        return dir.into();
+    }
+    // The same place the app keeps this person's other settings.
+    let var = |name: &str| {
+        std::env::var_os(name)
+            .map(std::path::PathBuf::from)
+            .unwrap_or_default()
+    };
+    let base = if cfg!(target_os = "macos") {
+        var("HOME").join("Library/Application Support")
+    } else if cfg!(windows) {
+        var("APPDATA")
+    } else {
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(Into::into)
+            .unwrap_or_else(|| var("HOME").join(".config"))
+    };
+    base.join("io.lokus.app")
+}
+
+/// A calendar command: these reach the providers, so they are not core commands.
+fn calendar(p: &Parsed) -> ExitCode {
+    if p.command == "calendar.commands" {
+        let list: Vec<Value> = lokus_calendar::COMMANDS
+            .iter()
+            .map(|c| json!({ "name": c.name, "about": c.about, "writes": c.writes,
+                "args": c.args.iter().map(|(n, k, a)| json!({ "name": n, "type": k, "about": a })).collect::<Vec<_>>() }))
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&list).unwrap_or_default()
+        );
+        return ExitCode::SUCCESS;
+    }
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(e) => return fail(json!({ "code": "io", "message": e.to_string() })),
+    };
+    let root = p.vault.as_ref().map(std::path::PathBuf::from);
+    // The address to open is printed; the command goes on once the person has signed in.
+    let show = |url: &str| println!("{}", json!({ "type": "sign_in", "url": url }));
+    let done = runtime.block_on(lokus_calendar::run(
+        &calendar_dir(),
+        root.as_deref(),
+        &p.command,
+        &p.args,
+        &show,
+    ));
+    match done {
+        Ok(value) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_default()
+            );
+            ExitCode::SUCCESS
+        }
+        Err(e) => fail(e.body()),
     }
 }
 
@@ -337,6 +406,9 @@ fn ai(p: &Parsed) -> ExitCode {
         }),
         chat: arg("chat"),
         helper: None,
+        local: lokus_calendar::Store::exists(&calendar_dir()).then(|| {
+            lokus_calendar::assistant(calendar_dir(), p.vault.as_ref().map(Into::into), |_| ())
+        }),
     };
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,

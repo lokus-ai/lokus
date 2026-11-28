@@ -1,6 +1,6 @@
 /** @part-of ui.shell */
 import { runCommand } from "./commands";
-import { app, GRAPH_TAB, isNotePath, notify } from "./workspace";
+import { app, CALENDAR_TAB, GRAPH_TAB, isNotePath, notify } from "./workspace";
 
 export interface ContextMenuItem {
   id: string;
@@ -181,7 +181,7 @@ export function openMenu(event: MenuEvent, label: string, items: (ContextMenuIte
 /** The menu of a note or a file, the same wherever it is shown; the sidebar adds its own to it. */
 export function fileMenu(event: MenuEvent, path: string, where: "tab" | "row" | "tree" | "draft" = "row", folder?: string): void {
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/i, "");
-  openMenu(event, path === GRAPH_TAB ? "Graph" : name, path === GRAPH_TAB ? [{ id: "note.close", label: "Close tab" }] : [
+  openMenu(event, path === GRAPH_TAB ? "Graph" : path === CALENDAR_TAB ? "Calendar" : name, path === GRAPH_TAB || path === CALENDAR_TAB ? [{ id: "note.close", label: "Close tab" }] : [
     where === "tab" ? { id: "note.close", label: "Close tab" } : { id: "note.open", label: "Open" },
     ...(where === "tree" ? [{ id: "tree.newNote", label: "New note" }, { id: "tree.newFolder", label: "New folder" }] : [{ id: "tree.revealActive", label: "Reveal in sidebar" }]),
     null,

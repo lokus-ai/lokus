@@ -57,7 +57,7 @@ import {
   Zap,
   Megaphone,
   Play,
-  Download,
+  Download, Clock, Repeat, Video, MapPin, AlignLeft, ChevronUp, ChevronLeft,
 } from "lucide-react";
 
 /**
@@ -123,6 +123,13 @@ const icons = {
   left: ArrowLeft,
   right: ArrowRight,
   hide: EyeOff,
+  clock: Clock,
+  repeat: Repeat,
+  video: Video,
+  place: MapPin,
+  text: AlignLeft,
+  up: ChevronUp,
+  back: ChevronLeft,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof icons;

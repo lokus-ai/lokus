@@ -6,6 +6,7 @@
 mod account;
 mod ai;
 mod background;
+mod calendar;
 #[cfg(all(debug_assertions, desktop))]
 mod dev_channel;
 #[cfg(desktop)]
@@ -248,6 +249,8 @@ macro_rules! commands {
     ($($extra:path),*) => {
         tauri::generate_handler![
             core_run,
+            calendar::calendar_run,
+            calendar::calendar_sync,
             vault_open,
             vault_current,
             sync::sync_connect,
@@ -339,6 +342,7 @@ pub fn run() {
         .setup(|app| {
             dev_channel::start(app.handle().clone());
             background::start(app.handle());
+            calendar::start(app.handle());
             ai::hand_on(app.handle(), &vaults::here(app.handle()));
             Ok(())
         });
@@ -346,6 +350,7 @@ pub fn run() {
     #[cfg(not(all(debug_assertions, desktop)))]
     let builder = builder.invoke_handler(commands!()).setup(|app| {
         background::start(app.handle());
+        calendar::start(app.handle());
         // Connections from before they belonged to a workspace go to every workspace here.
         ai::hand_on(app.handle(), &vaults::here(app.handle()));
         Ok(())

@@ -12,7 +12,7 @@ import { allFiles, app, getEditor, isSwitchingVault, notify, openNote, refreshTr
 export type Item =
   | { kind: "user"; text: string; note?: string; files?: string[] }
   | { kind: "assistant"; text: string; live: boolean }
-  | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; status: "asking" | "running" | "ok" | "failed"; result?: string }
+  | { kind: "tool"; id: string; name: string; input: Record<string, unknown>; status: "asking" | "running" | "ok" | "failed"; result?: string; emails?: boolean }
   | { kind: "question"; id: string; question: string; options: string[]; multiple: boolean; answer?: string }
   /** `passing` marks a line about this window only (a compaction that did not happen): shown, never kept in the file. */
   | { kind: "notice"; text: string; error?: boolean; code?: string; passing?: boolean }
@@ -394,12 +394,12 @@ function onEvent(event: AiEvent): void {
           const options = Array.isArray(event.input.options) ? event.input.options.map(String).slice(0, 8) : [];
           return [...settle(items), { kind: "question", id: event.id, question: String(event.input.question ?? ""), options, multiple: event.input.multiple === true }];
         }
-        if (event.asks && allowed.has(event.name)) {
+        if (event.asks && !event.emails && allowed.has(event.name)) {
           // Already allowed in this conversation: say yes without stopping to ask.
           void aiApprove(event.id, true);
           return [...settle(items), { kind: "tool", id: event.id, name: event.name, input: event.input, status: "running" }];
         }
-        return [...settle(items), { kind: "tool", id: event.id, name: event.name, input: event.input, status: event.asks ? "asking" : "running" }];
+        return [...settle(items), { kind: "tool", id: event.id, name: event.name, input: event.input, emails: event.emails, status: event.asks ? "asking" : "running" }];
       case "tool_done":
         keepSoon();
         return items.map((i) => (i.kind === "tool" && i.id === event.id ? { ...i, status: event.ok ? "ok" : "failed", result: event.result } : i));

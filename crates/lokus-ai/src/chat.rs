@@ -256,6 +256,28 @@ pub struct Request {
     pub chat: Option<String>,
     /// Set when this run is a helper's, not the assistant's own.
     pub helper: Option<helpers::Role>,
+    /// Tools that run on this computer and are not the vault's: the calendar's. They are
+    /// handed in because they reach the network, which this crate's own tools do not.
+    pub local: Option<Local>,
+}
+
+/// Runs one handed-in tool (tool name, input).
+pub type LocalRunner = Arc<
+    dyn Fn(
+            String,
+            Value,
+        ) -> futures_util::future::BoxFuture<'static, std::result::Result<String, String>>
+        + Send
+        + Sync,
+>;
+
+/// Tools given by whoever starts the run, and how one is run.
+#[derive(Clone)]
+pub struct Local {
+    pub tools: Vec<Tool>,
+    /// The tools that email other people. Each use is asked about, whatever the setting says.
+    pub emails: Vec<String>,
+    pub run: LocalRunner,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -263,12 +285,14 @@ pub struct Request {
 pub enum Event {
     /// More of the answer.
     Text { delta: String },
-    /// The model is calling a tool. `asks` means the person must allow it.
+    /// The model is calling a tool. `asks` means the person must allow it; `emails` that it
+    /// emails other people, so it is asked about each time and never allowed in bulk.
     Tool {
         id: String,
         name: String,
         input: Value,
         asks: bool,
+        emails: bool,
     },
     ToolDone {
         id: String,
@@ -346,6 +370,8 @@ pub type AppRunner = Arc<
 enum Source {
     Vault,
     App,
+    /// A tool handed in with the request (the calendar).
+    Local,
     Server(usize, String),
     /// The tool that brings a connected service's tools off the shelf.
     Loader,
@@ -415,6 +441,7 @@ struct Reading<'a> {
     launch: Option<&'a helpers::Launch>,
     role: Option<&'a helpers::Role>,
     research: bool,
+    local: Option<&'a Local>,
 }
 
 impl Reading<'_> {
@@ -424,6 +451,7 @@ impl Reading<'_> {
         let reads = matches!(
             self.sources[at],
             Source::Vault
+                | Source::Local
                 | Source::Server(..)
                 | Source::Api(false)
                 | Source::Messages
@@ -451,6 +479,10 @@ impl Reading<'_> {
                     .call(tool, &without_blanks(input, &self.offered[at].schema))
                     .await
             }
+            Source::Local => match self.local {
+                Some(local) => (local.run)(name.to_string(), input.clone()).await,
+                None => Err(format!("{name} cannot run here")),
+            },
             Source::Api(write) => crate::own_api::call(self.config, *write, input).await,
             Source::Messages => crate::imessage::call(input),
             Source::Web => crate::web::call(self.web, name, input).await,
@@ -736,6 +768,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
         web,
         chat,
         helper,
+        local,
     } = request;
     let mut system = if briefing.trim().is_empty() {
         SYSTEM.to_string()
@@ -782,6 +815,12 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
     if app.is_some() {
         for tool in tools::app_tools() {
             sources.push(Source::App);
+            offered.push(tool);
+        }
+    }
+    if let Some(local) = &local {
+        for tool in local.tools.iter().cloned() {
+            sources.push(Source::Local);
             offered.push(tool);
         }
     }
@@ -907,6 +946,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
             let from = match source {
                 Source::Vault => "vault".to_string(),
                 Source::App => "app".to_string(),
+                Source::Local => "calendar".to_string(),
                 Source::Server(index, _) => connections[*index].server.clone(),
                 Source::Loader => "loader".to_string(),
                 Source::Api(_) => "own_api".to_string(),
@@ -1051,6 +1091,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                     launch: launch.as_ref(),
                     role: helper.as_ref(),
                     research,
+                    local: local.as_ref(),
                 };
                 let together: Vec<(usize, &Value)> = calls[next..]
                     .iter()
@@ -1066,7 +1107,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                         futures_util::future::join_all(together.into_iter().map(|(at, call)| async move {
                             let id = call["id"].as_str().unwrap_or_default();
                             let name = call["name"].as_str().unwrap_or_default();
-                            emit(Event::Tool { id: id.to_string(), name: name.to_string(), input: call["input"].clone(), asks: false });
+                            emit(Event::Tool { id: id.to_string(), name: name.to_string(), input: call["input"].clone(), asks: false, emails: false });
                             done(id, reading.run(at, id, name, &call["input"]).await)
                         }))
                         .await,
@@ -1079,14 +1120,15 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                 let name = call["name"].as_str().unwrap_or_default().to_string();
                 let input = call["input"].clone();
                 let position = offered.iter().position(|t| t.name == name);
-                let asks = position.is_some_and(|p| offered[p].writes) && !config.auto_approve;
+                let emails = local.as_ref().is_some_and(|l| l.emails.contains(&name));
+                let asks = emails || (position.is_some_and(|p| offered[p].writes) && !config.auto_approve);
                 let outcome: std::result::Result<String, String> = if turn.stop != "tool_use" {
                     // The reply was cut off, so the call may be incomplete.
                     Err("the reply was cut short before this call was complete; it was not run".into())
                 } else if turn.invalid.contains(&id) {
                     Err("INVALID_JSON: the arguments were not a valid JSON object; send the call again".into())
                 } else {
-                    emit(Event::Tool { id: id.clone(), name: name.clone(), input: input.clone(), asks });
+                    emit(Event::Tool { id: id.clone(), name: name.clone(), input: input.clone(), asks, emails });
                     if asks && !approve(&id).await.unwrap_or(false) {
                         Err("The user declined this.".into())
                     } else {
@@ -1146,6 +1188,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                                     launch: launch.as_ref(),
                                     role: helper.as_ref(),
                                     research,
+                                    local: local.as_ref(),
                                 };
                                 reading.run(position.unwrap_or_default(), &id, &name, &input).await
                             }

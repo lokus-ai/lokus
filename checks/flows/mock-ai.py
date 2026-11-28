@@ -29,6 +29,9 @@ def script(messages):
         ("edit_note", {"path": "Plan.md", "old_text": "Launch: TBD", "new_text": "Launch: 1 March"}),
         ("mcp__cli__add", {"a": 2, "b": 3}),
     ]
+    # "book ... on my calendar" has the stand-in ask for the calendar's own tool instead.
+    if "on my calendar" in json.dumps(messages[:1]):
+        steps = [("calendar_event_create", {"title": "Pricing sync", "start": "2026-12-01T22:00:00Z", "end": "2026-12-01T22:30:00Z", "guests": [{"email": "ben@acme.test"}], "send": True})]
     return steps[done] if done < len(steps) else None
 
 

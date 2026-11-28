@@ -35,6 +35,7 @@ none of its code is carried over.
 crates/
   lokus-core/     vault, commands, watcher; later index, search, links   (building)
   lokus-cli/      the `lokus` binary: run core commands on a real vault  (building)
+  lokus-calendar/ calendar: Google and Microsoft 365 client, local copy   (built, stand-in only)
   lokus-sync/     CRDT documents, local update store, sync client         (planned)
   lokus-server/   websocket relay, roles, persistence                     (planned)
 apps/
@@ -406,6 +407,193 @@ sprints, estimates, a roadmap or timeline view, comments on a task, and reading 
   different folder, all follow, because the core holds one open folder.
 - **Layout** (Settings, Appearance): Spacing (roomy, regular, compact), Detail (essentials,
   balanced, everything) and what is on screen when Lokus opens. `styles/density.css`.
+
+## 5f. Calendar (built; tried in the real app against a local stand-in of both providers, not yet the real services)
+
+Lokus owns no calendar. It is a client of **Google Calendar** and **Microsoft 365** (Graph): the
+provider keeps the events and sends the invitation emails, so a guest gets the same email they
+would from Google or Outlook. The code is `crates/lokus-calendar` (it cannot be in `lokus-core`,
+which has no networking); the screen is `ui/src/features/calendar`, loaded when first opened.
+
+**Signing in.** Per person, in their browser, as a desktop app: PKCE and a one-time address on this
+computer (`http://localhost:<port>/callback`), the same way connections sign in. The sign-in is kept
+in the OS keychain (`calendar:<provider>:<email>`), is renewed when it runs out, and never goes
+through the Lokus server. A person can connect several accounts; each event is read and written
+with the sign-in of the account it belongs to. Lokus's Google client id is in the code (it is public). Google also
+gives a desktop app a client secret and refuses the sign-in without it, so that is given when the
+app is built (`LOKUS_GOOGLE_CLIENT_SECRET`), as is the Microsoft client id
+(`LOKUS_MICROSOFT_CLIENT_ID`); neither is in the repository, and a build without one does not
+offer that provider at all: with one provider left, connecting goes straight to it, and with none
+the screen says so in a sentence. This release is Google only: the Microsoft code is built and
+switched off by having no client id. For development, `LOKUS_CALENDAR_GOOGLE` and
+`LOKUS_CALENDAR_MICROSOFT` point at a stand-in (`checks/flows/mock-calendar.py`); a released
+build ignores both.
+
+**The local copy.** `calendar.sqlite` in the app's own folder (not in a vault: a calendar belongs
+to the person, not to a folder) holds accounts, calendars, events, changes waiting to be sent and
+which note belongs to which event. It is derived: delete it and the events are read again. The
+calendar draws from it, so it opens at once and works offline. While the app is open it asks each
+provider what changed two seconds after the start, whichever screen is open, and then about once a minute (Google's sync tokens, Graph's delta links; when a
+provider says the position is too old the calendar is read afresh). Nothing runs, and the file is
+not made, until an account is connected.
+
+**Changes.** Every change is written to the local copy first and put in a queue; the queue is sent
+before anything is read, and a change the network refused stays queued and is sent by a later
+minute. Only a connection that could not be made counts as offline. A provider that is busy or
+broken (a 429, a connection that drops mid-answer, a 5xx on a read) is tried again after 1 and
+then 3 seconds, or after the `Retry-After` it names. A change answered with a 5xx may have been
+made all the same, so it is not sent again at once: like any change whose answer was lost, the
+event is first read back from the provider and sent again only if the change is not there. A
+reply is read back before its first send too, so one already given is not emailed twice; past that the change waits for a later minute (and
+the account is left alone until a long `Retry-After` has passed). Only another 4xx is a refusal:
+the change stays, the event shows one plain sentence (never the provider's own text) with "Retry"
+and "Discard" (`calendar.event.retry`, `calendar.event.discard`), and later changes to that event
+wait behind it. Discard first reads the event back from the provider and drops nothing when it
+cannot be asked. A refused delete has no event left to show the choice on, so the event comes back
+as the provider has it and nothing is left waiting. A sign-in the provider has ended
+(`invalid_grant` on renewal) is forgotten, so the account shows "Sign in again". The assistant asks
+each time before a retry, as for anything that emails people: creating, changing, sending, retrying,
+deleting and answering an event always wait for a yes, also when the assistant is set to change
+notes without asking, and are never offered as "Allow all like this" (the list is `EMAILS` in
+`crates/lokus-calendar/src/commands.rs`; the window is told with each request). An answer that does
+not come within 30 seconds, or is cut off, may still have been acted on. Before such a change, a
+reply or a delete is sent a second time, the event is read from the provider and compared
+(`sync::applied`; the queue row is marked in `tried` when it is first sent): what is already there
+is not sent again, and an event that is gone counts as deleted. An answer already given is not
+sent again, and a second delete is not queued while one waits. Replies follow one rule
+(`Store::overtaken`): the latest answer to an event, or to a series, wins. A reply waits three
+seconds before it is sent, and a newer one replaces every earlier one that is not on its way to
+the provider at that moment; that one is followed by the latest and by nothing else. Answered
+four times in a row, online or offline, the organiser hears once, the last answer; changed again
+while the first is on its way, twice at most. A reply to one date
+and a reply to the series are different things and both stay. Guests are compared by what the
+change meant: the ones it added or made optional or required are so, and the ones it removed are not; a guest someone else
+added meanwhile does not make it unsent. A change being sent is marked with the number of the
+program sending it (`sending.by`); when that program is no longer running the mark is dropped at
+the next sync, so a change cut off by a crash is read back and settled when the app next starts,
+and one a second window is still sending is left to it (a mark whose program cannot be asked
+about is dropped after five minutes, as before). A new event
+cannot be made twice either: Google is
+sent an event `id` of ours and Microsoft a `transactionId` (both the event's local id, which is in
+the queue with the change), and a second send is answered with the event already made. That id is
+chosen when the draft is opened and passed to `calendar.event.create` (`id`), which answers a
+second create of the same draft with the first one's event; the send button is also off while a
+create is on its way.
+
+**What is sent back.** Google replaces an event's whole guest list, so every guest goes back with
+their answer, and a reply reads the event first and changes only this person's answer. A Microsoft
+description is read in full as text and written only when the person edited it. A repeat rule
+Graph has no words for is not sent at all. Graph's Windows zone names are kept as IANA names.
+
+**Guests and the one send.** An event with guests is never updated a keystroke at a time. The
+first change holds the event as "Pending changes" (the panel lists what changed); any number of
+further changes join it; then one "Send update" sends one request to the provider, which emails the
+guests, or "Update without email" sends the same request telling the provider not to, or "Discard"
+puts the event back. A new event with guests is the same with "Send invite". An event without
+guests is sent as it is changed.
+
+**The screen.** A small month, then accounts, calendars (colour, hide, default), team and
+colleagues on the left; a grid of 1 to 9 days in the middle (keys 1 to 9; T today, J and K to move,
+C new, F find a time); the event on the right, edited in place, or today's events and the
+shortcuts when none is open. Opening the calendar folds the app's sidebar and the assistant away,
+and leaving it puts them back. The screen is laid out by the room it has: the week never draws a
+day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one; another count becomes the
+most that fit, and the menu names what is shown: "8 days", not "Week"; a week starts on the
+locale's first weekday); an open event takes its own column while one such day still fits beside
+it (the open event's day is always among those shown), and only below that lies over the week, as
+the list on the left does when it has no room, and then the assistant folds away while the event
+is open and comes back when it closes; the bar gives up key hints,
+then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
+or the sync status. Overlapping events share the width as columns while each keeps 72 pixels, room for about two words; a day as wide as five such columns shows five, a narrower one fewer; where that would leave one event showing and the rest hidden, two are shown at 48 pixels each (one word), so a day, never narrower than 136 pixels, always shows at least two, since two cards and "+1" hide less than one card and "+2"; and one
+widens into the columns to its right that are free while it lasts. An event that starts half an
+hour or more after everything still going is laid over them, set in by one step and outlined in
+the surface colour; when a group has no room for one more column, the event is laid over a single
+column whose event began half an hour before it, one laid over a column widens into the columns to its right that hold nothing
+while it lasts. Only what still has no room is behind a "+N" that
+opens the list for that time. A title takes the lines its card has before the time does, breaks
+between words only and ends in an ellipsis, never in a hyphen; a title with a word wider than
+its card stays on one line. The open event is drawn over the later ones, out to the day's
+edge or to an event beside it that began with it, which stays in reach (one of three hours or
+more stays where it is). The event panel
+comes and goes over 140 milliseconds and a change in how many days are shown fades in over the
+same; neither moves when the system asks for reduced motion. An all-day event is one bar across the days it covers; a click in
+the all-day row, or a drag across days, starts one, and the panel has an "All day" switch. The
+time zone is picked from a list to type in, with the chosen zone, this computer's and the last
+four used on top. A colleague's or teammate's busy time is a hatched block across the day behind
+the events, with their initials while the pointer is on that day. The grid opens on the 08:00
+line, with its label. A guest's answer is a badge beside their initials (going, not going, maybe,
+no answer) and is written beside the name. An invitation not yet answered is an outlined box and
+Y, N and M answer it; one answered Maybe is hatched and outlined in its colour, where one
+accepted is a plain fill; one declined is a broken outline with its title struck through. The
+dark look has one set of rules, whether the app or the system chose it (`--cal-dark`). What a
+`title` says is shown in the app's own box: opaque, at most 280 pixels wide, wrapped, kept
+inside the window. Where an event's calendar is chosen, each calendar has its account on a
+second line. Opening an event keeps its day where it was: when the number of days changes, the
+grid slides from that day's old place over the same 140 milliseconds. O opens the
+meeting note. The panel shows times in the zone the week is shown in and names the event's own
+zone only when it differs. An account that is signed out has a "Sign in again" button. Escape
+closes the open event, also when typed in the assistant beside it. Every window redraws what is
+waiting when any of them changes the calendar. An event is a button: Tab and the arrow keys move
+between events, Enter opens one. One invitation that reaches two connected accounts is shown once
+(by its iCalUID; the organiser's copy). Deleting an event with guests asks once: "Delete and tell
+N guests?", with "Delete without email" (not offered on Microsoft 365, which always emails a
+cancellation). The question opens above the Delete button, which stays where it was, switched
+off. Every group of choices that sends or deletes (this question, the send block, the meeting
+note question, the assistant's approval card) ignores a click for the first half second after it
+appears, and no longer however often it is clicked, so a double or triple click aimed at
+what stood there before does nothing (`ui/src/shell/Settle.tsx`). Deleting an event without
+guests hides it at once and shows "Deleted “title” · Undo" for five seconds (also Cmd+Z); only then is
+the delete queued. One delete can be undone at a time: a second delete sends the first at once
+and the line then names the second. Leaving the calendar sends it at once too. Closing the app within those five seconds keeps the event. Drag on the grid to make an event, drag an event to move it,
+its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
+meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
+any zone. A repeating event is changed, answered or deleted as "This event" or "All events".
+"All events" answers the series: a date answered on its own keeps its own answer, every other
+date takes the series' answer, and the panel shows the series' answer while "All events" is
+chosen. An answer the series already has is not sent again. After "Send update" the block that
+held it stays where it was, with nothing left to press, until the pointer leaves it.
+
+**Other people.** A colleague's busy times come from the provider (Google `freeBusy`, Graph
+`getSchedule`): times only, and only for people whose calendars the account may see. Across
+companies, where no provider can see everyone, each member's app writes their own busy times for
+the next 14 days into the team folder, `Team/Availability/<email>.md`: frontmatter (member, name,
+emails: the first connected account's address only, updated) and a list of `start/end` lines from
+the calendars that are not hidden. **No titles, guests or places are written.** The
+existing team sync carries the file; the calendar lists each member with how long ago theirs was
+written. An unchanged file is rewritten at most every ten minutes. Drag a member onto the grid to
+start an event with them as a guest; "Find a time" lists the first times everyone picked is free
+(weekdays, 09:00 to 18:00 in the shown zone), from team files and provider answers together;
+"Block this time on…" puts a plain "Busy" event on another connected account.
+
+**Notes and the assistant.** "Meeting note" makes `Meetings/<date> <title>.md` in the open folder
+with the event's time, guests, place and link filled in, and remembers which event it belongs to,
+per folder. In a team's folder the note syncs to the team, so the first ask is answered with one
+line saying so and the note is written when the person confirms.
+The briefing is the day's events in order. Every calendar command is offered to the assistant as a
+tool when an account is connected; those that write (`writes: true`) go through the same approval
+as any other change, so an invitation or an event change is asked about first unless approvals are
+turned off in the assistant's settings.
+
+| Command | Does |
+|---|---|
+| `calendar.status` | accounts, calendars, what is waiting |
+| `calendar.account.add`, `calendar.account.remove` | connect (browser sign-in), disconnect |
+| `calendar.calendars.set` | hide or show, colour, default |
+| `calendar.events`, `calendar.event.get` | read the local copy |
+| `calendar.event.create`, `.update`, `.delete`, `.reply` | change an event |
+| `calendar.event.send`, `.discard`, `.retry` | send or drop an event's held changes; try a refused one again |
+| `calendar.sync` | send the queue, read what changed |
+| `calendar.busy` | people's busy times from the provider |
+| `calendar.team.publish`, `calendar.team` | write own busy times to the team folder; read everyone's |
+| `calendar.find_time`, `calendar.block` | common free times; a "Busy" block on another account |
+| `calendar.note`, `calendar.briefing` | the meeting note; the day's briefing |
+
+**Before the real services.** Google: registered by the owner (a desktop app, in testing, with named test
+users); Microsoft: not registered, and not for this release (the owner's call, 2026-11-28). On Google, calendar scopes are "sensitive", so until the app is verified people see an
+"unverified app" screen, at most 100 people can use it, and a test user's sign-in ends after seven
+days; verification is free and takes days to weeks. Microsoft: registration is free; work accounts
+may need an administrator's consent unless the publisher is verified. Not built: booking links,
+recording and transcription, iCloud, phone.
 
 ## 6. Sync and the server (built, M3)
 
@@ -1271,6 +1459,6 @@ is needed.
 
 ## 13. Cut from the rewrite
 
-Calendar, Gmail, MathGraph, the terminal panel, the old templates engine, the old plugin system,
+Gmail, MathGraph, the terminal panel, the old templates engine, the old plugin system,
 end-to-end encrypted team sync, and the manifest-based personal sync. Existing users of the old
 sync get a sunset notice; their notes are plain files and are unaffected.

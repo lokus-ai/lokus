@@ -10,6 +10,7 @@ const READ_CHARS: usize = 32_000;
 /// How many entries one folder listing returns.
 const LIST_ENTRIES: usize = 200;
 
+#[derive(Clone)]
 pub struct Tool {
     pub name: String,
     pub description: String,
