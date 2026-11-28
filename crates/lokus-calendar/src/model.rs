@@ -28,6 +28,10 @@ impl CalError {
     pub fn offline(&self) -> bool {
         self.code == "offline"
     }
+    /// Not refused: the change stays waiting and is tried again.
+    pub fn waits(&self) -> bool {
+        matches!(self.code, "offline" | "slow")
+    }
 }
 
 impl std::fmt::Display for CalError {

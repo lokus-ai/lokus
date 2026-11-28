@@ -161,10 +161,14 @@ pub fn http() -> reqwest::Client {
         .unwrap_or_default()
 }
 
-/// What went wrong reaching a provider: not reachable (the change waits) or refused.
+/// What went wrong reaching a provider. Only a connection that could not be made is "offline":
+/// nothing was sent. An answer that did not come in time is "slow": the provider may have done
+/// what was asked, so whatever is sent again must be something it cannot do twice.
 pub fn unreachable(e: reqwest::Error) -> CalError {
-    if e.is_connect() || e.is_timeout() || e.is_request() {
+    if e.is_connect() {
         CalError::new("offline", "The calendar provider could not be reached.")
+    } else if e.is_timeout() {
+        CalError::new("slow", "The calendar provider did not answer in time.")
     } else {
         CalError::new("provider", e.to_string())
     }
@@ -232,7 +236,7 @@ pub async fn fresh(provider: Provider, account: &str, force: bool) -> Result<Tok
         ],
     )
     .await
-    .map_err(|e| if e.offline() { e } else { signed_out() })?;
+    .map_err(|e| if e.waits() { e } else { signed_out() })?;
     let new = tokens(&body, Some(&had.refresh))?;
     keep(account, &new);
     Ok(new)
@@ -372,7 +376,9 @@ pub async fn call(
         let mut request = http()
             .request(method.clone(), url)
             .bearer_auth(&tokens.access)
-            .header("prefer", "outlook.timezone=\"UTC\"");
+            .header("prefer", "outlook.timezone=\"UTC\"")
+            // Graph: the whole description as text, not HTML with a short preview beside it.
+            .header("prefer", "outlook.body-content-type=\"text\"");
         if let Some(body) = body {
             request = request.json(body);
         }
@@ -396,10 +402,10 @@ pub async fn call(
                 .or(value["error"].as_str())
                 .unwrap_or("the provider refused the request");
             return Err(CalError::new(
-                if status == 401 {
-                    "signed_out"
-                } else {
-                    "provider"
+                match status {
+                    401 => "signed_out",
+                    409 => "conflict",
+                    _ => "provider",
                 },
                 format!("{why} ({status})"),
             ));

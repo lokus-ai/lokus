@@ -167,7 +167,8 @@ fn point(e: &Event, at: &str) -> Value {
     if e.all_day {
         json!({ "date": &at[..10.min(at.len())] })
     } else if e.zone.is_empty() {
-        json!({ "dateTime": at })
+        // Google wants a zone on a repeating event; the instant is in UTC already.
+        json!({ "dateTime": at, "timeZone": "UTC" })
     } else {
         json!({ "dateTime": at, "timeZone": e.zone })
     }
@@ -195,7 +196,9 @@ fn write(e: &Event, changed: Option<&[String]>) -> Value {
             .guests
             .iter()
             .map(|g| {
-                let mut a = json!({ "email": g.email, "optional": g.optional });
+                // Google replaces the whole list: each guest's answer goes back with them.
+                let mut a = json!({ "email": g.email, "optional": g.optional,
+                    "responseStatus": if g.reply.is_empty() { "needsAction" } else { &g.reply } });
                 if !g.name.is_empty() {
                     a["displayName"] = json!(g.name);
                 }
@@ -245,8 +248,17 @@ pub async fn create(account: &str, calendar: &str, e: &Event, notify: bool) -> R
         enc(calendar),
         told(notify)
     );
-    let (_, body) = call(P, account, Method::POST, &url, Some(&write(e, None))).await?;
-    back(account, calendar, &body)
+    let mut new = write(e, None);
+    // The id is ours (the local one, which is in the queue with the change), so sending the
+    // same new event again is refused by Google instead of making a second one.
+    let ours = e.id.strip_prefix("local-").map(str::to_string);
+    if let Some(id) = &ours {
+        new["id"] = json!(id);
+    }
+    match (call(P, account, Method::POST, &url, Some(&new)).await, ours) {
+        (Err(e), Some(id)) if e.code == "conflict" => get(account, calendar, &id).await,
+        (answer, _) => back(account, calendar, &answer?.1),
+    }
 }
 
 pub async fn update(
@@ -313,7 +325,27 @@ pub async fn reply(
         enc(calendar),
         enc(id)
     );
-    let body = json!({ "attendees": [{ "email": email, "responseStatus": answer }] });
+    // Google replaces the whole guest list, so everyone goes back as they are and only this
+    // person's answer differs.
+    let read = format!(
+        "{}/calendars/{}/events/{}",
+        base(account)?,
+        enc(calendar),
+        enc(id)
+    );
+    let (_, event) = call(P, account, Method::GET, &read, None).await?;
+    let mut guests = event["attendees"].as_array().cloned().unwrap_or_default();
+    let me = |a: &Value| {
+        a["self"] == true
+            || a["email"]
+                .as_str()
+                .is_some_and(|e| e.eq_ignore_ascii_case(email))
+    };
+    match guests.iter_mut().find(|a| me(a)) {
+        Some(mine) => mine["responseStatus"] = json!(answer),
+        None => guests.push(json!({ "email": email, "responseStatus": answer })),
+    }
+    let body = json!({ "attendees": guests });
     call(P, account, Method::PATCH, &url, Some(&body))
         .await
         .map(|_| ())

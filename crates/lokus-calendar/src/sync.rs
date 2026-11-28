@@ -197,6 +197,12 @@ pub async fn run(dir: &Path) -> Result<Value> {
                 offline = true;
                 break;
             }
+            Err(e) if e.waits() => {
+                // No answer in time. It waits and is sent again next round: a new event carries
+                // an id of ours, so the provider cannot make it twice.
+                Store::open(dir)?.untake(q.n)?;
+                stuck.push(q.key.clone());
+            }
             Err(e) => {
                 Store::open(dir)?.refused(q.n, &e.message)?;
                 stuck.push(q.key.clone());

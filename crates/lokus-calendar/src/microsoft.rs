@@ -80,6 +80,70 @@ fn point(e: &Event, at: &str) -> Value {
     }
 }
 
+/// Graph names zones as Windows does ("Pacific Standard Time"); Lokus keeps the IANA name.
+/// One it does not know is left out, and the event's times stand as the instants they are.
+fn zone_name(name: &str) -> String {
+    if name.parse::<chrono_tz::Tz>().is_ok() {
+        return name.to_string();
+    }
+    WINDOWS_ZONES
+        .iter()
+        .find(|(windows, _)| *windows == name)
+        .map(|(_, iana)| iana.to_string())
+        .unwrap_or_default()
+}
+
+const WINDOWS_ZONES: [(&str, &str); 48] = [
+    ("Hawaiian Standard Time", "Pacific/Honolulu"),
+    ("Alaskan Standard Time", "America/Anchorage"),
+    ("Pacific Standard Time", "America/Los_Angeles"),
+    ("US Mountain Standard Time", "America/Phoenix"),
+    ("Mountain Standard Time", "America/Denver"),
+    ("Central Standard Time", "America/Chicago"),
+    ("Central Standard Time (Mexico)", "America/Mexico_City"),
+    ("Canada Central Standard Time", "America/Regina"),
+    ("Eastern Standard Time", "America/New_York"),
+    ("SA Pacific Standard Time", "America/Bogota"),
+    ("Atlantic Standard Time", "America/Halifax"),
+    ("Venezuela Standard Time", "America/Caracas"),
+    ("Pacific SA Standard Time", "America/Santiago"),
+    ("Newfoundland Standard Time", "America/St_Johns"),
+    ("E. South America Standard Time", "America/Sao_Paulo"),
+    ("Argentina Standard Time", "America/Argentina/Buenos_Aires"),
+    ("UTC", "UTC"),
+    ("GMT Standard Time", "Europe/London"),
+    ("Greenwich Standard Time", "Atlantic/Reykjavik"),
+    ("W. Europe Standard Time", "Europe/Berlin"),
+    ("Central Europe Standard Time", "Europe/Budapest"),
+    ("Central European Standard Time", "Europe/Warsaw"),
+    ("Romance Standard Time", "Europe/Paris"),
+    ("W. Central Africa Standard Time", "Africa/Lagos"),
+    ("GTB Standard Time", "Europe/Bucharest"),
+    ("FLE Standard Time", "Europe/Kyiv"),
+    ("E. Europe Standard Time", "Europe/Chisinau"),
+    ("South Africa Standard Time", "Africa/Johannesburg"),
+    ("Egypt Standard Time", "Africa/Cairo"),
+    ("Israel Standard Time", "Asia/Jerusalem"),
+    ("Turkey Standard Time", "Europe/Istanbul"),
+    ("Russian Standard Time", "Europe/Moscow"),
+    ("Arab Standard Time", "Asia/Riyadh"),
+    ("E. Africa Standard Time", "Africa/Nairobi"),
+    ("Iran Standard Time", "Asia/Tehran"),
+    ("Arabian Standard Time", "Asia/Dubai"),
+    ("Pakistan Standard Time", "Asia/Karachi"),
+    ("India Standard Time", "Asia/Kolkata"),
+    ("Bangladesh Standard Time", "Asia/Dhaka"),
+    ("SE Asia Standard Time", "Asia/Bangkok"),
+    ("China Standard Time", "Asia/Shanghai"),
+    ("Singapore Standard Time", "Asia/Singapore"),
+    ("W. Australia Standard Time", "Australia/Perth"),
+    ("Tokyo Standard Time", "Asia/Tokyo"),
+    ("Korea Standard Time", "Asia/Seoul"),
+    ("Cen. Australia Standard Time", "Australia/Adelaide"),
+    ("AUS Eastern Standard Time", "Australia/Sydney"),
+    ("New Zealand Standard Time", "Pacific/Auckland"),
+];
+
 const DAYS: [(&str, &str); 7] = [
     ("MO", "monday"),
     ("TU", "tuesday"),
@@ -204,10 +268,7 @@ fn read(account: &str, calendar: &str, e: &Value) -> Option<Event> {
         start: when(&e["start"])?,
         end: when(&e["end"])?,
         all_day: e["isAllDay"] == true,
-        zone: e["originalStartTimeZone"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string(),
+        zone: zone_name(e["originalStartTimeZone"].as_str().unwrap_or_default()),
         location: e["location"]["displayName"]
             .as_str()
             .unwrap_or_default()
@@ -341,11 +402,16 @@ fn write(e: &Event, changed: Option<&[String]>) -> Value {
             .collect();
     }
     if has("repeat") {
-        out["recurrence"] = e
-            .repeat
-            .as_deref()
-            .and_then(|rule| to_recurrence(rule, &e.start, &e.zone))
-            .unwrap_or(Value::Null);
+        match e.repeat.as_deref() {
+            None => out["recurrence"] = Value::Null,
+            // A rule Lokus cannot put in Graph's words is not sent at all: sending nothing
+            // would turn the series into one event.
+            Some(rule) => {
+                if let Some(pattern) = to_recurrence(rule, &e.start, &e.zone) {
+                    out["recurrence"] = pattern;
+                }
+            }
+        }
     }
     if has("meeting") {
         let wanted = e.want_meeting || e.meeting.is_some();
@@ -370,7 +436,12 @@ fn back(account: &str, calendar: &str, body: &Value) -> Result<Event> {
 
 pub async fn create(account: &str, calendar: &str, e: &Event) -> Result<Event> {
     let url = format!("{}/me/calendars/{}/events", base()?, enc(calendar));
-    let (_, body) = call(P, account, Method::POST, &url, Some(&write(e, None))).await?;
+    let mut new = write(e, None);
+    // Graph's own guard against a retry making a second event: the id is the local one.
+    if let Some(id) = e.id.strip_prefix("local-") {
+        new["transactionId"] = json!(id);
+    }
+    let (_, body) = call(P, account, Method::POST, &url, Some(&new)).await?;
     back(account, calendar, &body)
 }
 

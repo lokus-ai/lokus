@@ -8,7 +8,8 @@ change, delete, reply), free/busy and meeting links are answered under /google a
 the shapes the real services document. An event with guests appears on each guest's calendar, as
 an invitation does. Every request is written to the log as one JSON line; `mail` on a line is who
 would have been emailed. /_ctl?offline=1|0 makes it unreachable; /_ctl?log=1 returns the log;
-/_ctl?reset=1 forgets everything. It proves the app's side only: it is not the real services.
+/_ctl?reset=1 forgets everything; /_ctl?delay=40 makes the next change answer that many seconds late
+(the change itself is made at once, as a slow provider does). It proves the app's side only: it is not the real services.
 """
 import base64, hashlib, json, os, re, sys, threading, time, uuid
 from datetime import datetime, timedelta, timezone
@@ -21,6 +22,7 @@ STATE = sys.argv[2] if len(sys.argv) > 2 else ""
 LOG = sys.argv[3] if len(sys.argv) > 3 else ""
 UTC = timezone.utc
 lock = threading.RLock()
+AS_TEXT = False
 PEOPLE = {
     "ana@acme.test": ("Ana Ruiz", "google"), "ben@acme.test": ("Ben Okafor", "google"),
     "cara@birch.test": ("Cara Lind", "microsoft"), "dev@birch.test": ("Dev Patel", "microsoft"),
@@ -201,7 +203,7 @@ def g_in(e, body, me):
     if "attendees" in body:
         old = {a["email"]: a for a in e["attendees"]}
         e["attendees"] = [{"email": a["email"], "name": a.get("displayName") or old.get(a["email"], {}).get("name") or PEOPLE.get(a["email"], ("",))[0], "optional": bool(a.get("optional")),
-                           "response": a.get("responseStatus") or old.get(a["email"], {}).get("response", "needsAction")} for a in body["attendees"] or []]
+                           "response": a.get("responseStatus") or "needsAction"} for a in body["attendees"] or []]  # the list replaces the old one, answers and all
         if e["attendees"] and not any(a["email"] == e["owner"] for a in e["attendees"]):
             e["attendees"].insert(0, {"email": e["owner"], "name": PEOPLE[e["owner"]][0], "optional": False, "response": "accepted"})
     if "recurrence" in body: e["rrule"] = (body["recurrence"] or [None])[0]
@@ -223,7 +225,8 @@ def m_recur(e):
 def m_out(e, me):
     if e["cancelled"]: return {"id": e["id"], "@removed": {"reason": "deleted"}}
     mine = next((a["response"] for a in e["attendees"] if a["email"] == me), "needsAction")
-    o = {"id": e["id"], "subject": e["title"], "bodyPreview": e["description"], "body": {"contentType": "text", "content": e["description"]},
+    o = {"id": e["id"], "subject": e["title"], "bodyPreview": e["description"][:255],
+         "body": {"contentType": "text", "content": e["description"]} if AS_TEXT else {"contentType": "html", "content": "<html><body>" + e["description"].replace("\n", "<br>") + "</body></html>"},
          "location": {"displayName": e["location"]}, "start": m_time(e["start"]), "end": m_time(e["end"]), "originalStartTimeZone": e["zone"], "isAllDay": e["allDay"],
          "organizer": {"emailAddress": {"address": e["owner"], "name": PEOPLE[e["owner"]][0]}}, "isOrganizer": e["owner"] == me,
          "responseStatus": {"response": "organizer" if e["owner"] == me else M_REPLY[mine]},
@@ -275,9 +278,12 @@ def retime(e, before):
 
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    late = 0
     def log_message(self, *a): pass
     def out(self, code, body, kind="application/json"):
         data = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+        self.entry["status"] = code
+        if self.late: self.kept = (code, kind, data); return
         self.send_response(code); self.send_header("content-type", kind); self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
         self.entry["status"] = code
     def who(self):
@@ -292,6 +298,7 @@ class H(BaseHTTPRequestHandler):
             with lock:
                 global S
                 if "offline" in q: S["offline"] = q["offline"] == "1"
+                if "delay" in q: S["delay"] = int(q["delay"])
                 if "reset" in q:
                     S = fresh()
                     if LOG: open(LOG, "w").close()
@@ -309,6 +316,10 @@ class H(BaseHTTPRequestHandler):
         self.entry = {"at": iso(datetime.now(UTC)), "method": method, "path": u.path, "query": {k: v for k, v in q.items() if k not in ("code_challenge", "state")}, "body": shown}
         with lock:
             me = self.who(); self.entry["as"] = me
+            global AS_TEXT
+            AS_TEXT = 'outlook.body-content-type="text"' in self.headers.get("prefer", "")
+            if method != "GET" and "/events" in u.path and S.get("delay"):
+                self.late, S["delay"] = S["delay"], 0; self.entry["late"] = self.late
             try:
                 parts = [p for p in u.path.split("/") if p]
                 if not parts: self.out(200, "calendar stand-in", "text/plain")
@@ -320,6 +331,10 @@ class H(BaseHTTPRequestHandler):
                 self.out(500, {"error": {"message": repr(e)}})
             save()
         record(self.entry)
+        if self.late:
+            code, kind, data = self.kept; self.late = 0; time.sleep(self.entry["late"])
+            try: self.send_response(code); self.send_header("content-type", kind); self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)
+            except OSError: pass
     def do_GET(self): self.handle_one("GET")
     def do_POST(self): self.handle_one("POST")
     def do_PATCH(self): self.handle_one("PATCH")
@@ -394,7 +409,9 @@ class H(BaseHTTPRequestHandler):
                 since, lo, hi, _ = w
                 return self.out(200, {"kind": "calendar#events", "items": [g_out(e, me) for e in listing(me, cal, lo, hi, since)], "nextSyncToken": self.next_token(lo, hi)})
             if method == "POST" and len(p) == 3:
-                e = blank(me, cal); g_in(e, body, me); bump(e); S["events"][e["id"]] = e
+                # A client may choose the id; the same id twice is refused, as Google does.
+                if body.get("id") and body["id"] in S["events"]: return self.out(409, {"error": {"code": 409, "message": "The requested identifier already exists."}})
+                e = blank(me, cal); e["id"] = body.get("id") or e["id"]; g_in(e, body, me); bump(e); S["events"][e["id"]] = e
                 self.entry["mail"] = mailed(e, me) if notify else []
                 return self.out(200, g_out(e, me))
             e = find(p[3]) if len(p) == 4 else None
@@ -407,8 +424,7 @@ class H(BaseHTTPRequestHandler):
                 before = json.loads(json.dumps(e))
                 if e["owner"] != me:
                     # A guest may only change their own reply.
-                    mine = next((a for a in body.get("attendees", []) if a.get("email") == me), None)
-                    if mine: next(a for a in e["attendees"] if a["email"] == me)["response"] = mine.get("responseStatus", "needsAction")
+                    if "attendees" in body: g_in(e, {"attendees": body["attendees"]}, me)
                     bump(e); self.entry["mail"] = [e["owner"]] if notify else []
                     return self.out(200, g_out(e, me))
                 g_in(e, body, me); retime(e, before); bump(e)
@@ -441,7 +457,10 @@ class H(BaseHTTPRequestHandler):
         if len(p) == 4 and p[:2] == ["me", "calendars"] and p[3] == "events" and method == "POST":
             cal = unquote(p[2])
             if not any(c["id"] == cal for c in S["cals"][me]): return self.out(404, {"error": {"code": "ErrorItemNotFound", "message": "not found"}})
-            e = blank(me, cal); m_in(e, body, me); bump(e); S["events"][e["id"]] = e
+            # The same transactionId twice is the same event, as Graph does for a client's retry.
+            again = next((x for x in S["events"].values() if body.get("transactionId") and x.get("tx") == body["transactionId"] and x["owner"] == me), None)
+            if again: self.entry["mail"] = []; return self.out(201, m_out(again, me))
+            e = blank(me, cal); e["tx"] = body.get("transactionId"); m_in(e, body, me); bump(e); S["events"][e["id"]] = e
             self.entry["mail"] = mailed(e, me)
             return self.out(201, m_out(e, me))
         if len(p) >= 3 and p[:2] == ["me", "events"]:
