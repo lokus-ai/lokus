@@ -317,7 +317,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     window.clearTimeout(was.timer);
     gone.current = null;
     if (undo) return setHidden(null);
-    void act("calendar.event.delete", was.args).then(() => setHidden(null));
+    void act("calendar.event.delete", was.args).then(() => gone.current || setHidden(null));
   };
   const settleRef = useRef(settle);
   settleRef.current = settle;
