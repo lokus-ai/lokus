@@ -55,6 +55,17 @@ const EVENT_ARGS: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The commands that email other people. The assistant asks before each one, even when it is set
+/// to change things without asking, and never offers to allow them in bulk.
+pub const EMAILS: &[&str] = &[
+    "calendar.event.create",
+    "calendar.event.update",
+    "calendar.event.send",
+    "calendar.event.retry",
+    "calendar.event.delete",
+    "calendar.event.reply",
+];
+
 pub const COMMANDS: &[Spec] = &[
     Spec { name: "calendar.status", about: "The connected calendar accounts, their calendars, and what is waiting to be sent.", args: &[], writes: false },
     Spec { name: "calendar.account.add", about: "Connect a Google or Microsoft 365 account: opens the provider's sign-in in the browser.", args: &[("provider", "string", "google or microsoft")], writes: true },
@@ -472,6 +483,15 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
         other => return Err(bad(format!("'reply' is yes, no or maybe, not '{other}'"))),
     };
     let mut event = store.stored(k)?.ok_or_else(|| bad("no such event"))?;
+    // Already answered so, and nothing else is on its way: the organiser is not emailed again.
+    if event.reply == answer
+        && !store
+            .waiting()?
+            .iter()
+            .any(|q| q.key == k && q.op == "reply")
+    {
+        return Ok(json!({ "event": store.event(k)? }));
+    }
     let me = store.account(&event.account)?;
     event.reply = answer.to_string();
     for g in event
@@ -830,6 +850,7 @@ pub fn assistant(
 ) -> lokus_ai::chat::Local {
     lokus_ai::chat::Local {
         tools: tools(),
+        emails: EMAILS.iter().map(|n| n.replace('.', "_")).collect(),
         run: std::sync::Arc::new(move |tool: String, input: Value| {
             let (dir, root) = (dir.clone(), root.clone());
             Box::pin(async move {

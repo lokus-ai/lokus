@@ -33,8 +33,6 @@ export const CALENDAR: Record<string, (i: Record<string, unknown>) => string> = 
   calendar_briefing: () => "Reading the day's events",
 };
 
-/** Anything here emails other people, so each one is asked about on its own: never "allow all". */
-export const emailsPeople = (name: string) => /^calendar_event_(create|update|send|retry|delete|reply)$/.test(name);
 
 /** When an event is, in words. */
 function eventTime(start: unknown, end: unknown, zone: unknown, allDay: unknown): string {

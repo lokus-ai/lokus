@@ -90,7 +90,7 @@ function Assistant() {
           <input value={config.base_url} placeholder="https://api.openai.com/v1" onChange={(e) => void save({ base_url: e.target.value })} />
         </Row>
       )}
-      <Row label="Change notes without asking" hint="Off: every edit, new note and action in a connected service waits for you to allow it.">
+      <Row label="Change notes without asking" hint="Off: every edit, new note and action in a connected service waits for you to allow it. Anything that emails people always asks.">
         <Toggle on={config.auto_approve} onChange={(auto_approve) => void save({ auto_approve })} label="Change notes without asking" />
       </Row>
 

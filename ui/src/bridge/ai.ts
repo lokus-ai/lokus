@@ -60,7 +60,7 @@ export interface AiSettings {
 
 export type AiEvent =
   | { type: "text"; delta: string }
-  | { type: "tool"; id: string; name: string; input: Record<string, unknown>; asks: boolean }
+  | { type: "tool"; id: string; name: string; input: Record<string, unknown>; asks: boolean; emails: boolean }
   | { type: "tool_done"; id: string; ok: boolean; result: string }
   | { type: "notice"; message: string }
   | { type: "compacted"; summary: string; kept_turns: number }

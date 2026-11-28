@@ -13,7 +13,7 @@ import { useStore } from "../../shell/store";
 import { allFiles, app, getEditor, notify, openNote, renderMarkdown } from "../../shell/workspace";
 import { aiSettings, saveAiConfig } from "../../bridge/ai";
 import { type CalEvent, runCalendar } from "../../bridge/calendar";
-import { CALENDAR, calendarDetail, emailsPeople } from "./calendarWords";
+import { CALENDAR, calendarDetail } from "./calendarWords";
 import { Logo } from "../connections/logos";
 import { type Customer, loadCustomers, show as shown, threads, tone } from "../customers/data";
 import { fileName, fileTag, kindOf } from "../files/files";
@@ -137,7 +137,7 @@ function Tool({ item }: { item: Extract<Item, { kind: "tool" }> }) {
           <button className="primary" onClick={() => answer(item.id, true)}>
             Allow
           </button>
-          {!emailsPeople(item.name) && (
+          {!item.emails && (
             <button title="Allow this and every further change of the same kind for the rest of this chat" onClick={() => answerAll(item.id)}>
               Allow all like this
             </button>

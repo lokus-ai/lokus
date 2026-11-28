@@ -275,6 +275,8 @@ pub type LocalRunner = Arc<
 #[derive(Clone)]
 pub struct Local {
     pub tools: Vec<Tool>,
+    /// The tools that email other people. Each use is asked about, whatever the setting says.
+    pub emails: Vec<String>,
     pub run: LocalRunner,
 }
 
@@ -283,12 +285,14 @@ pub struct Local {
 pub enum Event {
     /// More of the answer.
     Text { delta: String },
-    /// The model is calling a tool. `asks` means the person must allow it.
+    /// The model is calling a tool. `asks` means the person must allow it; `emails` that it
+    /// emails other people, so it is asked about each time and never allowed in bulk.
     Tool {
         id: String,
         name: String,
         input: Value,
         asks: bool,
+        emails: bool,
     },
     ToolDone {
         id: String,
@@ -1103,7 +1107,7 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                         futures_util::future::join_all(together.into_iter().map(|(at, call)| async move {
                             let id = call["id"].as_str().unwrap_or_default();
                             let name = call["name"].as_str().unwrap_or_default();
-                            emit(Event::Tool { id: id.to_string(), name: name.to_string(), input: call["input"].clone(), asks: false });
+                            emit(Event::Tool { id: id.to_string(), name: name.to_string(), input: call["input"].clone(), asks: false, emails: false });
                             done(id, reading.run(at, id, name, &call["input"]).await)
                         }))
                         .await,
@@ -1116,14 +1120,15 @@ pub async fn send(request: Request, emit: Emitter, approve: Approver) -> Result<
                 let name = call["name"].as_str().unwrap_or_default().to_string();
                 let input = call["input"].clone();
                 let position = offered.iter().position(|t| t.name == name);
-                let asks = position.is_some_and(|p| offered[p].writes) && !config.auto_approve;
+                let emails = local.as_ref().is_some_and(|l| l.emails.contains(&name));
+                let asks = emails || (position.is_some_and(|p| offered[p].writes) && !config.auto_approve);
                 let outcome: std::result::Result<String, String> = if turn.stop != "tool_use" {
                     // The reply was cut off, so the call may be incomplete.
                     Err("the reply was cut short before this call was complete; it was not run".into())
                 } else if turn.invalid.contains(&id) {
                     Err("INVALID_JSON: the arguments were not a valid JSON object; send the call again".into())
                 } else {
-                    emit(Event::Tool { id: id.clone(), name: name.clone(), input: input.clone(), asks });
+                    emit(Event::Tool { id: id.clone(), name: name.clone(), input: input.clone(), asks, emails });
                     if asks && !approve(&id).await.unwrap_or(false) {
                         Err("The user declined this.".into())
                     } else {
