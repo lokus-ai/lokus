@@ -170,7 +170,7 @@ div.cal-person { color: var(--fg); }
 .cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; cursor: ns-resize; }
 .cal-tip { position: absolute; left: 2px; z-index: 18; height: 20px; padding: 0 6px; border-radius: var(--radius-xs); background: var(--fg); color: var(--bg); font-size: 11px; line-height: 20px; white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
 .cal-chip { height: 20px; padding: 0 6px 0 9px; text-align: left; font-size: var(--text-caption); font-weight: 550; line-height: 20px; white-space: nowrap; text-overflow: ellipsis; min-width: 0; flex: none; }
-.cal-busy { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, transparent) 0 4px, transparent 4px 8px); box-shadow: inset 2px 0 0 var(--c); pointer-events: none; }
+.cal-busy { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, transparent) 0 4px, transparent 4px 8px); border-radius: var(--radius-sm); pointer-events: none; }
 .cal-now { position: absolute; left: -1px; right: 0; height: 1px; background: var(--danger); z-index: 19; pointer-events: none; }
 .cal-now::before { content: ""; position: absolute; left: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
 
