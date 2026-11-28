@@ -28,20 +28,13 @@ fn window() -> (String, String) {
     )
 }
 
-async fn restore(dir: &Path, q: &Queued) -> bool {
-    let Ok(store) = Store::open(dir) else {
+/// After a refused delete the calendar is read afresh, so the event (or the whole series) is
+/// back as the provider has it.
+fn restore(dir: &Path, q: &Queued) -> bool {
+    let Ok((account, calendar, _)) = split(&q.key) else {
         return false;
     };
-    let Ok((_, calendar, id)) = split(&q.key) else {
-        return false;
-    };
-    let Ok(account) = store.account(&q.account) else {
-        return false;
-    };
-    match provider::get(&account, calendar, id).await {
-        Ok(theirs) => store.put(&theirs).is_ok(),
-        Err(_) => false,
-    }
+    Store::open(dir).is_ok_and(|store| store.set_position(account, calendar, None, "").is_ok())
 }
 
 async fn send(dir: &Path, q: &Queued) -> Result<()> {
@@ -238,7 +231,7 @@ pub async fn run(dir: &Path) -> Result<Value> {
                 refused += 1;
                 // A refused delete has no event left to show Retry on: the event comes back as
                 // the provider has it, and can be deleted again from there.
-                if q.op == "delete" && restore(dir, &q).await {
+                if q.op == "delete" && restore(dir, &q) {
                     Store::open(dir)?.sent(q.n)?;
                     problems.push(
                         json!({ "account": q.account, "code": e.code, "message": e.message }),
