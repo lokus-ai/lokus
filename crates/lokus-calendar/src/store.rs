@@ -506,21 +506,49 @@ impl Store {
         Ok(())
     }
 
-    /// Whether every occurrence of a series read so far carries this answer of mine.
-    pub fn answered(&self, like: &Event, answer: &str) -> Result<bool> {
+    /// My answer to a series as a whole: the one most of its dates read so far carry. A date
+    /// answered on its own keeps its own answer and does not change this.
+    pub fn series_reply(&self, like: &Event) -> Result<String> {
+        let mut counts: Vec<(String, usize)> = Vec::new();
+        for e in self.series_dates(like)? {
+            match counts.iter_mut().find(|(r, _)| *r == e.reply) {
+                Some((_, n)) => *n += 1,
+                None => counts.push((e.reply, 1)),
+            }
+        }
+        Ok(counts
+            .into_iter()
+            .max_by_key(|(_, n)| *n)
+            .map_or_else(|| like.reply.clone(), |(r, _)| r))
+    }
+
+    /// The series is answered: every date that carried the series' answer takes the new one.
+    pub fn answer_series(&self, like: &Event, me: &str, answer: &str) -> Result<()> {
+        let was = self.series_reply(like)?;
+        for mut e in self.series_dates(like)? {
+            if e.reply == was {
+                e.reply = answer.to_string();
+                for g in e.guests.iter_mut().filter(|g| g.email.eq_ignore_ascii_case(me)) {
+                    g.reply = answer.to_string();
+                }
+                self.put(&e)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn series_dates(&self, like: &Event) -> Result<Vec<Event>> {
         let mut q = self
             .db
             .prepare("SELECT json FROM events WHERE account = ?1 AND calendar = ?2")?;
-        for json in q.query_map(params![like.account, like.calendar], |r| {
-            r.get::<_, String>(0)
-        })? {
-            if let Ok(e) = serde_json::from_str::<Event>(&json?) {
-                if e.series.is_some() && e.series == like.series && e.reply != answer {
-                    return Ok(false);
-                }
-            }
-        }
-        Ok(true)
+        let all = q
+            .query_map(params![like.account, like.calendar], |r| {
+                r.get::<_, String>(0)
+            })?
+            .filter_map(|json| serde_json::from_str::<Event>(&json.ok()?).ok())
+            .filter(|e| e.series.is_some() && e.series == like.series)
+            .collect();
+        Ok(all)
     }
 
     /// The first occurrence of a series, of those read so far.

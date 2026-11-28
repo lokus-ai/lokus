@@ -39,6 +39,8 @@ interface Props {
   onReply: (answer: "yes" | "no" | "maybe") => void;
   /** A reply is on its way: the buttons wait for it. */
   replying: boolean;
+  /** My answer to the series as a whole; a date answered on its own keeps its own. */
+  seriesReply: string | null;
   onNote: (shared?: boolean) => void;
   onBlock: (account: string) => void;
   onClose: () => void;
@@ -112,6 +114,19 @@ export function EventPanel(p: Props) {
     if (!email.includes("@") || e.guests.some((g) => g.email === email)) return;
     guests([...e.guests, { email, name: "", optional: false, reply: "needsAction" }]);
   };
+  // The send block keeps its place for a moment after sending: a second click of the same hand lands on it, not on what was below.
+  const pend = (e.pending || e.unsent) && !p.draft;
+  const before = useRef({ key: e.key, pend, until: 0 });
+  const [, again] = useState(0);
+  if (before.current.key !== e.key) before.current = { key: e.key, pend, until: 0 };
+  else if (before.current.pend && !pend) before.current.until = Date.now() + 1500;
+  before.current.pend = pend;
+  const justSent = !pend && Date.now() < before.current.until;
+  useEffect(() => {
+    if (!justSent) return;
+    const done = window.setTimeout(() => again((n) => n + 1), before.current.until - Date.now() + 20);
+    return () => window.clearTimeout(done);
+  }, [justSent]);
   const [start, end] = [Date.parse(e.start), Date.parse(e.end)];
   /** A typed time: the start keeps the length; an end before the start is the next day's. */
   const time = (which: "start" | "end", typed: string) => {
@@ -163,21 +178,6 @@ export function EventPanel(p: Props) {
 
       <div className="cal-panel-body">
         {can ? <Text grow className="cal-title" value={e.title} placeholder="Title" focus={p.draft} onCommit={(title) => p.onChange({ title })} /> : <h2 className="cal-title">{e.title || "(No title)"}</h2>}
-        {e.error && (
-          <div className="cal-refused" role="alert">
-            <small>{/[.!?]$/.test(e.error) && e.error.length < 90 && !/[{}<>]/.test(e.error) ? e.error : "The provider did not accept this change."}</small>
-            <div>
-              <button className="cal-button" onClick={p.onRetry}>
-                Retry
-              </button>
-              <button className="link" onClick={p.onDiscard}>
-                Discard
-              </button>
-            </div>
-          </div>
-        )}
-        {e.queued && !e.error && <p className="cal-waiting">Waiting to be sent to {account?.provider === "microsoft" ? "Microsoft 365" : "Google Calendar"}.</p>}
-
         {repeating && (
           <div className="segmented cal-scope" title="What a change, a reply or a delete applies to">
             <button className={p.scope === "this" ? "active" : ""} onClick={() => p.onScope("this")}>
@@ -257,7 +257,7 @@ export function EventPanel(p: Props) {
         {!can && (
           <div className="cal-reply" role="group" aria-label="Going?">
             {(["yes", "no", "maybe"] as const).map((answer) => {
-              const on = e.reply === { yes: "accepted", no: "declined", maybe: "tentative" }[answer];
+              const on = (p.scope === "all" && p.seriesReply ? p.seriesReply : e.reply) === { yes: "accepted", no: "declined", maybe: "tentative" }[answer];
               return (
                 <button key={answer} className={on ? "active" : ""} aria-pressed={on} disabled={p.replying} onClick={() => p.onReply(answer)}>
                   {answer[0].toUpperCase() + answer.slice(1)} <kbd>{answer[0].toUpperCase()}</kbd>
@@ -298,11 +298,11 @@ export function EventPanel(p: Props) {
               <input className="cal-add" value={guest} placeholder="Add guest by email" aria-label="Add guest by email" onChange={(ev) => setGuest(ev.target.value)} onKeyDown={(ev) => ev.key === "Enter" && addGuest()} onBlur={addGuest} />
             </Row>
           )}
-          {(e.pending || e.unsent) && !p.draft && (
+          {(pend || justSent) && (
             <div className="cal-pending" role="status">
-              <small>{e.unsent ? "Invitation not sent. Guests have not been told." : `Pending changes: ${e.changes.map((c) => LABEL[c] ?? c).join(", ")}. Guests have not been told.`}</small>
+              <small>{justSent ? "Sent." : e.unsent ? "Invitation not sent. Guests have not been told." : `Pending changes: ${e.changes.map((c) => LABEL[c] ?? c).join(", ")}. Guests have not been told.`}</small>
               <div className="cal-split">
-                <button className="primary" onClick={() => p.onSend(true)}>
+                <button className="primary" disabled={justSent} onClick={() => p.onSend(true)}>
                   {e.unsent ? "Send invite" : "Send update"} <kbd>{formatKeys("Mod-Enter")}</kbd>
                 </button>
                 <button
@@ -310,6 +310,7 @@ export function EventPanel(p: Props) {
                   title="Other ways to finish"
                   aria-label="Other ways to finish"
                   aria-haspopup="menu"
+                  disabled={justSent}
                   onClick={(ev) =>
                     pickMenu(ev.currentTarget, "Pending changes", [["quiet", e.unsent ? "Save without email" : "Update without email"], null, ["discard", e.unsent ? "Discard invitation" : "Discard changes"]], null, (id) => (id === "quiet" ? p.onSend(false) : p.onDiscard()))
                   }
@@ -406,6 +407,25 @@ export function EventPanel(p: Props) {
             </Row>
           )}
         </section>
+        {(e.error || e.queued) && (
+          // What is waiting or was refused sits at the foot, so nothing above it moves when it comes and goes.
+          <div className="cal-status">
+        {e.error && (
+              <div className="cal-refused" role="alert">
+                <small>{/[.!?]$/.test(e.error) && e.error.length < 90 && !/[{}<>]/.test(e.error) ? e.error : "The provider did not accept this change."}</small>
+                <div>
+                  <button className="cal-button" onClick={p.onRetry}>
+                    Retry
+                  </button>
+                  <button className="link" onClick={p.onDiscard}>
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+            {e.queued && !e.error && <p className="cal-waiting">Waiting to be sent to {account?.provider === "microsoft" ? "Microsoft 365" : "Google Calendar"}.</p>}
+          </div>
+        )}
       </div>
 
       {p.draft ? (

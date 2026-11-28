@@ -282,7 +282,9 @@ pub async fn run(dir: &Path) -> Result<Value> {
         }
         // Handed over before with no answer (too slow, cut off, or the app was closed): the
         // provider is asked what it has before the change goes a second time.
-        let mut again = Store::open(dir)?.tried(q.n)?;
+        // A reply is looked up first as well: answered so already (here before, or on another
+        // device), the organiser is not emailed a second time.
+        let mut again = Store::open(dir)?.tried(q.n)? || q.op == "reply";
         Store::open(dir)?.set_tried(q.n)?;
         let mut q = q;
         let done = loop {

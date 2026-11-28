@@ -50,10 +50,12 @@ fn configured(name: &str, built: Option<&str>) -> Option<String> {
 /// `None` while Lokus has no registration with the provider in this build.
 pub fn endpoints(provider: Provider) -> Option<Endpoints> {
     // A stand-in's address, for development and the scripted flow only.
+    // A released build never follows an address from the environment.
     let stand_in = env(match provider {
         Provider::Google => "LOKUS_CALENDAR_GOOGLE",
         Provider::Microsoft => "LOKUS_CALENDAR_MICROSOFT",
-    });
+    })
+    .filter(|_| cfg!(debug_assertions));
     let (id, secret) = match provider {
         Provider::Google => (
             configured("LOKUS_GOOGLE_CLIENT_ID", GOOGLE_ID).or(Some(GOOGLE_DEFAULT_ID.into())),
@@ -424,6 +426,10 @@ pub async fn call(
     body: Option<&Value>,
 ) -> Result<(u16, Value)> {
     let mut force = false;
+    // Free/busy is a question asked by POST.
+    let read = method == reqwest::Method::GET
+        || url.ends_with("/freeBusy")
+        || url.ends_with("/getSchedule");
     // A busy provider (429, 5xx) or a lost connection is tried again, a little later each time.
     let mut again = [1u64, 3].into_iter();
     let later = || {
@@ -452,7 +458,7 @@ pub async fn call(
         let answer = match request.send().await.map_err(unreachable) {
             // Only a read is asked again here. A change may have been acted on before the
             // connection was lost: `sync` looks at the provider first, then sends it again.
-            Err(e) if e.code == "lost" && method == reqwest::Method::GET => match again.next() {
+            Err(e) if e.code == "lost" && read => match again.next() {
                 Some(wait) => {
                     tokio::time::sleep(Duration::from_secs(wait)).await;
                     continue;
@@ -465,6 +471,14 @@ pub async fn call(
         if status == 401 && !force {
             force = true;
             continue;
+        }
+        // A change answered with a server error may have been made all the same: it is not sent
+        // again from here. `sync` asks the provider what it has first, as after a lost answer.
+        if status >= 500 && !read {
+            return Err(CalError::new(
+                "lost",
+                "The calendar provider failed while answering.",
+            ));
         }
         if status == 429 || status >= 500 {
             let asked = answer

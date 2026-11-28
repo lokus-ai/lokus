@@ -86,7 +86,7 @@ pub fn meeting_note(
     shared: bool,
 ) -> Result<Value> {
     let store = Store::open(dir)?;
-    let event = store.event(key)?.ok_or_else(|| bad("no such event"))?;
+    let event = store.event(key)?.ok_or_else(|| bad("That event is no longer there."))?;
     if let Some(path) = linked(&store, root, &event)? {
         return Ok(json!({ "path": path, "created": false }));
     }

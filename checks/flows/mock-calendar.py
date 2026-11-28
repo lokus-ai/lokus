@@ -10,7 +10,8 @@ an invitation does. Every request is written to the log as one JSON line; `mail`
 would have been emailed. /_ctl?offline=1|0 makes it unreachable; /_ctl?log=1 returns the log;
 /_ctl?reset=1 forgets everything; /_ctl?delay=40 makes the next change answer that many seconds late
 (the change itself is made at once, as a slow provider does); /_ctl?fail=500 (or 429, with &after=3
-for Retry-After) refuses the next change that way without making it; /_ctl?drop=1 makes the next
+for Retry-After) refuses the next change that way without making it (&made=1: makes it, then
+answers that way); /_ctl?drop=1 makes the next
 change and then closes the connection with no answer. It proves the app's side only: it is not the real services.
 """
 import base64, hashlib, json, os, re, sys, threading, time, uuid
@@ -306,7 +307,7 @@ class H(BaseHTTPRequestHandler):
                 global S
                 if "offline" in q: S["offline"] = q["offline"] == "1"
                 if "delay" in q: S["delay"] = int(q["delay"])
-                if "fail" in q: S["fail"] = [int(q["fail"]), q.get("after")]
+                if "fail" in q: S["fail"] = [int(q["fail"]), q.get("after"), q.get("made") == "1"]
                 if "drop" in q: S["drop"] = q["drop"] == "1"
                 if "reset" in q:
                     S = fresh()
@@ -330,8 +331,10 @@ class H(BaseHTTPRequestHandler):
             if method != "GET" and "/events" in u.path and S.get("delay"):
                 self.late, S["delay"] = S["delay"], 0; self.entry["late"] = self.late
             change = method != "GET" and "/events" in u.path
-            if change and S.get("fail"):
-                (code, after), S["fail"] = S["fail"], None; self.entry["status"] = code; save()
+            if change and S.get("fail") and S["fail"][2:] == [True]:
+                self.failed, S["fail"] = S["fail"][0], None; self.late = -1; self.entry["made_then"] = self.failed
+            elif change and S.get("fail"):
+                (code, after), S["fail"] = S["fail"][:2], None; self.entry["status"] = code; save()
                 data = json.dumps({"error": {"message": "stand-in: told to fail"}}).encode()
                 self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data)))
                 if after: self.send_header("retry-after", after)
@@ -349,6 +352,11 @@ class H(BaseHTTPRequestHandler):
                 self.out(500, {"error": {"message": repr(e)}})
             save()
         record(self.entry)
+        if self.late < 0 and getattr(self, "failed", 0):
+            code, self.failed, self.late = self.failed, 0, 0
+            data = b'{"error": {"message": "stand-in: made, then failed"}}'
+            self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data)))
+            self.end_headers(); self.wfile.write(data); return
         if self.late < 0:
             self.late = 0; self.close_connection = True; self.connection.close(); return
         if self.late:

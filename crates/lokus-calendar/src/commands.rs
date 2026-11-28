@@ -340,7 +340,7 @@ fn update(dir: &Path, args: &Value) -> Result<Value> {
     let scope = text(args, "scope").unwrap_or("this");
     let held = store.held(k)?;
     let base = store.stored(k)?;
-    let shown = store.event(k)?.ok_or_else(|| bad("no such event"))?;
+    let shown = store.event(k)?.ok_or_else(|| bad("That event is no longer there."))?;
     if !shown.mine {
         return Err(CalError::new(
             "not_yours",
@@ -442,7 +442,7 @@ fn delete(dir: &Path, args: &Value) -> Result<Value> {
     let store = Store::open(dir)?;
     let k = need(args, "key")?;
     let (account, calendar, id) = split(k)?;
-    let event = store.event(k)?.ok_or_else(|| bad("no such event"))?;
+    let event = store.event(k)?.ok_or_else(|| bad("That event is no longer there."))?;
     let never_sent = id.starts_with("local-");
     if never_sent && store.taking(k)? {
         // It is on its way to the provider this moment; dropping it here would leave it there.
@@ -485,28 +485,41 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
         "maybe" | "tentative" => "tentative",
         other => return Err(bad(format!("'reply' is yes, no or maybe, not '{other}'"))),
     };
-    let mut event = store.stored(k)?.ok_or_else(|| bad("no such event"))?;
+    let mut event = store.stored(k)?.ok_or_else(|| bad("That event is no longer there."))?;
     // Already answered so, and nothing else is on its way: the organiser is not emailed again.
+    // "All events" answers the series; a date answered on its own keeps its own answer.
     let scope = text(args, "scope").unwrap_or("this");
-    if event.reply == answer
-        && (scope != "all" || store.answered(&event, answer)?)
-        && !store
-            .waiting()?
-            .iter()
-            .any(|q| q.key == k && q.op == "reply")
-    {
-        return Ok(json!({ "event": store.event(k)? }));
+    let all = scope == "all" && event.series.is_some();
+    let has = if all {
+        store.series_reply(&event)?
+    } else {
+        event.reply.clone()
+    };
+    let on_its_way = store.waiting()?.iter().any(|q| {
+        q.op == "reply"
+            && (q.key == k
+                || (all
+                    && q.body["scope"] == "all"
+                    && q.body["event"]["series"].as_str() == event.series.as_deref()))
+    });
+    if has == answer && !on_its_way {
+        return Ok(json!({ "event": store.event(k)?, "series_reply": has }));
     }
     let me = store.account(&event.account)?;
-    event.reply = answer.to_string();
-    for g in event
-        .guests
-        .iter_mut()
-        .filter(|g| g.email.eq_ignore_ascii_case(&me.email))
-    {
-        g.reply = answer.to_string();
+    if all {
+        store.answer_series(&event, &me.email, answer)?;
+        event = store.stored(k)?.unwrap_or(event);
+    } else {
+        event.reply = answer.to_string();
+        for g in event
+            .guests
+            .iter_mut()
+            .filter(|g| g.email.eq_ignore_ascii_case(&me.email))
+        {
+            g.reply = answer.to_string();
+        }
+        store.put(&event)?;
     }
-    store.put(&event)?;
     store.queue(
         &event.account,
         k,
@@ -514,7 +527,7 @@ fn reply(dir: &Path, args: &Value) -> Result<Value> {
         &json!({ "event": event, "answer": answer, "scope": scope }),
         true,
     )?;
-    Ok(json!({ "event": store.event(k)? }))
+    Ok(json!({ "event": store.event(k)?, "series_reply": if all { answer.to_string() } else { store.series_reply(&event)? } }))
 }
 
 /// Each person's busy times from whichever connected account can see their calendar.
@@ -649,7 +662,7 @@ fn block(dir: &Path, args: &Value) -> Result<Value> {
     let store = Store::open(dir)?;
     let (start, end) = match text(args, "key") {
         Some(k) => {
-            let e = store.event(k)?.ok_or_else(|| bad("no such event"))?;
+            let e = store.event(k)?.ok_or_else(|| bad("That event is no longer there."))?;
             (e.start, e.end)
         }
         None => (
@@ -741,7 +754,14 @@ async fn run_one(
             Ok(json!({ "events": events }))
         }
         "calendar.event.get" => {
-            Ok(json!({ "event": Store::open(dir)?.event(need(args, "key")?)? }))
+            let store = Store::open(dir)?;
+            let event = store.event(need(args, "key")?)?;
+            // For a date of a series: my answer to the series as a whole.
+            let series_reply = match &event {
+                Some(e) if e.series.is_some() && !e.mine => Some(store.series_reply(e)?),
+                _ => None,
+            };
+            Ok(json!({ "event": event, "series_reply": series_reply }))
         }
         "calendar.event.create" => create(dir, args),
         "calendar.event.update" => update(dir, args),

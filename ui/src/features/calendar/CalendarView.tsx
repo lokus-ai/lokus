@@ -206,6 +206,16 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     setPin(current.all_day ? instant(Date.parse(current.start), zone) : Date.parse(current.start));
   }, [current?.key, current?.start, beside, zone]);
 
+  // For a date of a repeating invitation: my answer to the series, shown while "All events" is chosen.
+  const [seriesReply, setSeriesReply] = useState<string | null>(null);
+  useEffect(() => {
+    setSeriesReply(null);
+    if (!current?.series || current.mine || selected === DRAFT) return;
+    let stale = false;
+    void runCalendar<{ series_reply: string | null }>("calendar.event.get", { key: current.key }).then((r) => !stale && setSeriesReply(r.series_reply), () => undefined);
+    return () => void (stale = true);
+  }, [current?.key, current?.reply, current?.queued]);
+
   const select = (key: string | null) => {
     setSelected(key);
     setScope("this");
@@ -654,6 +664,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
           key={panel.key}
           event={panel}
           leaving={!current}
+          seriesReply={seriesReply}
           draft={panel.key === DRAFT || selected === DRAFT}
           accounts={status.accounts}
           calendars={status.calendars}
