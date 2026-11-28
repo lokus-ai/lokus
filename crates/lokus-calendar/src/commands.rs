@@ -37,7 +37,7 @@ const EVENT_ARGS: &[(&str, &str, &str)] = &[
         "array",
         "Guests: email addresses, or {email, optional}",
     ),
-    ("meeting", "boolean", "Add a Google Meet or Teams link"),
+    ("meeting", "boolean", "Add a meeting link (Google Meet; Teams on a Microsoft account)"),
     (
         "repeat",
         "string",
@@ -68,12 +68,12 @@ pub const EMAILS: &[&str] = &[
 
 pub const COMMANDS: &[Spec] = &[
     Spec { name: "calendar.status", about: "The connected calendar accounts, their calendars, and what is waiting to be sent.", args: &[], writes: false },
-    Spec { name: "calendar.account.add", about: "Connect a Google or Microsoft 365 account: opens the provider's sign-in in the browser.", args: &[("provider", "string", "google or microsoft")], writes: true },
+    Spec { name: "calendar.account.add", about: "Connect a Google account: opens the sign-in in the browser. Microsoft 365 only in a build registered for it (calendar.status says which).", args: &[("provider", "string", "google (or microsoft, where the build has it)")], writes: true },
     Spec { name: "calendar.account.remove", about: "Disconnect a calendar account and forget its sign-in and local copy.", args: &[("account", "string", "The account, like google:ana@acme.test")], writes: true },
     Spec { name: "calendar.calendars.set", about: "Hide or show a calendar, change its colour, or make it where new events go.", args: &[("account", "string", "The account"), ("calendar", "string", "The calendar's id"), ("hidden", "boolean", "Hide it"), ("color", "string", "A colour like #4f7cff"), ("default", "boolean", "New events go here")], writes: true },
     Spec { name: "calendar.events", about: "The events between two times, from the local copy.", args: &[("from", "string", "Start, like 2026-12-01T00:00:00Z"), ("to", "string", "End")], writes: false },
     Spec { name: "calendar.event.get", about: "One event.", args: &[("key", "string", "The event's key")], writes: false },
-    Spec { name: "calendar.event.create", about: "Make an event. With guests it is held until sent (send=true, or calendar.event.send).", args: &[("account", "string", "The account to make it on (default: the default calendar's)"), ("calendar", "string", "The calendar (default: the default calendar)"), ("title", "string", "What it is called"), ("start", "string", "When it starts, like 2026-12-01T15:00:00Z"), ("end", "string", "When it ends"), ("all_day", "boolean", "It takes the whole day"), ("zone", "string", "Its time zone, like Europe/Berlin"), ("location", "string", "Where"), ("description", "string", "Notes for the guests"), ("guests", "array", "Guests: email addresses, or {email, optional}"), ("meeting", "boolean", "Add a Google Meet or Teams link"), ("repeat", "string", "A repeat rule like RRULE:FREQ=WEEKLY;BYDAY=MO"), ("send", "boolean", "Send the invitation now"), ("notify", "boolean", "Email the guests (default true)")], writes: true },
+    Spec { name: "calendar.event.create", about: "Make an event. With guests it is held until sent (send=true, or calendar.event.send).", args: &[("account", "string", "The account to make it on (default: the default calendar's)"), ("calendar", "string", "The calendar (default: the default calendar)"), ("title", "string", "What it is called"), ("start", "string", "When it starts, like 2026-12-01T15:00:00Z"), ("end", "string", "When it ends"), ("all_day", "boolean", "It takes the whole day"), ("zone", "string", "Its time zone, like Europe/Berlin"), ("location", "string", "Where"), ("description", "string", "Notes for the guests"), ("guests", "array", "Guests: email addresses, or {email, optional}"), ("meeting", "boolean", "Add a meeting link (Google Meet; Teams on a Microsoft account)"), ("repeat", "string", "A repeat rule like RRULE:FREQ=WEEKLY;BYDAY=MO"), ("send", "boolean", "Send the invitation now"), ("notify", "boolean", "Email the guests (default true)")], writes: true },
     Spec { name: "calendar.event.update", about: "Change an event. If it has guests the change is held as pending until sent.", args: &[("key", "string", "The event's key"), ("scope", "string", "For a repeating event: this (default) or all")], writes: true },
     Spec { name: "calendar.event.send", about: "Send an event's held changes to the provider: the invitation, or one update.", args: &[("key", "string", "The event's key"), ("notify", "boolean", "Email the guests (default true)")], writes: true },
     Spec { name: "calendar.event.retry", about: "Try a change the provider refused again, at the next sync.", args: &[("key", "string", "The event's key")], writes: true },

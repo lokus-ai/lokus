@@ -21,7 +21,9 @@ const recent = (): string[] => {
     return [];
   }
 };
-const name = (zone: string) => zone.replace(/_/g, " ");
+// Cities whose zone still goes by an older name on this system are shown and found by today's.
+const NOW: Record<string, string> = { "Asia/Calcutta": "Asia/Kolkata", "Europe/Kiev": "Europe/Kyiv", "Asia/Saigon": "Asia/Ho Chi Minh", "Asia/Rangoon": "Asia/Yangon", "Asia/Katmandu": "Asia/Kathmandu", "America/Godthab": "America/Nuuk", "Asia/Dacca": "Asia/Dhaka" };
+const name = (zone: string) => (NOW[zone] ?? zone).replace(/_/g, " ");
 
 /** The time zone: a button that opens a list to type in, with the chosen zone, this computer's and the last few used on top. */
 export function ZonePick({ value, label, title, at, outlined, onChange }: Props) {
@@ -38,7 +40,7 @@ export function ZonePick({ value, label, title, at, outlined, onChange }: Props)
 
   const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const first = [...new Set([value, localZone, ...recent()])].slice(0, 6);
-  const found = words.length ? ZONES.filter((z) => words.every((w) => `${name(z)} ${offsetName(z, at)}`.toLowerCase().includes(w))) : [];
+  const found = words.length ? ZONES.filter((z) => words.every((w) => `${name(z)} ${z.replace(/_/g, " ")} ${offsetName(z, at)}`.toLowerCase().includes(w))) : [];
   const list = words.length ? found.slice(0, 60) : [...first, ...ZONES.filter((z) => !first.includes(z))];
   const pick = (zone: string) => {
     localStorage.setItem(KEY, JSON.stringify([zone, ...recent().filter((z) => z !== zone)].slice(0, 4)));
@@ -59,6 +61,9 @@ export function ZonePick({ value, label, title, at, outlined, onChange }: Props)
             value={text}
             placeholder="Search a city or GMT+1"
             aria-label="Search time zones"
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
             onChange={(e) => (setText(e.target.value), setOn(0))}
             // After typing, the system keeps the first Escape press for its own text suggestions: its release closes the list all the same.
             onKeyUp={(e) => e.key === "Escape" && setOpen(false)}

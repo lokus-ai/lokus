@@ -16,7 +16,7 @@ const USAGE: &str = "usage:
   lokus <command> [--vault DIR] [key=value ...] [--json '{...}']
   lokus app <command> [key=value ...]     (talks to the running dev app)
   lokus commands.list                     (every core command)
-  lokus calendar.commands                 (every calendar command; they reach Google and Microsoft)
+  lokus calendar.commands                 (every calendar command; they reach Google Calendar)
   lokus calendar.<command> [--vault DIR] [key=value ...]
   lokus sync --vault DIR server=URL workspace=ID token=TOKEN
                                           (keep a folder in sync with a relay; prints what it does)

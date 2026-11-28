@@ -116,12 +116,16 @@ export function EventPanel(p: Props) {
   };
   // The send block keeps its place for a moment after sending: a second click of the same hand lands on it, not on what was below.
   const pend = (e.pending || e.unsent) && !p.draft;
-  const before = useRef({ key: e.key, pend, until: 0 });
+  const before = useRef({ key: e.key, pend, until: 0, height: 0 });
   const [, again] = useState(0);
-  if (before.current.key !== e.key) before.current = { key: e.key, pend, until: 0 };
+  if (before.current.key !== e.key) before.current = { key: e.key, pend, until: 0, height: 0 };
   else if (before.current.pend && !pend) before.current.until = Date.now() + 1500;
   before.current.pend = pend;
-  const justSent = !pend && Date.now() < before.current.until;
+  // ...and for as long as the pointer rests on it.
+  const [over, setOver] = useState(false);
+  const justSent = !pend && before.current.until > 0 && (over || Date.now() < before.current.until);
+  if (pend || !justSent) before.current.until = 0;
+  useEffect(() => setOver(false), [e.key]);
   useEffect(() => {
     if (!justSent) return;
     const done = window.setTimeout(() => again((n) => n + 1), before.current.until - Date.now() + 20);
@@ -299,8 +303,8 @@ export function EventPanel(p: Props) {
             </Row>
           )}
           {(pend || justSent) && (
-            <div className="cal-pending" role="status">
-              <small>{justSent ? "Sent." : e.unsent ? "Invitation not sent. Guests have not been told." : `Pending changes: ${e.changes.map((c) => LABEL[c] ?? c).join(", ")}. Guests have not been told.`}</small>
+            <div className="cal-pending" role="status" ref={(el) => void (el && pend && (before.current.height = el.offsetHeight))} style={justSent ? { minHeight: before.current.height } : undefined} onPointerEnter={() => setOver(true)} onPointerLeave={() => setOver(false)}>
+              <small>{justSent ? "Nothing left to send." : e.unsent ? "Invitation not sent. Guests have not been told." : `Pending changes: ${e.changes.map((c) => LABEL[c] ?? c).join(", ")}. Guests have not been told.`}</small>
               <div className="cal-split">
                 <button className="primary" disabled={justSent} onClick={() => p.onSend(true)}>
                   {e.unsent ? "Send invite" : "Send update"} <kbd>{formatKeys("Mod-Enter")}</kbd>
@@ -374,6 +378,7 @@ export function EventPanel(p: Props) {
                 value={`${e.account}|${e.calendar}`}
                 label={`${calendar?.name ?? ""} · ${account?.email ?? ""}`}
                 title="The calendar it is made on"
+                swatches={Object.fromEntries(p.calendars.map((c) => [`${c.account}|${c.id}`, c.color]))}
                 options={p.calendars.map((c) => [`${c.account}|${c.id}`, `${c.name} · ${p.accounts.find((a) => a.id === c.account)?.email}`])}
                 onChange={(v) => p.onChange({ account: v.split("|")[0], calendar: v.split("|")[1] })}
               />

@@ -10,6 +10,7 @@ import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
 import { ZonePick } from "./ZonePick";
 import { addDays, age, clock, dayStart, instant, localZone, offsetName, span, stamp, weekday } from "./time";
+import { ownTips } from "./tips";
 import "./calendar.css";
 
 const PEOPLE = ["#b266d9", "#e2674a", "#3aa675", "#d9a400", "#4f7cff"];
@@ -71,6 +72,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   const [noteAsk, setNoteAsk] = useState<string | null>(null);
   // The screen is laid out by the room it has: how wide the calendar is, and the week inside it.
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  useEffect(() => (rootEl ? ownTips(rootEl) : undefined), [rootEl]);
   const [mainEl, setMainEl] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState(1440);
   const [weekWidth, setWeekWidth] = useState(900);
@@ -150,9 +152,10 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   useEffect(() => {
     if (!people.length || !status?.accounts.length) return setBusy([]);
     let stale = false;
-    void runCalendar<{ busy: CalBusy[] }>("calendar.busy", { emails: people, from: stamp(from), to: stamp(to) }).then((b) => !stale && setBusy(b.busy), () => undefined);
-    return () => void (stale = true);
-  }, [people, from, to, status?.accounts.length]);
+    // Asked once the days in view have settled: turning the week is one question, not one per step.
+    const ask = window.setTimeout(() => void runCalendar<{ busy: CalBusy[] }>("calendar.busy", { emails: people, from: stamp(from), to: stamp(to) }).then((b) => !stale && setBusy(b.busy), () => undefined), 150);
+    return () => void ((stale = true), window.clearTimeout(ask));
+  }, [people, from, to, !!status?.accounts.length]);
 
   const mine = useMemo(() => new Set(status?.accounts.map((a) => a.email) ?? []), [status]);
   const overlays: Overlay[] = useMemo(
@@ -363,7 +366,9 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     // Escape in a field of the calendar leaves the field; typed in the assistant beside it, it still closes the event.
     const outside = e.target instanceof HTMLElement && !e.target.closest(".calendar");
     if (e.key === "Escape" && e.defaultPrevented) return;
-    if (e.key === "Escape" && typing && !(outside && selected)) return (document.activeElement as HTMLElement | null)?.blur();
+    // Escape in a field of the open event closes the event in one press (what was typed is kept, as on leaving the field); in any other field it leaves the field.
+    if (e.key === "Escape" && typing && !(selected && (outside || (e.target as HTMLElement).closest(".cal-panel")))) return (document.activeElement as HTMLElement | null)?.blur();
+    if (e.key === "Escape" && typing) (document.activeElement as HTMLElement | null)?.blur();
     if (e.key === "Escape" && sideOpen && !sideFits) return setSideOpen(false);
     if (e.key === "Escape" && dayOpen && !selected) return setDayOpen(false);
     if (e.key === "Escape" && (deleting || noteAsk)) return (setDeleting(false), setNoteAsk(null));
@@ -432,6 +437,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   const calendarMenu = (el: HTMLElement, c: CalStatus["calendars"][number]) =>
     pickMenu(el, c.name, [...(c.default ? [] : [["default", "Make default"] as [string, string], null]), [c.hidden ? "show" : "hide", c.hidden ? "Show" : "Hide"], null, ...COLORS.map(([hex, name]): [string, string] => [hex, name])], c.color, (id) =>
       void act("calendar.calendars.set", { account: c.account, calendar: c.id, ...(id === "default" ? { default: true } : id === "hide" || id === "show" ? { hidden: id === "hide" } : { color: id }) }, false),
+      { swatches: Object.fromEntries(COLORS.map(([hex]) => [hex, hex])) },
     );
 
   const idle = (
@@ -595,11 +601,23 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
               </div>
               {slots.found === null && <small>Looking…</small>}
               {slots.found?.length === 0 && <small>Nobody is free together this week.</small>}
+              {/* Whole rows only: as many as the window has room for, the rest by scrolling. */}
+              <div
+                className="cal-slot-list"
+                ref={(el) => {
+                  const side = el?.closest<HTMLElement>(".cal-side-scroll");
+                  if (!el || !side) return;
+                  const rows = Math.max(2, Math.min(6, Math.floor((side.clientHeight - 96) / 30)));
+                  el.style.maxHeight = `${rows * 30 - 2}px`;
+                  el.parentElement?.scrollIntoView({ block: "nearest" });
+                }}
+              >
               {slots.found?.map((s) => (
                 <button key={s.start} title={s.local} onClick={() => (setAnchor(Date.parse(s.start)), startDraft(s.start, s.end), setDraft((d) => d && { ...d, guests: [...people, ...shownMembers].map((email) => ({ email, name: "", optional: false, reply: "needsAction" })) }))}>
                   {s.local}
                 </button>
               ))}
+              </div>
               {slots.unknown.length > 0 && <small>Could not see: {slots.unknown.join(", ")}</small>}
             </div>
           )}

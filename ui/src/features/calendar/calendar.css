@@ -102,8 +102,10 @@ div.cal-person { color: var(--fg); }
 .cal-slots { display: flex; flex-direction: column; gap: 2px; }
 .cal-slots .segmented { align-items: center; margin-bottom: 4px; }
 .cal-slots .segmented button:not(.cal-icon) { flex: 1; min-width: 0; padding: 0; }
-.cal-slots > button { height: var(--row-height); padding: 0 8px; border-radius: var(--radius-sm); text-align: left; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cal-slots > button:hover { background: var(--bg-hover); }
+.cal-slot-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; scroll-snap-type: y mandatory; scrollbar-width: none; flex: none; }
+.cal-slot-list > button { scroll-snap-align: start; }
+.cal-slot-list > button { height: var(--row-height); padding: 0 8px; border-radius: var(--radius-sm); text-align: left; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-slot-list > button:hover { background: var(--bg-hover); }
 .cal-slots small { color: var(--fg-3); padding: 2px 8px; overflow-wrap: anywhere; }
 .cal-standin { color: var(--fg-3); padding: 0 8px; font-size: 11px; }
 
@@ -302,7 +304,7 @@ div.cal-person { color: var(--fg); }
 .calendar .primary:active:not(:disabled) { filter: brightness(0.9); transform: translateY(0.5px); }
 .cal-button:active, .cal-pick.outlined:active, .cal-reply button:active, .cal-more:active { background: var(--bg-active); transform: translateY(0.5px); }
 .cal-reply button:disabled { opacity: 0.6; }
-.cal-calendar:active, .cal-person:active, .cal-item:active, .cal-more-list button:active, .cal-slots > button:active { background: var(--bg-active); }
+.cal-calendar:active, .cal-person:active, .cal-item:active, .cal-more-list button:active, .cal-slot-list > button:active { background: var(--bg-active); }
 /* ---- The all-day row: bars across the days they cover; a press on the empty part starts one. ---- */
 .cal-allday { grid-auto-rows: 24px; padding-bottom: 2px; }
 .cal-allday-cell { padding: 0; min-height: 24px; }
@@ -350,3 +352,9 @@ div.cal-person { color: var(--fg); }
 /* What is waiting or was refused: at the foot of the panel, so it never pushes a button from under the pointer. */
 .cal-status { position: sticky; bottom: -12px; margin-top: auto; padding: 8px 0 12px; background: var(--bg); }
 .cal-status .cal-refused { margin: 0; }
+/* The calendar's menus with a colour dot before a choice. */
+.cal-menu button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.cal-menu button i { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 3px; }
+/* What a control is for, shown on hover in the app's look. */
+.cal-tip { position: fixed; z-index: 1000; max-width: 280px; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-size: var(--text-caption); line-height: 16px; box-shadow: var(--shadow-pop); pointer-events: none; overflow-wrap: anywhere; }
+.cal-pending .cal-split { margin-top: auto; }

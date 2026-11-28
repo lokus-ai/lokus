@@ -15,10 +15,12 @@ interface Props {
   outlined?: boolean;
   /** No tick beside a choice: the menu is a list of things to do. */
   actions?: boolean;
+  /** A colour dot before a choice, by its value; the menu is then as wide as the panel around the button. */
+  swatches?: Record<string, string>;
 }
 
 /** A choice from a list: a button that opens the app's menu. */
-export function Pick({ value, label, title, options, onChange, disabled, icon, outlined, actions }: Props) {
+export function Pick({ value, label, title, options, onChange, disabled, icon, outlined, actions, swatches }: Props) {
   return (
     <button
       type="button"
@@ -27,7 +29,7 @@ export function Pick({ value, label, title, options, onChange, disabled, icon, o
       aria-label={`${title}: ${label}`}
       aria-haspopup="menu"
       disabled={disabled}
-      onClick={(e) => pickMenu(e.currentTarget, title, options, actions ? null : value, onChange)}
+      onClick={(e) => pickMenu(e.currentTarget, title, options, actions ? null : value, onChange, swatches && { swatches, fill: e.currentTarget.closest<HTMLElement>(".cal-panel") })}
     >
       {icon && <Icon name={icon} size={14} />}
       <span>{label}</span>
