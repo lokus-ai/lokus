@@ -86,14 +86,20 @@ async fn applied(dir: &Path, q: &Queued) -> Result<bool> {
                 let has = |e: &Event, who: &str| {
                     e.guests.iter().any(|g| g.email.eq_ignore_ascii_case(who))
                 };
-                let added = ours
-                    .guests
-                    .iter()
-                    .filter(|g| !was.iter().any(|w| g.email.eq_ignore_ascii_case(w)));
+                // Each guest of ours is there as required or optional as we have them; one we
+                // did not add may have been taken off by someone else.
+                let ours_there = ours.guests.iter().all(|g| {
+                    match theirs
+                        .guests
+                        .iter()
+                        .find(|t| t.email.eq_ignore_ascii_case(&g.email))
+                    {
+                        Some(t) => t.optional == g.optional,
+                        None => was.iter().any(|w| g.email.eq_ignore_ascii_case(w)),
+                    }
+                });
                 let removed = was.iter().filter(|w| !has(ours, w));
-                if added.clone().all(|g| has(&theirs, &g.email))
-                    && !removed.clone().any(|w| has(&theirs, w))
-                {
+                if ours_there && !removed.clone().any(|w| has(&theirs, w)) {
                     still.retain(|c| c != "guests");
                 }
             }
