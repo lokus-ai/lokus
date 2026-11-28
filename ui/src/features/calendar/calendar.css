@@ -70,7 +70,7 @@
 .cal-month-days button:hover span { background: var(--bg-hover); }
 .cal-month-days button.today span { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .cal-account-name { display: flex; align-items: center; min-height: var(--row-height); line-height: 1.3; padding-top: 4px; padding-bottom: 4px; padding-left: 8px; color: var(--fg-3); font-size: var(--text-caption); }
-.cal-account-name span { flex: 1; min-width: 0; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.cal-account-name span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-signin { margin: 0 8px 4px; align-self: flex-start; color: var(--danger); }
 .cal-refused { margin: 0 0 8px; padding: 0 8px; display: flex; flex-direction: column; gap: 6px; }
 .cal-refused small { color: var(--danger); font-size: var(--text-caption); line-height: 16px; overflow-wrap: anywhere; }
@@ -86,7 +86,8 @@
 .cal-account-name .cal-icon, .cal-calendar .cal-icon, .cal-person .cal-icon { position: absolute; right: 2px; top: 2px; width: 24px; height: 24px; opacity: 0; }
 .cal-account:hover .cal-account-name .cal-icon, .cal-calendar:hover .cal-icon, .cal-person:hover .cal-icon, .cal-side .cal-icon:focus-visible { opacity: 1; background: var(--bg-hover); }
 .cal-account:hover .cal-account-name .cal-icon { background: var(--bg-sidebar); }
-.cal-calendar:hover small { visibility: hidden; }
+.cal-calendar:hover small { display: none; }
+.cal-account:hover .cal-account-name, .cal-calendar:hover, div.cal-person:hover { padding-right: 28px; }
 .cal-person { display: flex; align-items: center; gap: 8px; height: var(--row-height); padding-left: 8px; border-radius: var(--radius-sm); min-width: 0; text-align: left; color: var(--fg-2); }
 .cal-person:hover { background: var(--bg-hover); }
 button.cal-person { cursor: grab; padding-right: 8px; }
@@ -173,7 +174,7 @@ div.cal-person { color: var(--fg); }
 .cal-event.unanswered::before { display: none; }
 .cal-event.unanswered.selected { --fill: color-mix(in srgb, var(--c) 24%, var(--bg)); --ink: color-mix(in oklab, var(--c) 58%, var(--fg)); }
 /* Declined: an empty box with a broken outline and its title struck through. */
-.cal-event.declined { --fill: var(--bg); --ink: var(--fg-3); outline: 1px dashed color-mix(in srgb, var(--c) 60%, var(--bg)); outline-offset: -1px; }
+.cal-event.declined { --fill: var(--bg); --ink: var(--fg-2); outline: 1px dashed color-mix(in srgb, var(--c) 60%, var(--bg)); outline-offset: -1px; }
 .cal-event.declined::before { display: none; }
 .cal-event.declined b { text-decoration: line-through; font-weight: 500; }
 .cal-event.declined.selected { --fill: color-mix(in srgb, var(--c) 16%, var(--bg)); --ink: var(--fg-2); }
@@ -285,9 +286,48 @@ div.cal-person { color: var(--fg); }
 }
 :root[data-theme="dark"] .cal-event span { opacity: 1; }
 :root[data-theme="dark"] .cal-event:is(.unanswered, .declined):not(.selected) { --fill: var(--bg); }
-:root[data-theme="dark"] .cal-event.declined:not(.selected) { --ink: var(--fg-3); }
+:root[data-theme="dark"] .cal-event.declined:not(.selected) { --ink: var(--fg-2); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .cal-event:is(.unanswered, .declined):not(.selected) { --fill: var(--bg); }
-  :root:not([data-theme="light"]) .cal-event.declined:not(.selected) { --ink: var(--fg-3); }
+  :root:not([data-theme="light"]) .cal-event.declined:not(.selected) { --ink: var(--fg-2); }
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cal-event span { opacity: 1; } }
+
+/* ---- One corner for every event, however short: the app's small radius, never more than a third of its height. ---- */
+.cal-event, .cal-chip, .cal-more, .cal-event.ghost { border-radius: min(var(--radius-sm), calc(var(--tall, 60px) / 3)); }
+/* ---- Pressed, hovered, focused. ---- */
+.cal-event:active, .cal-chip:active { filter: brightness(0.93); }
+.cal-event.selected:hover, .cal-chip.selected:hover { --fill: color-mix(in srgb, var(--c) 90%, #fff); }
+.calendar .primary { transition: filter var(--fast), transform var(--fast); }
+.calendar .primary:hover:not(:disabled) { filter: brightness(1.08); }
+.calendar .primary:active:not(:disabled) { filter: brightness(0.9); transform: translateY(0.5px); }
+.cal-button:active, .cal-pick.outlined:active, .cal-reply button:active, .cal-more:active { background: var(--bg-active); transform: translateY(0.5px); }
+.cal-reply button:disabled { opacity: 0.6; }
+.cal-calendar:active, .cal-person:active, .cal-item:active, .cal-more-list button:active, .cal-slots > button:active { background: var(--bg-active); }
+/* ---- The all-day row: bars across the days they cover; a press on the empty part starts one. ---- */
+.cal-allday { grid-auto-rows: 24px; padding-bottom: 2px; }
+.cal-allday-cell { padding: 0; min-height: 24px; }
+.cal-allday-cell:hover { background-color: var(--bg-hover); }
+.cal-allday-cell.picked { background-color: color-mix(in srgb, var(--accent) 18%, transparent); }
+.cal-allday .cal-chip { align-self: center; margin: 0 8px 0 2px; z-index: 1; overflow: hidden; }
+.cal-allday .cal-chip.before { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: 0; }
+.cal-allday .cal-chip.after { border-top-right-radius: 0; border-bottom-right-radius: 0; margin-right: 0; }
+.cal-switch { height: var(--row-height); padding: 0 8px; display: inline-flex; align-items: center; gap: 8px; border-radius: var(--radius-sm); color: var(--fg-2); }
+.cal-switch:hover { background: var(--bg-hover); }
+.cal-switch i { width: 24px; height: 14px; border-radius: 7px; background: var(--border-strong, var(--fg-3)); position: relative; transition: background var(--fast); flex: none; }
+.cal-switch i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: #fff; transition: transform var(--fast); }
+.cal-switch[aria-checked="true"] i { background: var(--accent); }
+.cal-switch[aria-checked="true"] i::after { transform: translateX(10px); }
+/* ---- The time zone list: typed into, the chosen and recent ones first. ---- */
+.cal-zone { position: relative; display: inline-flex; min-width: 0; max-width: 100%; }
+.cal-zone-list { position: absolute; z-index: 40; top: calc(100% + 4px); right: 0; width: 280px; max-width: calc(100vw - 24px); padding: 4px; display: flex; flex-direction: column; gap: 4px; border-radius: var(--radius-md); background: var(--bg); box-shadow: var(--shadow-pop); }
+.cal-row .cal-zone-list { right: auto; left: 0; width: 256px; }
+.cal-zone-list input { height: 28px; flex: none; box-shadow: inset 0 0 0 1px var(--border); }
+.cal-zone-list > div { max-height: 264px; overflow-y: auto; display: flex; flex-direction: column; }
+.cal-zone-list > div > small { padding: 6px 8px; color: var(--fg-3); }
+.cal-zone-list button { position: relative; flex: none; height: var(--row-height); padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: var(--radius-sm); text-align: left; min-width: 0; }
+.cal-zone-list button.on { background: var(--bg-hover); }
+.cal-zone-list button[aria-selected="true"] span { font-weight: 600; }
+.cal-zone-list button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-zone-list button small { flex: none; color: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cal-zone-list button hr { position: absolute; left: 4px; right: 4px; bottom: -1px; margin: 0; border: 0; border-top: 1px solid var(--border); }

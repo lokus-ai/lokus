@@ -25,7 +25,7 @@ interface Props {
   colorOf: (event: CalEvent) => string;
   onSelect: (key: string) => void;
   /** An empty stretch was dragged out, or something was dropped on it: start a new event there. */
-  onNew: (start: string, end: string, guest?: string) => void;
+  onNew: (start: string, end: string, guest?: string, allDay?: boolean) => void;
   onMove: (event: CalEvent, start: string, end: string) => void;
 }
 
@@ -40,6 +40,7 @@ interface Drag {
 
 /** The week: one column a day, an hour every 48 pixels, events where they fall. */
 /** A person's initials, from a name or the start of an email. */
+const nextDate = (date: string) => new Date(Date.parse(`${date}T00:00:00Z`) + DAY).toISOString().slice(0, 10);
 const initials = (label: string) =>
   label
     .split("@")[0]
@@ -62,6 +63,8 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
     return () => watch.disconnect();
   }, [days.length]);
   const [drag, setDrag] = useState<Drag | null>(null);
+  /** The days being dragged across in the all-day row. */
+  const [span, setSpan] = useState<{ from: number; to: number } | null>(null);
   const [now, setNow] = useState(Date.now());
   /** The "+N more" that is open: its day, where it hangs, and the events behind it. */
   const [more, setMore] = useState<{ day: number; top: number } | null>(null);
@@ -186,7 +189,28 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
   const ghost = drag && (drag.kind === "new" || drag.moved) ? outcome(drag) : null;
   const shown = ghost && drag?.event ? events.map((e) => (e.key === drag.event!.key ? { ...e, start: stamp(ghost[0]), end: stamp(ghost[1]) } : e)) : events;
   const today = dayStart(now, zone);
-  const allDay = shown.filter((e) => e.all_day);
+  // Whole-day events: one bar each across the days it covers, in as few rows as they fit in.
+  const dates = days.map((day) => dateOf(day + DAY / 2, zone));
+  const rows: number[] = [];
+  const allDay = shown
+    .filter((e) => e.all_day && e.start.slice(0, 10) <= dates[dates.length - 1] && e.end.slice(0, 10) > dates[0])
+    .sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end))
+    .map((event) => {
+      const from = Math.max(0, dates.findIndex((d) => d >= event.start.slice(0, 10)));
+      const to = Math.max(from, dates.findLastIndex((d) => d < event.end.slice(0, 10)));
+      let row = rows.findIndex((end) => end < from);
+      if (row < 0) row = rows.length;
+      rows[row] = to;
+      return { event, from, to, row, before: event.start.slice(0, 10) < dates[0], after: event.end.slice(0, 10) > nextDate(dates[dates.length - 1]) };
+    });
+  /** A press in the all-day row: the days dragged across become a whole-day event. */
+  const dayAt = (e: { clientX: number }) => at({ clientX: e.clientX, clientY: 0 }).day;
+  const allDayDone = () => {
+    if (!span) return;
+    const [a, b] = [Math.min(span.from, span.to), Math.max(span.from, span.to)];
+    setSpan(null);
+    onNew(`${dates[a]}T00:00:00Z`, `${nextDate(dates[b])}T00:00:00Z`, undefined, true);
+  };
 
   const laid = days.map((day, i) => place(shown, day, days[i + 1] ?? addDays(day, 1, zone), dayWidth));
   const weekend = (day: number) => [0, 6].includes(weekday(day + DAY / 2, zone));
@@ -210,22 +234,34 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
               );
             })}
           </div>
-          {allDay.length > 0 && (
-            <div className="cal-allday">
-              <div className="cal-gutter">All-day</div>
-              {days.map((day) => (
-                <div key={day} className={`cal-allday-cell${weekend(day) ? " weekend" : ""}`}>
-                  {allDay
-                    .filter((e) => e.start.slice(0, 10) <= dateOf(day, zone) && e.end.slice(0, 10) > dateOf(day, zone))
-                    .map((e) => (
-                      <button key={e.key} className={`cal-chip${e.key === selected ? " selected" : ""}`} style={{ "--c": colorOf(e) } as CSSProperties} title={e.title} aria-label={spoken(e)} aria-pressed={e.key === selected} onClick={() => onSelect(e.key)}>
-                        {e.title || "(No title)"}
-                      </button>
-                    ))}
-                </div>
-              ))}
+          <div className="cal-allday" onPointerMove={(e) => span && dayAt(e) !== span.to && setSpan({ ...span, to: dayAt(e) })} onPointerUp={allDayDone} onPointerLeave={() => setSpan(null)}>
+            <div className="cal-gutter" style={{ gridRow: `1 / span ${Math.max(1, rows.length)}` }}>
+              All-day
             </div>
-          )}
+            {days.map((day, i) => (
+              <div
+                key={day}
+                className={`cal-allday-cell${weekend(day) ? " weekend" : ""}${span && i >= Math.min(span.from, span.to) && i <= Math.max(span.from, span.to) ? " picked" : ""}`}
+                style={{ gridColumn: i + 2, gridRow: `1 / span ${Math.max(1, rows.length)}` }}
+                title="Click, or drag across days, for an all-day event"
+                onPointerDown={(e) => e.button === 0 && setSpan({ from: i, to: i })}
+              />
+            ))}
+            {allDay.map(({ event: e, from, to, row, before, after }) => (
+              <button
+                key={e.key}
+                className={`cal-chip${e.key === selected ? " selected" : ""}${before ? " before" : ""}${after ? " after" : ""}`}
+                style={{ "--c": colorOf(e), gridColumn: `${from + 2} / ${to + 3}`, gridRow: row + 1 } as CSSProperties}
+                title={e.title}
+                aria-label={spoken(e)}
+                aria-pressed={e.key === selected}
+                onPointerDown={(ev) => ev.stopPropagation()}
+                onClick={() => onSelect(e.key)}
+              >
+                {e.title || "(No title)"}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="cal-hours" ref={hours} style={{ height: 24 * HOUR }}>
           <div className="cal-gutter">
@@ -276,7 +312,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                     <div
                       key={e.key}
                       className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${dragged ? " dragged" : ""}`}
-                      style={{ top: p.top * PX, height: tall, left: `calc(${p.left * 100}% + 1px)`, width: `calc(${(p.right - p.left) * 100}% - ${p.right === 1 ? 9 : 2}px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px` } as CSSProperties}
+                      style={{ top: p.top * PX, height: tall, left: `calc(${p.left * 100}% + 1px)`, width: `calc(${(p.right - p.left) * 100}% - ${p.right === 1 ? 9 : 2}px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
                       title={`${e.title || "(No title)"}\n${clock(e.start, zone)} – ${clock(e.end, zone)}`}
                       role="button"
                       tabIndex={0}

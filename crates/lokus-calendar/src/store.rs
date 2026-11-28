@@ -539,9 +539,10 @@ impl Store {
         Ok(())
     }
 
-    pub fn release(&self, key: &str) -> Result<()> {
-        self.db.execute("DELETE FROM held WHERE key = ?1", [key])?;
-        Ok(())
+    /// Whether there was something held: of two that send the same held change at once, only
+    /// the one that releases it sends it.
+    pub fn release(&self, key: &str) -> Result<bool> {
+        Ok(self.db.execute("DELETE FROM held WHERE key = ?1", [key])? > 0)
     }
 
     // ---- changes waiting to be sent ----

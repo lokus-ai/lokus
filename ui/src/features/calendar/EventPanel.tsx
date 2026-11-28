@@ -7,7 +7,8 @@ import { Icon, type IconName } from "../../shell/Icon";
 import { pickMenu } from "./menu";
 import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
-import { addDays, addMinutes, clock, DAY, dateOf, dayStart, instant, minuteOfDay, offsetName, repeatChoices, span, stamp, typedClock, ZONES } from "./time";
+import { ZonePick } from "./ZonePick";
+import { addDays, addMinutes, clock, DAY, dateOf, dayStart, instant, minuteOfDay, offsetName, repeatChoices, span, stamp, typedClock } from "./time";
 
 export type Scope = "this" | "all";
 
@@ -123,6 +124,16 @@ export function EventPanel(p: Props) {
     if (at <= start) at = addDays(at, 1, p.zone);
     if (at !== end) p.onChange({ end: stamp(at) });
   };
+  /** To a whole day and back: the day it is on stays; back, it is half an hour at nine. */
+  const allDay = () => {
+    if (e.all_day) {
+      const at = addMinutes(dayStart(instant(start + DAY / 2, p.zone), p.zone), 9 * 60, p.zone);
+      return p.onChange({ all_day: false, start: stamp(at), end: stamp(at + 30 * 60_000) });
+    }
+    const first = Date.parse(`${dateOf(start, p.zone)}T00:00:00Z`);
+    const last = Date.parse(`${dateOf(Math.max(start, end - 1), p.zone)}T00:00:00Z`);
+    p.onChange({ all_day: true, start: stamp(first), end: stamp(last + DAY) });
+  };
   const date = (day: number) => {
     setDating(false);
     // A whole-day event is kept as midnight UTC of its date, whatever the zone.
@@ -176,7 +187,7 @@ export function EventPanel(p: Props) {
         <section className="cal-group">
           <Row icon="clock">
             {e.all_day ? (
-              <span className="cal-value">All day</span>
+              <span className="cal-value">{end - start > DAY ? `All day · ${span(e.start, e.end)}` : "All day"}</span>
             ) : can ? (
               <span className="cal-times">
                 <Text key={`s${e.start}${p.zone}`} className="cal-time" label="Starts" value={clock(e.start, p.zone)} placeholder="Start" onCommit={(v) => time("start", v)} />
@@ -202,6 +213,14 @@ export function EventPanel(p: Props) {
               <span className="cal-value">{dateName}</span>
             )}
           </Row>
+          {can && (
+            <Row>
+              <button className="cal-switch" role="switch" aria-checked={e.all_day} title="The event takes the whole day" onClick={allDay}>
+                <i />
+                <span>All day</span>
+              </button>
+            </Row>
+          )}
           {dating && (
             <div className="cal-date">
               <MiniMonth zone={p.zone} shown={[]} picked={dayStart(e.all_day ? instant(start + DAY / 2, p.zone) : start, p.zone)} onPick={date} />
@@ -209,7 +228,7 @@ export function EventPanel(p: Props) {
           )}
           {can && !e.all_day && (
             <Row icon="globe">
-              <Pick value={zoneOf} label={zoneName(zoneOf, start)} title={own ? `Made in ${e.zone.replace(/_/g, " ")}; the times above are in ${p.zone.replace(/_/g, " ")}` : "The event's time zone"} options={ZONES.map((z) => [z, `${z.replace(/_/g, " ")} (${offsetName(z, start)})`])} onChange={(zone) => p.onChange({ zone })} />
+              <ZonePick value={zoneOf} label={zoneName(zoneOf, start)} at={start} title={own ? `Made in ${e.zone.replace(/_/g, " ")}; the times above are in ${p.zone.replace(/_/g, " ")}` : "The event's time zone"} onChange={(zone) => p.onChange({ zone })} />
             </Row>
           )}
           {(can || repeating) && (

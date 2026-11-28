@@ -8,7 +8,8 @@ import { Grid, type Overlay } from "./Grid";
 import { pickMenu } from "./menu";
 import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
-import { addDays, age, clock, dayStart, instant, localZone, offsetName, span, stamp, weekday, ZONES } from "./time";
+import { ZonePick } from "./ZonePick";
+import { addDays, age, clock, dayStart, instant, localZone, offsetName, span, stamp, weekday } from "./time";
 import "./calendar.css";
 
 const PEOPLE = ["#b266d9", "#e2674a", "#3aa675", "#d9a400", "#4f7cff"];
@@ -31,6 +32,10 @@ const SIDE_FITS = 1230;
 const PANEL_FITS = 1530;
 const SIDE_WIDE = 220;
 const PANEL_WIDE = 300;
+/** The width the event panel covers when it lies over the week. */
+const PANEL_OVER = 320;
+/** The least the week keeps beside the event panel: its bar still shows the month, Today, the arrows and New. */
+const BAR_MIN = 600;
 const kept = (name: string, fallback: string) => localStorage.getItem(`lokus.calendar.${name}`) ?? fallback;
 const keep = (name: string, value: string) => localStorage.setItem(`lokus.calendar.${name}`, value);
 
@@ -86,7 +91,9 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   /** Today's summary, opened over the week when it has no room beside it. */
   const [dayOpen, setDayOpen] = useState(false);
   /** An open event takes its own column while a readable day still fits beside it, so its own day is never covered; narrower, it lies over the week. */
-  const beside = width - (sideFits && side ? SIDE_WIDE : 0) - PANEL_WIDE - 56 >= DAY_MIN;
+  const beside = width - (sideFits && side ? SIDE_WIDE : 0) - PANEL_WIDE >= BAR_MIN;
+  /** The day of the open event while its panel lies over the week. */
+  const [pin, setPin] = useState<number | null>(null);
   // As many days as fit readably: never thin columns. A week steps down to 5, 3, 2, then a day.
   const room = Math.max(1, Math.floor((weekWidth - 56) / DAY_MIN));
   const fit = count <= room ? count : count === 7 ? ([5, 3, 2, 1].find((n) => n <= room) ?? 1) : room;
@@ -101,9 +108,15 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     const starts = fit === 7 ? WEEK_STARTS : 1;
     const monday = week ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) - starts + 7) % 7), zone) : day;
     // A working week ends on the day in view when that day is at the weekend.
-    const first = day >= addDays(monday, fit, zone) ? addDays(day, 1 - fit, zone) : monday;
+    let first = day >= addDays(monday, fit, zone) ? addDays(day, 1 - fit, zone) : monday;
+    // A panel lying over the week covers its last days: the open event's day is kept among the ones still seen.
+    if (pin !== null) {
+      const clear = Math.max(1, Math.floor((weekWidth - PANEL_OVER - 56) / ((weekWidth - 56) / fit)));
+      const at = Math.round((dayStart(pin, zone) - first) / 86_400_000);
+      if (at >= clear && at < fit) first = addDays(first, at - clear + 1, zone);
+    }
     return Array.from({ length: fit }, (_, i) => addDays(first, i, zone));
-  }, [anchor, fit, week, zone]);
+  }, [anchor, fit, week, zone, pin, weekWidth]);
   const from = days[0];
   const to = addDays(days[days.length - 1], 1, zone);
 
@@ -162,6 +175,10 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       : [Date.parse(current.start), Date.parse(current.end)];
     if (start >= to || Math.max(end, start + 1) <= from) setAnchor(dayStart(start, zone) + 12 * 3_600_000);
   }, [fit, current?.key]);
+  useEffect(() => {
+    if (!current || beside) return setPin(null);
+    setPin(current.all_day ? instant(Date.parse(current.start), zone) : Date.parse(current.start));
+  }, [current?.key, current?.start, beside, zone]);
 
   const select = (key: string | null) => {
     setSelected(key);
@@ -175,14 +192,14 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const draftId = useRef("");
   const madeAt = useRef(0);
   const [sending, setSending] = useState(false);
-  const startDraft = (start: string, end: string, guest?: string) => {
+  const startDraft = (start: string, end: string, guest?: string, allDay = false) => {
     // The second click of a double click on "Send invite" lands on the grid the panel just uncovered: it is not a new event.
     if (Date.now() - madeAt.current < 600) return;
     const home = status?.calendars.find((c) => c.default) ?? status?.calendars[0];
     if (!home) return;
     const member = members.find((m) => m.member === guest);
     setDraft({
-      key: DRAFT, account: home.account, calendar: home.id, id: DRAFT, uid: "", title: "", start, end, all_day: false, zone, location: "", description: "",
+      key: DRAFT, account: home.account, calendar: home.id, id: DRAFT, uid: "", title: "", start, end, all_day: allDay, zone, location: "", description: "",
       guests: guest ? [{ email: guest, name: member?.name ?? "", optional: false, reply: "needsAction" }] : [],
       organizer: "", mine: true, reply: "", meeting: null, want_meeting: false, repeat: null, series: null, link: "", pending: false, unsent: false, changes: [], queued: false, error: null, note: null,
     });
@@ -234,7 +251,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     creating.current = true;
     setSending(true);
     const made = await act("calendar.event.create", {
-      id: draftId.current, account: draft.account, calendar: draft.calendar, title: draft.title, start: draft.start, end: draft.end, zone: draft.zone, location: draft.location,
+      id: draftId.current, account: draft.account, calendar: draft.calendar, title: draft.title, start: draft.start, end: draft.end, all_day: draft.all_day, zone: draft.zone, location: draft.location,
       description: draft.description, guests: draft.guests, meeting: draft.want_meeting, repeat: draft.repeat ?? "", send: true,
     });
     creating.current = false;
@@ -456,7 +473,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
                       {!c.hidden && <Icon name="check" size={10} />}
                     </button>
                     {/* The account's own calendar is named after it; its name is already written above. */}
-                    <span title={c.name}>{c.name === a.email || c.name === a.name ? "My calendar" : c.name}</span>
+                    <span title={c.name === a.email || c.name === a.name ? `My calendar (${a.email})` : c.name}>{c.name === a.email || c.name === a.name ? "My calendar" : c.name}</span>
                     {c.default && <small>Default</small>}
                     <button className="cal-icon" title="Default, colour, hide" aria-haspopup="menu" onClick={(ev) => calendarMenu(ev.currentTarget, c)}>
                       <Icon name="more" size={14} />
@@ -556,7 +573,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
             {tight < 3 && <span> {year}</span>}
           </h2>
           <span className="cal-spacer" />
-          {tight >= 2 ? (
+          {tight >= 2 && !waiting && !offline ? (
             <span className={`cal-sync${offline || waiting ? " waiting" : ""}`} role="status" tabIndex={0} title={syncNote} aria-label={syncNote} />
           ) : (
             <small className={`cal-status${offline || waiting ? " waiting" : ""}`} role="status" title={syncNote}>
@@ -576,7 +593,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
             options={[...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n): [string, string] => [String(n), `${dayNames(n)}`]), ...(tight >= 3 ? [null, ["today", "Go to today"] as [string, string]] : [])]}
             onChange={(v) => (v === "today" ? setAnchor(Date.now()) : (setCount(Number(v)), keep("days", v)))}
           />
-          <Pick outlined value={zone} label={offsetName(zone)} title={`Time zone: ${zone.replace(/_/g, " ")}`} options={ZONES.map((z) => [z, `${z.replace(/_/g, " ")} (${offsetName(z)})`])} onChange={(v) => (setZone(v), keep("zone", v))} />
+          <ZonePick outlined value={zone} label={offsetName(zone)} title={`Time zone: ${zone.replace(/_/g, " ")}`} onChange={(v) => (setZone(v), keep("zone", v))} />
           {tight < 3 && (
             <button className="cal-button" title="Go to today (T)" onClick={() => setAnchor(Date.now())}>
               Today

@@ -116,14 +116,16 @@ export interface Placed {
 
 /** The least an event is drawn tall, in minutes: a quarter of an hour, which has room for its title. */
 const MIN_HEIGHT = 15;
-/** Minutes of an event's height its title needs to stay readable. */
-const TITLE = 15;
 /** The least width an event is drawn beside another, in pixels: room for a word. */
-const FACE = 56;
+const FACE = 52;
+/** The width a "+N" takes beside the events that did fit, in pixels. */
+const CHIP = 30;
 /** How far an event is set in from the ones it is laid over, in pixels: the one step every stack uses. */
 const STEP = 10;
+/** An event is laid over the ones beneath only when it starts this many minutes after each of them: their titles stay clear. */
+const OVER = 30;
 
-/** Events that start together and had no room for a box of their own: drawn as one "+N more". */
+/** Events that had no room for a box of their own: drawn as one "+N more". */
 export interface More {
   events: CalEvent[];
   top: number;
@@ -132,12 +134,19 @@ export interface More {
   depth: number;
 }
 
+interface Cluster {
+  /** Each column's events, in the order they start. */
+  columns: Placed[][];
+  from: number;
+  depth: number;
+}
+
 /**
- * A day's timed events laid out as Google and Notion do. Events that start together share the
- * width equally as columns, each with room for a word (`width` is the day's width in pixels);
- * those that cannot have one are gathered into a "+N more". One that starts later while others
- * are still going is set in from them by one step and laid over them up to the day's right edge:
- * the earlier one keeps its title line, the later one the width.
+ * A day's timed events laid out as calendars do. Events that overlap share the width as columns,
+ * and one widens into the columns to its right that are free while it lasts. One that starts half
+ * an hour or more after everything still going is laid over them instead, set in by one step up to
+ * the day's right edge: those beneath keep their title line. Columns narrower than a word
+ * (`width` is the day's width in pixels) are gathered into a "+N more".
  */
 export function place(events: CalEvent[], day: number, next: number, width = 160): { placed: Placed[]; more: More[] } {
   const minutes = (next - day) / MINUTE;
@@ -150,35 +159,56 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
   const step = STEP / width;
+  const ends = (p: Placed) => p.top + p.height;
+  const clusters: Cluster[] = [];
+  const home = new Map<Placed, Cluster>();
+  const seen: Placed[] = [];
+  for (const item of items) {
+    const going = seen.filter((p) => ends(p) > item.top);
+    const close = going.filter((p) => p.top > item.top - OVER);
+    let cluster: Cluster;
+    if (close.length) {
+      // Beside the ones it starts with: the first column that is free, or one more.
+      cluster = home.get(close[close.length - 1])!;
+      const free = cluster.columns.find((c) => ends(c[c.length - 1]) <= item.top);
+      if (free) free.push(item);
+      else cluster.columns.push([item]);
+    } else {
+      const depth = going.length ? Math.max(...going.map((p) => home.get(p)!.depth)) + 1 : 0;
+      cluster = { columns: [[item]], depth, from: Math.min(0.5, depth * step) };
+      clusters.push(cluster);
+    }
+    home.set(item, cluster);
+    seen.push(item);
+  }
   const placed: Placed[] = [];
   const more: More[] = [];
-  for (let i = 0; i < items.length; ) {
-    const under = placed.filter((p) => p.top + p.height > items[i].top);
-    const depth = under.length ? Math.max(...under.map((p) => p.depth)) + 1 : 0;
-    const from = Math.min(0.5, depth * step);
-    // Those that start within a title's height of each other are one group.
-    let n = 1;
-    while (i + n < items.length && items[i + n].top < items[i].top + TITLE) n++;
-    const together = items.slice(i, i + n);
-    i += n;
+  for (const { columns, from, depth } of clusters) {
     const room = width * (1 - from) - 8;
-    const most = Math.max(1, Math.floor(room / FACE));
-    // Too many for a titled box each: the first ones, and the rest behind a "+N more" that takes a narrow strip.
-    const chip = n > most ? Math.min(0.4, (most > 1 ? FACE + 8 : 30) / width) : 0;
-    const boxes = n > most ? Math.max(1, most - 1) : n;
+    const fits = columns.length <= Math.max(1, Math.floor(room / FACE));
+    // Too many for a word each: as many as fit, and the rest behind a "+N" in a narrow strip.
+    const boxes = fits ? columns.length : Math.max(1, Math.floor((room - CHIP) / FACE));
+    const chip = fits ? 0 : Math.min(0.4, (CHIP + 8) / width);
     const share = (1 - from - chip) / boxes;
-    together.slice(0, boxes).forEach((p, k) => {
-      p.depth = depth;
-      p.left = from + share * k;
-      p.right = from + share * (k + 1);
+    columns.slice(0, boxes).forEach((column, k) => {
+      for (const p of column) {
+        // Wider, into the columns to the right that hold nothing while it lasts.
+        let to = k + 1;
+        while (to < boxes && !columns[to].some((q) => q.top < ends(p) && ends(q) > p.top)) to++;
+        p.depth = depth;
+        p.left = from + share * k;
+        p.right = from + share * to;
+        placed.push(p);
+      }
     });
-    placed.push(...together.slice(0, boxes));
-    if (chip) more.push({ events: together.slice(boxes).map((p) => p.event), top: together[0].top, left: 1 - chip, right: 1, depth });
+    const rest = columns.slice(boxes).flat().sort((a, b) => a.top - b.top);
+    if (rest.length) more.push({ events: rest.map((p) => p.event), top: rest[0].top, left: 1 - chip, right: 1, depth });
   }
   for (const p of placed) {
     const over = placed.filter((q) => q.depth > p.depth && q.left < p.right && q.top < p.top + p.height && q.top + q.height > p.top);
     p.clear = Math.min(p.height, ...over.map((q) => Math.max(0, q.top - p.top)));
   }
+  placed.sort((a, b) => a.top - b.top || a.left - b.left);
   return { placed, more };
 }
 

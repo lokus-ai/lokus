@@ -408,7 +408,10 @@ fn send(dir: &Path, args: &Value) -> Result<Value> {
     };
     let mut event = held.event.clone();
     let base = store.stored(k)?;
-    store.release(k)?;
+    if !store.release(k)? {
+        // Sent from somewhere else this moment.
+        return Ok(json!({ "event": store.event(k)?, "sent": true }));
+    }
     if event.unsent {
         event.unsent = false;
         store.put(&event)?;
