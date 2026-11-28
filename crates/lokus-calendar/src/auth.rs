@@ -283,8 +283,9 @@ pub async fn fresh(provider: Provider, account: &str, force: bool) -> Result<Tok
         if e.waits() {
             return e;
         }
-        if e.code == "signed_out" {
-            // The provider ended this sign-in: the account now shows "Sign in again".
+        // The provider ended this sign-in: the account now shows "Sign in again". A newer
+        // sign-in made meanwhile is kept.
+        if e.code == "signed_out" && kept(account).is_some_and(|now| now.refresh == had.refresh) {
             forget(account);
         }
         signed_out()
