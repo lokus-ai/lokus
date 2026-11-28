@@ -391,7 +391,7 @@ fn update(dir: &Path, args: &Value) -> Result<Value> {
             )?;
         } else {
             store.put(&event)?;
-            let was = json!({ "start": against.start, "repeat": against.repeat });
+            let was = json!({ "start": against.start, "repeat": against.repeat, "guests": invited(&against) });
             store.queue(
                 &event.account,
                 k,
@@ -430,7 +430,7 @@ fn send(dir: &Path, args: &Value) -> Result<Value> {
         )?;
     } else {
         let was = base
-            .map(|b| json!({ "start": b.start, "repeat": b.repeat }))
+            .map(|b| json!({ "start": b.start, "repeat": b.repeat, "guests": invited(&b) }))
             .unwrap_or(Value::Null);
         store.put(&event)?;
         store.queue(
@@ -482,6 +482,12 @@ fn delete(dir: &Path, args: &Value) -> Result<Value> {
     }
     store.drop_event(k)?;
     Ok(json!({ "deleted": k }))
+}
+
+/// Who was invited before a change: what the provider holds is later compared with the guests
+/// this change added and removed, not with the whole list.
+fn invited(e: &Event) -> Vec<String> {
+    e.guests.iter().map(|g| g.email.to_lowercase()).collect()
 }
 
 fn reply(dir: &Path, args: &Value) -> Result<Value> {

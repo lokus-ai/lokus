@@ -4,6 +4,7 @@ import type { CalAccount, CalCalendar, CalEvent, CalGuest } from "../../bridge/c
 import { openWeb } from "../../bridge/updates";
 import { formatKeys } from "../../shell/commands";
 import { Icon, type IconName } from "../../shell/Icon";
+import { Settle } from "../../shell/Settle";
 import { pickMenu } from "./menu";
 import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
@@ -275,7 +276,7 @@ export function EventPanel(p: Props) {
 
         <section className="cal-group">
           {e.guests.map((g) => (
-            <div key={g.email} className="cal-guest" tabIndex={can ? 0 : undefined} title={`${g.name ? `${g.name} · ` : ""}${g.email} · ${REPLY[g.reply] ?? g.reply}`}>
+            <div key={g.email} className="cal-guest" tabIndex={can ? 0 : undefined} title={[g.name, g.email, REPLY[g.reply ?? "needsAction"]].filter(Boolean).join(" · ")}>
               <span className="cal-avatar" style={{ "--c": hue(g.email) } as React.CSSProperties}>
                 {initial(g)}
               </span>
@@ -286,7 +287,7 @@ export function EventPanel(p: Props) {
                 <span>{g.name || g.email}</span>
                 {g.optional && <small>Optional</small>}
               </span>
-              {g.reply !== "needsAction" && <small className="cal-guest-reply">{REPLY[g.reply] ?? g.reply}</small>}
+              {g.reply && g.reply !== "needsAction" && <small className="cal-guest-reply">{REPLY[g.reply] ?? g.reply}</small>}
               {can && (
                 <>
                   <button className="link" onClick={() => guests(e.guests.map((x) => (x.email === g.email ? { ...x, optional: !x.optional } : x)))}>
@@ -307,7 +308,7 @@ export function EventPanel(p: Props) {
           {(pend || justSent) && (
             <div className="cal-pending" role="status" ref={(el) => void (el && pend && (before.current.height = el.offsetHeight))} style={justSent ? { minHeight: before.current.height } : undefined} onPointerEnter={() => setOver(true)} onPointerLeave={() => setOver(false)}>
               <small>{justSent ? "Nothing left to send." : e.unsent ? "Invitation not sent. Guests have not been told." : `Pending changes: ${e.changes.map((c) => LABEL[c] ?? c).join(", ")}. Guests have not been told.`}</small>
-              <div className="cal-split">
+              <Settle className="cal-split">
                 <button className="primary" disabled={justSent} onClick={() => p.onSend(true)}>
                   {e.unsent ? "Send invite" : "Send update"} <kbd>{formatKeys("Mod-Enter")}</kbd>
                 </button>
@@ -323,7 +324,7 @@ export function EventPanel(p: Props) {
                 >
                   <Icon name="down" size={14} />
                 </button>
-              </div>
+              </Settle>
             </div>
           )}
         </section>
@@ -401,11 +402,11 @@ export function EventPanel(p: Props) {
           {p.noteAsk && (
             <div className="cal-ask">
               <small>{p.noteAsk}</small>
-              <div>
+              <Settle>
                 <button className="link" onClick={() => p.onNote(true)}>
                   Write the note
                 </button>
-              </div>
+              </Settle>
             </div>
           )}
           {!p.draft && others.length > 0 && (
@@ -446,34 +447,38 @@ export function EventPanel(p: Props) {
         </footer>
       ) : (
         can &&
-        (p.deleting ? (
-          <footer className="cal-ask danger" role="alertdialog" aria-label="Delete this event">
-            <b>
-              Delete and tell {told > 0 ? `${told} ` : "the "}{told === 1 ? "guest" : "guests"}?
-            </b>
-            <small>{p.scope === "all" && repeating ? "Every event of the series is cancelled, and the guests are emailed." : "The guests are emailed that it is cancelled."}</small>
-            <div>
-              <button className="primary danger" autoFocus onClick={() => p.onDelete(true)}>
-                Delete and tell {told === 1 ? "guest" : "guests"}
+        (
+          <>
+            {p.deleting && (
+              <div className="cal-ask danger" role="alertdialog" aria-label="Delete this event">
+                <b>
+                  Delete and tell {told > 0 ? `${told} ` : "the "}{told === 1 ? "guest" : "guests"}?
+                </b>
+                <small>{p.scope === "all" && repeating ? "Every event of the series is cancelled, and the guests are emailed." : "The guests are emailed that it is cancelled."}</small>
+                <Settle>
+                  <button className="primary danger" autoFocus onClick={() => p.onDelete(true)}>
+                    Delete and tell {told === 1 ? "guest" : "guests"}
+                  </button>
+                  {/* Microsoft always emails a cancellation, so the quiet choice is not offered there. */}
+                  {account?.provider !== "microsoft" && (
+                    <button className="link" onClick={() => p.onDelete(false)}>
+                      Delete without email
+                    </button>
+                  )}
+                  <button className="link" onClick={p.onKeep}>
+                    Keep
+                  </button>
+                </Settle>
+              </div>
+            )}
+            {/* Delete stays where it was while the question is asked above it: no choice lands under the pointer that pressed it. */}
+            <footer>
+              <button className="cal-button danger" disabled={p.deleting} onClick={() => p.onDelete()}>
+                Delete <kbd>⌫</kbd>
               </button>
-              {/* Microsoft always emails a cancellation, so the quiet choice is not offered there. */}
-              {account?.provider !== "microsoft" && (
-                <button className="link" onClick={() => p.onDelete(false)}>
-                  Delete without email
-                </button>
-              )}
-              <button className="link" onClick={p.onKeep}>
-                Keep
-              </button>
-            </div>
-          </footer>
-        ) : (
-          <footer>
-            <button className="cal-button danger" onClick={() => p.onDelete()}>
-              Delete <kbd>⌫</kbd>
-            </button>
-          </footer>
-        ))
+            </footer>
+          </>
+        )
       )}
     </aside>
   );

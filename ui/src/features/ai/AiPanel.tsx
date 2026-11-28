@@ -1,5 +1,6 @@
 /** @part-of ui.ai */
 import { fileMenu, type MenuEvent, openMenu } from "../../shell/contextMenu";
+import { Settle } from "../../shell/Settle";
 import { ConnectModel, useModel } from "./Connect";
 import { HelperBlock, ResearchCard } from "./Helpers";
 import lokusMark from "./lokus.svg";
@@ -133,7 +134,7 @@ function Tool({ item }: { item: Extract<Item, { kind: "tool" }> }) {
       </button>
       {(asking || open) && <pre className="ai-tool-detail">{asking || !item.result ? said : item.result}</pre>}
       {asking && (
-        <div className="ai-ask">
+        <Settle className="ai-ask">
           <button className="primary" onClick={() => answer(item.id, true)}>
             Allow
           </button>
@@ -143,7 +144,7 @@ function Tool({ item }: { item: Extract<Item, { kind: "tool" }> }) {
             </button>
           )}
           <button onClick={() => answer(item.id, false)}>Decline</button>
-        </div>
+        </Settle>
       )}
     </div>
   );

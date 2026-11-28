@@ -78,7 +78,25 @@ async fn applied(dir: &Path, q: &Queued) -> Result<bool> {
                 ours.start.clone_from(&theirs.start);
                 ours.end.clone_from(&theirs.end);
             }
-            let still = differ(&theirs, ours);
+            let mut still = differ(&theirs, ours);
+            // Guests: the ones this change added are there and the ones it removed are not.
+            // Someone else adding a guest meanwhile does not make it unsent.
+            if let Ok(was) = serde_json::from_value::<Vec<String>>(q.body["was"]["guests"].clone())
+            {
+                let has = |e: &Event, who: &str| {
+                    e.guests.iter().any(|g| g.email.eq_ignore_ascii_case(who))
+                };
+                let added = ours
+                    .guests
+                    .iter()
+                    .filter(|g| !was.iter().any(|w| g.email.eq_ignore_ascii_case(w)));
+                let removed = was.iter().filter(|w| !has(ours, w));
+                if added.clone().all(|g| has(&theirs, &g.email))
+                    && !removed.clone().any(|w| has(&theirs, w))
+                {
+                    still.retain(|c| c != "guests");
+                }
+            }
             !changed.iter().any(|c| still.contains(c))
         }
         _ => false,

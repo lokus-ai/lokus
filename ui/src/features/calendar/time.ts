@@ -116,10 +116,8 @@ export interface Placed {
 
 /** The least an event is drawn tall, in minutes: a quarter of an hour, which has room for its title. */
 const MIN_HEIGHT = 15;
-/** The least width an event is drawn beside another, in pixels: room for a word. */
-const FACE = 50;
-/** The width at which an event beside others still shows a few words, in pixels: narrower, a later one is laid over instead when it can be. */
-const ROOMY = 72;
+/** The least width an event is drawn beside another, in pixels: room for about two words. A day shows as many side by side as fit at that width; one more is laid over a column when it can be, and the rest are behind "+N". */
+const FACE = 72;
 /** The least width of an event laid over a column, in pixels: its title's first word is whole. */
 const LAID = 64;
 /** The width a "+N" takes beside the events that did fit, in pixels. */
@@ -200,7 +198,7 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       // A column too narrow for a card set in by one step to show a word takes none: the event goes behind the "+N" instead.
       const holds = lie(beside).share * width - STEP >= LAID;
       // Over rather than beside as soon as one more column would leave each less than a few words wide.
-      const snug = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / ROOMY));
+      const snug = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE));
       const column = snug && holds ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
       if (free) free.push(item);
       else if (column >= 0) {

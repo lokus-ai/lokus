@@ -18,6 +18,16 @@ export function pickMenu(under: HTMLElement, label: string, items: ([value: stri
     if (fill) Object.assign(menu.style, { left: `${fill.left + 8}px`, width: `${fill.width - 16}px`, maxWidth: `${fill.width - 16}px`, minWidth: "0" });
     for (const button of menu.querySelectorAll<HTMLButtonElement>("button")) {
       button.title = button.textContent?.trim() ?? "";
+      // "Name · account": the account goes on a second, smaller line, so two calendars of one name are told apart.
+      const [name, ...rest] = (button.textContent ?? "").split(" · ");
+      if (rest.length) {
+        const second = document.createElement("small");
+        second.textContent = rest.join(" · ");
+        const first = document.createElement("span");
+        first.textContent = name;
+        button.replaceChildren(first, second);
+        button.classList.add("two");
+      }
       const colour = look.swatches?.[button.dataset.command ?? ""];
       if (!colour) continue;
       const dot = document.createElement("i");

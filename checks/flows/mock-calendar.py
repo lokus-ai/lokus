@@ -11,7 +11,7 @@ would have been emailed. /_ctl?offline=1|0 makes it unreachable; /_ctl?log=1 ret
 /_ctl?reset=1 forgets everything; /_ctl?delay=40 makes the next change answer that many seconds late
 (the change itself is made at once, as a slow provider does); /_ctl?fail=500 (or 429, with &after=3
 for Retry-After) refuses the next change that way without making it (&made=1: makes it, then
-answers that way); /_ctl?drop=1 makes the next
+answers that way; &also=someone@acme.test: someone else invites that person in between); /_ctl?drop=1 makes the next
 change and then closes the connection with no answer. It proves the app's side only: it is not the real services.
 """
 import base64, hashlib, json, os, re, sys, threading, time, uuid
@@ -308,6 +308,7 @@ class H(BaseHTTPRequestHandler):
                 if "offline" in q: S["offline"] = q["offline"] == "1"
                 if "delay" in q: S["delay"] = int(q["delay"])
                 if "fail" in q: S["fail"] = [int(q["fail"]), q.get("after"), q.get("made") == "1"]
+                if "also" in q: S["also"] = q["also"]
                 if "drop" in q: S["drop"] = q["drop"] == "1"
                 if "reset" in q:
                     S = fresh()
@@ -350,6 +351,10 @@ class H(BaseHTTPRequestHandler):
             except Exception as e:
                 import traceback; traceback.print_exc()
                 self.out(500, {"error": {"message": repr(e)}})
+            # Someone else invites one more person right after the change that then fails.
+            if getattr(self, "failed", 0) and S.get("also"):
+                e, who = find([p for p in u.path.split("/") if p][-1]), S.pop("also")
+                if e: e["attendees"].append({"email": who, "name": "", "optional": False, "response": "needsAction"}); bump(e); self.entry["also"] = who
             save()
         record(self.entry)
         if self.late < 0 and getattr(self, "failed", 0):

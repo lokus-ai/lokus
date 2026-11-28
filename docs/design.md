@@ -460,7 +460,16 @@ not come within 30 seconds, or is cut off, may still have been acted on. Before 
 reply or a delete is sent a second time, the event is read from the provider and compared
 (`sync::applied`; the queue row is marked in `tried` when it is first sent): what is already there
 is not sent again, and an event that is gone counts as deleted. An answer already given is not
-sent again, and a second identical reply or delete is not queued while one waits. A new event
+sent again, and a second identical reply or delete is not queued while one waits. A newer
+reply replaces a waiting one to the same event, or to the same series, that has not been handed
+to the provider yet: answered four times offline, the organiser hears once. A reply to one date
+and a reply to the series are different things and both stay. Guests are compared by what the
+change meant: the ones it added are there and the ones it removed are not; a guest someone else
+added meanwhile does not make it unsent. A change being sent is marked with the number of the
+program sending it (`sending.by`); when that program is no longer running the mark is dropped at
+the next sync, so a change cut off by a crash is read back and settled when the app next starts,
+and one a second window is still sending is left to it (a mark whose program cannot be asked
+about is dropped after five minutes, as before). A new event
 cannot be made twice either: Google is
 sent an event `id` of ours and Microsoft a `transactionId` (both the event's local id, which is in
 the queue with the change), and a second send is answered with the event already made. That id is
@@ -492,12 +501,11 @@ it (the open event's day is always among those shown), and only below that lies 
 the list on the left does when it has no room, and then the assistant folds away while the event
 is open and comes back when it closes; the bar gives up key hints,
 then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
-or the sync status. Overlapping events share the width as columns while each has room for a word (50 pixels), and one
+or the sync status. Overlapping events share the width as columns while each keeps 72 pixels, room for about two words; a day as wide as five such columns shows five, a narrower one fewer, and one
 widens into the columns to its right that are free while it lasts. An event that starts half an
 hour or more after everything still going is laid over them, set in by one step and outlined in
 the surface colour; when a group has no room for one more column, the event is laid over a single
-column whose event began half an hour before it, as it is once one more column would leave each
-under 72 pixels; one laid over a column widens into the columns to its right that hold nothing
+column whose event began half an hour before it, one laid over a column widens into the columns to its right that hold nothing
 while it lasts. Only what still has no room is behind a "+N" that
 opens the list for that time. A title takes the lines its card has before the time does, breaks
 between words only and ends in an ellipsis, never in a hyphen; a title with a word wider than
@@ -512,7 +520,13 @@ four used on top. A colleague's or teammate's busy time is a hatched block acros
 the events, with their initials while the pointer is on that day. The grid opens on the 08:00
 line, with its label. A guest's answer is a badge beside their initials (going, not going, maybe,
 no answer) and is written beside the name. An invitation not yet answered is an outlined box and
-Y, N and M answer it; one declined is a broken outline with its title struck through. O opens the
+Y, N and M answer it; one answered Maybe is hatched and outlined in its colour, where one
+accepted is a plain fill; one declined is a broken outline with its title struck through. The
+dark look has one set of rules, whether the app or the system chose it (`--cal-dark`). What a
+`title` says is shown in the app's own box: opaque, at most 280 pixels wide, wrapped, kept
+inside the window. Where an event's calendar is chosen, each calendar has its account on a
+second line. Opening an event keeps its day where it was: when the number of days changes, the
+grid slides from that day's old place over the same 140 milliseconds. O opens the
 meeting note. The panel shows times in the zone the week is shown in and names the event's own
 zone only when it differs. An account that is signed out has a "Sign in again" button. Escape
 closes the open event, also when typed in the assistant beside it. Every window redraws what is
@@ -520,7 +534,13 @@ waiting when any of them changes the calendar. An event is a button: Tab and the
 between events, Enter opens one. One invitation that reaches two connected accounts is shown once
 (by its iCalUID; the organiser's copy). Deleting an event with guests asks once: "Delete and tell
 N guests?", with "Delete without email" (not offered on Microsoft 365, which always emails a
-cancellation). Drag on the grid to make an event, drag an event to move it,
+cancellation). The question opens above the Delete button, which stays where it was, switched
+off. Every group of choices that sends or deletes (this question, the send block, the meeting
+note question, the assistant's approval card) ignores a click for half a second after it
+appears and for half a second after each click it ignored, so a double or triple click aimed at
+what stood there before does nothing (`ui/src/shell/Settle.tsx`). Deleting an event without
+guests hides it at once and shows "Deleted · Undo" for five seconds (also Cmd+Z); only then is
+the delete queued. Closing the app within those five seconds keeps the event. Drag on the grid to make an event, drag an event to move it,
 its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
 meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
 any zone. A repeating event is changed, answered or deleted as "This event" or "All events".

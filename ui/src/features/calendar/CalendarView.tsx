@@ -1,5 +1,5 @@
 /** @part-of ui.calendar */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { onCalendarSynced, runCalendar, syncCalendar, type CalBusy, type CalEvent, type CalMember, type CalSlot, type CalStatus } from "../../bridge/calendar";
 import { formatKeys } from "../../shell/commands";
 import { Icon } from "../../shell/Icon";
@@ -168,7 +168,11 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   const colors = useMemo(() => new Map(status?.calendars.map((c) => [`${c.account}|${c.id}`, c.color]) ?? []), [status]);
   const colorOf = useCallback((e: CalEvent) => colors.get(`${e.account}|${e.calendar}`) ?? "#4f7cff", [colors]);
 
-  const shown = draft ? [...events, draft] : events;
+  // A delete that can still be undone: hidden here, not yet asked of the provider.
+  const gone = useRef<{ args: Record<string, unknown>; timer: number } | null>(null);
+  const [hidden, setHidden] = useState<{ key?: string; series?: string } | null>(null);
+  const kept_ = hidden ? events.filter((e) => (hidden.series ? e.series !== hidden.series : e.key !== hidden.key)) : events;
+  const shown = draft ? [...kept_, draft] : kept_;
   const current = selected === DRAFT ? draft : (events.find((e) => e.key === selected) ?? null);
 
   // When a panel takes room and fewer days fit, the open event's day stays among them.
@@ -200,9 +204,14 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   }, [current?.key]);
   const panel = current ?? left;
   // A change in how many days are shown is eased in.
-  useEffect(() => {
+  const held = useRef<{ day: string; left: number; at: number } | null>(null);
+  useLayoutEffect(() => {
+    const from = held.current && performance.now() - held.current.at < 1000 ? held.current : null;
+    held.current = null;
     if (!mainEl || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    mainEl.querySelector(".cal-grid")?.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 140, easing: "ease-out" });
+    const column = from && mainEl.querySelector<HTMLElement>(`[data-day="${from.day}"]`);
+    const shift = column && from ? from.left - column.getBoundingClientRect().left : 0;
+    mainEl.querySelector(".cal-grid")?.animate([{ opacity: 0.35, transform: `translateX(${shift}px)` }, { opacity: 1, transform: "none" }], { duration: 140, easing: "ease-out" });
   }, [fit]);
   useEffect(() => {
     if (!current || beside) return setPin(null);
@@ -220,6 +229,10 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
   }, [current?.key, current?.reply, current?.queued]);
 
   const select = (key: string | null) => {
+    // Where the day of the event being opened stands now: if the panel leaves room for fewer days, the week eases from there.
+    const opened = key === DRAFT ? draft : events.find((e) => e.key === key);
+    const column = opened && mainEl?.querySelector<HTMLElement>(`[data-day="${dayStart(opened.all_day ? instant(Date.parse(opened.start), zone) : Date.parse(opened.start), zone)}"]`);
+    held.current = column ? { day: column.dataset.day!, left: column.getBoundingClientRect().left, at: performance.now() } : null;
     setSelected(key);
     setScope("this");
     setDeleting(false);
@@ -298,10 +311,30 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     if (made) (madeAt.current = Date.now()), select(null);
   };
   /** Delete. With guests who were told of it, the panel asks first, once: `notify` is the answer. */
+  const settle = (undo = false) => {
+    const was = gone.current;
+    if (!was) return;
+    window.clearTimeout(was.timer);
+    gone.current = null;
+    if (undo) return setHidden(null);
+    void act("calendar.event.delete", was.args).then(() => setHidden(null));
+  };
+  const settleRef = useRef(settle);
+  settleRef.current = settle;
+  useEffect(() => () => settleRef.current(), []);
   const remove = async (notify?: boolean) => {
     if (!current || selected === DRAFT) return select(null);
     if (notify === undefined && !current.unsent && (current.guests.length > 0 || current.changes.includes("guests"))) return setDeleting(true);
-    await act("calendar.event.delete", { key: current.key, scope, notify: notify ?? true });
+    if (notify === undefined) {
+      // No guest to tell: it goes from the screen now and to the provider a few seconds later, unless undone.
+      settle();
+      const args = { key: current.key, scope, notify: true };
+      const hide = scope === "all" && current.series ? { series: current.series } : { key: current.key };
+      gone.current = { args, timer: window.setTimeout(settle, 5000) };
+      setHidden(hide);
+      return select(null);
+    }
+    await act("calendar.event.delete", { key: current.key, scope, notify });
     select(null);
   };
   const note = async (shared = false) => {
@@ -373,6 +406,7 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
     if (e.key === "Escape" && dayOpen && !selected) return setDayOpen(false);
     if (e.key === "Escape" && (deleting || noteAsk)) return (setDeleting(false), setNoteAsk(null));
     if (e.key === "Escape" && selected) return select(null);
+    if (!typing && (e.metaKey || e.ctrlKey) && e.key === "z" && gone.current) return (e.preventDefault(), settle(true));
     if (typing || e.metaKey || e.ctrlKey || e.altKey || document.querySelector(".palette, [role=dialog]")) return;
     const step = (by: number) => setAnchor(addDays(from, by * turn, zone));
     if (/^[1-9]$/.test(e.key)) (setCount(Number(e.key)), keep("days", e.key));
@@ -677,6 +711,14 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
             {!tight && <kbd>C</kbd>}
           </button>
         </header>
+        {hidden && (
+          <div className="cal-undo" role="status">
+            Deleted
+            <button className="link" onClick={() => settle(true)}>
+              Undo <kbd>{formatKeys("Mod-Z")}</kbd>
+            </button>
+          </div>
+        )}
         <Grid days={days} zone={zone} zoneLabel={offsetName(zone, days[0])} events={shown} selected={selected} overlays={overlays} colorOf={colorOf} onSelect={select} onNew={startDraft} onMove={(e, start, end) => void act("calendar.event.update", { key: e.key, scope: "this", start, end })} />
       </section>
 

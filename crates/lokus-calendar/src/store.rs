@@ -63,7 +63,7 @@ impl Store {
              CREATE TABLE IF NOT EXISTS events (key TEXT PRIMARY KEY, account TEXT, calendar TEXT, start TEXT, end TEXT, json TEXT);
              CREATE INDEX IF NOT EXISTS events_by_time ON events (start, end);
              CREATE TABLE IF NOT EXISTS held (key TEXT PRIMARY KEY, json TEXT);
-             CREATE TABLE IF NOT EXISTS sending (n INTEGER PRIMARY KEY, at TEXT);
+             CREATE TABLE IF NOT EXISTS sending (n INTEGER PRIMARY KEY, at TEXT, by INTEGER);
              CREATE TABLE IF NOT EXISTS tried (n INTEGER PRIMARY KEY);
              CREATE TABLE IF NOT EXISTS outbox (n INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT, key TEXT, op TEXT, body TEXT,
                notify INTEGER, error TEXT, made TEXT);
@@ -71,6 +71,8 @@ impl Store {
              CREATE TABLE IF NOT EXISTS notes (key TEXT PRIMARY KEY, folder TEXT, path TEXT);
              CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT);",
         )?;
+        // A file made before the sender of a change was recorded gains the column; otherwise this fails, harmlessly.
+        let _ = db.execute("ALTER TABLE sending ADD COLUMN by INTEGER", []);
         // Events read before each carried its invitation id are read once more, in full.
         db.execute_batch(
             "UPDATE calendars SET position = NULL WHERE NOT EXISTS (SELECT 1 FROM settings WHERE name = 'uids');
@@ -635,6 +637,18 @@ impl Store {
         // One delete of an event waits at a time, and a reply is not added when the last one waiting
         // is the same: asked for three times at once it is still one request and one email, and
         // yes, no, yes still ends in yes.
+        // A newer reply replaces one to the same event (or the same series) that has not been
+        // handed to the provider yet: answered four times offline, the organiser hears once.
+        if op == "reply" {
+            self.db.execute(
+                "DELETE FROM outbox WHERE op = 'reply' AND account = ?1 AND error IS NULL
+                   AND n NOT IN (SELECT n FROM sending) AND n NOT IN (SELECT n FROM tried)
+                   AND json_extract(body, '$.scope') = json_extract(?3, '$.scope')
+                   AND (key = ?2 OR (json_extract(?3, '$.scope') = 'all'
+                     AND json_extract(body, '$.event.series') = json_extract(?3, '$.event.series')))",
+                params![account, key, body.to_string()],
+            )?;
+        }
         self.db.execute(
             "INSERT INTO outbox (account, key, op, body, notify, made) SELECT ?1, ?2, ?3, ?4, ?5, ?6
              WHERE ?3 NOT IN ('delete', 'reply') OR NOT EXISTS (SELECT 1 FROM outbox o WHERE key = ?2 AND op = ?3
@@ -689,14 +703,28 @@ impl Store {
 
     /// Take a waiting change to send it. The app and the command line share this file, and each
     /// sends what waits: only the one that takes a change sends it, so it reaches the provider
-    /// once. A change taken by something that then died is free again after five minutes.
+    /// once. A change taken by something that then died is free again at once when that program is
+    /// seen to be gone, and after five minutes otherwise.
     pub fn take(&self, n: i64) -> Result<bool> {
         let stale = stamp(chrono::Utc::now() - chrono::Duration::minutes(5));
         self.db
             .execute("DELETE FROM sending WHERE at < ?1", [stale])?;
+        // Taken by a program that is no longer running (the app was quit mid-send): free now,
+        // not in five minutes. One still running, a second window or the command line, keeps it.
+        let me = std::process::id();
+        let mut by = self
+            .db
+            .prepare("SELECT DISTINCT by FROM sending WHERE by IS NOT ?1")?;
+        let others: Vec<Option<u32>> = by
+            .query_map([me], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        for gone in others.into_iter().flatten().filter(|p| !alive(*p)) {
+            self.db
+                .execute("DELETE FROM sending WHERE by = ?1", [gone])?;
+        }
         let taken = self.db.execute(
-            "INSERT OR IGNORE INTO sending (n, at) SELECT n, ?2 FROM outbox WHERE n = ?1",
-            params![n, now()],
+            "INSERT OR IGNORE INTO sending (n, at, by) SELECT n, ?2, ?3 FROM outbox WHERE n = ?1",
+            params![n, now(), me],
         )?;
         Ok(taken == 1)
     }
@@ -833,4 +861,16 @@ impl Store {
         )?;
         Ok(())
     }
+}
+
+/// Whether a program with this number is running. Where that cannot be asked, it is taken to be.
+fn alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    return std::process::Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_or(true, |s| s.success());
+    #[cfg(not(unix))]
+    return pid > 0;
 }

@@ -285,7 +285,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
           {days.map((day, i) => {
             const next = days[i + 1] ?? addDays(day, 1, zone);
             return (
-              <div key={day} className={`cal-column${weekend(day) ? " weekend" : ""}`} onPointerDown={(e) => begin("new", e)} onPointerMove={move} onPointerUp={finish}>
+              <div key={day} data-day={day} className={`cal-column${weekend(day) ? " weekend" : ""}`} onPointerDown={(e) => begin("new", e)} onPointerMove={move} onPointerUp={finish}>
                 {overlays.map((o) =>
                   o.times
                     .filter(([s, e]) => Date.parse(s) < next && Date.parse(e) > day)
@@ -332,7 +332,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   return (
                     <div
                       key={e.key}
-                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : ""}${tight ? " tight" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 72 ? " slim" : ""}${wraps ? " wraps" : ""}${dragged ? " dragged" : ""}`}
+                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.reply === "tentative" ? " tentative" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : ""}${tight ? " tight" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 72 ? " slim" : ""}${wraps ? " wraps" : ""}${dragged ? " dragged" : ""}`}
                       style={{ top: p.top * PX, height: tall, left: `calc((100% - 8px) * ${p.left} + 1px)`, width: `calc((100% - 8px) * ${right - p.left} - 2px)`, zIndex: picked ? 16 : p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
                       title={`${e.title || "(No title)"}\n${clock(e.start, zone)} – ${clock(e.end, zone)}`}
                       role="button"

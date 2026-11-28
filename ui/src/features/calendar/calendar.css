@@ -110,7 +110,8 @@ div.cal-person { color: var(--fg); }
 .cal-standin { color: var(--fg-3); padding: 0 8px; font-size: 11px; }
 
 /* ---- The bar: one row, every item 28 high on one line, 8 apart. What gives way, and in what order, is CalendarView's. ---- */
-.cal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cal-main { position: relative; overflow-x: clip; flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cal-undo { position: absolute; z-index: 30; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg); box-shadow: 0 4px 16px rgb(0 0 0 / 0.18); font-size: var(--text-caption); }
 .cal-bar { height: var(--cal-bar); flex: none; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 10px; }
 .cal-bar > * { flex: none; }
 .cal-bar h2 { flex: 0 1 auto; min-width: 0; margin: 0 0 0 2px; font-size: var(--text-h3); line-height: 28px; font-weight: 650; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -142,15 +143,15 @@ div.cal-person { color: var(--fg); }
 .cal-allday-cell { min-width: 0; min-height: 26px; padding: 3px 8px 3px 1px; display: flex; flex-direction: column; gap: 2px; border-left: 1px solid var(--border); }
 .cal-hours { position: relative; background-image: linear-gradient(to bottom, var(--border) 1px, transparent 1px); background-size: 100% 60px; background-position: 0 -1px; }
 .cal-column { position: relative; min-width: 0; border-left: 1px solid var(--border); touch-action: none; }
-.cal-column.weekend, .cal-allday-cell.weekend { background-color: color-mix(in srgb, var(--fg) 2.5%, transparent); }
+.cal-column.weekend, .cal-allday-cell.weekend { background-color: color-mix(in srgb, var(--fg) calc(2.5% + 2% * var(--cal-dark)), transparent); }
 
 /* An event: one box, one radius, the calendar's colour as a straight strip the box clips. */
-.cal-event, .cal-chip { --fill: color-mix(in srgb, var(--c) 16%, var(--bg)); --ink: color-mix(in oklab, var(--c) 58%, var(--fg)); border-radius: var(--radius-sm); background: var(--fill); color: var(--ink); box-shadow: 0 0 0 1px var(--bg); overflow: hidden; cursor: default; user-select: none; -webkit-user-select: none; transition: background var(--fast), filter var(--fast); }
+.cal-event, .cal-chip { --fill: color-mix(in srgb, var(--c) calc(16% + 10% * var(--cal-dark)), var(--bg)); --ink: color-mix(in oklab, var(--c) calc(58% - 20% * var(--cal-dark)), color-mix(in srgb, #fff calc(100% * var(--cal-dark)), var(--fg))); border-radius: var(--radius-sm); background: var(--fill); color: var(--ink); box-shadow: 0 0 0 1px var(--bg); overflow: hidden; cursor: default; user-select: none; -webkit-user-select: none; transition: background var(--fast), filter var(--fast); }
 .cal-event { position: absolute; min-width: 0; padding: 3px 6px 0 9px; display: flex; flex-direction: column; font-size: var(--text-caption); line-height: 15px; }
-.cal-event:hover, .cal-chip:hover { --fill: color-mix(in srgb, var(--c) 24%, var(--bg)); }
+.cal-event:hover, .cal-chip:hover { --fill: color-mix(in srgb, var(--c) calc(24% + 10% * var(--cal-dark)), var(--bg)); }
 .cal-event b { font-weight: 550; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 /* The time: its start, then its end when there is room for it; never in the title's way. */
-.cal-event span { display: flex; flex-wrap: wrap; height: 15px; overflow: hidden; font-size: 11px; opacity: 0.9; white-space: pre; font-variant-numeric: tabular-nums; flex: none; }
+.cal-event span { display: flex; flex-wrap: wrap; height: 15px; overflow: hidden; font-size: 11px; opacity: calc(0.9 + 0.1 * var(--cal-dark)); white-space: pre; font-variant-numeric: tabular-nums; flex: none; }
 .cal-event span i { font-style: normal; flex: none; }
 .cal-event.short { padding-top: 0; }
 /* A short event's one line: the title, then the time when there is room; what does not fit is not shown at all. */
@@ -188,7 +189,9 @@ div.cal-person { color: var(--fg); }
 .cal-more-list i { width: 3px; height: 14px; flex: none; border-radius: 2px; background: var(--c); }
 .cal-more-list b { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-more-list small { flex: none; color: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cal-event.pending:not(.selected) { background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--c) 12%, transparent) 5px 10px); }
+/* Maybe: hatched and outlined in its colour, as Google and Cron draw it; a plain fill means Going. */
+.cal-event.tentative:not(.selected) { --fill: var(--bg); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 70%, var(--bg)), 0 0 0 1px var(--bg); background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) calc(30% + 10% * var(--cal-dark)), transparent) 0 4px, transparent 4px 8px); }
+.cal-event.pending:not(.selected, .tentative) { background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--c) 12%, transparent) 5px 10px); }
 .cal-event.dragged { z-index: 17 !important; box-shadow: 0 0 0 1px var(--bg), var(--shadow-pop); transition: none; }
 .cal-event.ghost { --c: var(--accent); z-index: 17; pointer-events: none; }
 .cal-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; cursor: ns-resize; }
@@ -259,7 +262,8 @@ div.cal-person { color: var(--fg); }
 .cal-ask small { color: var(--fg-2); font-size: var(--text-caption); line-height: 16px; overflow-wrap: anywhere; }
 .cal-ask div { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 4px; }
 .cal-panel footer { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
-.cal-panel footer.cal-ask { margin: 0; padding: 12px 16px; align-items: stretch; }
+.cal-panel > .cal-ask { flex: none; margin: 0; padding: 12px 16px 2px; border-top: 1px solid var(--border); }
+.cal-panel > .cal-ask + footer { border-top: 0; }
 /* Today, in the same rows as the event's. */
 .cal-item { display: flex; align-items: stretch; gap: 8px; min-height: 40px; padding: 4px 8px; border-radius: var(--radius-sm); text-align: left; min-width: 0; }
 .cal-item:hover { background: var(--bg-hover); }
@@ -273,26 +277,11 @@ div.cal-person { color: var(--fg); }
 .cal-keys > div span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-keys kbd { min-width: 20px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: var(--radius-xs); background: var(--bg-hover); white-space: pre; }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cal-event, :root:not([data-theme="light"]) .cal-chip { --fill: color-mix(in srgb, var(--c) 26%, var(--bg)); --ink: color-mix(in oklab, var(--c) 38%, #fff); }
-  :root:not([data-theme="light"]) .cal-event:hover, :root:not([data-theme="light"]) .cal-chip:hover { --fill: color-mix(in srgb, var(--c) 34%, var(--bg)); }
-}
-:root[data-theme="dark"] .cal-event, :root[data-theme="dark"] .cal-chip { --fill: color-mix(in srgb, var(--c) 26%, var(--bg)); --ink: color-mix(in oklab, var(--c) 38%, #fff); }
-:root[data-theme="dark"] .cal-event:hover, :root[data-theme="dark"] .cal-chip:hover { --fill: color-mix(in srgb, var(--c) 34%, var(--bg)); }
-:root[data-theme="dark"] .cal-event.selected, :root[data-theme="dark"] .cal-chip.selected { --fill: var(--c); --ink: #fff; }
+/* Dark, chosen or the system's, is one switch; every rule that differs in the dark reads it, so the two cannot drift. */
+:root { --cal-dark: 0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cal-dark: 1; } }
+:root[data-theme="dark"] { --cal-dark: 1; }
 @media (prefers-reduced-motion: reduce) { .calendar * { transition: none !important; } }
-:root[data-theme="dark"] .cal-column.weekend, :root[data-theme="dark"] .cal-allday-cell.weekend { background-color: color-mix(in srgb, var(--fg) 4.5%, transparent); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cal-column.weekend, :root:not([data-theme="light"]) .cal-allday-cell.weekend { background-color: color-mix(in srgb, var(--fg) 4.5%, transparent); }
-}
-:root[data-theme="dark"] .cal-event span { opacity: 1; }
-:root[data-theme="dark"] .cal-event:is(.unanswered, .declined):not(.selected) { --fill: var(--bg); }
-:root[data-theme="dark"] .cal-event.declined:not(.selected) { --ink: var(--fg-2); }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .cal-event:is(.unanswered, .declined):not(.selected) { --fill: var(--bg); }
-  :root:not([data-theme="light"]) .cal-event.declined:not(.selected) { --ink: var(--fg-2); }
-}
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cal-event span { opacity: 1; } }
 
 /* ---- One corner for every event, however short: the app's small radius, never more than a third of its height. ---- */
 .cal-event, .cal-chip, .cal-more, .cal-event.ghost { border-radius: min(var(--radius-sm), calc(var(--tall, 60px) / 3)); }
@@ -354,7 +343,10 @@ div.cal-person { color: var(--fg); }
 .cal-foot .cal-refused { margin: 0; }
 /* The calendar's menus with a colour dot before a choice. */
 .cal-menu button { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.cal-menu button.two { height: auto; padding-top: 4px; padding-bottom: 4px; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0; align-items: center; line-height: 16px; text-align: left; }
+.cal-menu button.two span { grid-column: 2; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
+.cal-menu button.two small { grid-column: 2; color: var(--fg-3); font-size: 11px; line-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: pre; }
 .cal-menu button i { display: inline-block; width: 10px; height: 10px; margin-right: 8px; border-radius: 3px; }
 /* What a control is for, shown on hover in the app's look. */
-.cal-tip { position: fixed; z-index: 1000; max-width: 280px; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-size: var(--text-caption); line-height: 16px; box-shadow: var(--shadow-pop); pointer-events: none; overflow-wrap: anywhere; }
+.cal-hint { position: fixed; z-index: 1000; max-width: min(280px, calc(100vw - 16px)); white-space: pre-line; opacity: 1; padding: 4px 8px; border-radius: var(--radius-sm); background: var(--bg); color: var(--fg); font-size: var(--text-caption); line-height: 16px; box-shadow: var(--shadow-pop); pointer-events: none; overflow-wrap: anywhere; }
 .cal-pending .cal-split { margin-top: auto; }

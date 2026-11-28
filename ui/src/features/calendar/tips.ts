@@ -3,7 +3,7 @@
 /** Shows what an element's `title` says in the app's own look, instead of the system's grey box. Returns how to stop. */
 export function ownTips(root: HTMLElement): () => void {
   const tip = document.body.appendChild(document.createElement("div"));
-  tip.className = "cal-tip";
+  tip.className = "cal-hint";
   tip.setAttribute("role", "tooltip");
   tip.hidden = true;
   let wait = 0;
@@ -27,11 +27,13 @@ export function ownTips(root: HTMLElement): () => void {
       if (!el.isConnected) return;
       tip.textContent = text;
       tip.hidden = false;
+      // Measured from the corner, so the edge of the window does not narrow it first.
+      Object.assign(tip.style, { left: "0px", top: "0px" });
       const box = el.getBoundingClientRect();
       const mine = tip.getBoundingClientRect();
       const below = box.bottom + 6 + mine.height <= window.innerHeight;
       tip.style.left = `${Math.max(8, Math.min(window.innerWidth - mine.width - 8, box.left + box.width / 2 - mine.width / 2))}px`;
-      tip.style.top = `${below ? box.bottom + 6 : box.top - 6 - mine.height}px`;
+      tip.style.top = `${Math.max(8, below ? box.bottom + 6 : box.top - 6 - mine.height)}px`;
     }, 500);
   };
   const stop = new AbortController();
