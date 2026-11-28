@@ -467,7 +467,8 @@ or the sync status. Overlapping events sit side by side while each has room for 
 the later is set in and laid over the earlier. An event is a button: Tab and the arrow keys move
 between events, Enter opens one. One invitation that reaches two connected accounts is shown once
 (by its iCalUID; the organiser's copy). Deleting an event with guests asks once: "Delete and tell
-N guests?", with "Delete without email". Drag on the grid to make an event, drag an event to move it,
+N guests?", with "Delete without email" (not offered on Microsoft 365, which always emails a
+cancellation). Drag on the grid to make an event, drag an event to move it,
 its lower edge to change its length. Replies are Yes, No, Maybe. "Add Google Meet" or "Add Teams
 meeting" asks the provider for a link. Each event keeps its own time zone and the grid is shown in
 any zone. A repeating event is changed, answered or deleted as "This event" or "All events".
