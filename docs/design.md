@@ -495,8 +495,9 @@ under 72 pixels; one laid over a column widens into the columns to its right tha
 while it lasts. Only what still has no room is behind a "+N" that
 opens the list for that time. A title takes the lines its card has before the time does, breaks
 between words only and ends in an ellipsis, never in a hyphen; a title with a word wider than
-its card stays on one line. The open event is drawn over the later ones and out to the day's
-edge, so its whole title shows (one of three hours or more stays where it is). The event panel
+its card stays on one line. The open event is drawn over the later ones, out to the day's
+edge or to an event beside it that began with it, which stays in reach (one of three hours or
+more stays where it is). The event panel
 comes and goes over 140 milliseconds and a change in how many days are shown fades in over the
 same; neither moves when the system asks for reduced motion. An all-day event is one bar across the days it covers; a click in
 the all-day row, or a drag across days, starts one, and the panel has an "All day" switch. The

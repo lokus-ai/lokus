@@ -305,7 +305,9 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   // Only the part no later event lies over is written on; the open event is drawn over the rest and out to the day's edge, so all of it is.
                   // One of three hours or more has the room for its title already, and drawn over the rest would hide the day.
                   const picked = e.key === selected && p.height < 180;
-                  const right = picked ? 1 : p.right;
+                  // It stops at an event beside it that began with it or before it, and at the "+N": those stay in reach.
+                  const beside = [...laid[i].placed.filter((o) => o.top < p.top + 30), ...laid[i].more].filter((o) => o !== p && o.left >= p.right - 0.001 && o.top < p.top + p.height && ("height" in o ? o.top + o.height > p.top : true));
+                  const right = picked ? Math.min(1, ...beside.map((o) => o.left)) : p.right;
                   const wide = (right - p.left) * (dayWidth - 8) - 2;
                   const face = Math.max(14, picked ? tall : Math.min(tall, p.clear * PX - 1));
                   // A line is 15 pixels; a part cut short by a later event closes its lines up to 13, so half an hour still holds two.
