@@ -194,7 +194,9 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       const full = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE));
       // No room for one more column: over a column whose event began long enough ago, if nothing lies on it yet.
       const taken = (k: number) => going.some((p) => home.get(p)!.over?.cluster === beside && home.get(p)!.over?.column === k);
-      const column = full ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
+      // A column too narrow for a card set in by one step takes none: the event goes behind the "+N" instead.
+      const holds = lie(beside).share * width - STEP >= FACE - STEP;
+      const column = full && holds ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
       if (free) free.push(item);
       else if (column >= 0) {
         cluster = { columns: [[item]], depth: above, from: 0, over: { cluster: beside, column } };
