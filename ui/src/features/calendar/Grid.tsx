@@ -204,9 +204,11 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
       return { event, from, to, row, before: event.start.slice(0, 10) < dates[0], after: event.end.slice(0, 10) > nextDate(dates[dates.length - 1]) };
     });
   /** A press in the all-day row: the days dragged across become a whole-day event. */
+  const spanned = useRef(0);
   const dayAt = (e: { clientX: number }) => at({ clientX: e.clientX, clientY: 0 }).day;
   const allDayDone = () => {
     if (!span) return;
+    spanned.current = Date.now();
     const [a, b] = [Math.min(span.from, span.to), Math.max(span.from, span.to)];
     setSpan(null);
     onNew(`${dates[a]}T00:00:00Z`, `${nextDate(dates[b])}T00:00:00Z`, undefined, true);
@@ -245,6 +247,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                 style={{ gridColumn: i + 2, gridRow: `1 / span ${Math.max(1, rows.length)}` }}
                 title="Click, or drag across days, for an all-day event"
                 onPointerDown={(e) => e.button === 0 && setSpan({ from: i, to: i })}
+                onClick={() => Date.now() - spanned.current > 400 && onNew(`${dates[i]}T00:00:00Z`, `${nextDate(dates[i])}T00:00:00Z`, undefined, true)}
               />
             ))}
             {allDay.map(({ event: e, from, to, row, before, after }) => (
@@ -293,7 +296,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   const tall = p.height * PX - 2;
                   // A line of the title is 15 pixels: under two lines it is the title alone on one, then the time when there is room.
                   // Only the part no later event lies over is written on; a narrow one keeps its title to one line.
-                  const wide = (p.right - p.left) * dayWidth - (p.right === 1 ? 8 : 2);
+                  const wide = (p.right - p.left) * (dayWidth - 8) - 2;
                   const face = Math.max(14, Math.min(tall, p.clear * PX - 1));
                   const room = Math.floor((face - 5) / 15);
                   const short = face < 34;
@@ -301,7 +304,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   const dragged = drag?.event?.key === e.key && drag.moved;
                   const words = (
                     <>
-                      <b style={!short && lines >= 2 ? { WebkitLineClamp: wide < 96 ? 1 : lines - 1 } : undefined}>{e.title || "(No title)"}</b>
+                      <b className={short || lines < 3 || wide < 96 ? "one" : ""} style={!short && lines >= 3 && wide >= 96 ? { WebkitLineClamp: lines - 1 } : undefined}>{e.title || "(No title)"}</b>
                       <span>
                         <i>{clock(e.start, zone)}</i>
                         <i>{e.pending || e.unsent ? " · not sent" : e.queued ? " · waiting" : ` – ${clock(e.end, zone)}`}</i>
@@ -311,8 +314,8 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   return (
                     <div
                       key={e.key}
-                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${dragged ? " dragged" : ""}`}
-                      style={{ top: p.top * PX, height: tall, left: `calc(${p.left * 100}% + 1px)`, width: `calc(${(p.right - p.left) * 100}% - ${p.right === 1 ? 9 : 2}px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
+                      className={`cal-event${e.key === selected ? " selected" : ""}${e.reply === "needsAction" ? " unanswered" : ""}${e.reply === "declined" ? " declined" : ""}${e.pending || e.unsent ? " pending" : ""}${short ? " short" : lines < 2 ? " one" : ""}${tall < 18 ? " tiny" : ""}${wide < 96 ? " lane" : ""}${wide < 64 ? " slim" : ""}${dragged ? " dragged" : ""}`}
+                      style={{ top: p.top * PX, height: tall, left: `calc((100% - 8px) * ${p.left} + 1px)`, width: `calc((100% - 8px) * ${p.right - p.left} - 2px)`, zIndex: p.depth + 1, "--c": colorOf(e), "--h": `${face}px`, "--tall": `${tall}px` } as CSSProperties}
                       title={`${e.title || "(No title)"}\n${clock(e.start, zone)} – ${clock(e.end, zone)}`}
                       role="button"
                       tabIndex={0}
@@ -332,7 +335,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                   <button
                     key={`more${m.top}`}
                     className="cal-more"
-                    style={{ top: m.top * PX, left: `calc(${m.left * 100}% + 1px)`, width: `calc(${(m.right - m.left) * 100}% - 9px)`, zIndex: m.depth + 1 }}
+                    style={{ top: m.top * PX, left: `calc((100% - 8px) * ${m.left} + 1px)`, width: `calc((100% - 8px) * ${m.right - m.left} - 2px)`, zIndex: m.depth + 1 }}
                     title={`${m.events.length} more at ${clock(m.events[0].start, zone)}: ${m.events.map((e) => e.title || "(No title)").join(", ")}`}
                     aria-label={`${m.events.length} more events at ${clock(m.events[0].start, zone)}`}
                     aria-haspopup="menu"

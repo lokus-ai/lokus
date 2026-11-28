@@ -446,8 +446,16 @@ wait behind it. Discard first reads the event back from the provider and drops n
 cannot be asked. A refused delete has no event left to show the choice on, so the event comes back
 as the provider has it and nothing is left waiting. A sign-in the provider has ended
 (`invalid_grant` on renewal) is forgotten, so the account shows "Sign in again". The assistant asks
-each time before a retry, as for anything that emails people. An answer that does not come within 30 seconds, or is cut off, may still have been
-acted on, so the change is sent again, and a new event cannot be made twice by that: Google is
+each time before a retry, as for anything that emails people: creating, changing, sending, retrying,
+deleting and answering an event always wait for a yes, also when the assistant is set to change
+notes without asking, and are never offered as "Allow all like this" (the list is `EMAILS` in
+`crates/lokus-calendar/src/commands.rs`; the window is told with each request). An answer that does
+not come within 30 seconds, or is cut off, may still have been acted on. Before such a change, a
+reply or a delete is sent a second time, the event is read from the provider and compared
+(`sync::applied`; the queue row is marked in `tried` when it is first sent): what is already there
+is not sent again, and an event that is gone counts as deleted. An answer already given is not
+sent again, and a second identical reply or delete is not queued while one waits. A new event
+cannot be made twice either: Google is
 sent an event `id` of ours and Microsoft a `transactionId` (both the event's local id, which is in
 the queue with the change), and a second send is answered with the event already made. That id is
 chosen when the draft is opened and passed to `calendar.event.create` (`id`), which answers a
@@ -477,10 +485,15 @@ locale's first weekday); an open event takes its own column while one such day s
 it (the open event's day is always among those shown), and only below that lies over the week, as
 the list on the left does when it has no room; the bar gives up key hints,
 then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
-or the sync status. Overlapping events that start together share the width equally as columns while each has room for a word (56 pixels);
-those that do not fit are behind a "+N more" that opens the list for that time; a later
-one is set in by one step and laid over the earlier, outlined in the surface colour, all ending on
-the same right edge. A colleague's or teammate's busy time is a hatched block across the day behind
+or the sync status. Overlapping events share the width as columns while each has room for a word (50 pixels), and one
+widens into the columns to its right that are free while it lasts. An event that starts half an
+hour or more after everything still going is laid over them, set in by one step and outlined in
+the surface colour; when a group has no room for one more column, the event is laid over a single
+column whose event began half an hour before it. Only what still has no room is behind a "+N" that
+opens the list for that time. An all-day event is one bar across the days it covers; a click in
+the all-day row, or a drag across days, starts one, and the panel has an "All day" switch. The
+time zone is picked from a list to type in, with the chosen zone, this computer's and the last
+four used on top. A colleague's or teammate's busy time is a hatched block across the day behind
 the events, with their initials while the pointer is on that day. The grid opens on the 08:00
 line, with its label. A guest's answer is a badge beside their initials (going, not going, maybe,
 no answer) and is written beside the name. An invitation not yet answered is an outlined box and

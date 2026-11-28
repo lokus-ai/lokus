@@ -72,8 +72,8 @@ export function ZonePick({ value, label, title, at, outlined, onChange }: Props)
             {list.length === 0 && <small>No time zone matches.</small>}
             {list.map((z, i) => (
               <button key={z} role="option" aria-selected={z === value} className={i === on ? "on" : ""} ref={i === on ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined} title={name(z)} onPointerMove={() => on !== i && setOn(i)} onClick={() => pick(z)}>
-                <span>{name(z)}</span>
-                <small>{z === value ? "Chosen · " : !words.length && z === localZone ? "Here · " : ""}{offsetName(z, at)}</small>
+                <span>{name(z).split("/").pop()}</span>
+                <small>{z === value ? "Chosen · " : !words.length && z === localZone ? "Here · " : z.includes("/") ? `${name(z).split("/")[0]} · ` : ""}{offsetName(z, at)}</small>
                 {!words.length && i === first.length - 1 && <hr />}
               </button>
             ))}

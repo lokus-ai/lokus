@@ -330,4 +330,11 @@ div.cal-person { color: var(--fg); }
 .cal-zone-list button[aria-selected="true"] span { font-weight: 600; }
 .cal-zone-list button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-zone-list button small { flex: none; color: var(--fg-3); font-size: 11px; font-variant-numeric: tabular-nums; }
-.cal-zone-list button hr { position: absolute; left: 4px; right: 4px; bottom: -1px; margin: 0; border: 0; border-top: 1px solid var(--border); }
+.cal-zone-list button:has(hr) { margin-bottom: 9px; overflow: visible; }
+.cal-zone-list button hr { position: absolute; left: 0; right: 0; bottom: -5px; height: 1px; margin: 0; border: 0; background: var(--border); }
+/* A title kept to one line ends in an ellipsis, never in half a word. */
+.cal-event b.one { display: block; flex: none; white-space: nowrap; text-overflow: ellipsis; }
+/* A card with room for one word only: less padding and smaller letters, so the word is whole. */
+.cal-event.slim { padding-left: 7px; padding-right: 2px; font-size: 11px; letter-spacing: -0.01em; }
+.cal-event.slim > span { font-size: 10px; }
+.cal-more { padding: 0 2px; }

@@ -140,7 +140,9 @@ export function EventPanel(p: Props) {
     const at = e.all_day ? Date.parse(`${dateOf(day + DAY / 2, p.zone)}T00:00:00Z`) : addMinutes(day, minuteOfDay(start, p.zone), p.zone);
     if (at !== start) p.onChange({ start: stamp(at), end: stamp(at + end - start) });
   };
-  const dateName = new Date(start).toLocaleDateString([], { timeZone: e.all_day ? "UTC" : p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(start).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+  const dayName = (at: number) => new Date(at).toLocaleDateString([], { timeZone: e.all_day ? "UTC" : p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(at).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+  // A whole-day event over several days names its first and last day.
+  const dateName = e.all_day && end - start > DAY ? `${dayName(start)} → ${dayName(end - DAY)}` : dayName(start);
   // An event with no zone of its own (or plain UTC, as providers hand them over) is in the zone the week is shown in.
   const own = e.zone && e.zone !== "UTC" && offsetName(e.zone, Date.parse(e.start)) !== offsetName(p.zone, Date.parse(e.start));
   const zoneOf = own ? e.zone : p.zone;

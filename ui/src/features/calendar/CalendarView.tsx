@@ -84,7 +84,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   /** The event and today's summary sit beside the week; below this the event opens over it. */
   const wide = width >= PANEL_FITS;
   /** How much the bar has to give up: 0 nothing, 1 key hints and long names, 2 words for icons, 3 the rest. */
-  const tight = weekWidth < 590 ? 3 : weekWidth < 660 ? 2 : weekWidth < 740 ? 1 : 0;
+  const tight = weekWidth < 520 ? 3 : weekWidth < 660 ? 2 : weekWidth < 740 ? 1 : 0;
   /** The list on the left: kept open or folded as the person left it; over the week when it has no room beside it. */
   const [side, setSide] = useState(() => kept("side", "1") === "1");
   const [sideOpen, setSideOpen] = useState(false);

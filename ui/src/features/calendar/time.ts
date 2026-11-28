@@ -117,9 +117,9 @@ export interface Placed {
 /** The least an event is drawn tall, in minutes: a quarter of an hour, which has room for its title. */
 const MIN_HEIGHT = 15;
 /** The least width an event is drawn beside another, in pixels: room for a word. */
-const FACE = 52;
+const FACE = 50;
 /** The width a "+N" takes beside the events that did fit, in pixels. */
-const CHIP = 30;
+const CHIP = 18;
 /** How far an event is set in from the ones it is laid over, in pixels: the one step every stack uses. */
 const STEP = 10;
 /** An event is laid over the ones beneath only when it starts this many minutes after each of them: their titles stay clear. */
@@ -137,8 +137,11 @@ export interface More {
 interface Cluster {
   /** Each column's events, in the order they start. */
   columns: Placed[][];
+  /** How far in from the left it starts, when it is laid over the whole width. */
   from: number;
   depth: number;
+  /** The one column of another group it is laid over, when that group had no room for it beside. */
+  over?: { cluster: Cluster; column: number };
 }
 
 /**
@@ -160,22 +163,45 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
     .sort((a, b) => a.top - b.top || b.height - a.height);
   const step = STEP / width;
   const ends = (p: Placed) => p.top + p.height;
+  /** Where a group lies across the day, as it stands: its edges, how many boxes it shows, each one's share, its "+N" strip. */
+  const lie = (c: Cluster): { lo: number; hi: number; boxes: number; share: number; chip: number } => {
+    let [lo, hi] = [c.from, 1];
+    if (c.over) {
+      const under = lie(c.over.cluster);
+      lo = under.lo + under.share * c.over.column + step;
+      hi = under.lo + under.share * (c.over.column + 1);
+    }
+    const room = width * (hi - lo) - 8;
+    const fits = c.columns.length <= Math.max(1, Math.floor(room / FACE));
+    const boxes = fits ? c.columns.length : Math.max(1, Math.floor((room - CHIP) / FACE));
+    const chip = fits ? 0 : Math.min((hi - lo) * 0.4, (CHIP + 8) / width);
+    return { lo, hi, boxes, share: (hi - lo - chip) / boxes, chip };
+  };
   const clusters: Cluster[] = [];
   const home = new Map<Placed, Cluster>();
   const seen: Placed[] = [];
   for (const item of items) {
     const going = seen.filter((p) => ends(p) > item.top);
     const close = going.filter((p) => p.top > item.top - OVER);
+    const above = going.length ? Math.max(...going.map((p) => home.get(p)!.depth)) + 1 : 0;
     let cluster: Cluster;
     if (close.length) {
       // Beside the ones it starts with: the first column that is free, or one more.
-      cluster = home.get(close[close.length - 1])!;
-      const free = cluster.columns.find((c) => ends(c[c.length - 1]) <= item.top);
+      const beside = home.get(close[close.length - 1])!;
+      cluster = beside;
+      const free = beside.columns.find((c) => ends(c[c.length - 1]) <= item.top);
+      const { lo, hi } = lie(beside);
+      const full = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE));
+      // No room for one more column: over a column whose event began long enough ago, if nothing lies on it yet.
+      const taken = (k: number) => going.some((p) => home.get(p)!.over?.cluster === beside && home.get(p)!.over?.column === k);
+      const column = full ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
       if (free) free.push(item);
-      else cluster.columns.push([item]);
+      else if (column >= 0) {
+        cluster = { columns: [[item]], depth: above, from: 0, over: { cluster: beside, column } };
+        clusters.push(cluster);
+      } else beside.columns.push([item]);
     } else {
-      const depth = going.length ? Math.max(...going.map((p) => home.get(p)!.depth)) + 1 : 0;
-      cluster = { columns: [[item]], depth, from: Math.min(0.5, depth * step) };
+      cluster = { columns: [[item]], depth: above, from: Math.min(0.5, above * step) };
       clusters.push(cluster);
     }
     home.set(item, cluster);
@@ -183,29 +209,25 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
   }
   const placed: Placed[] = [];
   const more: More[] = [];
-  for (const { columns, from, depth } of clusters) {
-    const room = width * (1 - from) - 8;
-    const fits = columns.length <= Math.max(1, Math.floor(room / FACE));
-    // Too many for a word each: as many as fit, and the rest behind a "+N" in a narrow strip.
-    const boxes = fits ? columns.length : Math.max(1, Math.floor((room - CHIP) / FACE));
-    const chip = fits ? 0 : Math.min(0.4, (CHIP + 8) / width);
-    const share = (1 - from - chip) / boxes;
+  for (const cluster of clusters) {
+    const { columns, depth } = cluster;
+    const { lo, hi, boxes, share, chip } = lie(cluster);
     columns.slice(0, boxes).forEach((column, k) => {
       for (const p of column) {
         // Wider, into the columns to the right that hold nothing while it lasts.
         let to = k + 1;
         while (to < boxes && !columns[to].some((q) => q.top < ends(p) && ends(q) > p.top)) to++;
         p.depth = depth;
-        p.left = from + share * k;
-        p.right = from + share * to;
+        p.left = lo + share * k;
+        p.right = lo + share * to;
         placed.push(p);
       }
     });
     const rest = columns.slice(boxes).flat().sort((a, b) => a.top - b.top);
-    if (rest.length) more.push({ events: rest.map((p) => p.event), top: rest[0].top, left: 1 - chip, right: 1, depth });
+    if (rest.length) more.push({ events: rest.map((p) => p.event), top: rest[0].top, left: hi - chip, right: hi, depth });
   }
   for (const p of placed) {
-    const over = placed.filter((q) => q.depth > p.depth && q.left < p.right && q.top < p.top + p.height && q.top + q.height > p.top);
+    const over = placed.filter((q) => q.depth > p.depth && q.left < p.right && q.right > p.left && q.top < p.top + p.height && q.top + q.height > p.top);
     p.clear = Math.min(p.height, ...over.map((q) => Math.max(0, q.top - p.top)));
   }
   placed.sort((a, b) => a.top - b.top || a.left - b.left);
