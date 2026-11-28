@@ -654,12 +654,17 @@ impl Store {
     }
 
     /// Give up what was refused for this event, and what waits behind it. True if there was any.
-    pub fn drop_refused(&self, key: &str) -> Result<bool> {
+    pub fn is_refused(&self, key: &str) -> Result<bool> {
         let refused: i64 = self.db.query_row(
             "SELECT COUNT(*) FROM outbox WHERE key = ?1 AND error IS NOT NULL",
             [key],
             |r| r.get(0),
         )?;
+        Ok(refused > 0)
+    }
+
+    pub fn drop_refused(&self, key: &str) -> Result<bool> {
+        let refused = i64::from(self.is_refused(key)?);
         if refused > 0 {
             self.db
                 .execute("DELETE FROM outbox WHERE key = ?1", [key])?;

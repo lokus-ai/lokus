@@ -725,18 +725,16 @@ async fn run_one(
         "calendar.event.discard" => {
             let store = Store::open(dir)?;
             let k = need(args, "key")?;
-            store.release(k)?;
-            if store.drop_refused(k)? {
-                let (account, calendar, id) = split(k)?;
-                if id.starts_with("local-") {
-                    store.drop_event(k)?;
-                } else if let Ok(theirs) =
-                    crate::provider::get(&store.account(account)?, calendar, id).await
-                {
-                    // Back to what the provider has.
-                    store.put(&theirs)?;
-                }
+            let (account, calendar, id) = split(k)?;
+            if store.is_refused(k)? && !id.starts_with("local-") {
+                // Back to what the provider has; if it cannot be asked now, nothing is dropped.
+                let theirs = crate::provider::get(&store.account(account)?, calendar, id).await?;
+                store.drop_refused(k)?;
+                store.put(&theirs)?;
+            } else if store.drop_refused(k)? {
+                store.drop_event(k)?;
             }
+            store.release(k)?;
             Ok(json!({ "event": store.event(k)? }))
         }
         "calendar.event.retry" => {
