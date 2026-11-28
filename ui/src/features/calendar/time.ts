@@ -120,6 +120,8 @@ const MIN_HEIGHT = 15;
 const FACE = 50;
 /** The width at which an event beside others still shows a few words, in pixels: narrower, a later one is laid over instead when it can be. */
 const ROOMY = 72;
+/** The least width of an event laid over a column, in pixels: its title's first word is whole. */
+const LAID = 64;
 /** The width a "+N" takes beside the events that did fit, in pixels. */
 const CHIP = 18;
 /** How far an event is set in from the ones it is laid over, in pixels: the one step every stack uses. */
@@ -195,8 +197,8 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       const { lo, hi } = lie(beside);
       // No room for one more column: over a column whose event began long enough ago, if nothing lies on it yet.
       const taken = (k: number) => going.some((p) => home.get(p)!.over?.cluster === beside && home.get(p)!.over?.column === k);
-      // A column too narrow for a card set in by one step takes none: the event goes behind the "+N" instead.
-      const holds = lie(beside).share * width - STEP >= FACE - STEP;
+      // A column too narrow for a card set in by one step to show a word takes none: the event goes behind the "+N" instead.
+      const holds = lie(beside).share * width - STEP >= LAID;
       // Over rather than beside as soon as one more column would leave each less than a few words wide.
       const snug = beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / ROOMY));
       const column = snug && holds ? beside.columns.findIndex((c, k) => c[c.length - 1].top <= item.top - OVER && !taken(k)) : -1;
@@ -204,6 +206,11 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
       else if (column >= 0) {
         cluster = { columns: [[item]], depth: above, from: 0, over: { cluster: beside, column } };
         clusters.push(cluster);
+      } else if (beside.over && beside.columns.length + 1 > Math.max(1, Math.floor((width * (hi - lo) - 8) / FACE))) {
+        // Laid over a column already, with no room there for one more beside: no sliver, it joins the "+N" of the group beneath.
+        cluster = beside;
+        while (cluster.over) cluster = cluster.over.cluster;
+        cluster.columns.push([item]);
       } else beside.columns.push([item]);
     } else {
       cluster = { columns: [[item]], depth: above, from: Math.min(0.5, above * step) };

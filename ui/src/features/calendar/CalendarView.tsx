@@ -609,7 +609,10 @@ export default function CalendarView({ onOpen, onNotice, onRoom }: Props) {
                   if (!el || !side) return;
                   const rows = Math.max(2, Math.min(6, Math.floor((side.clientHeight - 96) / 30)));
                   el.style.maxHeight = `${rows * 30 - 2}px`;
-                  el.parentElement?.scrollIntoView({ block: "nearest" });
+                  // Brought into view once for each list found, down to the end of the side.
+                  const found = String(el.childElementCount);
+                  if (el.dataset.found !== found) side.scrollTop = side.scrollHeight;
+                  el.dataset.found = found;
                 }}
               >
               {slots.found?.map((s) => (
