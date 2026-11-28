@@ -85,7 +85,7 @@ export function calendarDetail(name: string, input: Record<string, unknown>, eve
     if (input.start) lines.push(`When: ${eventTime(input.start, input.end, undefined, false)}`);
     lines.push(`A plain “${String(input.title ?? "Busy")}” event on ${String(input.account ?? "your other calendar").replace(/^[a-z]+:/, "")}, with no details.`);
   }
-  if (op === "note") lines.push("A note in this folder with the event's time and guests filled in.");
+  if (op === "note") lines.push("A note in this folder with the event's time and guests filled in.", "If this folder syncs to your team, the note's title and guests go to the team too.");
   if (op === "calendars_set") lines.push([input.hidden === true ? "Hide it" : input.hidden === false ? "Show it" : "", input.default === true ? "make it the default" : "", input.color ? `colour ${String(input.color)}` : ""].filter(Boolean).join(", ") || "No change");
   return lines.join("\n");
 }
