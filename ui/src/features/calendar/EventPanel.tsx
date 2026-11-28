@@ -7,7 +7,7 @@ import { Icon, type IconName } from "../../shell/Icon";
 import { pickMenu } from "./menu";
 import { MiniMonth } from "./MiniMonth";
 import { Pick } from "./Pick";
-import { addDays, addMinutes, clock, dayStart, minuteOfDay, offsetName, repeatChoices, span, stamp, typedClock, ZONES } from "./time";
+import { addDays, addMinutes, clock, DAY, dateOf, dayStart, minuteOfDay, offsetName, repeatChoices, span, stamp, typedClock, ZONES } from "./time";
 
 export type Scope = "this" | "all";
 
@@ -112,16 +112,18 @@ export function EventPanel(p: Props) {
       const at = addMinutes(dayStart(start, p.zone), minutes, p.zone);
       return at !== start && p.onChange({ start: stamp(at), end: stamp(at + end - start) });
     }
-    let at = addMinutes(dayStart(start, p.zone), minutes, p.zone);
+    // An event longer than a day keeps its last day; a shorter one ends on the start's day or the next.
+    let at = addMinutes(dayStart(end - start > DAY ? end - 1 : start, p.zone), minutes, p.zone);
     if (at <= start) at = addDays(at, 1, p.zone);
     if (at !== end) p.onChange({ end: stamp(at) });
   };
   const date = (day: number) => {
     setDating(false);
-    const at = addMinutes(day, minuteOfDay(start, p.zone), p.zone);
+    // A whole-day event is kept as midnight UTC of its date, whatever the zone.
+    const at = e.all_day ? Date.parse(`${dateOf(day, p.zone)}T00:00:00Z`) : addMinutes(day, minuteOfDay(start, p.zone), p.zone);
     if (at !== start) p.onChange({ start: stamp(at), end: stamp(at + end - start) });
   };
-  const dateName = new Date(start).toLocaleDateString([], { timeZone: p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(start).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+  const dateName = new Date(start).toLocaleDateString([], { timeZone: e.all_day ? "UTC" : p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(start).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
   const zoneOf = e.zone || p.zone;
   const zoneName = (z: string, at: number) => `${offsetName(z, at)} ${z.split("/").pop()!.replace(/_/g, " ")}`;
   const repeatName = e.series && !e.repeat ? "Part of a repeating event" : (repeatChoices(e.repeat).find(([rule]) => rule === (e.repeat ?? ""))?.[1] ?? "");
@@ -172,7 +174,7 @@ export function EventPanel(p: Props) {
             )}
           </Row>
           <Row>
-            {can && !e.all_day ? (
+            {can ? (
               <button className="cal-pick" aria-expanded={dating} title="Change the day" onClick={() => setDating(!dating)}>
                 <span>{dateName}</span>
               </button>
@@ -182,7 +184,7 @@ export function EventPanel(p: Props) {
           </Row>
           {dating && (
             <div className="cal-date">
-              <MiniMonth zone={p.zone} shown={[]} picked={dayStart(start, p.zone)} onPick={date} />
+              <MiniMonth zone={p.zone} shown={[]} picked={dayStart(e.all_day ? start + DAY / 2 : start, p.zone)} onPick={date} />
             </div>
           )}
           {can && !e.all_day && (
@@ -223,7 +225,7 @@ export function EventPanel(p: Props) {
 
         <section className="cal-group">
           {e.guests.map((g) => (
-            <div key={g.email} className="cal-guest" title={`${g.name ? `${g.name} · ` : ""}${g.email} · ${REPLY[g.reply] ?? g.reply}`}>
+            <div key={g.email} className="cal-guest" tabIndex={can ? 0 : undefined} title={`${g.name ? `${g.name} · ` : ""}${g.email} · ${REPLY[g.reply] ?? g.reply}`}>
               <span className="cal-avatar" style={{ "--c": hue(g.email) } as React.CSSProperties}>
                 {initial(g)}
                 <i className={`cal-answer ${g.reply}`} />
@@ -371,16 +373,19 @@ export function EventPanel(p: Props) {
         (p.deleting ? (
           <footer className="cal-ask danger" role="alertdialog" aria-label="Delete this event">
             <b>
-              Delete and tell {told} {told === 1 ? "guest" : "guests"}?
+              Delete and tell {told > 0 ? `${told} ` : "the "}{told === 1 ? "guest" : "guests"}?
             </b>
             <small>{p.scope === "all" && repeating ? "Every event of the series is cancelled, and the guests are emailed." : "The guests are emailed that it is cancelled."}</small>
             <div>
               <button className="primary danger" autoFocus onClick={() => p.onDelete(true)}>
                 Delete and tell {told === 1 ? "guest" : "guests"}
               </button>
-              <button className="link" onClick={() => p.onDelete(false)}>
-                Delete without email
-              </button>
+              {/* Microsoft always emails a cancellation, so the quiet choice is not offered there. */}
+              {account?.provider !== "microsoft" && (
+                <button className="link" onClick={() => p.onDelete(false)}>
+                  Delete without email
+                </button>
+              )}
               <button className="link" onClick={p.onKeep}>
                 Keep
               </button>
