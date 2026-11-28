@@ -436,12 +436,19 @@ not made, until an account is connected.
 
 **Changes.** Every change is written to the local copy first and put in a queue; the queue is sent
 before anything is read, and a change the network refused stays queued and is sent by a later
-minute. A change the provider itself refuses stays, with the reason shown on the event, and later
-changes to that event wait behind it. Only a connection that could not be made counts as offline.
-An answer that does not come within 30 seconds may still have been acted on, so the change waits
-and is sent again, and a new event cannot be made twice by that: Google is sent an event `id` of
-ours and Microsoft a `transactionId` (both the event's local id, which is in the queue with the
-change), and a second send is answered with the event already made.
+minute. Only a connection that could not be made counts as offline. A provider that is busy or
+broken (any 5xx, a 429, a connection that drops mid-answer) is tried again after 1 and then 3
+seconds, or after the `Retry-After` it names; past that the change waits for a later minute (and
+the account is left alone until a long `Retry-After` has passed). Only another 4xx is a refusal:
+the change stays, the event shows one plain sentence (never the provider's own text) with "Retry"
+and "Discard" (`calendar.event.retry`, `calendar.event.discard`), and later changes to that event
+wait behind it. An answer that does not come within 30 seconds, or is cut off, may still have been
+acted on, so the change is sent again, and a new event cannot be made twice by that: Google is
+sent an event `id` of ours and Microsoft a `transactionId` (both the event's local id, which is in
+the queue with the change), and a second send is answered with the event already made. That id is
+chosen when the draft is opened and passed to `calendar.event.create` (`id`), which answers a
+second create of the same draft with the first one's event; the send button is also off while a
+create is on its way.
 
 **What is sent back.** Google replaces an event's whole guest list, so every guest goes back with
 their answer, and a reply reads the event first and changes only this person's answer. A Microsoft
@@ -460,16 +467,24 @@ colleagues on the left; a grid of 1 to 9 days in the middle (keys 1 to 9; T toda
 C new, F find a time); the event on the right, edited in place, or today's events and the
 shortcuts when none is open. Opening the calendar folds the app's sidebar and the assistant away,
 and leaving it puts them back. The screen is laid out by the room it has: the week never draws a
-day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one); an open event takes its own
-column while three such days still fit beside it (the open event's day stays among them), and only
-below that lies over the week, as the list on the left does when it has no room; the bar gives up key hints,
+day narrower than 136 pixels (a week becomes 5, 3, 2 days, then one; another count becomes the
+most that fit, and the menu names what is shown: "8 days", not "Week"; a week starts on the
+locale's first weekday); an open event takes its own column while one such day still fits beside
+it (the open event's day is always among those shown), and only below that lies over the week, as
+the list on the left does when it has no room; the bar gives up key hints,
 then words for icons, then "Today" (which stays in the days menu), and never the time zone, "New"
-or the sync status. Overlapping events that start together sit side by side while each has room for a word; a later
+or the sync status. Overlapping events that start together share the width equally as columns while each has room for a word (56 pixels);
+those that do not fit are behind a "+N more" that opens the list for that time; a later
 one is set in by one step and laid over the earlier, outlined in the surface colour, all ending on
 the same right edge. A colleague's or teammate's busy time is a hatched block across the day behind
 the events, with their initials while the pointer is on that day. The grid opens on the 08:00
-line. A guest's answer is a badge on their initials (going, not going, maybe, no answer) and is
-written beside the name. An event is a button: Tab and the arrow keys move
+line, with its label. A guest's answer is a badge beside their initials (going, not going, maybe,
+no answer) and is written beside the name. An invitation not yet answered is an outlined box and
+Y, N and M answer it; one declined is a broken outline with its title struck through. O opens the
+meeting note. The panel shows times in the zone the week is shown in and names the event's own
+zone only when it differs. An account that is signed out has a "Sign in again" button. Escape
+closes the open event, also when typed in the assistant beside it. Every window redraws what is
+waiting when any of them changes the calendar. An event is a button: Tab and the arrow keys move
 between events, Enter opens one. One invitation that reaches two connected accounts is shown once
 (by its iCalUID; the organiser's copy). Deleting an event with guests asks once: "Delete and tell
 N guests?", with "Delete without email" (not offered on Microsoft 365, which always emails a
@@ -506,7 +521,7 @@ turned off in the assistant's settings.
 | `calendar.calendars.set` | hide or show, colour, default |
 | `calendar.events`, `calendar.event.get` | read the local copy |
 | `calendar.event.create`, `.update`, `.delete`, `.reply` | change an event |
-| `calendar.event.send`, `.discard` | send or drop an event's held changes |
+| `calendar.event.send`, `.discard`, `.retry` | send or drop an event's held changes; try a refused one again |
 | `calendar.sync` | send the queue, read what changed |
 | `calendar.busy` | people's busy times from the provider |
 | `calendar.team.publish`, `calendar.team` | write own busy times to the team folder; read everyone's |

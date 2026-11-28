@@ -63,9 +63,19 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
   }, [days.length]);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [now, setNow] = useState(Date.now());
+  /** The "+N more" that is open: its day, where it hangs, and the events behind it. */
+  const [more, setMore] = useState<{ day: number; top: number } | null>(null);
+  useEffect(() => {
+    if (!more) return;
+    const close = (e: Event) => (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as HTMLElement).closest(".cal-more-list, .cal-more")) && setMore(null);
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", close);
+    return () => (window.removeEventListener("pointerdown", close), window.removeEventListener("keydown", close));
+  }, [more]);
 
   useLayoutEffect(() => {
-    if (scroll.current) scroll.current.scrollTop = 8 * HOUR;
+    // The day opens at 08:00, with room above the line for its own label.
+    if (scroll.current) scroll.current.scrollTop = 8 * HOUR - 10;
   }, []);
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Date.now()), MINUTE);
@@ -178,6 +188,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
   const today = dayStart(now, zone);
   const allDay = shown.filter((e) => e.all_day);
 
+  const laid = days.map((day, i) => place(shown, day, days[i + 1] ?? addDays(day, 1, zone), dayWidth));
   const weekend = (day: number) => [0, 6].includes(weekday(day + DAY / 2, zone));
   const hourName = (h: number) => new Date(Date.UTC(2026, 0, 5, h)).toLocaleTimeString([], { timeZone: "UTC", hour: "numeric" });
 
@@ -241,7 +252,7 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                       );
                     }),
                 )}
-                {place(shown, day, next, dayWidth).map((p) => {
+                {laid[i].placed.map((p) => {
                   const e = p.event;
                   const tall = p.height * PX - 2;
                   // A line of the title is 15 pixels: under two lines it is the title alone on one, then the time when there is room.
@@ -281,6 +292,33 @@ export function Grid({ days, zone, events, selected, overlays, zoneLabel, colorO
                     </div>
                   );
                 })}
+                {laid[i].more.map((m) => (
+                  <button
+                    key={`more${m.top}`}
+                    className="cal-more"
+                    style={{ top: m.top * PX, left: `calc(${m.left * 100}% + 1px)`, width: `calc(${(m.right - m.left) * 100}% - 9px)`, zIndex: m.depth + 1 }}
+                    title={`${m.events.length} more at ${clock(m.events[0].start, zone)}: ${m.events.map((e) => e.title || "(No title)").join(", ")}`}
+                    aria-label={`${m.events.length} more events at ${clock(m.events[0].start, zone)}`}
+                    aria-haspopup="menu"
+                    aria-expanded={more?.day === day && more.top === m.top}
+                    onPointerDown={(ev) => ev.stopPropagation()}
+                    onClick={() => setMore(more?.day === day && more.top === m.top ? null : { day, top: m.top })}
+                  >
+                    +{m.events.length}
+                    {(m.right - m.left) * dayWidth >= 56 ? " more" : ""}
+                  </button>
+                ))}
+                {more?.day === day && laid[i].more.some((m) => m.top === more.top) && (
+                  <div className={`cal-more-list${i >= days.length - 1 && days.length > 1 ? " left" : ""}`} role="menu" style={{ top: more.top * PX + 20 }} onPointerDown={(ev) => ev.stopPropagation()}>
+                    {laid[i].more.find((m) => m.top === more.top)!.events.map((e) => (
+                      <button key={e.key} role="menuitem" style={{ "--c": colorOf(e) } as CSSProperties} title={e.title} onClick={() => (setMore(null), onSelect(e.key))}>
+                        <i />
+                        <b>{e.title || "(No title)"}</b>
+                        <small>{clock(e.start, zone)}</small>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {ghost && drag?.kind === "new" && drag.from.day === i && <div className="cal-event ghost" style={{ top: ((ghost[0] - day) / MINUTE) * PX, height: ((ghost[1] - ghost[0]) / MINUTE) * PX - 1, left: 1, width: "calc(100% - 8px)" }} />}
                 {ghost && ghost[0] >= day && ghost[0] < next && (
                   <div className="cal-tip" style={{ top: Math.max(0, ((ghost[0] - day) / MINUTE) * PX - 24) }}>

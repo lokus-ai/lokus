@@ -16,6 +16,15 @@ const DRAFT = "draft";
 /** The colours a calendar can be given. */
 const COLORS: [string, string][] = [["#4f7cff", "Blue"], ["#b266d9", "Purple"], ["#e2674a", "Red"], ["#d9a400", "Yellow"], ["#3aa675", "Green"], ["#2a9d9d", "Teal"], ["#8d8c87", "Grey"]];
 /** The narrowest a day is drawn. */
+/** The first day of a week where the person lives, as a weekday number (0 Sunday, 1 Monday). */
+const WEEK_STARTS = (() => {
+  try {
+    const locale = new Intl.Locale(navigator.language) as Intl.Locale & { getWeekInfo?: () => { firstDay: number }; weekInfo?: { firstDay: number } };
+    return ((locale.getWeekInfo?.() ?? locale.weekInfo)?.firstDay ?? 1) % 7;
+  } catch {
+    return 1;
+  }
+})();
 const DAY_MIN = 136;
 /** Calendar widths at which the list on the left, and the event on the right, fit beside the week. */
 const SIDE_FITS = 1230;
@@ -76,23 +85,25 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const [sideOpen, setSideOpen] = useState(false);
   /** Today's summary, opened over the week when it has no room beside it. */
   const [dayOpen, setDayOpen] = useState(false);
-  /** An open event takes its own column while three readable days still fit beside it; narrower, it lies over the week. */
-  const beside = width - (sideFits && side ? SIDE_WIDE : 0) - PANEL_WIDE - 56 >= 3 * DAY_MIN;
+  /** An open event takes its own column while a readable day still fits beside it, so its own day is never covered; narrower, it lies over the week. */
+  const beside = width - (sideFits && side ? SIDE_WIDE : 0) - PANEL_WIDE - 56 >= DAY_MIN;
   // As many days as fit readably: never thin columns. A week steps down to 5, 3, 2, then a day.
   const room = Math.max(1, Math.floor((weekWidth - 56) / DAY_MIN));
-  const fit = count <= room ? count : ([7, 5, 3, 2, 1].find((n) => n <= room && n <= count) ?? 1);
+  const fit = count <= room ? count : count === 7 ? ([5, 3, 2, 1].find((n) => n <= room) ?? 1) : room;
 
   // A week that shows only its working days still turns a whole week at a time, from its first day.
-  const turn = count === 7 && fit >= 5 ? 7 : fit;
+  const week = count === 7 && fit >= 5;
+  const turn = week ? 7 : fit;
 
   const days = useMemo(() => {
     const day = dayStart(anchor, zone);
-    // A whole week starts on Monday, and so does the working week it shrinks to; fewer days start on the day in view.
-    const monday = count === 7 && fit >= 5 ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) + 6) % 7), zone) : day;
+    // A whole week starts on the first weekday where the person lives; the working week it shrinks to on Monday; fewer days on the day in view.
+    const starts = fit === 7 ? WEEK_STARTS : 1;
+    const monday = week ? addDays(day, -((weekday(day + 3_600_000 * 12, zone) - starts + 7) % 7), zone) : day;
     // A working week ends on the day in view when that day is at the weekend.
     const first = day >= addDays(monday, fit, zone) ? addDays(day, 1 - fit, zone) : monday;
     return Array.from({ length: fit }, (_, i) => addDays(first, i, zone));
-  }, [anchor, fit, zone]);
+  }, [anchor, fit, week, zone]);
   const from = days[0];
   const to = addDays(days[days.length - 1], 1, zone);
 
@@ -115,7 +126,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   }, [fail]);
 
   useEffect(() => void refresh(), [refresh, from, to, zone]);
-  useEffect(() => onCalendarSynced((changed, off) => (setOffline(off), changed && void refresh())), [refresh]);
+  useEffect(() => onCalendarSynced((changed, off) => (off !== undefined && setOffline(off), changed && void refresh())), [refresh]);
   useEffect(() => {
     syncCalendar();
   }, []);
@@ -160,7 +171,13 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     if (key !== DRAFT) setDraft(null);
   };
 
+  /** A draft's id is chosen when it is opened: however often it is sent, it is one event. */
+  const draftId = useRef("");
+  const madeAt = useRef(0);
+  const [sending, setSending] = useState(false);
   const startDraft = (start: string, end: string, guest?: string) => {
+    // The second click of a double click on "Send invite" lands on the grid the panel just uncovered: it is not a new event.
+    if (Date.now() - madeAt.current < 600) return;
     const home = status?.calendars.find((c) => c.default) ?? status?.calendars[0];
     if (!home) return;
     const member = members.find((m) => m.member === guest);
@@ -169,6 +186,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       guests: guest ? [{ email: guest, name: member?.name ?? "", optional: false, reply: "needsAction" }] : [],
       organizer: "", mine: true, reply: "", meeting: null, want_meeting: false, repeat: null, series: null, link: "", pending: false, unsent: false, changes: [], queued: false, error: null, note: null,
     });
+    draftId.current = crypto.randomUUID().replace(/-/g, "");
     setSelected(DRAFT);
   };
 
@@ -198,13 +216,18 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
     }
     if (current) void act("calendar.event.update", { key: current.key, scope, ...fields });
   };
+  const creating = useRef(false);
   const create = async () => {
-    if (!draft) return;
+    if (!draft || creating.current) return;
+    creating.current = true;
+    setSending(true);
     const made = await act("calendar.event.create", {
-      account: draft.account, calendar: draft.calendar, title: draft.title, start: draft.start, end: draft.end, zone: draft.zone, location: draft.location,
+      id: draftId.current, account: draft.account, calendar: draft.calendar, title: draft.title, start: draft.start, end: draft.end, zone: draft.zone, location: draft.location,
       description: draft.description, guests: draft.guests, meeting: draft.want_meeting, repeat: draft.repeat ?? "", send: true,
     });
-    if (made) select(null);
+    creating.current = false;
+    setSending(false);
+    if (made) (madeAt.current = Date.now()), select(null);
   };
   /** Delete. With guests who were told of it, the panel asks first, once: `notify` is the answer. */
   const remove = async (notify?: boolean) => {
@@ -272,7 +295,10 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       setTimeout(() => submit.current(), 0);
       return e.preventDefault();
     }
-    if (e.key === "Escape" && typing) return (document.activeElement as HTMLElement | null)?.blur();
+    // Escape in a field of the calendar leaves the field; typed in the assistant beside it, it still closes the event.
+    const outside = e.target instanceof HTMLElement && !e.target.closest(".calendar");
+    if (e.key === "Escape" && e.defaultPrevented) return;
+    if (e.key === "Escape" && typing && !(outside && selected)) return (document.activeElement as HTMLElement | null)?.blur();
     if (e.key === "Escape" && sideOpen && !sideFits) return setSideOpen(false);
     if (e.key === "Escape" && dayOpen && !selected) return setDayOpen(false);
     if (e.key === "Escape" && (deleting || noteAsk)) return (setDeleting(false), setNoteAsk(null));
@@ -287,7 +313,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
       const start = Math.ceil(Date.now() / 1_800_000) * 1_800_000;
       startDraft(stamp(start), stamp(start + 1_800_000));
     } else if (e.key === "f") void findTime(30);
-    else if (current && selected !== DRAFT && e.key === "n") void note();
+    else if (current && selected !== DRAFT && e.key === "o") void note();
     else if (current && selected !== DRAFT && current.mine && e.key === "Backspace") deleting || void remove();
     else if (current && !current.mine && "ynm".includes(e.key)) void act("calendar.event.reply", { key: current.key, scope, reply: { y: "yes", n: "no", m: "maybe" }[e.key] });
     else return;
@@ -328,7 +354,11 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
   const month = new Date(middle).toLocaleDateString([], { timeZone: zone, month: tight ? "short" : "long" });
   const year = new Date(middle).toLocaleDateString([], { timeZone: zone, year: "numeric" });
   const syncNote = `${offline ? "Offline" : status.synced ? `Synced ${clock(status.synced, zone)}` : "Not synced yet"}${waiting > 0 ? ` · ${waiting} waiting to be sent` : ""}`;
+  /** The same in few words, for the bar: the whole of it is in the tooltip. */
+  const syncShort = waiting > 0 ? `${offline ? "Offline · " : ""}${waiting} waiting` : offline ? "Offline" : status.synced ? `Synced ${clock(status.synced, zone)}` : "Not synced";
   const dayNames = (n: number) => (n === 7 ? "Week" : n === 1 ? "Day" : `${n} days`);
+  /** What is shown, said truthfully: "Week" only for a whole week that was asked for. */
+  const shownName = fit === 1 ? "Day" : fit === 7 && count === 7 ? "Week" : `${fit} days`;
   const goTo = (day: number) => setAnchor(day + 12 * 3_600_000);
   const sideShown = sideFits ? side : sideOpen;
   const toggleSide = () => (sideFits ? (setSide(!side), keep("side", side ? "0" : "1")) : setSideOpen(!sideOpen));
@@ -374,7 +404,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
               ["Earlier, later", "K  J"],
               ["Days shown", "1 – 9"],
               ["Send invite or update", formatKeys("Mod-Enter")],
-              ["Meeting note", "N"],
+              ["Meeting note", "O"],
             ] as const
           ).map(([name, key]) => (
             <div key={name}>
@@ -396,15 +426,16 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           {status.accounts.map((a) => (
             <section key={a.id} className="cal-account">
               <div className="cal-account-name">
-                <span title={a.signed_in ? `${a.name ? `${a.name} · ` : ""}${a.email}` : "Signed out: connect it again"}>
-                  <i>{a.email.split("@")[0]}</i>
-                  <i>@{a.email.split("@")[1]}</i>
-                </span>
+                <span title={`${a.name ? `${a.name} · ` : ""}${a.email}`}>{a.email}</span>
                 <button className="cal-icon" title="Disconnect this account" onClick={() => void act("calendar.account.remove", { account: a.id }, false)}>
                   <Icon name="close" size={12} />
                 </button>
               </div>
-              {!a.signed_in && <small className="cal-error">Signed out. Connect it again.</small>}
+              {!a.signed_in && (
+                <button className="cal-button cal-signin" disabled={!!connecting} title={`Signed out of ${a.email}. Sign in again in your browser.`} onClick={() => void connect(a.provider)}>
+                  {connecting === a.provider ? "Finish in your browser…" : "Sign in again"}
+                </button>
+              )}
               {status.calendars
                 .filter((c) => c.account === a.id)
                 .map((c) => (
@@ -517,7 +548,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
             <span className={`cal-sync${offline || waiting ? " waiting" : ""}`} role="status" tabIndex={0} title={syncNote} aria-label={syncNote} />
           ) : (
             <small className={`cal-status${offline || waiting ? " waiting" : ""}`} role="status" title={syncNote}>
-              {tight && waiting ? `${offline ? "Offline · " : ""}${waiting} waiting` : syncNote}
+              {syncShort}
             </small>
           )}
           {!wide && !current && (
@@ -528,7 +559,7 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           <Pick
             outlined
             value={String(count)}
-            label={dayNames(fit)}
+            label={shownName}
             title={fit < count ? `Days shown (press 1 to 9). ${dayNames(count)} is chosen; ${fit} fit in this window.` : "Days shown (press 1 to 9)"}
             options={[...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n): [string, string] => [String(n), `${dayNames(n)}`]), ...(tight >= 3 ? [null, ["today", "Go to today"] as [string, string]] : [])]}
             onChange={(v) => (v === "today" ? setAnchor(Date.now()) : (setCount(Number(v)), keep("days", v)))}
@@ -567,6 +598,8 @@ export default function CalendarView({ onOpen, onNotice }: Props) {
           onScope={setScope}
           onChange={change}
           onCreate={() => void create()}
+          sending={sending}
+          onRetry={() => void act("calendar.event.retry", { key: current.key })}
           onSend={(notify) => void act("calendar.event.send", { key: current.key, notify })}
           onDiscard={() => void act("calendar.event.discard", { key: current.key }, false)}
           onDelete={(notify) => void remove(notify)}

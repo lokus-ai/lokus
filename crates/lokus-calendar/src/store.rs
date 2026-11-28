@@ -66,6 +66,7 @@ impl Store {
              CREATE TABLE IF NOT EXISTS sending (n INTEGER PRIMARY KEY, at TEXT);
              CREATE TABLE IF NOT EXISTS outbox (n INTEGER PRIMARY KEY AUTOINCREMENT, account TEXT, key TEXT, op TEXT, body TEXT,
                notify INTEGER, error TEXT, made TEXT);
+             CREATE TABLE IF NOT EXISTS made (id TEXT PRIMARY KEY, key TEXT, at TEXT);
              CREATE TABLE IF NOT EXISTS notes (key TEXT PRIMARY KEY, folder TEXT, path TEXT);
              CREATE TABLE IF NOT EXISTS settings (name TEXT PRIMARY KEY, value TEXT);",
         )?;
@@ -627,9 +628,48 @@ impl Store {
         self.untake(n)
     }
 
+    /// The event already made from a draft with this id, if any: making it again is the same event.
+    pub fn made(&self, id: &str) -> Result<Option<String>> {
+        Ok(self
+            .db
+            .query_row("SELECT key FROM made WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?)
+    }
+
+    pub fn keep_made(&self, id: &str, key: &str) -> Result<()> {
+        let old = stamp(chrono::Utc::now() - chrono::Duration::days(7));
+        self.db.execute("DELETE FROM made WHERE at < ?1", [old])?;
+        self.db.execute(
+            "INSERT OR REPLACE INTO made (id, key, at) VALUES (?1, ?2, ?3)",
+            params![id, key, now()],
+        )?;
+        Ok(())
+    }
+
+    /// Try a refused change to this event again.
+    pub fn retry_event(&self, key: &str) -> Result<()> {
+        self.db
+            .execute("UPDATE outbox SET error = NULL WHERE key = ?1", [key])?;
+        Ok(())
+    }
+
+    /// Give up what was refused for this event, and what waits behind it. True if there was any.
+    pub fn drop_refused(&self, key: &str) -> Result<bool> {
+        let refused: i64 = self.db.query_row(
+            "SELECT COUNT(*) FROM outbox WHERE key = ?1 AND error IS NOT NULL",
+            [key],
+            |r| r.get(0),
+        )?;
+        if refused > 0 {
+            self.db
+                .execute("DELETE FROM outbox WHERE key = ?1", [key])?;
+        }
+        Ok(refused > 0)
+    }
+
     /// The provider gave a new event its own id: everything that named the local one follows.
     pub fn rename(&self, old: &str, new: &str) -> Result<()> {
-        for table in ["outbox", "held", "notes"] {
+        for table in ["outbox", "held", "notes", "made"] {
             self.db.execute(
                 &format!("UPDATE OR REPLACE {table} SET key = ?2 WHERE key = ?1"),
                 params![old, new],

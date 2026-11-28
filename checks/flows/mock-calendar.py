@@ -9,7 +9,9 @@ the shapes the real services document. An event with guests appears on each gues
 an invitation does. Every request is written to the log as one JSON line; `mail` on a line is who
 would have been emailed. /_ctl?offline=1|0 makes it unreachable; /_ctl?log=1 returns the log;
 /_ctl?reset=1 forgets everything; /_ctl?delay=40 makes the next change answer that many seconds late
-(the change itself is made at once, as a slow provider does). It proves the app's side only: it is not the real services.
+(the change itself is made at once, as a slow provider does); /_ctl?fail=500 (or 429, with &after=3
+for Retry-After) refuses the next change that way without making it; /_ctl?drop=1 makes the next
+change and then closes the connection with no answer. It proves the app's side only: it is not the real services.
 """
 import base64, hashlib, json, os, re, sys, threading, time, uuid
 from datetime import datetime, timedelta, timezone
@@ -304,6 +306,8 @@ class H(BaseHTTPRequestHandler):
                 global S
                 if "offline" in q: S["offline"] = q["offline"] == "1"
                 if "delay" in q: S["delay"] = int(q["delay"])
+                if "fail" in q: S["fail"] = [int(q["fail"]), q.get("after")]
+                if "drop" in q: S["drop"] = q["drop"] == "1"
                 if "reset" in q:
                     S = fresh()
                     if LOG: open(LOG, "w").close()
@@ -325,6 +329,15 @@ class H(BaseHTTPRequestHandler):
             AS_TEXT = 'outlook.body-content-type="text"' in self.headers.get("prefer", "")
             if method != "GET" and "/events" in u.path and S.get("delay"):
                 self.late, S["delay"] = S["delay"], 0; self.entry["late"] = self.late
+            change = method != "GET" and "/events" in u.path
+            if change and S.get("fail"):
+                (code, after), S["fail"] = S["fail"], None; self.entry["status"] = code; save()
+                data = json.dumps({"error": {"message": "stand-in: told to fail"}}).encode()
+                self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(data)))
+                if after: self.send_header("retry-after", after)
+                self.end_headers(); self.wfile.write(data); record(self.entry); return
+            if change and S.get("drop"):
+                S["drop"] = False; self.late = -1; self.entry["dropped"] = True
             try:
                 parts = [p for p in u.path.split("/") if p]
                 if not parts: self.out(200, "calendar stand-in", "text/plain")
@@ -336,6 +349,8 @@ class H(BaseHTTPRequestHandler):
                 self.out(500, {"error": {"message": repr(e)}})
             save()
         record(self.entry)
+        if self.late < 0:
+            self.late = 0; self.close_connection = True; self.connection.close(); return
         if self.late:
             code, kind, data = self.kept; self.late = 0; time.sleep(self.entry["late"])
             try: self.send_response(code); self.send_header("content-type", kind); self.send_header("content-length", str(len(data))); self.end_headers(); self.wfile.write(data)

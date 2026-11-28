@@ -58,6 +58,14 @@ pub async fn calendar_run(
         &open,
     )
     .await;
+    // Every window shows the same events and the same count of what waits.
+    if done.is_ok()
+        && lokus_calendar::COMMANDS
+            .iter()
+            .any(|c| c.name == name && c.writes)
+    {
+        let _ = app.emit("calendar:synced", json!({ "changed": true }));
+    }
     done.map_err(|e| e.body())
 }
 

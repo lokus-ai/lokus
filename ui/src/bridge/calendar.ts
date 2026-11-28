@@ -108,10 +108,10 @@ export function syncCalendar(): void {
   void invoke("calendar_sync").catch(() => undefined);
 }
 
-/** Told after every round with the providers; `changed` when the local copy moved. */
-export function onCalendarSynced(handler: (changed: boolean, offline: boolean) => void): () => void {
-  const stop = listen<{ changed: boolean; sync: { offline: boolean } }>("calendar:synced", ({ payload }) =>
-    handler(payload.changed, payload.sync.offline),
+/** Told after every round with the providers and after a change made in any window; `changed` when the local copy moved, `offline` only after a round. */
+export function onCalendarSynced(handler: (changed: boolean, offline?: boolean) => void): () => void {
+  const stop = listen<{ changed: boolean; sync?: { offline: boolean } }>("calendar:synced", ({ payload }) =>
+    handler(payload.changed, payload.sync?.offline),
   );
   return () => void stop.then((off) => off());
 }

@@ -65,7 +65,8 @@ pub const COMMANDS: &[Spec] = &[
     Spec { name: "calendar.event.create", about: "Make an event. With guests it is held until sent (send=true, or calendar.event.send).", args: &[("account", "string", "The account to make it on (default: the default calendar's)"), ("calendar", "string", "The calendar (default: the default calendar)"), ("title", "string", "What it is called"), ("start", "string", "When it starts, like 2026-12-01T15:00:00Z"), ("end", "string", "When it ends"), ("all_day", "boolean", "It takes the whole day"), ("zone", "string", "Its time zone, like Europe/Berlin"), ("location", "string", "Where"), ("description", "string", "Notes for the guests"), ("guests", "array", "Guests: email addresses, or {email, optional}"), ("meeting", "boolean", "Add a Google Meet or Teams link"), ("repeat", "string", "A repeat rule like RRULE:FREQ=WEEKLY;BYDAY=MO"), ("send", "boolean", "Send the invitation now"), ("notify", "boolean", "Email the guests (default true)")], writes: true },
     Spec { name: "calendar.event.update", about: "Change an event. If it has guests the change is held as pending until sent.", args: &[("key", "string", "The event's key"), ("scope", "string", "For a repeating event: this (default) or all")], writes: true },
     Spec { name: "calendar.event.send", about: "Send an event's held changes to the provider: the invitation, or one update.", args: &[("key", "string", "The event's key"), ("notify", "boolean", "Email the guests (default true)")], writes: true },
-    Spec { name: "calendar.event.discard", about: "Drop an event's held changes.", args: &[("key", "string", "The event's key")], writes: true },
+    Spec { name: "calendar.event.retry", about: "Try a change the provider refused again, at the next sync.", args: &[("key", "string", "The event's key")], writes: true },
+    Spec { name: "calendar.event.discard", about: "Drop an event's held changes, and any the provider refused.", args: &[("key", "string", "The event's key")], writes: true },
     Spec { name: "calendar.event.delete", about: "Delete an event.", args: &[("key", "string", "The event's key"), ("scope", "string", "For a repeating event: this (default) or all"), ("notify", "boolean", "Email the guests (default true)")], writes: true },
     Spec { name: "calendar.event.reply", about: "Answer an invitation.", args: &[("key", "string", "The event's key"), ("reply", "string", "yes, no or maybe"), ("scope", "string", "For a repeating event: this (default) or all")], writes: true },
     Spec { name: "calendar.sync", about: "Send what is waiting and read what changed at the providers.", args: &[], writes: false },
@@ -273,7 +274,19 @@ fn target(store: &Store, args: &Value) -> Result<(String, String)> {
 fn create(dir: &Path, args: &Value) -> Result<Value> {
     let store = Store::open(dir)?;
     let (account, calendar) = target(&store, args)?;
-    let id = format!("local-{}", uuid::Uuid::new_v4().simple());
+    // A draft carries its id from the moment it is opened, so sending it twice makes one event.
+    let draft =
+        text(args, "id").filter(|d| d.len() == 32 && d.bytes().all(|b| b.is_ascii_hexdigit()));
+    if let Some(key) = draft.and_then(|d| store.made(d).transpose()).transpose()? {
+        return Ok(json!({ "event": store.event(&key)? }));
+    }
+    let id = format!(
+        "local-{}",
+        draft.map_or_else(
+            || uuid::Uuid::new_v4().simple().to_string(),
+            str::to_lowercase
+        )
+    );
     let me = store.account(&account)?;
     let mut event = Event {
         key: key(&account, &calendar, &id),
@@ -285,6 +298,9 @@ fn create(dir: &Path, args: &Value) -> Result<Value> {
         ..Event::default()
     };
     apply(&mut event, args)?;
+    if draft.is_some() {
+        store.keep_made(&event.id["local-".len()..], &event.key)?;
+    }
     let notify = args["notify"].as_bool().unwrap_or(true);
     if event.guests.is_empty() || args["send"] == true {
         store.put(&event)?;
@@ -710,6 +726,23 @@ async fn run_one(
             let store = Store::open(dir)?;
             let k = need(args, "key")?;
             store.release(k)?;
+            if store.drop_refused(k)? {
+                let (account, calendar, id) = split(k)?;
+                if id.starts_with("local-") {
+                    store.drop_event(k)?;
+                } else if let Ok(theirs) =
+                    crate::provider::get(&store.account(account)?, calendar, id).await
+                {
+                    // Back to what the provider has.
+                    store.put(&theirs)?;
+                }
+            }
+            Ok(json!({ "event": store.event(k)? }))
+        }
+        "calendar.event.retry" => {
+            let store = Store::open(dir)?;
+            let k = need(args, "key")?;
+            store.retry_event(k)?;
             Ok(json!({ "event": store.event(k)? }))
         }
         "calendar.event.delete" => delete(dir, args),

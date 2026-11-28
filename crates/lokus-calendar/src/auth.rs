@@ -170,7 +170,28 @@ pub fn unreachable(e: reqwest::Error) -> CalError {
     } else if e.is_timeout() {
         CalError::new("slow", "The calendar provider did not answer in time.")
     } else {
-        CalError::new("provider", e.to_string())
+        CalError::new("later", "The connection to the calendar provider was lost.")
+    }
+}
+
+/// Until when a provider asked not to be called again, per account.
+static HOLD: std::sync::Mutex<Vec<(String, std::time::Instant)>> =
+    std::sync::Mutex::new(Vec::new());
+
+fn held_off(account: &str) -> bool {
+    let mut hold = HOLD.lock().unwrap_or_else(|e| e.into_inner());
+    hold.retain(|(_, until)| *until > std::time::Instant::now());
+    hold.iter().any(|(a, _)| a == account)
+}
+
+/// A refusal in one plain sentence. What the provider wrote is for its own developers.
+fn refusal(status: u16) -> &'static str {
+    match status {
+        401 => "This account is signed out.",
+        403 => "This account is not allowed to do that.",
+        404 | 410 => "The provider no longer has this event.",
+        409 | 412 => "The event was changed somewhere else in the meantime.",
+        _ => "The provider did not accept this change.",
     }
 }
 
@@ -186,6 +207,13 @@ async fn exchange(at: &Endpoints, form: &[(&str, &str)]) -> Result<Value> {
         .send()
         .await
         .map_err(unreachable)?;
+    let status = answer.status().as_u16();
+    if status == 429 || status >= 500 {
+        return Err(CalError::new(
+            "later",
+            "The calendar provider is busy. It is tried again shortly.",
+        ));
+    }
     let ok = answer.status().is_success();
     let body: Value = answer.json().await.unwrap_or(Value::Null);
     if !ok {
@@ -371,7 +399,18 @@ pub async fn call(
     body: Option<&Value>,
 ) -> Result<(u16, Value)> {
     let mut force = false;
+    // A busy provider (429, 5xx) or a lost connection is tried again, a little later each time.
+    let mut again = [1u64, 3].into_iter();
+    let later = || {
+        CalError::new(
+            "later",
+            "The calendar provider is busy. It is tried again shortly.",
+        )
+    };
     loop {
+        if held_off(account) {
+            return Err(later());
+        }
         let tokens = fresh(provider, account, force).await?;
         let mut request = http()
             .request(method.clone(), url)
@@ -385,13 +424,48 @@ pub async fn call(
         if let Some(body) = body {
             request = request.json(body);
         }
-        let answer = request.send().await.map_err(unreachable)?;
+        let answer = match request.send().await.map_err(unreachable) {
+            Err(e) if e.code == "later" => match again.next() {
+                Some(wait) => {
+                    tokio::time::sleep(Duration::from_secs(wait)).await;
+                    continue;
+                }
+                None => return Err(e),
+            },
+            other => other?,
+        };
         let status = answer.status().as_u16();
         if status == 401 && !force {
             force = true;
             continue;
         }
-        let text = answer.text().await.unwrap_or_default();
+        if status == 429 || status >= 500 {
+            let asked = answer
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok()?.trim().parse::<u64>().ok());
+            match (asked, again.next()) {
+                (Some(asked), _) if asked > 20 => {
+                    // Too long to wait here: nothing goes to this account until then.
+                    HOLD.lock().unwrap_or_else(|e| e.into_inner()).push((
+                        account.to_string(),
+                        std::time::Instant::now() + Duration::from_secs(asked.min(3600)),
+                    ));
+                    return Err(later());
+                }
+                (asked, Some(wait)) => {
+                    tokio::time::sleep(Duration::from_secs(asked.unwrap_or(wait).max(1))).await;
+                    continue;
+                }
+                (_, None) => return Err(later()),
+            }
+        }
+        let Ok(text) = answer.text().await else {
+            return Err(CalError::new(
+                "later",
+                "The connection to the calendar provider was lost.",
+            ));
+        };
         let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
         if status == 410 {
             return Err(CalError::new(
@@ -400,17 +474,14 @@ pub async fn call(
             ));
         }
         if status >= 400 {
-            let why = value["error"]["message"]
-                .as_str()
-                .or(value["error"].as_str())
-                .unwrap_or("the provider refused the request");
             return Err(CalError::new(
                 match status {
                     401 => "signed_out",
+                    404 => "missing",
                     409 => "conflict",
                     _ => "provider",
                 },
-                format!("{why} ({status})"),
+                refusal(status),
             ));
         }
         return Ok((status, value));

@@ -87,13 +87,18 @@ async fn send(dir: &Path, q: &Queued) -> Result<()> {
         }
         "delete" => {
             let series = event.and_then(|e| e.series).filter(|_| all);
-            provider::delete(
+            match provider::delete(
                 &account,
                 calendar,
                 series.as_deref().unwrap_or(id),
                 q.notify,
             )
-            .await?;
+            .await
+            {
+                // Already gone there: a delete sent twice, or deleted elsewhere first.
+                Err(e) if matches!(e.code, "missing" | "gone") => {}
+                other => other?,
+            }
             let store = Store::open(dir)?;
             match series {
                 Some(series) => store.drop_series(&account.id, calendar, &series),

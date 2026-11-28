@@ -77,7 +77,13 @@ export function calendarDetail(name: string, input: Record<string, unknown>, eve
   if (typeof input.description === "string" && input.description) lines.push(`Notes: ${input.description}`);
   if (input.scope === "all") lines.push("Applies to every event of the series.");
   if (op === "create") lines.push(!guestsOf(input).length ? "Nobody is emailed." : input.send === true && input.notify !== false ? "The guests are emailed an invitation." : "Nobody is emailed until you send the invitation.");
-  if (op === "update") lines.push(invited ? "The guests are not emailed until you send the update." : "Nobody is emailed.");
+  if (op === "update") {
+    const sent = !!event && !event.unsent;
+    const any = invited > 0 || guestsOf(input).length > 0;
+    if (!any) lines.push("Nobody is emailed.");
+    else if (input.send === true) lines.push(input.notify === false ? "It is saved without emailing the guests." : sent ? "The guests are emailed the update." : "The guests are emailed an invitation.");
+    else lines.push(sent ? "The guests are not emailed until you send the update." : "Nobody is emailed until you send the invitation.");
+  }
   if (op === "send") lines.push(input.notify === false ? "It is saved without emailing the guests." : "The guests are emailed.");
   if (op === "delete") lines.push(invited && input.notify !== false ? `${invited === 1 ? "The guest is" : `All ${invited} guests are`} emailed that it is cancelled.` : "Nobody is emailed.");
   if (op === "reply") lines.push(`Your answer: ${String(input.reply ?? "")}. The organiser is told.`);

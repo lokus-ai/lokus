@@ -22,6 +22,10 @@ interface Props {
   onScope: (scope: Scope) => void;
   onChange: (fields: Record<string, unknown>) => void;
   onCreate: () => void;
+  /** The draft is on its way: it cannot be sent a second time. */
+  sending: boolean;
+  /** Try a refused change again. */
+  onRetry: () => void;
   onSend: (notify: boolean) => void;
   onDiscard: () => void;
   /** Delete; `notify` is the answer once the panel has asked about the guests. */
@@ -124,7 +128,9 @@ export function EventPanel(p: Props) {
     if (at !== start) p.onChange({ start: stamp(at), end: stamp(at + end - start) });
   };
   const dateName = new Date(start).toLocaleDateString([], { timeZone: e.all_day ? "UTC" : p.zone, weekday: "short", month: "short", day: "numeric", year: new Date(start).getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
-  const zoneOf = e.zone || p.zone;
+  // An event with no zone of its own (or plain UTC, as providers hand them over) is in the zone the week is shown in.
+  const own = e.zone && e.zone !== "UTC" && offsetName(e.zone, Date.parse(e.start)) !== offsetName(p.zone, Date.parse(e.start));
+  const zoneOf = own ? e.zone : p.zone;
   const zoneName = (z: string, at: number) => `${offsetName(z, at)} ${z.split("/").pop()!.replace(/_/g, " ")}`;
   const repeatName = e.series && !e.repeat ? "Part of a repeating event" : (repeatChoices(e.repeat).find(([rule]) => rule === (e.repeat ?? ""))?.[1] ?? "");
 
@@ -139,7 +145,19 @@ export function EventPanel(p: Props) {
 
       <div className="cal-panel-body">
         {can ? <Text grow className="cal-title" value={e.title} placeholder="Title" focus={p.draft} onCommit={(title) => p.onChange({ title })} /> : <h2 className="cal-title">{e.title || "(No title)"}</h2>}
-        {e.error && <p className="cal-error">The provider refused the last change: {e.error}</p>}
+        {e.error && (
+          <div className="cal-refused" role="alert">
+            <small>{/[.!?]$/.test(e.error) && e.error.length < 90 && !/[{}<>]/.test(e.error) ? e.error : "The provider did not accept this change."}</small>
+            <div>
+              <button className="cal-button" onClick={p.onRetry}>
+                Retry
+              </button>
+              <button className="link" onClick={p.onDiscard}>
+                Discard
+              </button>
+            </div>
+          </div>
+        )}
         {e.queued && !e.error && <p className="cal-waiting">Waiting to be sent to {account?.provider === "microsoft" ? "Microsoft 365" : "Google Calendar"}.</p>}
 
         {repeating && (
@@ -189,7 +207,7 @@ export function EventPanel(p: Props) {
           )}
           {can && !e.all_day && (
             <Row icon="globe">
-              <Pick value={zoneOf} label={zoneName(zoneOf, start)} title="The event's time zone" options={ZONES.map((z) => [z, `${z.replace(/_/g, " ")} (${offsetName(z, start)})`])} onChange={(zone) => p.onChange({ zone })} />
+              <Pick value={zoneOf} label={zoneName(zoneOf, start)} title={own ? `Made in ${e.zone.replace(/_/g, " ")}; the times above are in ${p.zone.replace(/_/g, " ")}` : "The event's time zone"} options={ZONES.map((z) => [z, `${z.replace(/_/g, " ")} (${offsetName(z, start)})`])} onChange={(zone) => p.onChange({ zone })} />
             </Row>
           )}
           {(can || repeating) && (
@@ -228,10 +246,10 @@ export function EventPanel(p: Props) {
             <div key={g.email} className="cal-guest" tabIndex={can ? 0 : undefined} title={`${g.name ? `${g.name} · ` : ""}${g.email} · ${REPLY[g.reply] ?? g.reply}`}>
               <span className="cal-avatar" style={{ "--c": hue(g.email) } as React.CSSProperties}>
                 {initial(g)}
-                <i className={`cal-answer ${g.reply}`} role="img" aria-label={REPLY[g.reply] ?? g.reply}>
-                  {g.reply === "accepted" ? <Icon name="check" size={8} /> : g.reply === "declined" ? <Icon name="close" size={8} /> : g.reply === "tentative" ? "?" : null}
-                </i>
               </span>
+              <i className={`cal-answer ${g.reply}`} role="img" aria-label={REPLY[g.reply] ?? g.reply}>
+                {g.reply === "accepted" ? <Icon name="check" size={8} /> : g.reply === "declined" ? <Icon name="close" size={8} /> : g.reply === "tentative" ? "?" : null}
+              </i>
               <span className="cal-guest-name">
                 <span>{g.name || g.email}</span>
                 {g.optional && <small>Optional</small>}
@@ -292,7 +310,9 @@ export function EventPanel(p: Props) {
               </>
             ) : e.want_meeting ? (
               <>
-                <span className="cal-value muted">{meetingName} link is added when sent</span>
+                <span className="cal-value muted" title={`A ${meetingName} link is added when the event is sent`}>
+                  {account?.provider === "microsoft" ? "Teams" : "Meet"} link on send
+                </span>
                 <button className="cal-icon" title="Do not add a meeting link" onClick={() => p.onChange({ meeting: false })}>
                   <Icon name="close" size={12} />
                 </button>
@@ -340,7 +360,7 @@ export function EventPanel(p: Props) {
             <Row icon="note">
               <button className="cal-pick" onClick={() => p.onNote()}>
                 <span>{e.note ? "Open meeting note" : "Meeting note"}</span>
-                <kbd>N</kbd>
+                <kbd>O</kbd>
               </button>
             </Row>
           )}
@@ -364,8 +384,8 @@ export function EventPanel(p: Props) {
 
       {p.draft ? (
         <footer>
-          <button className="primary" onClick={p.onCreate}>
-            {e.guests.length ? "Send invite" : "Create"} <kbd>{formatKeys("Mod-Enter")}</kbd>
+          <button className="primary" disabled={p.sending} aria-busy={p.sending} onClick={p.onCreate}>
+            {p.sending ? "Sending…" : e.guests.length ? "Send invite" : "Create"} <kbd>{formatKeys("Mod-Enter")}</kbd>
           </button>
           <button className="cal-button" onClick={p.onClose}>
             Cancel

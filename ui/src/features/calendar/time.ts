@@ -119,17 +119,27 @@ const MIN_HEIGHT = 15;
 /** Minutes of an event's height its title needs to stay readable. */
 const TITLE = 15;
 /** The least width an event is drawn beside another, in pixels: room for a word. */
-const FACE = 60;
+const FACE = 56;
 /** How far an event is set in from the ones it is laid over, in pixels: the one step every stack uses. */
 const STEP = 10;
 
+/** Events that start together and had no room for a box of their own: drawn as one "+N more". */
+export interface More {
+  events: CalEvent[];
+  top: number;
+  left: number;
+  right: number;
+  depth: number;
+}
+
 /**
- * A day's timed events laid out as Google and Notion do. Events that start together sit side by
- * side while each has room for a word (`width` is the day's width in pixels). One that starts
- * later while others are still going is set in from them by one step and laid over them up to the
- * day's right edge: the earlier one keeps its title line, the later one the width.
+ * A day's timed events laid out as Google and Notion do. Events that start together share the
+ * width equally as columns, each with room for a word (`width` is the day's width in pixels);
+ * those that cannot have one are gathered into a "+N more". One that starts later while others
+ * are still going is set in from them by one step and laid over them up to the day's right edge:
+ * the earlier one keeps its title line, the later one the width.
  */
-export function place(events: CalEvent[], day: number, next: number, width = 160): Placed[] {
+export function place(events: CalEvent[], day: number, next: number, width = 160): { placed: Placed[]; more: More[] } {
   const minutes = (next - day) / MINUTE;
   const items: Placed[] = events
     .filter((e) => !e.all_day && Date.parse(e.start) < next && Date.parse(e.end) > day)
@@ -140,30 +150,36 @@ export function place(events: CalEvent[], day: number, next: number, width = 160
     })
     .sort((a, b) => a.top - b.top || b.height - a.height);
   const step = STEP / width;
-  const done: Placed[] = [];
+  const placed: Placed[] = [];
+  const more: More[] = [];
   for (let i = 0; i < items.length; ) {
-    const under = done.filter((p) => p.top + p.height > items[i].top);
+    const under = placed.filter((p) => p.top + p.height > items[i].top);
     const depth = under.length ? Math.max(...under.map((p) => p.depth)) + 1 : 0;
-    // One that starts with those under it has no line of theirs to leave clear: it is set in from the last of them.
-    const beside = under.filter((p) => p.top + TITLE > items[i].top);
-    const from = beside.length ? Math.min(0.8, Math.max(...beside.map((p) => p.left)) + step) : Math.min(0.5, depth * step);
-    const most = Math.max(1, Math.floor((width * (1 - from) - 8) / FACE));
-    // Those that start within a title's height of each other share the width, as many as fit.
-    const together = [items[i]];
-    while (together.length < most && i + together.length < items.length && items[i + together.length].top < items[i].top + TITLE) together.push(items[i + together.length]);
-    i += together.length;
-    together.forEach((p, k) => {
+    const from = Math.min(0.5, depth * step);
+    // Those that start within a title's height of each other are one group.
+    let n = 1;
+    while (i + n < items.length && items[i + n].top < items[i].top + TITLE) n++;
+    const together = items.slice(i, i + n);
+    i += n;
+    const room = width * (1 - from) - 8;
+    const most = Math.max(1, Math.floor(room / FACE));
+    // Too many for a titled box each: the first ones, and the rest behind a "+N more" that takes a narrow strip.
+    const chip = n > most ? Math.min(0.4, (most > 1 ? FACE + 8 : 30) / width) : 0;
+    const boxes = n > most ? Math.max(1, most - 1) : n;
+    const share = (1 - from - chip) / boxes;
+    together.slice(0, boxes).forEach((p, k) => {
       p.depth = depth;
-      p.left = from + ((1 - from) * k) / together.length;
-      p.right = from + ((1 - from) * (k + 1)) / together.length;
+      p.left = from + share * k;
+      p.right = from + share * (k + 1);
     });
-    done.push(...together);
+    placed.push(...together.slice(0, boxes));
+    if (chip) more.push({ events: together.slice(boxes).map((p) => p.event), top: together[0].top, left: 1 - chip, right: 1, depth });
   }
-  for (const p of items) {
-    const over = items.filter((q) => q.depth > p.depth && q.left < p.right && q.top < p.top + p.height && q.top + q.height > p.top);
+  for (const p of placed) {
+    const over = placed.filter((q) => q.depth > p.depth && q.left < p.right && q.top < p.top + p.height && q.top + q.height > p.top);
     p.clear = Math.min(p.height, ...over.map((q) => Math.max(0, q.top - p.top)));
   }
-  return items;
+  return { placed, more };
 }
 
 /** How long, in words: 45m, 1h, 1h 30m. */
